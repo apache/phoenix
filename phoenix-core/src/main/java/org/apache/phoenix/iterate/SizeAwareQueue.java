@@ -15,23 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.iterate;
 
-import java.util.Map;
+import java.io.Closeable;
+import java.util.Queue;
 
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+public interface SizeAwareQueue<T> extends Queue<T>, Closeable {
 
-import com.google.common.collect.Maps;
+    public long getByteSize();
 
-public class OrderByWithSpillingIT extends OrderByIT {
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        // do lot's of spooling!
-        props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
-        props.put(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 }
