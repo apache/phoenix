@@ -834,7 +834,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             try {
                 if (targetHTable != null) {
-                    targetHTable.close();
+                    try {
+                        targetHTable.close();
+                    } catch (IOException e) {
+                        logger.error("Closing table: " + targetHTable + " failed: ", e);
+                    }
                 }
             } finally {
                 try {
