@@ -103,7 +103,8 @@ public class PhoenixIndexImportDirectMapper extends
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
+            tryClosingResources();
             throw new RuntimeException(e);
         }
     }
@@ -176,17 +177,20 @@ public class PhoenixIndexImportDirectMapper extends
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         } finally {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
-                        e.getMessage());
-                }
+            tryClosingResources();
+        }
+    }
+
+    private void tryClosingResources() throws IOException {
+        if (this.connection != null) {
+            try {
+                this.connection.close();
+            } catch (SQLException e) {
+                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
-            if (writer != null) {
-                writer.close();
-            }
+        }
+        if (this.writer != null) {
+            this.writer.close();
         }
     }
 }
