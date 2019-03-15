@@ -268,6 +268,12 @@ public class IndexTool extends Configured implements Tool {
 
         }
 
+        void closeConnection() throws SQLException {
+            if (this.connection != null) {
+                this.connection.close();
+            }
+        }
+
         public Job getJob() throws Exception {
             if (isPartialBuild) {
                 return configureJobForPartialBuild();
@@ -516,10 +522,10 @@ public class IndexTool extends Configured implements Tool {
             final Configuration configuration = job.getConfiguration();
             final String physicalIndexTable =
                     PhoenixConfigurationUtil.getPhysicalTableName(configuration);
-            final HTable htable = new HTable(configuration, physicalIndexTable);
-            HFileOutputFormat.configureIncrementalLoad(job, htable);
+            try(final HTable htable = new HTable(configuration, physicalIndexTable)) {
+                HFileOutputFormat.configureIncrementalLoad(job, htable);
+            }
             return job;
-               
         }
         
         /**
@@ -527,9 +533,6 @@ public class IndexTool extends Configured implements Tool {
          * waits for the job completion based on runForeground parameter.
          * 
          * @param job
-         * @param outputPath
-         * @param runForeground - if true, waits for job completion, else submits and returns
-         *            immediately.
          * @return
          * @throws Exception
          */
@@ -562,6 +565,7 @@ public class IndexTool extends Configured implements Tool {
     public int run(String[] args) throws Exception {
         Connection connection = null;
         HTable htable = null;
+        JobFactory jobFactory = null;
         try {
             CommandLine cmdLine = null;
             try {
@@ -576,13 +580,14 @@ public class IndexTool extends Configured implements Tool {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
-            connection = ConnectionUtil.getInputConnection(configuration);
             schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
-            pDataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
+            try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
+                pDataTable = PhoenixRuntime.getTableNoCache(tempConn, qDataTable);
+            }
             useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
@@ -609,7 +614,6 @@ public class IndexTool extends Configured implements Tool {
                 }
                 htable = (HTable)connection.unwrap(PhoenixConnection.class).getQueryServices()
                         .getTable(pIndexTable.getPhysicalName().getBytes());
-
                 if (IndexType.LOCAL.equals(pIndexTable.getIndexType())) {
                     isLocalIndexBuild = true;
                     splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();
@@ -637,7 +641,8 @@ public class IndexTool extends Configured implements Tool {
 				fs.delete(outputPath, true);
 			}
 
-			job = new JobFactory(connection, configuration, outputPath).getJob();
+            jobFactory = new JobFactory(connection, configuration, outputPath);
+            job = jobFactory.getJob();
 
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
@@ -670,16 +675,36 @@ public class IndexTool extends Configured implements Tool {
                     + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
+            boolean rethrowException = false;
             try {
                 if (connection != null) {
-                    connection.close();
+                    try {
+                        connection.close();
+                    } catch (SQLException e) {
+                        LOG.error("Failed to close connection ", e);
+                        rethrowException = true;
+                    }
                 }
                 if (htable != null) {
-                    htable.close();
+                    try {
+                        htable.close();
+                    } catch (IOException e) {
+                        LOG.error("Failed to close htable ", e);
+                        rethrowException = true;
+                    }
                 }
-            } catch (SQLException sqle) {
-                LOG.error("Failed to close connection ", sqle.getMessage());
-                throw new RuntimeException("Failed to close connection");
+                if (jobFactory != null) {
+                    try {
+                        jobFactory.closeConnection();
+                    } catch (SQLException e) {
+                        LOG.error("Failed to close jobFactory ", e);
+                        rethrowException = true;
+                    }
+                }
+            } finally {
+                if (rethrowException) {
+                    throw new RuntimeException("Failed to close resource");
+                }
             }
         }
     }
