@@ -156,7 +156,7 @@ public class Pherf {
                 writerThreadPoolSize =
                 command.getOptionValue("writerThreadSize",
                         properties.getProperty("pherf.default.dataloader.threadpool"));
-        properties.setProperty("pherf. default.dataloader.threadpool", writerThreadPoolSize);
+        properties.setProperty("pherf.default.dataloader.threadpool", writerThreadPoolSize);
         label = command.getOptionValue("label", null);
         compareResults = command.getOptionValue("compare", null);
         compareType = command.hasOption("useAverageCompareType") ? CompareType.AVERAGE : CompareType.MINIMUM;
