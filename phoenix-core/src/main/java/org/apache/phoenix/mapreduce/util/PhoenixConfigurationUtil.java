@@ -303,18 +303,20 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getOutputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final Connection connection = ConnectionUtil.getOutputConnection(configuration);
-        List<String> upsertColumnList = PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
-        if(!upsertColumnList.isEmpty()) {
-            LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s, upsertColumnList=%s "
-                    ,!upsertColumnList.isEmpty(), upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)
-                    ));
-        } 
-       columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
-       // we put the encoded column infos in the Configuration for re usability.
-       ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList); 
-       connection.close();
-       return columnMetadataList;
+        try (final Connection connection = ConnectionUtil.getOutputConnection(configuration)) {
+            List<String> upsertColumnList =
+                    PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
+            if(!upsertColumnList.isEmpty()) {
+                LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s,"
+                                + " upsertColumnList=%s ",!upsertColumnList.isEmpty(),
+                        upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)));
+            }
+            columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName,
+                    upsertColumnList);
+            // we put the encoded column infos in the Configuration for re usability.
+            ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
+        }
+		return columnMetadataList;
     }
     
      public static String getUpsertStatement(final Configuration configuration) throws SQLException {
@@ -361,12 +363,13 @@ public final class PhoenixConfigurationUtil {
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
-        final Connection connection = ConnectionUtil.getInputConnection(configuration, props);
-        final List<String> selectColumnList = getSelectColumnList(configuration);
-        columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
-        // we put the encoded column infos in the Configuration for re usability.
-        ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
-        connection.close();
+        try (final Connection connection = ConnectionUtil.getInputConnection(configuration, props)){
+            final List<String> selectColumnList = getSelectColumnList(configuration);
+            columnMetadataList =
+                    PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
+            // we put the encoded column infos in the Configuration for re usability.
+            ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
+        }
         return columnMetadataList;
     }
 
@@ -401,9 +404,9 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         long batchSize = configuration.getLong(UPSERT_BATCH_SIZE, DEFAULT_UPSERT_BATCH_SIZE);
         if(batchSize <= 0) {
-           Connection conn = ConnectionUtil.getOutputConnection(configuration);
-           batchSize = ((PhoenixConnection) conn).getMutateBatchSize();
-           conn.close();
+           try (Connection conn = ConnectionUtil.getOutputConnection(configuration)) {
+               batchSize = ((PhoenixConnection) conn).getMutateBatchSize();
+           }
         }
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
         return batchSize;

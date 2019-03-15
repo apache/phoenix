@@ -408,35 +408,21 @@ public class OrphanViewTool extends Configured implements Tool {
             } else {
                 tenantConnection = phoenixConnection;
             }
-            String fullViewName = SchemaUtil.getTableName(key.getSchemaName(), key.getTableName());
-            String dropTable = String.format("DROP VIEW IF EXISTS %s CASCADE", fullViewName);
+
+            MetaDataClient client = new MetaDataClient(tenantConnection);
+            org.apache.phoenix.parse.TableName pTableName = org.apache.phoenix.parse.TableName
+                    .create(key.getSchemaName(), key.getTableName());
             try {
-                tenantConnection.createStatement().execute(dropTable);
-                tenantConnection.commit();
+                client.dropTable(
+                        new DropTableStatement(pTableName, PTableType.VIEW, false, true));
             }
             catch (TableNotFoundException e) {
-                LOG.info("Ignoring view " + fullViewName + " as it has already been dropped");
+                LOG.info("Ignoring view " + pTableName + " as it has already been dropped");
             }
         } finally {
             if (newConn) {
                 tryClosingConnection(tenantConnection);
             }
-        }
-    }
-
-    /**
-     * Try closing a connection if it is not null
-     * @param connection connection object
-     * @throws RuntimeException if closing the connection fails
-     */
-    private void tryClosingConnection(Connection connection) {
-        try {
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (SQLException sqlE) {
-            LOG.error("Failed to close connection: ", sqlE);
-            throw new RuntimeException("Failed to close connection with exception: ", sqlE);
         }
     }
 
@@ -798,14 +784,7 @@ public class OrphanViewTool extends Configured implements Tool {
     }
 
     private void closeConnectionAndFiles(Connection connection) throws IOException {
-        try {
-            if (connection != null) {
-                connection.close();
-            }
-        } catch (SQLException sqle) {
-            LOG.error("Failed to close connection ", sqle.getMessage());
-            throw new RuntimeException("Failed to close connection");
-        }
+        tryClosingConnection(connection);
         for (byte i = VIEW; i < ORPHAN_TYPE_COUNT; i++) {
             if (writer[i] != null) {
                 writer[i].close();
@@ -813,6 +792,22 @@ public class OrphanViewTool extends Configured implements Tool {
             if (reader[i] != null) {
                 reader[i].close();
             }
+        }
+    }
+
+    /**
+     * Try closing a connection if it is not null
+     * @param connection connection object
+     * @throws RuntimeException if closing the connection fails
+     */
+    private void tryClosingConnection(Connection connection) {
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } catch (SQLException sqlE) {
+            LOG.error("Failed to close connection: ", sqlE);
+            throw new RuntimeException("Failed to close connection with exception: ", sqlE);
         }
     }
 

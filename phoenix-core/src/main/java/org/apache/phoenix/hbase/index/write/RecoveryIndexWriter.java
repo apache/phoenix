@@ -26,8 +26,6 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.MasterNotRunningException;
-import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -55,15 +53,13 @@ public class RecoveryIndexWriter extends IndexWriter {
      * Directly specify the {@link IndexCommitter} and {@link IndexFailurePolicy}. Both are expected to be fully setup
      * before calling.
      * 
-     * @param committer
      * @param policy
      * @param env
+     * @param name
      * @throws IOException
-     * @throws ZooKeeperConnectionException
-     * @throws MasterNotRunningException
      */
     public RecoveryIndexWriter(IndexFailurePolicy policy, RegionCoprocessorEnvironment env, String name)
-            throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
+            throws IOException {
         super(new TrackingParallelWriterIndexCommitter(), policy, env, name);
         this.admin = new HBaseAdmin(env.getConfiguration());
     }
@@ -125,7 +121,7 @@ public class RecoveryIndexWriter extends IndexWriter {
             try {
                 admin.close();
             } catch (IOException e) {
-                // closing silently
+                LOG.error("Closing the admin failed: ", e);
             }
         }
     }
