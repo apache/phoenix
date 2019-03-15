@@ -586,7 +586,7 @@ public class MetaDataClient {
         return currentScn;
     }
 
-    private MetaDataMutationResult updateCache(PName origTenantId, String schemaName, String tableName,
+    public MetaDataMutationResult updateCache(PName origTenantId, String schemaName, String tableName,
             boolean alwaysHitServer, Long resolvedTimestamp) throws SQLException { // TODO: pass byte[] herez
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
