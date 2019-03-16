@@ -438,8 +438,8 @@ public class DeleteCompiler {
         final ConnectionQueryServices services = connection.getQueryServices();
         List<QueryPlan> queryPlans;
         boolean allowServerMutations =
-                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS,
-                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_MUTATIONS);
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_DELETE_MUTATIONS);
         NamedTableNode tableNode = delete.getTable();
         String tableName = tableNode.getName().getTableName();
         String schemaName = tableNode.getName().getSchemaName();

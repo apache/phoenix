@@ -59,7 +59,15 @@ public class MetaDataUtilTest {
         assertTrue(VersionUtil.encodeVersion("0.94.1-mapR")>VersionUtil.encodeVersion("0.94"));
         assertTrue(VersionUtil.encodeVersion("1", "1", "3")>VersionUtil.encodeVersion("1", "1", "1"));
     }
-    
+
+    @Test
+    public void testDecode() {
+        int encodedVersion = VersionUtil.encodeVersion("4.15.5");
+        assertEquals(VersionUtil.decodeMajorVersion(encodedVersion), 4);
+        assertEquals(VersionUtil.decodeMinorVersion(encodedVersion), 15);
+        assertEquals(VersionUtil.decodePatchVersion(encodedVersion), 5);
+    }
+
     @Test
     public void testCompatibility() {
         assertTrue(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(1,2,1), 1, 2));

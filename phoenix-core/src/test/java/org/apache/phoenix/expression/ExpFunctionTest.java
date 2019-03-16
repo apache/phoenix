@@ -27,6 +27,7 @@ import java.util.Random;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ExpFunction;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
@@ -48,22 +49,6 @@ import com.google.common.collect.Lists;
  * Unit tests for {@link ExpFunction}
  */
 public class ExpFunctionTest {
-    private static final double ZERO = 1e-9;
-
-    private static boolean twoDoubleEquals(double a, double b) {
-        if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
-        if (Double.isNaN(a)) return true;
-        if (Double.isInfinite(a) ^ Double.isInfinite(b)) return false;
-        if (Double.isInfinite(a)) {
-            if ((a > 0) ^ (b > 0)) return false;
-            else return true;
-        }
-        if (Math.abs(a - b) <= ZERO) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     private static boolean testExpression(LiteralExpression literal, double expected)
             throws SQLException {
@@ -74,7 +59,7 @@ public class ExpFunctionTest {
         if (ret) {
             Double result =
                     (Double) sqrtFunction.getDataType().toObject(ptr, sqrtFunction.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), expected));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), expected));
         }
         return ret;
     }

@@ -91,10 +91,18 @@ public class ClientScanPlan extends ClientProcessingPlan {
         }
         
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes, limit,
-                    offset, projector.getEstimatedRowByteSize());
+            long thresholdBytes =
+                    context.getConnection().getQueryServices().getProps().getLong(
+                        QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+            boolean spoolingEnabled =
+                    context.getConnection().getQueryServices().getProps().getBoolean(
+                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+            iterator =
+                    new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(),
+                            spoolingEnabled, thresholdBytes, limit, offset,
+                            projector.getEstimatedRowByteSize());
         } else {
             if (offset != null) {
                 iterator = new OffsetResultIterator(iterator, offset);

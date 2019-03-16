@@ -36,6 +36,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -112,11 +113,10 @@ public class ScanPlan extends BaseQueryPlan {
         this.allowPageFilter = allowPageFilter;
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         if (isOrdered) { // TopN
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes,
-                    limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset), orderBy.getOrderByExpressions(),
-                    projector.getEstimatedRowByteSize());
+            ScanRegionObserver.serializeIntoScan(context.getScan(),
+                limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset),
+                orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
+            ScanUtil.setClientVersion(context.getScan(), MetaDataProtocol.PHOENIX_VERSION);
         }
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);

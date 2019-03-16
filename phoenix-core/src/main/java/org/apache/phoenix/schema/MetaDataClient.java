@@ -3159,6 +3159,9 @@ public class MetaDataClient {
             }
         } catch (TableNotFoundException e) {
             if (!ifExists) {
+                if (tableType == PTableType.INDEX)
+                    throw new IndexNotFoundException(e.getSchemaName(),
+                            e.getTableName(), e.getTimeStamp());
                 throw e;
             }
         }
@@ -4288,7 +4291,9 @@ public class MetaDataClient {
             String indexName = statement.getTable().getName().getTableName();
             boolean isAsync = statement.isAsync();
             String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
-            PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
+            PTable table = FromCompiler.getIndexResolver(statement, connection)
+                    .getTables().get(0).getTable();
+
             String schemaName = statement.getTable().getName().getSchemaName();
             String tableName = table.getTableName().getString();
 

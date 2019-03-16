@@ -21,7 +21,10 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.hamcrest.CoreMatchers.containsString;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -31,6 +34,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -606,6 +611,46 @@ public class OrderByIT extends BaseOrderByIT {
         } finally {
             if(conn != null) {
                 conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testOrderByWithClientMemoryLimit() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+        props.put(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+            Boolean.toString(Boolean.FALSE));
+
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE " + tableName + "  (a_string varchar not null, col1 integer"
+                            + "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 40);
+            stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setInt(2, 20);
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setInt(2, 30);
+            stmt.execute();
+            conn.commit();
+
+            String query = "select count(*), col1 from " + tableName + " group by col1 order by 2";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            try {
+                rs.next();
+                fail("Expected PhoenixIOException due to IllegalStateException");
+            } catch (PhoenixIOException e) {
+                assertThat(e.getMessage(), containsString("java.lang.IllegalStateException: "
+                        + "Queue full. Consider increasing memory threshold or spooling to disk"));
             }
         }
     }

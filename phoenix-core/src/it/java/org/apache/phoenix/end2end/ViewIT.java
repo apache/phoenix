@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseMetaDataEndpointObserver;
@@ -72,6 +73,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -1358,6 +1360,51 @@ public class ViewIT extends SplitSystemCatalogIT {
         PhoenixRuntime.getTableNoCache(conn, fullTableName);
         // we should be able to load the second view
         PhoenixRuntime.getTableNoCache(conn, fullViewName2);
+    }
+
+    @Test
+    public void testCreateViewFromHBaseTable() throws Exception {
+        String tableNameStr = generateUniqueName();
+        String familyNameStr = generateUniqueName();
+
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(),
+                TestUtil.TEST_PROPERTIES).getAdmin();
+
+        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(tableNameStr));
+        desc.addFamily(new HColumnDescriptor(familyNameStr));
+        admin.createTable(desc);
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        //PK is not specified, without where clause
+        try {
+            conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                    "\" (ROWKEY VARCHAR, \"" + familyNameStr + "\".a VARCHAR)");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+
+        // No error, as PK is specified
+        conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                "\" (ROWKEY VARCHAR PRIMARY KEY, \"" + familyNameStr + "\".a VARCHAR)");
+
+        conn.createStatement().executeUpdate("DROP VIEW \"" + tableNameStr + "\"");
+
+        //PK is not specified, with where clause
+        try {
+            conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                    "\" (ROWKEY VARCHAR, \"" + familyNameStr + "\".a VARCHAR) AS SELECT * FROM \""
+                    + tableNameStr + "\" WHERE ROWKEY = '1'");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
+        }
+
+        conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +
+                "\" (ROWKEY VARCHAR PRIMARY KEY, \"" + familyNameStr + "\".a VARCHAR) AS SELECT " +
+                "* FROM \"" + tableNameStr + "\" WHERE ROWKEY = '1'");
+
+        conn.createStatement().executeUpdate("DROP VIEW \"" + tableNameStr + "\"");
     }
     
     @Test

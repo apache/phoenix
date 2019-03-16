@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -40,7 +41,7 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
     private final int limit;
 
     public BufferedSortedQueue(Comparator<ResultEntry> comparator,
-            Integer limit, int thresholdBytes) throws IOException {
+            Integer limit, long thresholdBytes) throws IOException {
         super(thresholdBytes);
         this.comparator = comparator;
         this.limit = limit == null ? -1 : limit;
@@ -48,7 +49,7 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
 
     @Override
     protected BufferedSegmentQueue<ResultEntry> createSegmentQueue(
-            int index, int thresholdBytes) {
+            int index, long thresholdBytes) {
         return new BufferedResultEntryPriorityQueue(index, thresholdBytes, limit, comparator);
     }
 
@@ -66,7 +67,7 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
         private MinMaxPriorityQueue<ResultEntry> results = null;
         
         public BufferedResultEntryPriorityQueue(int index,
-                int thresholdBytes, int limit, Comparator<ResultEntry> comparator) {
+                long thresholdBytes, int limit, Comparator<ResultEntry> comparator) {
             super(index, thresholdBytes, limit >= 0);
             this.results = limit < 0 ? 
                     MinMaxPriorityQueue.<ResultEntry> orderedBy(comparator).create()
@@ -79,8 +80,8 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
         }
 
         @Override
-        protected int sizeOf(ResultEntry e) {
-            return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
+        protected long sizeOf(ResultEntry e) {
+            return ResultEntry.sizeOf(e);
         }
 
         @SuppressWarnings("deprecation")
@@ -141,33 +142,10 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
             int size = result.size();
             List<KeyValue> kvs = new ArrayList<KeyValue>(size);
             for (int i = 0; i < size; i++) {
-                kvs.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i)));
+                kvs.add(KeyValueUtil.ensureKeyValue(result.getValue(i)));
             }
             return kvs;
         }
 
-        private int sizeof(List<KeyValue> kvs) {
-            int size = Bytes.SIZEOF_INT; // totalLen
-
-            for (KeyValue kv : kvs) {
-                size += kv.getLength();
-                size += Bytes.SIZEOF_INT; // kv.getLength
-            }
-
-            return size;
-        }
-
-        private int sizeof(ImmutableBytesWritable[] sortKeys) {
-            int size = Bytes.SIZEOF_INT;
-            if (sortKeys != null) {
-                for (ImmutableBytesWritable sortKey : sortKeys) {
-                    if (sortKey != null) {
-                        size += sortKey.getLength();
-                    }
-                    size += Bytes.SIZEOF_INT;
-                }
-            }
-            return size;
-        }
     }
 }

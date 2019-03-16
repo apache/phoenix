@@ -15,24 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.monitoring;
+package org.apache.phoenix.expression;
+
+import static org.junit.Assert.assertTrue;
+
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.function.MathPIFunction;
+import org.apache.phoenix.query.BaseTest;
+
+import org.junit.Test;
 
 /**
- * Class that exposes the various internal phoenix metrics collected
- * at the JVM level. Because metrics are dynamic in nature, it is not guaranteed that the
- * state exposed will always be in sync with each other. One should use
- * these metrics primarily for monitoring and debugging purposes. 
+ * Unit tests for {@link MathPIFunction}
  */
-public interface GlobalMetric extends Metric {
-    
-    /**
-     * @return Number of samples collected since the last {@link #reset()} call.
-     */
-    public long getNumberOfSamples();
-    
-    /**
-     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
-     */
-    @Deprecated
-    public long getTotalSum();
+public class MathPIFunctionTest {
+
+    @Test
+    public void testMathPIFunction() {
+        Expression mathPIFunction = new MathPIFunction();
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        boolean res = mathPIFunction.evaluate(null, ptr);
+        if (res) {
+            Double result = (Double) mathPIFunction.getDataType().toObject(ptr);
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), Math.PI));
+        }
+        assertTrue(res);
+    }
 }

@@ -72,7 +72,7 @@ public class PhoenixMetricsDisabledIT extends BaseUniqueNamesOwnClusterIT {
     public void testResetGlobalPhoenixMetrics() {
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
             assertThat(m, CoreMatchers.<GlobalMetric>instanceOf(NoOpGlobalMetricImpl.class));
-            assertEquals(NO_VALUE, m.getTotalSum());
+            assertEquals(NO_VALUE, m.getValue());
             assertEquals(NO_SAMPLES, m.getNumberOfSamples());
         }
     }

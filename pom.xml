@@ -27,8 +27,6 @@
     <module>phoenix-flume</module>
     <module>phoenix-kafka</module>
     <module>phoenix-pig</module>
-    <module>phoenix-queryserver-client</module>
-    <module>phoenix-queryserver</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
     <module>phoenix-hive</module>
@@ -36,7 +34,6 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
-    <module>phoenix-load-balancer</module>
   </modules>
 
   <repositories>
@@ -554,11 +551,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-queryserver-client</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-load-balancer</artifactId>
         <version>${project.version}</version>
       </dependency>
 
