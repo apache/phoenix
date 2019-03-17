@@ -76,8 +76,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [\"I1.:item_id\"]"
+                "    CLIENT MERGE SORT"
                 }});
         return testCases;
     }

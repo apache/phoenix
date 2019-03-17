@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -42,15 +43,19 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.Lists;
 
 public class ClientScanPlan extends ClientProcessingPlan {
 
+    private List<OrderBy> actualOutputOrderBys;
+
     public ClientScanPlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, Expression where, OrderBy orderBy,
             QueryPlan delegate) {
         super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
+        this.actualOutputOrderBys = convertActualOutputOrderBy(orderBy, delegate, context);
     }
 
     @Override
@@ -142,4 +147,21 @@ public class ClientScanPlan extends ClientProcessingPlan {
         return new ExplainPlan(planSteps);
     }
 
+    private static List<OrderBy> convertActualOutputOrderBy(
+            OrderBy orderBy,
+            QueryPlan targetQueryPlan,
+            StatementContext statementContext) {
+
+        if(!orderBy.isEmpty()) {
+            return Collections.singletonList(OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy));
+        }
+
+        assert orderBy != OrderBy.REV_ROW_KEY_ORDER_BY;
+        return targetQueryPlan.getOutputOrderBy();
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBy() {
+       return this.actualOutputOrderBys;
+    }
 }

@@ -766,6 +766,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public Long getEstimateInfoTimestamp() throws SQLException {
                     return estimateTs;
                 }
+
+                @Override
+                public List<OrderBy> getOutputOrderBy() {
+                    return Collections.<OrderBy> emptyList();
+                }
             };
         }
     }
