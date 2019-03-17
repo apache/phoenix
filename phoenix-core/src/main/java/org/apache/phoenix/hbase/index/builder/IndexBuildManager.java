@@ -79,9 +79,33 @@ public class IndexBuildManager implements Stoppable {
       return this.delegate.getIndexMetaData(miniBatchOp);
   }
 
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
+  public Collection<Pair<Pair<Mutation, byte[]>, byte[]>> getIndexUpdates(
       MiniBatchOperationInProgress<Mutation> miniBatchOp,
       Collection<? extends Mutation> mutations) throws Throwable {
+    // notify the delegate that we have started processing a batch
+    final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
+    this.delegate.batchStarted(miniBatchOp, indexMetaData);
+
+    // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
+    ArrayList<Pair<Pair<Mutation, byte[]>, byte[]>> results = new ArrayList<>(mutations.size());
+    for (Mutation m : mutations) {
+      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData);
+      if (PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap())) {
+          for (Pair<Mutation, byte[]> update : updates) {
+            update.getFirst().setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+          }
+      }
+      for (Pair<Mutation, byte[]> update : updates) {
+        results.add(new Pair<>(update, m.getRow()));
+      }
+    }
+    return results;
+  }
+
+  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
+          MiniBatchOperationInProgress<Mutation> miniBatchOp,
+          Collection<? extends Mutation> mutations) throws Throwable {
     // notify the delegate that we have started processing a batch
     final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
@@ -91,10 +115,10 @@ public class IndexBuildManager implements Stoppable {
     for (Mutation m : mutations) {
       Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData);
       if (PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap())) {
-          for (Pair<Mutation, byte[]> update : updates) {
-            update.getFirst().setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
-          }
+        for (Pair<Mutation, byte[]> update : updates) {
+          update.getFirst().setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                  BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+        }
       }
       results.addAll(updates);
     }
@@ -116,11 +140,11 @@ public class IndexBuildManager implements Stoppable {
     delegate.batchStarted(miniBatchOp, indexMetaData);
   }
 
-  public boolean isEnabled(Mutation m) throws IOException {
+  public boolean isEnabled(Mutation m) {
     return delegate.isEnabled(m);
   }
 
-  public boolean isAtomicOp(Mutation m) throws IOException {
+  public boolean isAtomicOp(Mutation m) {
     return delegate.isAtomicOp(m);
   }
 

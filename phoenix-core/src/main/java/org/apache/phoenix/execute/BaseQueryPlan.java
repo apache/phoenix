@@ -392,7 +392,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    private void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {
+    public static void serializeViewConstantsIntoScan(Scan scan, PTable dataTable) {
         int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
         int nViewConstants = 0;
         if (dataTable.getType() == PTableType.VIEW) {
@@ -422,7 +422,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    private void serializeViewConstantsIntoScan(byte[][] viewConstants, Scan scan) {
+    private static void serializeViewConstantsIntoScan(byte[][] viewConstants, Scan scan) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
