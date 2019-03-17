@@ -51,16 +51,13 @@ public class LockManager {
 
     /**
      * Lock the row or throw otherwise
-     * @param row the row key
+     * @param rowKey the row key
      * @return RowLock used to eventually release the lock 
      * @throws TimeoutIOException if the lock could not be acquired within the
      * allowed rowLockWaitDuration and InterruptedException if interrupted while
      * waiting to acquire lock.
      */
-    public RowLock lockRow(byte[] row, int waitDuration) throws IOException {
-        // create an object to use a a key in the row lock map
-        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row);
-
+    public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
         RowLockContext rowLockContext = null;
         RowLockImpl result = null;
         TraceScope traceScope = null;
@@ -114,6 +111,12 @@ public class LockManager {
                 traceScope.close();
             }
         }
+    }
+
+    public RowLock lockRow(byte[] row, int waitDuration) throws IOException {
+        // create an object to use a a key in the row lock map
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row);
+        return lockRow(rowKey, waitDuration);
     }
 
     /**
@@ -226,6 +229,11 @@ public class LockManager {
         }
 
         @Override
+        public ImmutableBytesPtr getRowKey() {
+            return context.rowKey;
+        }
+
+        @Override
         public String toString() {
             return "RowLockImpl{" +
                     "context=" + context +
@@ -247,6 +255,8 @@ public class LockManager {
          *     thread
          */
         void release();
+
+        ImmutableBytesPtr getRowKey();
     }
 
 }

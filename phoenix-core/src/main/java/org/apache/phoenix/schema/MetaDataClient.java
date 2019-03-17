@@ -943,6 +943,9 @@ public class MetaDataClient {
                 } else {
                     indexesToAdd.add(PTableImpl.builderWithColumns(index, getColumnsToClone(index))
                             .setTableName(modifiedIndexName)
+                            .setParentName(view.getName())
+                            .setParentSchemaName(view.getSchemaName())
+                            .setParentTableName(view.getTableName())
                             .setViewStatement(viewStatement)
                             .setUpdateCacheFrequency(view.getUpdateCacheFrequency())
                             .setTenantId(view.getTenantId())

@@ -152,6 +152,9 @@ public interface QueryConstants {
     public static final ImmutableBytesPtr DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
                DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
 
+    public static final String GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER = EMPTY_COLUMN_NAME;
+    public static final byte[] GLOBAL_INDEX_VERIFIED_COLUMN_NAME_BYTES = Bytes.toBytes(GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER);
+            ;
     public static final String ALL_FAMILY_PROPERTIES_KEY = "";
     public static final String SYSTEM_TABLE_PK_NAME = "pk";
 

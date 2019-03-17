@@ -100,6 +100,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public final static String IMMUTABLE_STORAGE_ENCODING_SCHEME = "_ImmutableStorageEncodingScheme";
     public final static String USE_ENCODED_COLUMN_QUALIFIER_LIST = "_UseEncodedColumnQualifierList";
     public static final String CLIENT_VERSION = "_ClientVersion";
+    public static final String CHECK_VERIFY_COLUMN = "_CheckVerifyColumn";
+    public static final String PHYSICAL_DATA_TABLE_NAME = "_PhysicalDataTableName";
+    public static final String EMPTY_COLUMN_FAMILY_NAME = "_EmptyCFName";
+    public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
+    public static final String SCAN_LIMIT = "_ScanLimit";
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
