@@ -71,7 +71,7 @@ public class CursorFetchPlan extends DelegateQueryPlan {
 		return fetchSize;
 	}
 
-        public boolean isAggregate(){
-            return this.isAggregate;
-        }
+	public boolean isAggregate(){
+	    return this.isAggregate;
+	}
 }
