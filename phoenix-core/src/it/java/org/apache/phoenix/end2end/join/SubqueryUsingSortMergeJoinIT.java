@@ -32,6 +32,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.execute.ClientAggregatePlan;
+import org.apache.phoenix.execute.ClientScanPlan;
+import org.apache.phoenix.execute.SortMergeJoinPlan;
+import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -516,8 +522,8 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
             assertEquals(rs.getString(2), "T6");
 
             assertFalse(rs.next());
-            
-            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
+            //add order by to make the query result stable
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity) order by \"order_id\"";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -528,6 +534,22 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
             assertEquals(rs.getString(2), "T6");
 
             assertFalse(rs.next());
+
+            PhoenixPreparedStatement phoenixPreparedStatement = statement.unwrap(PhoenixPreparedStatement.class);
+            ClientScanPlan clientScanPlan =(ClientScanPlan)phoenixPreparedStatement.optimizeQuery(query);
+            SortMergeJoinPlan sortMergeJoin = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+            ClientScanPlan lhsQueryPlan = (ClientScanPlan)sortMergeJoin.getLhsPlan();
+            /**
+             * test orderBy of lhs of final SortJoinMergePlan is avoid.
+             */
+            assertTrue(lhsQueryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            TupleProjectionPlan rhsQueryPlan = (TupleProjectionPlan)sortMergeJoin.getRhsPlan();
+            ClientAggregatePlan clientAggregatePlan = (ClientAggregatePlan)rhsQueryPlan.getDelegate();
+            /**
+             * test groupBy and orderBy of rhs of final SortJoinMergePlan is avoid.
+             */
+            assertTrue(clientAggregatePlan.getGroupBy().isOrderPreserving());
+            assertTrue(clientAggregatePlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
         } finally {
             conn.close();
         }

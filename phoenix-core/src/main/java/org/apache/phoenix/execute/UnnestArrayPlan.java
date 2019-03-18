@@ -18,12 +18,14 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.BaseSingleExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
@@ -187,5 +189,10 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
         public PDataType getDataType() {
             return PInteger.INSTANCE;
         }
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+        return Collections.<OrderBy> emptyList();
     }
 }
