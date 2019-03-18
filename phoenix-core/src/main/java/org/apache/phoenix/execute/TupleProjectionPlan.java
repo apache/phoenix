@@ -18,17 +18,32 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.OrderPreservingTracker;
+import org.apache.phoenix.compile.OrderPreservingTracker.Info;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.collect.Lists;
@@ -36,12 +51,102 @@ import com.google.common.collect.Lists;
 public class TupleProjectionPlan extends DelegateQueryPlan {
     private final TupleProjector tupleProjector;
     private final Expression postFilter;
+    private final StatementContext statementContext;
+    private ColumnResolver columnResolver = null;
+    private List<OrderBy> actualOutputOrderBys = Collections.<OrderBy> emptyList();
 
-    public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector, Expression postFilter) {
+    public TupleProjectionPlan(
+            QueryPlan plan,
+            TupleProjector tupleProjector,
+            StatementContext statementContext,
+            Expression postFilter) throws SQLException {
         super(plan);
         if (tupleProjector == null) throw new IllegalArgumentException("tupleProjector is null");
         this.tupleProjector = tupleProjector;
+        this.statementContext = statementContext;
         this.postFilter = postFilter;
+        if(this.statementContext != null) {
+            this.columnResolver = statementContext.getResolver();
+            this.actualOutputOrderBys = this.convertInputOrderBys(plan);
+        }
+    }
+
+    /**
+     * Map the expressions in the actualOutputOrderBys of targetQueryPlan to {@link ProjectedColumnExpression}.
+     * @param targetQueryPlan
+     * @return
+     * @throws SQLException
+     */
+    private List<OrderBy> convertInputOrderBys(QueryPlan targetQueryPlan) throws SQLException {
+        List<OrderBy> inputOrderBys = targetQueryPlan.getOutputOrderBys();
+        if(inputOrderBys.isEmpty()) {
+            return Collections.<OrderBy> emptyList();
+        }
+        Expression[] selectColumnExpressions = this.tupleProjector.getExpressions();
+        Map<Expression,Integer> selectColumnExpressionToIndex =
+                new HashMap<Expression, Integer>(selectColumnExpressions.length);
+        int columnIndex = 0;
+        for(Expression selectColumnExpression : selectColumnExpressions) {
+            selectColumnExpressionToIndex.put(selectColumnExpression, columnIndex++);
+        }
+        List<OrderBy> newOrderBys = new ArrayList<OrderBy>(inputOrderBys.size());
+        for(OrderBy inputOrderBy : inputOrderBys) {
+            OrderBy newOrderBy = this.convertSingleInputOrderBy(
+                    selectColumnExpressionToIndex,
+                    selectColumnExpressions,
+                    inputOrderBy);
+            if(newOrderBy != OrderBy.EMPTY_ORDER_BY) {
+                newOrderBys.add(newOrderBy);
+            }
+        }
+        if(newOrderBys.isEmpty()) {
+            return Collections.<OrderBy> emptyList();
+        }
+        return newOrderBys;
+    }
+
+    private OrderBy convertSingleInputOrderBy(
+            Map<Expression,Integer> selectColumnExpressionToIndex,
+            Expression[] selectColumnExpressions,
+            OrderBy inputOrderBy) throws SQLException {
+
+        OrderPreservingTracker orderPreservingTracker = new OrderPreservingTracker(
+                this.statementContext,
+                GroupBy.EMPTY_GROUP_BY,
+                Ordering.UNORDERED,
+                selectColumnExpressions.length,
+                Collections.singletonList(inputOrderBy),
+                null,
+                null);
+        for(Expression selectColumnExpression : selectColumnExpressions) {
+            orderPreservingTracker.track(selectColumnExpression);
+        }
+        orderPreservingTracker.isOrderPreserving();
+        List<Info> orderPreservingTrackInfos = orderPreservingTracker.getOrderPreservingTrackInfos();
+        if(orderPreservingTrackInfos.isEmpty()) {
+            return OrderBy.EMPTY_ORDER_BY;
+        }
+        List<OrderByExpression> newOrderByExpressions = new ArrayList<OrderByExpression>(orderPreservingTrackInfos.size());
+        for(Info orderPreservingTrackInfo : orderPreservingTrackInfos) {
+            Expression expression = orderPreservingTrackInfo.getExpression();
+            Integer index = selectColumnExpressionToIndex.get(expression);
+            assert index != null;
+            ProjectedColumnExpression projectedValueColumnExpression = this.getProjectedValueColumnExpression(index);
+            OrderByExpression newOrderByExpression = OrderByExpression.createByCheckIfOrderByReverse(
+                    projectedValueColumnExpression,
+                    orderPreservingTrackInfo.isNullsLast(),
+                    orderPreservingTrackInfo.isAscending(),
+                    false);
+            newOrderByExpressions.add(newOrderByExpression);
+        }
+        return new OrderBy(newOrderByExpressions);
+    }
+
+    private ProjectedColumnExpression getProjectedValueColumnExpression(int columnIndex) throws SQLException {
+        assert this.columnResolver != null;
+        TableRef tableRef = this.columnResolver.getTables().get(0);
+        ColumnRef columnRef = new ColumnRef(tableRef, columnIndex);
+        return (ProjectedColumnExpression)columnRef.newColumnExpression();
     }
 
     @Override
@@ -83,5 +188,10 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     @Override
     public <T> T accept(QueryPlanVisitor<T> visitor) {
         return visitor.visit(this);
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+        return this.actualOutputOrderBys;
     }
 }

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -406,7 +407,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                 stmt.execute();
                 stmt.setLong(2, 1462993430000000000L);
                 stmt.execute();
-                
+                //add order by to make the query result stable
                 String q =
                         "SELECT C.BUCKET, C.TIMESTAMP FROM (\n" +
                         "     SELECT E.BUCKET as BUCKET, L.BUCKET as LBUCKET, E.TIMESTAMP as TIMESTAMP, L.TIMESTAMP as LTIMESTAMP FROM\n" +
@@ -423,7 +424,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "         ) L\n" +
                         "     ON L.BUCKET = E.BUCKET AND L.TIMESTAMP = E.TIMESTAMP\n" +
                         " ) C\n" +
-                        " GROUP BY C.BUCKET, C.TIMESTAMP";
+                        " GROUP BY C.BUCKET, C.TIMESTAMP ORDER BY C.BUCKET, C.TIMESTAMP";
                 
                 String p = i == 0 ?
                         "SORT-MERGE-JOIN (INNER) TABLES\n" +
@@ -440,8 +441,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
                         "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n" +
-                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]"
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
                         :
                         "SORT-MERGE-JOIN (INNER) TABLES\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName + " [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
@@ -456,8 +456,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
-                        "CLIENT SORTED BY [E.TIMESTAMP, E.BUCKET]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.TIMESTAMP, E.BUCKET]";
+                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
                 
                 ResultSet rs = conn.createStatement().executeQuery("explain " + q);
                 assertEquals(p, QueryUtil.getExplainPlan(rs));
@@ -465,34 +464,34 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                 rs = conn.createStatement().executeQuery(q);
                 assertTrue(rs.next());
                 assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993520000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993515000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993510000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993505000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993490000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993485000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993480000000000L, rs.getLong(2));
-                assertTrue(rs.next());
-                assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993475000000000L, rs.getLong(2));
+                assertEquals(1462993430000000000L, rs.getLong(2));
                 assertTrue(rs.next());
                 assertEquals("5SEC", rs.getString(1));
                 assertEquals(1462993470000000000L, rs.getLong(2));
                 assertTrue(rs.next());
                 assertEquals("5SEC", rs.getString(1));
-                assertEquals(1462993430000000000L, rs.getLong(2));
+                assertEquals(1462993475000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993480000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993485000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993490000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993505000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993510000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993515000000000L, rs.getLong(2));
+                assertTrue(rs.next());
+                assertEquals("5SEC", rs.getString(1));
+                assertEquals(1462993520000000000L, rs.getLong(2));
                 assertFalse(rs.next());
             }
         } finally {
@@ -845,6 +844,101 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             assertTrue(rs.getInt(2) == 55);
             assertTrue(rs.getInt(3) == 88);
             assertTrue(!rs.next());
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testOrderPreservingForSortMergeJoinBug5148() throws Exception {
+        doTestOrderPreservingForSortMergeJoinBug5148(false, false);
+        doTestOrderPreservingForSortMergeJoinBug5148(false, true);
+        doTestOrderPreservingForSortMergeJoinBug5148(true, false);
+        doTestOrderPreservingForSortMergeJoinBug5148(true, true);
+    }
+
+    private void doTestOrderPreservingForSortMergeJoinBug5148(boolean desc, boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+
+            String sql = "CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY "+(desc ? "desc" : "")+","+
+                    "AGE INTEGER"+
+                    ") "+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (4,44)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (5,55)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (6,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (7,77)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (8,88)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (9,99)");
+            conn.commit();
+
+            sql = "CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY "+(desc ? "desc" : "")+","+
+                    "CODE INTEGER"+
+                    ")"+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (4,44)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (5,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (6,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (7,88)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (8,88)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (9,00)");
+            conn.commit();
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code order by a.aid ,a.age";
+            ResultSet rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{2,22},{4,44},{6,66},{8,88}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code order by a.aid desc,a.age desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,88},{6,66},{4,44},{2,22}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,a.age from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code group by a.aid,a.age order by a.aid ,a.age";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{2,22},{4,44},{6,66},{8,88}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,a.age from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code group by a.aid,a.age order by a.aid desc,a.age desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,88},{6,66},{4,44},{2,22}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code order by b.bid ,b.code";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{2,22},{4,44},{6,66},{8,88}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code order by b.bid desc ,b.code desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,88},{6,66},{4,44},{2,22}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code group by b.bid, b.code order by b.bid ,b.code";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{2,22},{4,44},{6,66},{8,88}});
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=99 order by age limit 10) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 10) b on a.aid=b.bid and a.age = b.code group by b.bid, b.code order by b.bid desc,b.code desc";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{8,88},{6,66},{4,44},{2,22}});
         } finally {
             if(conn!=null) {
                 conn.close();

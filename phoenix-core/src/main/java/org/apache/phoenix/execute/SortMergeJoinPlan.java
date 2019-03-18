@@ -20,30 +20,25 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatelessExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -52,8 +47,8 @@ import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
-import org.apache.phoenix.iterate.BufferedQueue;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PhoenixQueues;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -62,19 +57,21 @@ import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -103,10 +100,23 @@ public class SortMergeJoinPlan implements QueryPlan {
     private Long estimatedRows;
     private Long estimateInfoTs;
     private boolean getEstimatesCalled;
+    private List<OrderBy> actualOutputOrderBys;
 
-    public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
-            JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
-            PTable joinedTable, PTable lhsTable, PTable rhsTable, int rhsFieldPosition, boolean isSingleValueOnly) {
+    public SortMergeJoinPlan(
+            StatementContext context,
+            FilterableStatement statement,
+            TableRef table,
+            JoinType type,
+            QueryPlan lhsPlan,
+            QueryPlan rhsPlan,
+            Pair<List<Expression>,List<Expression>> lhsAndRhsKeyExpressions,
+            List<Expression> rhsKeyExpressions,
+            PTable joinedTable,
+            PTable lhsTable,
+            PTable rhsTable,
+            int rhsFieldPosition,
+            boolean isSingleValueOnly,
+            Pair<List<OrderByNode>,List<OrderByNode>> lhsAndRhsOrderByNodes) throws SQLException {
         if (type == JoinType.Right) throw new IllegalArgumentException("JoinType should not be " + type);
         this.context = context;
         this.statement = statement;
@@ -114,8 +124,8 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.type = type;
         this.lhsPlan = lhsPlan;
         this.rhsPlan = rhsPlan;
-        this.lhsKeyExpressions = lhsKeyExpressions;
-        this.rhsKeyExpressions = rhsKeyExpressions;
+        this.lhsKeyExpressions = lhsAndRhsKeyExpressions.getFirst();
+        this.rhsKeyExpressions = lhsAndRhsKeyExpressions.getSecond();
         this.joinedSchema = buildSchema(joinedTable);
         this.lhsSchema = buildSchema(lhsTable);
         this.rhsSchema = buildSchema(rhsTable);
@@ -132,6 +142,7 @@ public class SortMergeJoinPlan implements QueryPlan {
                 context.getConnection().getQueryServices().getProps().getBoolean(
                     QueryServices.CLIENT_JOIN_SPOOLING_ENABLED_ATTRIB,
                     QueryServicesOptions.DEFAULT_CLIENT_JOIN_SPOOLING_ENABLED);
+        this.actualOutputOrderBys = convertActualOutputOrderBy(lhsAndRhsOrderByNodes.getFirst(), lhsAndRhsOrderByNodes.getSecond(), context);
     }
 
     @Override
@@ -703,5 +714,73 @@ public class SortMergeJoinPlan implements QueryPlan {
             estimateInfoTs =
                     getMin(lhsPlan.getEstimateInfoTimestamp(), rhsPlan.getEstimateInfoTimestamp());
         }
+    }
+
+    /**
+     * We do not use {@link #lhsKeyExpressions} and {@link #rhsKeyExpressions} directly because {@link #lhsKeyExpressions} is compiled by the
+     * {@link ColumnResolver} of lhs and {@link #rhsKeyExpressions} is compiled by the {@link ColumnResolver} of rhs, so we must recompile use
+     * the {@link ColumnResolver} of joinProjectedTables.
+     * @param lhsOrderByNodes
+     * @param rhsOrderByNodes
+     * @param statementContext
+     * @return
+     * @throws SQLException
+     */
+    private static List<OrderBy> convertActualOutputOrderBy(
+            List<OrderByNode> lhsOrderByNodes,
+            List<OrderByNode> rhsOrderByNodes,
+            StatementContext statementContext) throws SQLException {
+
+        List<OrderBy> orderBys = new ArrayList<OrderBy>(2);
+        List<OrderByExpression> lhsOrderByExpressions =
+                compileOrderByNodes(lhsOrderByNodes, statementContext);
+        if(!lhsOrderByExpressions.isEmpty()) {
+            orderBys.add(new OrderBy(lhsOrderByExpressions));
+        }
+
+        List<OrderByExpression> rhsOrderByExpressions =
+                compileOrderByNodes(rhsOrderByNodes, statementContext);
+        if(!rhsOrderByExpressions.isEmpty()) {
+            orderBys.add(new OrderBy(rhsOrderByExpressions));
+        }
+        if(orderBys.isEmpty()) {
+            return Collections.<OrderBy> emptyList();
+        }
+        return orderBys;
+    }
+
+    private static List<OrderByExpression> compileOrderByNodes(List<OrderByNode> orderByNodes, StatementContext statementContext) throws SQLException {
+        /**
+         * If there is TableNotFoundException or ColumnNotFoundException, it means that the orderByNodes is not referenced by other parts of the sql,
+         * so could be ignored.
+         */
+        StatelessExpressionCompiler expressionCompiler = new StatelessExpressionCompiler(statementContext);
+        List<OrderByExpression> orderByExpressions = new ArrayList<OrderByExpression>(orderByNodes.size());
+        for(OrderByNode orderByNode : orderByNodes) {
+            expressionCompiler.reset();
+            Expression expression = null;
+            try {
+                expression = orderByNode.getNode().accept(expressionCompiler);
+            } catch(TableNotFoundException exception) {
+                return orderByExpressions;
+            } catch(ColumnNotFoundException exception) {
+                return orderByExpressions;
+            } catch(ColumnFamilyNotFoundException exception) {
+                return orderByExpressions;
+            }
+            assert expression != null;
+            orderByExpressions.add(
+                    OrderByExpression.createByCheckIfOrderByReverse(
+                            expression,
+                            orderByNode.isNullsLast(),
+                            orderByNode.isAscending(),
+                            false));
+        }
+        return orderByExpressions;
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+        return this.actualOutputOrderBys;
     }
 }
