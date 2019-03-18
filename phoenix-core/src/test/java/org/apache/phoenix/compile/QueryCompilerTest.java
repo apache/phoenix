@@ -5509,4 +5509,455 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
+
+    @Test
+    public void testOrderPreservingForClientScanPlanBug5148() throws Exception {
+        doTestOrderPreservingForClientScanPlanBug5148(false,false);
+        doTestOrderPreservingForClientScanPlanBug5148(false,true);
+        doTestOrderPreservingForClientScanPlanBug5148(true, false);
+        doTestOrderPreservingForClientScanPlanBug5148(true, true);
+    }
+
+    private void doTestOrderPreservingForClientScanPlanBug5148(boolean desc, boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 char(20) not null , " +
+                    " pk2 char(20) not null, " +
+                    " pk3 char(20) not null," +
+                    " v1 varchar, " +
+                    " v2 varchar, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                    "pk1 "+(desc ? "desc" : "")+", "+
+                    "pk2 "+(desc ? "desc" : "")+", "+
+                    "pk3 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+
+            sql = "select v1 from (select v1,v2,pk3 from "+tableName+" t where pk1 = '6' order by t.v2,t.pk3,t.v1 limit 10) a order by v2,pk3";
+            QueryPlan plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select v1 from (select v1,v2,pk3 from "+tableName+" t where pk1 = '6' order by t.v2,t.pk3,t.v1 limit 10) a where pk3 = '8' order by v2,v1";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select v1 from (select v1,v2,pk3 from "+tableName+" t where pk1 = '6' order by t.v2 desc,t.pk3 desc,t.v1 desc limit 10) a order by v2 desc ,pk3 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3),t.v2 limit 10) a order by cnt,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3),t.v2 limit 10) a order by cast(cnt as bigint),substr(sub,0,1)";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3) desc,t.v2 desc limit 10) a order by cnt desc ,sub desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,pk2 from "+tableName+" t where pk1 = '6' group by pk2,v2 limit 10) a order by pk2,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            if(desc) {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            } else {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            }
+
+            sql = "select sub from (select substr(v2,0,2) sub,pk2 from "+tableName+" t where pk1 = '6' group by pk2,v2 limit 10) a order by pk2 desc,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            if(desc) {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            } else {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            }
+
+            sql = "select sub from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by t.v2 ,count(pk3) limit 10) a order by sub ,cnt";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select sub from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by t.v2 ,count(pk3) limit 10) a order by substr(sub,0,1) ,cast(cnt as bigint)";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select sub from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by t.v2 ,count(pk3) limit 10) a order by sub ,cnt";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select v1 from (select v1,v2,pk3  from "+tableName+" t where pk1 = '6' order by t.v2 desc,t.pk3 desc,t.v1 desc limit 10) a order by v2 ,pk3";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select v1 from (select v1,v2,pk3 from "+tableName+" t where pk1 = '6' order by t.v2,t.pk3,t.v1 limit 10) a where pk3 = '8' or (v2 < 'abc' and pk3 > '11') order by v2,v1";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            //test innerQueryPlan is ordered by rowKey
+            sql = "select pk1 from (select pk3,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1,t.pk2 limit 10) a where pk3 > '8' order by pk1,pk2,pk3";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1,t.pk2 limit 10) a where sub > '8' order by pk1,pk2,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select pk3,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1 desc,t.pk2 desc limit 10) a where pk3 > '8' order by pk1 desc ,pk2 desc ,pk3 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1 desc,t.pk2 desc limit 10) a where sub > '8' order by pk1 desc,pk2 desc,sub desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testGroupByOrderPreservingForClientAggregatePlanBug5148() throws Exception {
+        doTestGroupByOrderPreservingForClientAggregatePlanBug5148(false, false);
+        doTestGroupByOrderPreservingForClientAggregatePlanBug5148(false, true);
+        doTestGroupByOrderPreservingForClientAggregatePlanBug5148(true, false);
+        doTestGroupByOrderPreservingForClientAggregatePlanBug5148(true, true);
+    }
+
+    private void doTestGroupByOrderPreservingForClientAggregatePlanBug5148(boolean desc, boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 varchar not null , " +
+                    " pk2 varchar not null, " +
+                    " pk3 varchar not null," +
+                    " v1 varchar, " +
+                    " v2 varchar, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                    "pk1 "+(desc ? "desc" : "")+", "+
+                    "pk2 "+(desc ? "desc" : "")+", "+
+                    "pk3 "+(desc ? "desc" : "")+
+                    " )) "+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+
+            sql = "select v1 from (select v1,pk2,pk1 from "+tableName+" t where pk1 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a group by pk2,v1 order by pk2,v1";
+            QueryPlan plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select v1 from (select v1,pk2,pk1 from "+tableName+" t where pk1 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' group by v1, pk1 order by v1,pk1";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select v1 from (select v1,pk2,pk1 from "+tableName+" t where pk1 = '6' order by t.pk2 desc,t.v1 desc,t.pk1 limit 10) a group by pk2, v1 order by pk2 desc,v1 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select v1 from (select v1,pk2,pk1 from "+tableName+" t where pk1 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' or (v1 < 'abc' and pk2 > '11') group by v1, pk1 order by v1,pk1";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            if(desc) {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            } else {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            }
+
+            sql = "select v1 from (select v1,pk2,pk1 from "+tableName+" t where pk1 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' or (v1 < 'abc' and pk2 > '11') group by v1, pk1 order by v1,pk1 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            if(desc) {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            } else {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            }
+
+            sql = "select sub from (select v1,pk2,substr(pk1,0,1) sub from "+tableName+" t where v2 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' group by v1,sub order by v1,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v1,0,1) sub,pk2,pk1 from "+tableName+" t where v2 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' group by sub,pk1 order by sub,pk1";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            if(desc) {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            } else {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            }
+
+            sql = "select sub from (select substr(v1,0,1) sub,pk2,pk1 from "+tableName+" t where v2 = '6' order by t.pk2,t.v1,t.pk1 limit 10) a where pk2 = '8' group by sub,pk1 order by sub,pk1 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            if(desc) {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            } else {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            }
+
+            sql = "select sub from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt from "+tableName+" t where pk1 = '6' group by v1,v2 order by count(pk3),t.v2 limit 10) a group by cnt,sub order by cnt,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select substr(sub,0,1) from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3),t.v2 limit 10) a "+
+                  "group by cast(cnt as bigint),substr(sub,0,1) order by cast(cnt as bigint),substr(sub,0,1)";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3) desc,t.v2 desc limit 10) a group by cnt,sub order by cnt desc ,sub desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select substr(sub,0,1) from (select substr(v2,0,2) sub,count(pk3) cnt from "+tableName+" t where pk1 = '6' group by v1 ,v2 order by count(pk3) desc,t.v2 desc limit 10) a "+
+                  "group by cast(cnt as bigint),substr(sub,0,1) order by cast(cnt as bigint) desc,substr(sub,0,1) desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select sub from (select substr(v2,0,2) sub,pk2 from "+tableName+" t where pk1 = '6' group by pk2,v2 limit 10) a group by pk2,sub order by pk2,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            if(desc) {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            } else {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            }
+
+            sql = "select sub from (select substr(v2,0,2) sub,pk2 from "+tableName+" t where pk1 = '6' group by pk2,v2 limit 10) a group by pk2,sub order by pk2 desc,sub";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            if(desc) {
+                assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            } else {
+                assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            }
+
+            //test innerQueryPlan is ordered by rowKey
+            sql = "select pk1 from (select pk3,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1,t.pk2 limit 10) a where pk3 > '8' group by pk1,pk2,pk3 order by pk1,pk2,pk3";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1,t.pk2 limit 10) a where sub > '8' group by pk1,pk2,sub order by pk1,pk2";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select pk3,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1 desc,t.pk2 desc limit 10) a where pk3 > '8' group by pk1, pk2, pk3 order by pk1 desc ,pk2 desc ,pk3 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select pk1 from (select substr(pk3,0,3) sub,pk2,pk1 from "+tableName+" t where v1 = '6' order by t.pk1 desc,t.pk2 desc limit 10) a where sub > '8' group by pk1,pk2,sub order by pk1 desc,pk2 desc";
+            plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testOrderPreservingForSortMergeJoinBug5148() throws Exception {
+        doTestOrderPreservingForSortMergeJoinBug5148(false, false);
+        doTestOrderPreservingForSortMergeJoinBug5148(false, true);
+        doTestOrderPreservingForSortMergeJoinBug5148(true, false);
+        doTestOrderPreservingForSortMergeJoinBug5148(true, true);
+    }
+
+    private void doTestOrderPreservingForSortMergeJoinBug5148(boolean desc, boolean salted) throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+
+            String tableName1 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+
+            String sql = "CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY "+(desc ? "desc" : "")+","+
+                    "AGE INTEGER"+
+                    ") "+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+
+            sql = "CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY "+(desc ? "desc" : "")+","+
+                    "CODE INTEGER"+
+                    ")"+(salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code order by a.aid ,a.age";
+            QueryPlan queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code order by a.aid desc,a.age desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,a.age from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code group by a.aid,a.age order by a.aid ,a.age";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,a.age from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code group by a.aid,a.age order by a.aid desc,a.age desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code order by b.bid ,b.code";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code order by b.bid desc ,b.code desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code group by b.bid, b.code order by b.bid ,b.code";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid and a.age = b.code group by b.bid, b.code order by b.bid desc,b.code desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+            //test part column
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by a.aid";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by a.aid desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code group by a.aid order by a.aid";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code group by a.aid order by a.aid desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by a.age";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid,a.age from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by b.bid";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid,a.age from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by b.bid desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code group by b.bid order by b.bid";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code group by b.bid order by b.bid desc";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+
+            sql = "select /*+ USE_SORT_MERGE_JOIN */ b.bid,a.age from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid and a.age = b.code order by b.code";
+            queryPlan = getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size() > 0);
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testSortMergeBug4508() throws Exception {
+        Connection conn = null;
+        Connection conn010 = null;
+        try {
+            // Salted tables
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty("TenantId", "010");
+            conn010 = DriverManager.getConnection(getUrl(), props);
+
+            String peopleTable1 = generateUniqueName();
+            String myTable1 = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + peopleTable1 + " (\n" +
+                    "PERSON_ID VARCHAR NOT NULL,\n" +
+                    "NAME VARCHAR\n" +
+                    "CONSTRAINT PK_TEST_PEOPLE PRIMARY KEY (PERSON_ID)) SALT_BUCKETS = 3");
+            conn.createStatement().execute("CREATE TABLE " + myTable1 + " (\n" +
+                    "LOCALID VARCHAR NOT NULL,\n" +
+                    "DSID VARCHAR(255) NOT NULL, \n" +
+                    "EID CHAR(40),\n" +
+                    "HAS_CANDIDATES BOOLEAN\n" +
+                    "CONSTRAINT PK_MYTABLE PRIMARY KEY (LOCALID, DSID)) SALT_BUCKETS = 3");
+            verifyQueryPlanForSortMergeBug4508(conn, peopleTable1, myTable1);
+
+            // Salted multi-tenant tables
+            String peopleTable2 = generateUniqueName();
+            String myTable2 = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + peopleTable2 + " (\n" +
+                    "TENANT_ID VARCHAR NOT NULL,\n" +
+                    "PERSON_ID VARCHAR NOT NULL,\n" +
+                    "NAME VARCHAR\n" +
+                    "CONSTRAINT PK_TEST_PEOPLE PRIMARY KEY (TENANT_ID, PERSON_ID))\n" +
+                    "SALT_BUCKETS = 3, MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE TABLE " + myTable2 + " (\n" +
+                    "TENANT_ID VARCHAR NOT NULL,\n" +
+                    "LOCALID VARCHAR NOT NULL,\n" +
+                    "DSID VARCHAR(255) NOT NULL, \n" +
+                    "EID CHAR(40),\n" +
+                    "HAS_CANDIDATES BOOLEAN\n" +
+                    "CONSTRAINT PK_MYTABLE PRIMARY KEY (TENANT_ID, LOCALID, DSID))\n" +
+                    "SALT_BUCKETS = 3, MULTI_TENANT=true");
+            verifyQueryPlanForSortMergeBug4508(conn010, peopleTable2, myTable2);
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+            if(conn010 != null) {
+                conn010.close();
+            }
+        }
+    }
+
+    private static void verifyQueryPlanForSortMergeBug4508(Connection conn, String peopleTable, String myTable) throws Exception {
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ COUNT(*)\n" +
+                "FROM " + peopleTable + " ds JOIN " + myTable + " l\n" +
+                "ON ds.PERSON_ID = l.LOCALID\n" +
+                "WHERE l.EID IS NULL AND l.DSID = 'PEOPLE' AND l.HAS_CANDIDATES = FALSE";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN */ COUNT(*)\n" +
+                "FROM (SELECT LOCALID FROM " + myTable + "\n" +
+                "WHERE EID IS NULL AND DSID = 'PEOPLE' AND HAS_CANDIDATES = FALSE) l\n" +
+                "JOIN " + peopleTable + " ds ON ds.PERSON_ID = l.LOCALID";
+
+        for (String q : new String[]{query1, query2}) {
+            ResultSet rs = conn.createStatement().executeQuery("explain " + q);
+            String plan = QueryUtil.getExplainPlan(rs);
+            assertFalse("Tables should not require sort over their PKs:\n" + plan,
+                    plan.contains("SERVER SORTED BY"));
+        }
+    }
 }

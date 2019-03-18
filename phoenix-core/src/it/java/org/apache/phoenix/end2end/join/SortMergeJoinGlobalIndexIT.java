@@ -76,8 +76,7 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.idx_item\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
-                "    CLIENT MERGE SORT\n" +
-                "CLIENT SORTED BY [\"I1.:item_id\"]"
+                "    CLIENT MERGE SORT"
                 }});
         return testCases;
     }

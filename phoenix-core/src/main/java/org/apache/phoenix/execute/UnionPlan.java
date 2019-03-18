@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.NumberUtil.getMin;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -48,6 +49,7 @@ import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.Sets;
 
@@ -298,5 +300,16 @@ public class UnionPlan implements QueryPlan {
                 estimateInfoTs = getMin(estimateInfoTs, plan.getEstimateInfoTimestamp());
             }
         }
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+        assert this.groupBy == GroupBy.EMPTY_GROUP_BY;
+        assert this.orderBy != OrderBy.FWD_ROW_KEY_ORDER_BY && this.orderBy != OrderBy.REV_ROW_KEY_ORDER_BY;
+        if(!this.orderBy.isEmpty()) {
+            return Collections.<OrderBy> singletonList(
+                    OrderBy.convertCompiledOrderByToOutputOrderBy(this.orderBy));
+        }
+        return Collections.<OrderBy> emptyList();
     }
 }
