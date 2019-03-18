@@ -24,12 +24,7 @@
 
   <modules>
     <module>phoenix-core</module>
-    <module>phoenix-flume</module>
-    <module>phoenix-kafka</module>
-    <module>phoenix-pig</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-spark</module>
-    <module>phoenix-hive</module>
     <module>phoenix-client</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
