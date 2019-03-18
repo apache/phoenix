@@ -71,6 +71,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -96,6 +97,7 @@ public class ScanPlan extends BaseQueryPlan {
     private Long serialRowsEstimate;
     private Long serialBytesEstimate;
     private Long serialEstimateInfoTs;
+    private OrderBy actualOutputOrderBy;
 
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit,
             Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, 
@@ -126,6 +128,7 @@ public class ScanPlan extends BaseQueryPlan {
             serialRowsEstimate = estimate.getSecond();
             serialEstimateInfoTs = StatisticsUtil.NOT_STATS_BASED_TS;
         }
+        this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, context);
     }
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
@@ -349,5 +352,26 @@ public class ScanPlan extends BaseQueryPlan {
             return serialEstimateInfoTs;
         }
         return super.getEstimateInfoTimestamp();
+    }
+
+    private static OrderBy convertActualOutputOrderBy(OrderBy orderBy, StatementContext statementContext) throws SQLException {
+        if(!orderBy.isEmpty()) {
+            return OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy);
+        }
+
+        if(!ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, statementContext)) {
+            return OrderBy.EMPTY_ORDER_BY;
+        }
+
+        TableRef tableRef = statementContext.getResolver().getTables().get(0);
+        return ExpressionUtil.getOrderByFromTable(
+                tableRef,
+                statementContext.getConnection(),
+                orderBy == OrderBy.REV_ROW_KEY_ORDER_BY).getFirst();
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+       return OrderBy.wrapForOutputOrderBys(this.actualOutputOrderBy);
     }
 }

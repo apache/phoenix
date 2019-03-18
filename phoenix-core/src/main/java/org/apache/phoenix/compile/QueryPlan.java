@@ -24,11 +24,13 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 
@@ -67,7 +69,10 @@ public interface QueryPlan extends StatementPlan {
     Integer getLimit();
 
     Integer getOffset();
-    
+
+    /**
+     * Return the compiled Order By clause of {@link SelectStatement}.
+     */
     OrderBy getOrderBy();
 
     GroupBy getGroupBy();
@@ -92,4 +97,17 @@ public interface QueryPlan extends StatementPlan {
     public boolean useRoundRobinIterator() throws SQLException;
 
     <T> T accept(QueryPlanVisitor<T> visitor);
+
+    /**
+     * <pre>
+     * Get the actual OrderBys of this queryPlan, which may be different from {@link #getOrderBy()},
+     * because {@link #getOrderBy()} is only the compiled result of {@link SelectStatement}.
+     * The return type is List because we can get multiple OrderBys for the query result of {@link SortMergeJoinPlan},
+     * eg. for the sql:
+     * SELECT  * FROM T1 JOIN T2 ON T1.a = T2.a and T1.b = T2.b
+     * The result of the sort-merge-join is sorted on (T1.a, T1.b) and (T2.a, T2.b) at the same time.
+     * </pre>
+     * @return
+     */
+    public List<OrderBy> getOutputOrderBys() ;
 }
