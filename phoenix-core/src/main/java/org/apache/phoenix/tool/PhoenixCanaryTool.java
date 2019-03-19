@@ -28,18 +28,20 @@ import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.RetryCounter;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -49,16 +51,23 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A Canary Tool to perform synthetic tests for Query Server
+ * A Canary Tool to perform synthetic tests for Phoenix
+ * It assumes that TEST.PQSTEST or the schema.table passed in the argument
+ * is already present as following command
+ * CREATE TABLE IF NOT EXISTS TEST.PQSTEST (mykey INTEGER NOT NULL
+ * PRIMARY KEY, mycolumn VARCHAR, insert_date TIMESTAMP);
+ *
  */
 public class PhoenixCanaryTool extends Configured implements Tool {
 
     private static String TEST_SCHEMA_NAME = "TEST";
     private static String TEST_TABLE_NAME = "PQSTEST";
     private static String FQ_TABLE_NAME = "TEST.PQSTEST";
-    private boolean USE_NAMESPACE = true;
-
+    private static Timestamp timestamp;
+    private static final int MAX_CONNECTION_ATTEMPTS = 5;
+    private final int FIRST_TIME_RETRY_TIMEOUT = 5000;
     private Sink sink = new StdOutSink();
+    public static final String propFileName = "phoenix-canary-file-sink.properties";
 
     /**
      * Base class for a Canary Test
@@ -97,84 +106,38 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         }
     }
 
-    /**
-     * Test which prepares environment before other tests run
-     */
-    static class PrepareTest extends CanaryTest {
-        void onExecute() throws Exception {
-            result.setTestName("prepare");
-            Statement statement = connection.createStatement();
-            DatabaseMetaData dbm = connection.getMetaData();
-            ResultSet tables = dbm.getTables(null, TEST_SCHEMA_NAME, TEST_TABLE_NAME, null);
-            if (tables.next()) {
-                // Drop test Table if exists
-                statement.executeUpdate("DROP TABLE IF EXISTS " + FQ_TABLE_NAME);
-            }
-
-            // Drop test schema if exists
-            if (TEST_SCHEMA_NAME != null) {
-                statement = connection.createStatement();
-                statement.executeUpdate("DROP SCHEMA IF EXISTS " + TEST_SCHEMA_NAME);
-            }
-        }
-    }
-
-    /**
-     * Create Schema Test
-     */
-    static class CreateSchemaTest extends CanaryTest {
-        void onExecute() throws Exception {
-            result.setTestName("createSchema");
-            Statement statement = connection.createStatement();
-            statement.executeUpdate("CREATE SCHEMA IF NOT EXISTS " + TEST_SCHEMA_NAME);
-        }
-    }
-
-    /**
-     * Create Table Test
-     */
-    static class CreateTableTest extends CanaryTest {
-        void onExecute() throws Exception {
-            result.setTestName("createTable");
-            Statement statement = connection.createStatement();
-            // Create Table
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS" + FQ_TABLE_NAME + " (mykey " + "INTEGER "
-                    + "NOT " + "NULL PRIMARY KEY, " + "mycolumn VARCHAR)");
-        }
-    }
-
-    /**
-     * Upsert Data into Table Test
-     */
     static class UpsertTableTest extends CanaryTest {
         void onExecute() throws Exception {
             result.setTestName("upsertTable");
             // Insert data
-            Statement statement = connection.createStatement();
-            statement.executeUpdate("UPSERT INTO " + FQ_TABLE_NAME + " VALUES (1, " +
-                    "'Hello" + " World')");
+            timestamp = new Timestamp(System.currentTimeMillis());
+            String stmt = "UPSERT INTO " + FQ_TABLE_NAME
+                    + "(mykey, mycolumn, insert_date) VALUES (?, ?, ?)";
+            PreparedStatement ps = connection.prepareStatement(stmt);
+            ps.setInt(1, 1);
+            ps.setString(2, "Hello World");
+            ps.setTimestamp(3, timestamp);
+            ps.executeUpdate();
             connection.commit();
         }
     }
 
-    /**
-     * Read data from Table Test
-     */
     static class ReadTableTest extends CanaryTest {
         void onExecute() throws Exception {
             result.setTestName("readTable");
-            // Query for table
-            PreparedStatement ps = connection.prepareStatement("SELECT * FROM " + FQ_TABLE_NAME);
+            PreparedStatement ps = connection.prepareStatement("SELECT * FROM "
+                    + FQ_TABLE_NAME+" WHERE INSERT_DATE = ?");
+            ps.setTimestamp(1,timestamp);
             ResultSet rs = ps.executeQuery();
 
-            // Check correctness
             int totalRows = 0;
             while (rs.next()) {
                 totalRows += 1;
                 Integer myKey = rs.getInt(1);
                 String myColumn = rs.getString(2);
                 if (myKey != 1 || !myColumn.equals("Hello World")) {
-                    throw new Exception("Retrieved values do not match the inserted " + "values");
+                    throw new Exception("Retrieved values do not " +
+                            "match the inserted values");
                 }
             }
             if (totalRows != 1) {
@@ -182,35 +145,6 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             }
             ps.close();
             rs.close();
-        }
-    }
-
-    /**
-     * Delete test table Test
-     */
-    static class DeleteTableTest extends CanaryTest {
-        void onExecute() throws Exception {
-            result.setTestName("deleteTable");
-            Statement statement = connection.createStatement();
-            statement.executeUpdate("DROP TABLE IF EXISTS" + FQ_TABLE_NAME);
-
-            // Check if table dropped
-            DatabaseMetaData dbm = connection.getMetaData();
-            ResultSet tables = dbm.getTables(null, TEST_SCHEMA_NAME, TEST_TABLE_NAME, null);
-            if (tables.next()) {
-                throw new Exception("Test Table could not be dropped");
-            }
-        }
-    }
-
-    /**
-     * Delete test Schema Test
-     */
-    static class DeleteSchemaTest extends CanaryTest {
-        void onExecute() throws Exception {
-            result.setTestName("deleteSchema");
-            Statement statement = connection.createStatement();
-            statement.executeUpdate("DROP SCHEMA IF EXISTS " + TEST_SCHEMA_NAME);
         }
     }
 
@@ -227,9 +161,6 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         void clearResults();
     }
 
-    /**
-     * Implementation of Std Out Sink
-     */
     public static class StdOutSink implements Sink {
         private List<CanaryTestResult> results = new ArrayList<>();
 
@@ -244,7 +175,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         }
 
         @Override
-        public void publishResults() throws Exception {
+        public void publishResults() {
 
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             String resultJson = gson.toJson(results);
@@ -264,7 +195,6 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         private List<CanaryTestResult> results = new ArrayList<>();
         File dir;
         String logfileName;
-        String propFileName = "phoenix-canary-file-sink.properties";
 
         public FileOutSink() throws Exception {
             Properties prop = new Properties();
@@ -338,7 +268,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
                 TEST_TABLE_NAME);
 
         parser.addArgument("--logsinkclass", "-lsc").type(String.class).nargs("?").setDefault
-                ("PhoenixCanaryTool$StdOutSink").help
+                ("org.apache.phoenix.tool.PhoenixCanaryTool$StdOutSink").help
                 ("Path to a Custom implementation for log sink class. default: stdout");
 
         Namespace res = null;
@@ -393,18 +323,10 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             appInfo.setTestName("appInfo");
             appInfo.setMiscellaneous(connectionURL);
 
-            Properties connProps = new Properties();
-            connProps.setProperty("phoenix.schema.mapSystemTablesToNamespace", "true");
-            connProps.setProperty("phoenix.schema.isNamespaceMappingEnabled", "true");
+            connection = getConnectionWithRetry(connectionURL);
 
-            try {
-                connection = DriverManager.getConnection(connectionURL, connProps);
-            } catch (Exception e) {
-                LOG.info("Namespace mapping cannot be set. Using default schema");
-                USE_NAMESPACE = false;
-                connection = DriverManager.getConnection(connectionURL);
-                TEST_SCHEMA_NAME = null;
-                FQ_TABLE_NAME = TEST_TABLE_NAME;
+            if (connection == null) {
+                LOG.error("Failed to get connection after multiple retries; the connection is null");
             }
 
             SimpleTimeLimiter limiter = new SimpleTimeLimiter();
@@ -416,32 +338,13 @@ public class PhoenixCanaryTool extends Configured implements Tool {
                     sink.clearResults();
 
                     // Execute tests
-
-                    LOG.info("Starting PrepareTest");
-                    sink.updateResults(new PrepareTest().runTest(connection));
-
-                    if (USE_NAMESPACE) {
-                        LOG.info("Starting CreateSchemaTest");
-                        sink.updateResults(new CreateSchemaTest().runTest(connection));
-                    }
-
-                    LOG.info("Starting CreateTableTest");
-                    sink.updateResults(new CreateTableTest().runTest(connection));
-
                     LOG.info("Starting UpsertTableTest");
                     sink.updateResults(new UpsertTableTest().runTest(connection));
 
                     LOG.info("Starting ReadTableTest");
                     sink.updateResults(new ReadTableTest().runTest(connection));
-
-                    LOG.info("Starting DeleteTableTest");
-                    sink.updateResults(new DeleteTableTest().runTest(connection));
-
-                    if (USE_NAMESPACE) {
-                        LOG.info("Starting DeleteSchemaTest");
-                        sink.updateResults(new DeleteSchemaTest().runTest(connection));
-                    }
                     return null;
+
                 }
             }, timeoutVal, TimeUnit.SECONDS, true);
 
@@ -464,11 +367,56 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         return 0;
     }
 
+    private Connection getConnectionWithRetry(String connectionURL) {
+        Connection connection=null;
+        try{
+            connection = getConnectionWithRetry(connectionURL, true);
+        } catch (Exception e) {
+            LOG.info("Failed to get connection with namespace enabled", e);
+            try {
+                connection = getConnectionWithRetry(connectionURL, false);
+            } catch (Exception ex) {
+                LOG.info("Failed to get connection without namespace enabled", ex);
+            }
+        }
+        return connection;
+    }
+
+    private Connection getConnectionWithRetry(String connectionURL, boolean namespaceFlag)
+        throws Exception {
+        Properties connProps = new Properties();
+        Connection connection = null;
+
+        connProps.setProperty("phoenix.schema.mapSystemTablesToNamespace", String.valueOf(namespaceFlag));
+        connProps.setProperty("phoenix.schema.isNamespaceMappingEnabled", String.valueOf(namespaceFlag));
+
+        RetryCounter retrier = new RetryCounter(MAX_CONNECTION_ATTEMPTS,
+                FIRST_TIME_RETRY_TIMEOUT, TimeUnit.MILLISECONDS);
+        LOG.info("Trying to get the connection with "
+                + retrier.getMaxAttempts() + " attempts with "
+                + "connectionURL :" + connectionURL
+                + "connProps :" + connProps);
+        while (retrier.shouldRetry()) {
+            try {
+                connection = DriverManager.getConnection(connectionURL, connProps);
+            } catch (SQLException e) {
+                LOG.info("Trying to establish connection with "
+                        + retrier.getAttemptTimes() + " attempts", e);
+            }
+            if (connection != null) {
+                LOG.info("Successfully established connection within "
+                        + retrier.getAttemptTimes() + " attempts");
+                break;
+            }
+            retrier.sleepUntilNextRetry();
+        }
+        return connection;
+    }
+
     public static void main(final String[] args) {
-        int result = 0;
         try {
             LOG.info("Starting Phoenix Canary Test tool...");
-            result = ToolRunner.run(new PhoenixCanaryTool(), args);
+            ToolRunner.run(new PhoenixCanaryTool(), args);
         } catch (Exception e) {
             LOG.error("Error in running Phoenix Canary Test tool. " + e);
         }
