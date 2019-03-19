@@ -54,40 +54,9 @@ public class PhoenixCanaryToolTest {
     }
 
     @Test
-    public void prepareTest() throws Exception {
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        when(connection.getMetaData()).thenReturn(dbm);
-        when(dbm.getTables(null, "TEST", "PQSTEST", null)).thenReturn(rs);
-        when(rs.next()).thenReturn(true).thenReturn(false);
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        CanaryTestResult result = new PhoenixCanaryTool.PrepareTest().runTest(connection);
-        assertEquals(true, result.isSuccessful());
-        assertEquals("Test prepare successful", result.getMessage());
-    }
-
-    @Test
-    public void createSchemaTest() throws Exception {
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        CanaryTestResult result = new PhoenixCanaryTool.CreateSchemaTest().runTest(connection);
-        assertEquals(true, result.isSuccessful());
-        assertEquals("Test createSchema successful", result.getMessage());
-    }
-
-    @Test
-    public void createTableTest() throws Exception {
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        CanaryTestResult result = new PhoenixCanaryTool.CreateTableTest().runTest(connection);
-        assertEquals(true, result.isSuccessful());
-        assertEquals("Test createTable successful", result.getMessage());
-    }
-
-    @Test
     public void upsertTableTest() throws Exception {
         when(connection.createStatement()).thenReturn(statement);
+        when(connection.prepareStatement(Mockito.anyString())).thenReturn(ps);
         when(statement.executeUpdate(Mockito.anyString())).thenReturn(1);
         CanaryTestResult result = new PhoenixCanaryTool.UpsertTableTest().runTest(connection);
         assertEquals(true, result.isSuccessful());
@@ -104,26 +73,6 @@ public class PhoenixCanaryToolTest {
         CanaryTestResult result = new PhoenixCanaryTool.ReadTableTest().runTest(connection);
         assertEquals(true, result.isSuccessful());
         assertEquals("Test readTable successful", result.getMessage());
-    }
-
-    @Test
-    public void deleteTableTest() throws Exception {
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        when(connection.getMetaData()).thenReturn(dbm);
-        when(dbm.getTables(null, "TEST", "PQSTEST", null)).thenReturn(rs);
-        CanaryTestResult result = new PhoenixCanaryTool.DeleteTableTest().runTest(connection);
-        assertEquals(true, result.isSuccessful());
-        assertEquals("Test deleteTable successful", result.getMessage());
-    }
-
-    @Test
-    public void deleteSchemaTest() throws Exception {
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeUpdate(Mockito.anyString())).thenReturn(0);
-        CanaryTestResult result = new PhoenixCanaryTool.DeleteSchemaTest().runTest(connection);
-        assertEquals(true, result.isSuccessful());
-        assertEquals("Test deleteSchema successful", result.getMessage());
     }
 
     @Test
