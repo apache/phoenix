@@ -720,11 +720,118 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            int guidePostWidth = 20;
+            int guidePostWidth = 520; // first guide post 106, second gp 112
+            String ddl =
+                    "CREATE TABLE " + tableName + " (pk1 INTEGER NOT NULL, pk2 bigint NOT NULL, a bigint CONSTRAINT PK PRIMARY KEY (pk1, pk2))"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization;
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,103,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,104,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,105,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,106,3)");
+
+            conn.createStatement().execute("upsert into " + tableName + " values (106,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,108,5)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,109,6)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,110,7)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,111,8)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,112,4)");
+
+            conn.createStatement().execute("upsert into " + tableName + " values (106,113,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (114,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (115,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (116,106,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (117,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (118,108,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (119,109,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // query whose start key is before any data
+            //String sql = "SELECT * FROM " + tableName + " WHERE ((pk1 >= 101 AND pk1 <= 105) OR (pk1 >= 111 AND pk1 <= 115)) AND (pk2 = 103)";
+            // (With GPW 520 gp1[106, 106] gp2 [106,112]) Skip Filter bug - filter range (pk1 >= 111 AND pk1 <= 115) still in first scan
+            //String sql = "SELECT * FROM " + tableName + " WHERE ((pk1 >= 101 AND pk1 <= 105) OR (pk1 >= 111 AND pk1 <= 115)) AND (pk2 >= 102 AND pk2 <= 104)";
+            // (With GPW 520 gp1[106, 106] gp2 [106,112]) Skip Scan Case 2; Overestimation
+            String sql = "SELECT * FROM " + tableName + " WHERE (pk1 >= 106 AND pk1 <= 115) AND (pk2 >= 102 AND pk2 <= 104)";
+            //String sql = "SELECT * FROM " + tableName + " WHERE pk1 IN (105, 106, 107) AND (pk2 >= 102 AND pk2 <= 104)";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            int i = 0;
+            int numRows = 8;
+            while (rs.next()) {
+                i++;
+            }
+            assertEquals(numRows, i);
+        }
+    }
+
+    /*
+    private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 720;
+            //int guidePostWidth = 20;
+            String ddl =
+                    "CREATE TABLE " + tableName + " (pk1 INTEGER NOT NULL, pk2 bigint NOT NULL, a bigint CONSTRAINT PK PRIMARY KEY (pk1, pk2))"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization;
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,103,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,104,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,105,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,106,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,108,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,109,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (110,100,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (111,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (112,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (113,103,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (114,104,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (115,105,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (116,106,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (117,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (118,108,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (119,109,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // query whose start key is before any data
+            //String sql = "SELECT * FROM " + tableName + " WHERE ((pk1 >= 101 AND pk1 <= 105) OR (pk1 >= 111 AND pk1 <= 115)) AND (pk2 = 103)";
+            String sql = "SELECT * FROM " + tableName + " WHERE ((pk1 >= 101 AND pk1 <= 105) OR (pk1 >= 111 AND pk1 <= 115)) AND (pk2 >= 102 AND pk2 <= 104)";
+            //String sql = "SELECT * FROM " + tableName + " WHERE (pk1 >= 111 AND pk1 <= 115) AND (pk2 >= 102 AND pk2 <= 104)";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            int i = 0;
+            int numRows = 8;
+            while (rs.next()) {
+                i++;
+            }
+            assertEquals(numRows, i);
+        }
+    }
+    */
+
+    /*
+    private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            //int guidePostWidth = 620;
+            int guidePostWidth = 200; // gps: 103, 105, ...
             String ddl =
                     "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
                             + " GUIDE_POSTS_WIDTH=" + guidePostWidth
-                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (102, 105, 108)";
+                            // + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (102, 105, 108)";
+                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (105)";
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
             conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
@@ -742,7 +849,55 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         List<Object> binds = Lists.newArrayList();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // query whose start key is before any data
-            String sql = "SELECT a FROM " + tableName + " WHERE K >= 99";
+            //String sql = "SELECT a FROM " + tableName + " WHERE (K >= 100 AND K <= 102) OR (K >= 104 AND K <= 107) OR (K >= 108 AND K <= 109)";
+            String sql = "SELECT a FROM " + tableName + " WHERE (K >= 101 AND K <= 107)";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            int i = 0;
+            int numRows = 8;
+            while (rs.next()) {
+                i++;
+            }
+            assertEquals(numRows, i);
+        }
+    }
+    */
+
+    /*
+    private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int guidePostWidth = 20;
+            //int guidePostWidth = 320;
+            String ddl =
+                    "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
+                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
+                            //+ ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (102, 105, 108)";
+                            //+ ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (107)";
+                            + ", SALT_BUCKETS=4, USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization;
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
+            conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (102,102,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (103,103,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (104,104,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (105,105,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (106,106,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (107,107,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (108,108,4)");
+            conn.createStatement().execute("upsert into " + tableName + " values (109,109,4)");
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName + "");
+        }
+        List<Object> binds = Lists.newArrayList();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // query whose start key is before any data
+            //String sql = "SELECT a FROM " + tableName + " WHERE K >= 99";
+            //String sql = "SELECT a FROM " + tableName;
+            //String sql = "SELECT a FROM " + tableName + " WHERE K <= 101";
+            String sql = "SELECT a FROM " + tableName + " WHERE (K >= 101 AND K <= 103) OR (K >= 107 AND K <= 108)";
+            //String sql = "SELECT a FROM " + tableName + " WHERE (K >= 101 AND K <= 102) OR (K >= 104 AND K <= 106) OR (K >= 107 AND K <= 108)";
+            //String sql = "SELECT a FROM " + tableName + " WHERE (K >= 107 AND K <= 109) OR (K >= 103 AND K <= 105) OR (K >= 104 AND K <= 106)";
+            //String sql = "SELECT a FROM " + tableName + " WHERE ((K >= 100 AND K <= 101) OR (K >= 107 AND K <= 108)) AND (a >= 107 AND b <= 108)";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             int i = 0;
             int numRows = 10;
@@ -859,6 +1014,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             assertTrue(info.getEstimateInfoTs() > 0);
         }
     }
+    */
 
     private static void createMultitenantTableAndViews(String tenant1View, String tenant2View,
             String tenant3View, String tenant4View, String tenant1, String tenant2, String tenant3, String tenant4,

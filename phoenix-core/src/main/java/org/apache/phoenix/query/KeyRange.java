@@ -220,13 +220,21 @@ public class KeyRange implements Writable {
     public int compareLowerToUpperBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
         return compareLowerToUpperBound(ptr, true, comparator);
     }
-    
+
+    public int compareLowerToUpperBound(KeyRange keyRange, BytesComparator comparator) {
+        return compareLowerToUpperBound(keyRange.getUpperRange(), 0, keyRange.getUpperRange().length, keyRange.isUpperInclusive(), comparator);
+    }
+
     public int compareUpperToLowerBound(ImmutableBytesWritable ptr, boolean isInclusive, BytesComparator comparator) {
         return compareUpperToLowerBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive, comparator);
     }
     
     public int compareUpperToLowerBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
         return compareUpperToLowerBound(ptr, true, comparator);
+    }
+
+    public int compareUpperToLowerBound(KeyRange keyRange, BytesComparator comparator) {
+        return compareUpperToLowerBound(keyRange.getLowerRange(), 0, keyRange.getLowerRange().length, keyRange.isLowerInclusive(), comparator);
     }
     
     public int compareLowerToUpperBound( byte[] b, int o, int l, BytesComparator comparator) {
@@ -519,16 +527,38 @@ public class KeyRange implements Writable {
         return Lists.transform(keys, POINT);
     }
 
-    private static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
-        int result = Boolean.compare(rowKeyRange1.upperUnbound(), rowKeyRange2.upperUnbound());
+    public int compareUpperRange(byte[] b, int o, int l, boolean isInclusive) {
+        int result = Boolean.compare(upperUnbound(), b == KeyRange.UNBOUND);
         if (result != 0) {
             return result;
         }
-        result = Bytes.BYTES_COMPARATOR.compare(rowKeyRange1.getUpperRange(), rowKeyRange2.getUpperRange());
+        result = Bytes.BYTES_RAWCOMPARATOR.compare(upperRange, 0, upperRange.length, b, o, l);
         if (result != 0) {
             return result;
         }
-        return Boolean.compare(rowKeyRange2.isUpperInclusive(), rowKeyRange1.isUpperInclusive());
+        return Boolean.compare(isUpperInclusive(), isInclusive);
+    }
+
+    public static int compareUpperRange(KeyRange rowKeyRange1, KeyRange rowKeyRange2) {
+        return rowKeyRange1.compareUpperRange(rowKeyRange2.getUpperRange(), 0,
+                rowKeyRange2.getUpperRange().length, rowKeyRange2.isUpperInclusive());
+    }
+
+    public int compareLowerRange(byte[] b, int o, int l, boolean isInclusive) {
+        int result = Boolean.compare(b == KeyRange.UNBOUND, lowerUnbound());
+        if (result != 0) {
+            return result;
+        }
+        result = Bytes.BYTES_RAWCOMPARATOR.compare(lowerRange, 0, lowerRange.length, b, o, l);
+        if (result != 0) {
+            return result;
+        }
+        return Boolean.compare(isInclusive, isLowerInclusive());
+    }
+
+    public static int compareLowerRange(KeyRange rowKeyRange1, KeyRange rowKeyRange2) {
+        return rowKeyRange1.compareLowerRange(rowKeyRange2.getLowerRange(), 0,
+                rowKeyRange2.getLowerRange().length, rowKeyRange2.isLowerInclusive());
     }
 
     public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {
