@@ -329,17 +329,15 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     }
 
-
     @Test
     public void testAddVarCols() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
 
-        try {
             String ddl = "CREATE TABLE " + dataTableFullName +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string)) " + tableDDLOptions;
+              "  (a_string varchar not null, col1 integer" +
+              "  CONSTRAINT pk PRIMARY KEY (a_string)) " + tableDDLOptions;
             conn.createStatement().execute(ddl);
 
             String dml = "UPSERT INTO " + dataTableFullName + " VALUES(?)";
@@ -358,16 +356,18 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals("b",rs.getString(1));
             assertFalse(rs.next());
 
-
             query = "SELECT * FROM " + dataTableFullName + " WHERE a_string = 'a' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
 
-            ddl = "ALTER TABLE " + dataTableFullName + " ADD  c1.col2 VARCHAR  , c1.col3 integer , c2.col4 integer";
+            ddl = "ALTER TABLE " + dataTableFullName + " ADD c1.col2 VARCHAR, c1.col3 integer, "
+              + "c2.col4 integer";
             conn.createStatement().execute(ddl);
 
-            ddl = "ALTER TABLE " + dataTableFullName + " ADD   col5 integer , c1.col2 VARCHAR";
+            // If we are adding two columns but one of them already exists, the other one should
+            // not be added
+            ddl = "ALTER TABLE " + dataTableFullName + " ADD col5 integer, c1.col2 VARCHAR";
             try {
                 conn.createStatement().execute(ddl);
                 fail();
@@ -383,10 +383,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column."));
             }
 
-            ddl = "ALTER TABLE " + dataTableFullName + " ADD IF NOT EXISTS col5 integer , c1.col2 VARCHAR";
-            conn.createStatement().execute(ddl);
-
-            dml = "UPSERT INTO " + dataTableFullName + " VALUES(?,?,?,?,?)";
+            dml = "UPSERT INTO " + dataTableFullName + " VALUES(?, ?, ?, ?, ?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "c");
             stmt.setInt(2, 100);
@@ -406,9 +403,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals(102,rs.getInt(5));
             assertFalse(rs.next());
 
-            ddl = "ALTER TABLE " + dataTableFullName + " ADD  col5 integer";
-            conn.createStatement().execute(ddl);
-
             query = "SELECT c1.* FROM " + dataTableFullName + " WHERE a_string = 'c' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -416,8 +410,16 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertEquals(101,rs.getInt(2));
             assertFalse(rs.next());
 
+            // If we are adding two columns with "IF NOT EXISTS" and one of them already exists,
+            // the other one should be added
+            ddl = "ALTER TABLE " + dataTableFullName + " ADD IF NOT EXISTS col5 integer, "
+              + "c1.col2 VARCHAR";
+            conn.createStatement().execute(ddl);
 
-            dml = "UPSERT INTO " + dataTableFullName + "(a_string,col1,col5) VALUES(?,?,?)";
+            query = "SELECT col5 FROM " + dataTableFullName;
+            conn.createStatement().executeQuery(query);
+
+            dml = "UPSERT INTO " + dataTableFullName + "(a_string, col1, col5) VALUES(?, ?, ?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "e");
             stmt.setInt(2, 200);
@@ -425,17 +427,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-
-            query = "SELECT a_string,col1,col5 FROM " + dataTableFullName + " WHERE a_string = 'e' ";
+            query = "SELECT a_string, col1, col5 FROM " + dataTableFullName
+              + " WHERE a_string = 'e' ";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("e",rs.getString(1));
             assertEquals(200,rs.getInt(2));
             assertEquals(201,rs.getInt(3));
             assertFalse(rs.next());
-
-          } finally {
-            conn.close();
         }
     }
 
