@@ -3569,7 +3569,7 @@ public class MetaDataClient {
                     }
                 }
             } else {
-                columnDefs = origColumnDefs == null ? Collections.emptyList() : origColumnDefs;
+                columnDefs = origColumnDefs == null ? Collections.<ColumnDef>emptyList() : origColumnDefs;
             }
 
             boolean retried = false;
