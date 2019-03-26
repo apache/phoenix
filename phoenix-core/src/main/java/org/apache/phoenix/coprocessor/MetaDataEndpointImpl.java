@@ -1618,13 +1618,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             done.run(builder.build());
                             return;
                         }
-                        // make sure we haven't gone over our threshold for indexes on this table.
-                        if (execeededIndexQuota(tableType, parentTable)) {
-                            builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                        }
                         long parentTableSeqNumber;
                         if (tableType == PTableType.VIEW && viewPhysicalTableRow != null && request.hasClientVersion()) {
                             // Starting 4.5, the client passes the sequence number of the physical table in the table metadata.
@@ -1671,7 +1664,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
-                
+
+                if (parentTableName != null) {
+                    // make sure we haven't gone over our threshold for indexes on this table.
+                    if (execeededIndexQuota(tableType, parentTable)) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                }
+
                 // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
                 // conform the correct row key. The exception is for a VIEW, which the client
                 // sends over depending on its base physical table.
