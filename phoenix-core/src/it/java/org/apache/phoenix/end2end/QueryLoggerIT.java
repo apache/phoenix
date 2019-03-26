@@ -51,7 +51,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.LogLevel;
+import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
@@ -62,6 +64,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+
+import javax.validation.constraints.AssertFalse;
+import javax.validation.constraints.AssertTrue;
 
 public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
 
@@ -225,29 +230,29 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.OFF.name());
         Connection conn = DriverManager.getConnection(getUrl(),props);
         assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.OFF);
+
+        // delete old data
+        conn.createStatement().executeUpdate("delete from " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"");
+        conn.commit();
+
         String query = "SELECT * FROM " + tableName;
-        
         ResultSet rs = conn.createStatement().executeQuery(query);
         StatementContext context = ((PhoenixResultSet)rs).getContext();
-        String queryId = context.getQueryLogger().getQueryId();
+        assertEquals(context.getQueryLogger(), QueryLogger.NO_OP_INSTANCE);
         while (rs.next()) {
             rs.getString(1);
             rs.getString(2);
         }
 
-        String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
+        String logQuery = "SELECT count(*) FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
         rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
-        while (rs.next()) {
-            if (rs.getString(QUERY_ID).equals(queryId)) {
-                foundQueryLog = true;
-            }
-        }
-        assertFalse(foundQueryLog);
+        assertTrue(rs.next());
+        assertEquals(rs.getInt(1), 0);
+        assertFalse(rs.next());
         conn.close();
     }
     
