@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
@@ -68,6 +69,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -1302,5 +1304,40 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testMaxIndexesPerTable() throws SQLException {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Configuration conf =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+            int maxIndexes =
+                    conf.getInt(QueryServices.MAX_INDEXES_PER_TABLE,
+                        QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
+            conn.createStatement()
+                    .execute("CREATE TABLE " + fullTableName
+                            + " (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)"
+                            + tableDDLOptions);
+            for (int i = 0; i < maxIndexes; i++) {
+                conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX "
+                        + indexName + i + " ON " + fullTableName + "(\"v2\") INCLUDE (\"V1\")");
+            }
+            try {
+                conn.createStatement()
+                        .execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName
+                                + maxIndexes + " ON " + fullTableName
+                                + "(\"v2\") INCLUDE (\"V1\")");
+                fail("Expected exception TOO_MANY_INDEXES");
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), SQLExceptionCode.TOO_MANY_INDEXES.getErrorCode());
+            }
+            conn.createStatement()
+                    .execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX IF NOT EXISTS "
+                            + indexName + "0" + " ON " + fullTableName
+                            + "(\"v2\") INCLUDE (\"V1\")");
+        }
+    }
 
 }
