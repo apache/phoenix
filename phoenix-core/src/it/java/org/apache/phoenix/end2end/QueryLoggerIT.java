@@ -51,7 +51,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryStatus;
@@ -65,8 +64,6 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-import javax.validation.constraints.AssertFalse;
-import javax.validation.constraints.AssertTrue;
 
 public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
 
