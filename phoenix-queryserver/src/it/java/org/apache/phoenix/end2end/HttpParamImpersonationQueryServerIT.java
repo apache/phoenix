@@ -32,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -380,11 +381,13 @@ public class HttpParamImpersonationQueryServerIT {
 
     void createTable(String tableName, int numRows) throws Exception {
         try (Connection conn = DriverManager.getConnection(PQS_URL);
-            Statement stmt = conn.createStatement()) {
+            Statement stmt = conn.createStatement();
+            PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?)")) {
             conn.setAutoCommit(true);
             assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk integer not null primary key)"));
             for (int i = 0; i < numRows; i++) {
-                assertEquals(1, stmt.executeUpdate("UPSERT INTO " + tableName + " values(" + i + ")"));
+                pstmt.setInt(1, i);
+                assertEquals(1, stmt.executeUpdate());
             }
             readRows(stmt, tableName, numRows);
         }

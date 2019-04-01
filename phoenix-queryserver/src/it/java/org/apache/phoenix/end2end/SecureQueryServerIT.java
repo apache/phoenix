@@ -29,6 +29,7 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
@@ -294,12 +295,14 @@ public class SecureQueryServerIT {
                 // Phoenix
                 final String tableName = "phx_table1";
                 try (java.sql.Connection conn = DriverManager.getConnection(PQS_URL);
-                        Statement stmt = conn.createStatement()) {
+                        Statement stmt = conn.createStatement(); 
+                        PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?)"))) {
                     conn.setAutoCommit(true);
                     assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk integer not null primary key)"));
                     final int numRows = 5;
                     for (int i = 0; i < numRows; i++) {
-                      assertEquals(1, stmt.executeUpdate("UPSERT INTO " + tableName + " values(" + i + ")"));
+                      pstmt.setInt(1, i);
+                      assertEquals(1, stmt.executeUpdate());
                     }
 
                     try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
