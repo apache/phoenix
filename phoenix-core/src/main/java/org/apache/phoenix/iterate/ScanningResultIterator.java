@@ -17,6 +17,17 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.BYTES_IN_REMOTE_RESULTS_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.NOT_SERVING_REGION_EXCEPTION_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REGIONS_SCANNED_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_CALLS_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_CALLS_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_RETRIES_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
@@ -47,29 +58,12 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
-    private final Scan scan;
     private final ScanMetricsHolder scanMetricsHolder;
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
 
-    // These metric names are how HBase refers them
-    // Since HBase stores these strings as static final, we are using the same here
-    static final String RPC_CALLS_METRIC_NAME = "RPC_CALLS";
-    static final String REMOTE_RPC_CALLS_METRIC_NAME = "REMOTE_RPC_CALLS";
-    static final String MILLIS_BETWEEN_NEXTS_METRIC_NAME = "MILLIS_BETWEEN_NEXTS";
-    static final String NOT_SERVING_REGION_EXCEPTION_METRIC_NAME = "NOT_SERVING_REGION_EXCEPTION";
-    static final String BYTES_IN_RESULTS_METRIC_NAME = "BYTES_IN_RESULTS";
-    static final String BYTES_IN_REMOTE_RESULTS_METRIC_NAME = "BYTES_IN_REMOTE_RESULTS";
-    static final String REGIONS_SCANNED_METRIC_NAME = "REGIONS_SCANNED";
-    static final String RPC_RETRIES_METRIC_NAME = "RPC_RETRIES";
-    static final String REMOTE_RPC_RETRIES_METRIC_NAME = "REMOTE_RPC_RETRIES";
-    static final String COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME = "ROWS_SCANNED";
-    static final String COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME = "ROWS_FILTERED";
-    static final String GLOBAL_BYTES_IN_RESULTS_METRIC_NAME = "BYTES_IN_RESULTS";
-
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder) {
         this.scanner = scanner;
-        this.scan = scan;
         this.scanMetricsHolder = scanMetricsHolder;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
@@ -81,7 +75,7 @@ public class ScanningResultIterator implements ResultIterator {
         scanner.close();
     }
 
-    private static void changeMetric(CombinableMetric metric, Long value) {
+    private void changeMetric(CombinableMetric metric, Long value) {
         if(value != null) {
             metric.change(value);
         }
@@ -89,16 +83,11 @@ public class ScanningResultIterator implements ResultIterator {
 
     private void getScanMetrics() {
 
-        if (!scanMetricsUpdated && scanMetricsEnabled) {
-            ScanMetrics scanMetrics = scan.getScanMetrics();
-            if (scanMetrics == null) {
-                return;
-            }
+        if (scanMetricsEnabled && !scanMetricsUpdated) {
+            ScanMetrics scanMetrics = scanner.getScanMetrics();
             Map<String, Long> scanMetricsMap = scanMetrics.getMetricsMap();
-            if(scanMetricsMap == null) {
-                return;
-            }
             scanMetricsHolder.setScanMetricMap(scanMetricsMap);
+
             changeMetric(scanMetricsHolder.getCountOfRPCcalls(),
                     scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfRemoteRPCcalls(),
@@ -122,8 +111,7 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(scanMetricsHolder.getCountOfRowsFiltered(),
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
 
-            GLOBAL_SCAN_BYTES.update(scanMetricsMap.get(GLOBAL_BYTES_IN_RESULTS_METRIC_NAME));
-
+            GLOBAL_SCAN_BYTES.update(scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
             GLOBAL_HBASE_COUNT_RPC_CALLS.update(scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
             GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS.update(scanMetricsMap.get(REMOTE_RPC_CALLS_METRIC_NAME));
             GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.update(scanMetricsMap.get(MILLIS_BETWEEN_NEXTS_METRIC_NAME));
