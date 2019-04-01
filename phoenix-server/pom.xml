@@ -196,6 +196,10 @@
                       <shadedPattern>${shaded.package}.org.apache.tephra</shadedPattern>
                     </relocation>
                     <relocation>
+                        <pattern>org.apache.omid</pattern>
+                        <shadedPattern>${shaded.package}.org.apache.omid</shadedPattern>
+                    </relocation>
+                    <relocation>
                       <pattern>org.apache.twill</pattern>
                       <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
                     </relocation>
@@ -203,6 +207,7 @@
                       <pattern>org.apache.thrift</pattern>
                       <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
                     </relocation>
+
                     <relocation>
                       <!-- This would shade protobuf, but we don't package it as hbase provides it
                            for all CPEPs. Similarly, we need to exclude the package so that

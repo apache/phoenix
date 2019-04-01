@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import com.google.common.collect.Lists;
@@ -79,6 +80,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final ServerAggregators serverAggregators;
     private final ClientAggregators clientAggregators;
     private final boolean useHashAgg;
+    private OrderBy actualOutputOrderBy;
     
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
@@ -96,6 +98,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // Extract hash aggregate hint, if any.
         HintNode hints = statement.getHint();
         useHashAgg = hints != null && hints.hasHint(HintNode.Hint.HASH_AGGREGATE);
+        this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, groupBy, context);
     }
 
     @Override
@@ -145,18 +148,32 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             if (groupBy.isOrderPreserving()) {
                 aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
             } else {
-                int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt
-                    (QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
+                long thresholdBytes =
+                        context.getConnection().getQueryServices().getProps().getLong(
+                            QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                            QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+                boolean spoolingEnabled =
+                        context.getConnection().getQueryServices().getProps().getBoolean(
+                            QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                            QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
                 List<OrderByExpression> keyExpressionOrderBy = Lists.newArrayListWithExpectedSize(keyExpressions.size());
                 for (Expression keyExpression : keyExpressions) {
-                    keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
+                    /**
+                     * Sort the result tuples by the GroupBy expressions.
+                     * If some GroupBy expression is SortOrder.DESC, then sorted results on that expression are DESC, not ASC.
+                     * for ClientAggregatePlan,the orderBy should not be OrderBy.REV_ROW_KEY_ORDER_BY, which is different from {@link AggregatePlan.OrderingResultIteratorFactory#newIterator}
+                     **/
+                    keyExpressionOrderBy.add(OrderByExpression.createByCheckIfOrderByReverse(keyExpression, false, true, false));
                 }
 
                 if (useHashAgg) {
                     // Pass in orderBy to apply any sort that has been optimized away
                     aggResultIterator = new ClientHashAggregatingResultIterator(context, iterator, serverAggregators, keyExpressions, orderBy);
                 } else {
-                    iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
+                    iterator =
+                            new OrderedResultIterator(iterator, keyExpressionOrderBy,
+                                    spoolingEnabled, thresholdBytes, null, null,
+                                    projector.getEstimatedRowByteSize());
                     aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
                 }
             }
@@ -180,9 +197,18 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 resultScanner = new LimitingResultIterator(resultScanner, limit);
             }
         } else {
-            int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                    QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(), thresholdBytes, limit, offset);
+            long thresholdBytes =
+                    context.getConnection().getQueryServices().getProps().getLong(
+                        QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+            boolean spoolingEnabled =
+                    context.getConnection().getQueryServices().getProps().getBoolean(
+                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+            resultScanner =
+                    new OrderedAggregatingResultIterator(aggResultIterator,
+                            orderBy.getOrderByExpressions(), spoolingEnabled, thresholdBytes, limit,
+                            offset);
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
@@ -305,5 +331,26 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             return "ClientUngroupedAggregatingResultIterator [resultIterator=" 
                     + resultIterator + ", aggregators=" + aggregators + "]";
         }
+    }
+
+    private OrderBy convertActualOutputOrderBy(OrderBy orderBy, GroupBy groupBy, StatementContext statementContext) {
+        if(!orderBy.isEmpty()) {
+            return OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy);
+        }
+
+        if(this.useHashAgg &&
+           !groupBy.isEmpty() &&
+           !groupBy.isOrderPreserving() &&
+           orderBy != OrderBy.FWD_ROW_KEY_ORDER_BY &&
+           orderBy != OrderBy.REV_ROW_KEY_ORDER_BY) {
+            return OrderBy.EMPTY_ORDER_BY;
+        }
+
+        return ExpressionUtil.convertGroupByToOrderBy(groupBy, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+       return OrderBy.wrapForOutputOrderBys(this.actualOutputOrderBy);
     }
 }

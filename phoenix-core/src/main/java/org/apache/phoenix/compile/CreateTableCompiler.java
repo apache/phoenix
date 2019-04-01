@@ -158,6 +158,23 @@ public class CreateTableCompiler {
                     }
                 }
             }
+            if (viewTypeToBe == ViewType.MAPPED && parentToBe.getPKColumns().size() == 0) {
+                boolean isPKMissed = true;
+                if (pkConstraint.getColumnNames().size() > 0) {
+                    isPKMissed = false;
+                } else {
+                    for (ColumnDef columnDef: columnDefs) {
+                        if (columnDef.isPK()){
+                            isPKMissed = false;
+                            break;
+                        }
+                    }
+                }
+                if (isPKMissed) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
+                            .build().buildException();
+                }
+            }
         }
         final ViewType viewType = viewTypeToBe;
         final String viewStatement = viewStatementToBe;

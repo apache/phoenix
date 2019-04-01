@@ -96,6 +96,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
             this.mutations = Lists.newArrayListWithExpectedSize(batchSize);
             maintainers=new ImmutableBytesPtr(PhoenixConfigurationUtil.getIndexMaintainers(configuration));
         } catch (SQLException e) {
+            tryClosingResources();
             throw new RuntimeException(e.getMessage());
         } 
     }
@@ -170,17 +171,21 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         } finally {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException e) {
-                    LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
-                        e.getMessage());
-                }
-            }
-            if (writer != null) {
-                writer.close();
-            }
+            tryClosingResources();
         }
     }
+
+    private void tryClosingResources() throws IOException {
+        if (this.connection != null) {
+            try {
+                this.connection.close();
+            } catch (SQLException e) {
+                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+            }
+        }
+        if (this.writer != null) {
+            this.writer.close();
+        }
+    }
+
 }

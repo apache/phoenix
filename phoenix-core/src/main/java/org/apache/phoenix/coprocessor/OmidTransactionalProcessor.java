@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.omid.transaction.OmidSnapshotFilter;
 import org.apache.phoenix.transaction.OmidTransactionProvider;
 
+import java.io.IOException;
 import java.util.Optional;
 
 
@@ -33,9 +35,21 @@ public class OmidTransactionalProcessor extends DelegateRegionObserver implement
     }
 
     public OmidTransactionalProcessor() {
-        // Hack for testing - retrieves the commit table client from the singleton OmidTransactionProvider
-        // TODO: use real commit table and get port from config
         super(new OmidSnapshotFilter(OmidTransactionProvider.getInstance().getCommitTableClient()));
+    }
+
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+        if (delegate instanceof RegionCoprocessor) {
+            ((RegionCoprocessor)delegate).start(env);
+        }
+    }
+
+    @Override
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        if (delegate instanceof RegionCoprocessor) {
+            ((RegionCoprocessor)delegate).stop(env);
+        }
     }
 
 }

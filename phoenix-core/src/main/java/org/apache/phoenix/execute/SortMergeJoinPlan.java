@@ -20,58 +20,58 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatelessExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
-import org.apache.phoenix.iterate.BufferedQueue;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.PhoenixQueues;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.SizeAwareQueue;
 import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -94,15 +94,29 @@ public class SortMergeJoinPlan implements QueryPlan {
     private final int rhsFieldPosition;
     private final boolean isSingleValueOnly;
     private final Set<TableRef> tableRefs;
-    private final int thresholdBytes;
+    private final long thresholdBytes;
+    private final boolean spoolingEnabled;
     private Long estimatedBytes;
     private Long estimatedRows;
     private Long estimateInfoTs;
     private boolean getEstimatesCalled;
+    private List<OrderBy> actualOutputOrderBys;
 
-    public SortMergeJoinPlan(StatementContext context, FilterableStatement statement, TableRef table, 
-            JoinType type, QueryPlan lhsPlan, QueryPlan rhsPlan, List<Expression> lhsKeyExpressions, List<Expression> rhsKeyExpressions,
-            PTable joinedTable, PTable lhsTable, PTable rhsTable, int rhsFieldPosition, boolean isSingleValueOnly) {
+    public SortMergeJoinPlan(
+            StatementContext context,
+            FilterableStatement statement,
+            TableRef table,
+            JoinType type,
+            QueryPlan lhsPlan,
+            QueryPlan rhsPlan,
+            Pair<List<Expression>,List<Expression>> lhsAndRhsKeyExpressions,
+            List<Expression> rhsKeyExpressions,
+            PTable joinedTable,
+            PTable lhsTable,
+            PTable rhsTable,
+            int rhsFieldPosition,
+            boolean isSingleValueOnly,
+            Pair<List<OrderByNode>,List<OrderByNode>> lhsAndRhsOrderByNodes) throws SQLException {
         if (type == JoinType.Right) throw new IllegalArgumentException("JoinType should not be " + type);
         this.context = context;
         this.statement = statement;
@@ -110,8 +124,8 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.type = type;
         this.lhsPlan = lhsPlan;
         this.rhsPlan = rhsPlan;
-        this.lhsKeyExpressions = lhsKeyExpressions;
-        this.rhsKeyExpressions = rhsKeyExpressions;
+        this.lhsKeyExpressions = lhsAndRhsKeyExpressions.getFirst();
+        this.rhsKeyExpressions = lhsAndRhsKeyExpressions.getSecond();
         this.joinedSchema = buildSchema(joinedTable);
         this.lhsSchema = buildSchema(lhsTable);
         this.rhsSchema = buildSchema(rhsTable);
@@ -120,8 +134,15 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.tableRefs = Sets.newHashSetWithExpectedSize(lhsPlan.getSourceRefs().size() + rhsPlan.getSourceRefs().size());
         this.tableRefs.addAll(lhsPlan.getSourceRefs());
         this.tableRefs.addAll(rhsPlan.getSourceRefs());
-        this.thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
-                QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
+        this.thresholdBytes =
+                context.getConnection().getQueryServices().getProps().getLong(
+                    QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                    QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
+        this.spoolingEnabled =
+                context.getConnection().getQueryServices().getProps().getBoolean(
+                    QueryServices.CLIENT_JOIN_SPOOLING_ENABLED_ATTRIB,
+                    QueryServicesOptions.DEFAULT_CLIENT_JOIN_SPOOLING_ENABLED);
+        this.actualOutputOrderBys = convertActualOutputOrderBy(lhsAndRhsOrderByNodes.getFirst(), lhsAndRhsOrderByNodes.getSecond(), context);
     }
 
     @Override
@@ -294,7 +315,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         private ValueBitSet lhsBitSet;
         private ValueBitSet rhsBitSet;
         private byte[] emptyProjectedValue;
-        private BufferedTupleQueue queue;
+        private SizeAwareQueue<Tuple> queue;
         private Iterator<Tuple> queueIterator;
         
         public BasicJoinIterator(ResultIterator lhsIterator, ResultIterator rhsIterator) {
@@ -316,14 +337,23 @@ public class SortMergeJoinPlan implements QueryPlan {
             int len = lhsBitSet.getEstimatedLength();
             this.emptyProjectedValue = new byte[len];
             lhsBitSet.toBytes(emptyProjectedValue, 0);
-            this.queue = new BufferedTupleQueue(thresholdBytes);
+            this.queue = PhoenixQueues.newTupleQueue(spoolingEnabled, thresholdBytes);
             this.queueIterator = null;
         }
         
         @Override
         public void close() throws SQLException {
             SQLException e = closeIterators(lhsIterator, rhsIterator);
-            queue.close();
+            try {
+              queue.close();
+            } catch (IOException t) {
+              if (e != null) {
+                    e.setNextException(
+                        new SQLException("Also encountered exception while closing queue", t));
+              } else {
+                e = new SQLException("Error while closing queue",t);
+              }
+            }
             if (e != null) {
                 throw e;
             }
@@ -355,7 +385,11 @@ public class SortMergeJoinPlan implements QueryPlan {
                         if (lhsKey.equals(rhsKey)) {
                             next = join(lhsTuple, rhsTuple);
                              if (nextLhsTuple != null && lhsKey.equals(nextLhsKey)) {
-                                queue.offer(rhsTuple);
+                                try {
+                                    queue.add(rhsTuple);
+                                } catch (IllegalStateException e) {
+                                    throw new PhoenixIOException(e);
+                                }
                                 if (nextRhsTuple == null || !rhsKey.equals(nextRhsKey)) {
                                     queueIterator = queue.iterator();
                                     advance(true);
@@ -609,107 +643,6 @@ public class SortMergeJoinPlan implements QueryPlan {
         }
     }
     
-    private static class BufferedTupleQueue extends BufferedQueue<Tuple> {
-
-        public BufferedTupleQueue(int thresholdBytes) {
-            super(thresholdBytes);
-        }
-
-        @Override
-        protected BufferedSegmentQueue<Tuple> createSegmentQueue(
-                int index, int thresholdBytes) {
-            return new BufferedTupleSegmentQueue(index, thresholdBytes, false);
-        }
-
-        @Override
-        protected Comparator<BufferedSegmentQueue<Tuple>> getSegmentQueueComparator() {
-            return new Comparator<BufferedSegmentQueue<Tuple>>() {
-                @Override
-                public int compare(BufferedSegmentQueue<Tuple> q1,
-                        BufferedSegmentQueue<Tuple> q2) {
-                    return q1.index() - q2.index();
-                }                
-            };
-        }
-
-        @Override
-        public Iterator<Tuple> iterator() {
-            return new Iterator<Tuple>() {
-                private Iterator<BufferedSegmentQueue<Tuple>> queueIter;
-                private Iterator<Tuple> currentIter;
-                {
-                    this.queueIter = getSegmentQueues().iterator();
-                    this.currentIter = queueIter.hasNext() ? queueIter.next().iterator() : null;
-                }
-                
-                @Override
-                public boolean hasNext() {
-                    return currentIter != null && currentIter.hasNext();
-                }
-
-                @Override
-                public Tuple next() {
-                    if (!hasNext())
-                        return null;
-                    
-                    Tuple ret = currentIter.next();                    
-                    if (!currentIter.hasNext()) {
-                        this.currentIter = queueIter.hasNext() ? queueIter.next().iterator() : null;                       
-                    }
-                    
-                    return ret;
-                }
-
-                @Override
-                public void remove() {
-                    throw new UnsupportedOperationException();
-                }
-                
-            };
-        }
-        
-        private static class BufferedTupleSegmentQueue extends BufferedSegmentQueue<Tuple> {
-            private LinkedList<Tuple> results;
-            
-            public BufferedTupleSegmentQueue(int index,
-                    int thresholdBytes, boolean hasMaxQueueSize) {
-                super(index, thresholdBytes, hasMaxQueueSize);
-                this.results = Lists.newLinkedList();
-            }
-
-            @Override
-            protected Queue<Tuple> getInMemoryQueue() {
-                return results;
-            }
-
-            @Override
-            protected int sizeOf(Tuple e) {
-                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
-                return Bytes.SIZEOF_INT * 2 + kv.getLength();
-            }
-
-            @Override
-            protected void writeToStream(DataOutputStream out, Tuple e) throws IOException {
-                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
-                out.writeInt(kv.getLength() + Bytes.SIZEOF_INT);
-                out.writeInt(kv.getLength());
-                out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
-            }
-
-            @Override
-            protected Tuple readFromStream(DataInputStream in) throws IOException {
-                int length = in.readInt();
-                if (length < 0)
-                    return null;
-                
-                byte[] b = new byte[length];
-                in.readFully(b);
-                Result result = ResultUtil.toResult(new ImmutableBytesWritable(b));
-                return new ResultTuple(result);
-            }
-            
-        }
-    }
     
     @Override
     public boolean useRoundRobinIterator() {
@@ -782,5 +715,73 @@ public class SortMergeJoinPlan implements QueryPlan {
             estimateInfoTs =
                     getMin(lhsPlan.getEstimateInfoTimestamp(), rhsPlan.getEstimateInfoTimestamp());
         }
+    }
+
+    /**
+     * We do not use {@link #lhsKeyExpressions} and {@link #rhsKeyExpressions} directly because {@link #lhsKeyExpressions} is compiled by the
+     * {@link ColumnResolver} of lhs and {@link #rhsKeyExpressions} is compiled by the {@link ColumnResolver} of rhs, so we must recompile use
+     * the {@link ColumnResolver} of joinProjectedTables.
+     * @param lhsOrderByNodes
+     * @param rhsOrderByNodes
+     * @param statementContext
+     * @return
+     * @throws SQLException
+     */
+    private static List<OrderBy> convertActualOutputOrderBy(
+            List<OrderByNode> lhsOrderByNodes,
+            List<OrderByNode> rhsOrderByNodes,
+            StatementContext statementContext) throws SQLException {
+
+        List<OrderBy> orderBys = new ArrayList<OrderBy>(2);
+        List<OrderByExpression> lhsOrderByExpressions =
+                compileOrderByNodes(lhsOrderByNodes, statementContext);
+        if(!lhsOrderByExpressions.isEmpty()) {
+            orderBys.add(new OrderBy(lhsOrderByExpressions));
+        }
+
+        List<OrderByExpression> rhsOrderByExpressions =
+                compileOrderByNodes(rhsOrderByNodes, statementContext);
+        if(!rhsOrderByExpressions.isEmpty()) {
+            orderBys.add(new OrderBy(rhsOrderByExpressions));
+        }
+        if(orderBys.isEmpty()) {
+            return Collections.<OrderBy> emptyList();
+        }
+        return orderBys;
+    }
+
+    private static List<OrderByExpression> compileOrderByNodes(List<OrderByNode> orderByNodes, StatementContext statementContext) throws SQLException {
+        /**
+         * If there is TableNotFoundException or ColumnNotFoundException, it means that the orderByNodes is not referenced by other parts of the sql,
+         * so could be ignored.
+         */
+        StatelessExpressionCompiler expressionCompiler = new StatelessExpressionCompiler(statementContext);
+        List<OrderByExpression> orderByExpressions = new ArrayList<OrderByExpression>(orderByNodes.size());
+        for(OrderByNode orderByNode : orderByNodes) {
+            expressionCompiler.reset();
+            Expression expression = null;
+            try {
+                expression = orderByNode.getNode().accept(expressionCompiler);
+            } catch(TableNotFoundException exception) {
+                return orderByExpressions;
+            } catch(ColumnNotFoundException exception) {
+                return orderByExpressions;
+            } catch(ColumnFamilyNotFoundException exception) {
+                return orderByExpressions;
+            }
+            assert expression != null;
+            orderByExpressions.add(
+                    OrderByExpression.createByCheckIfOrderByReverse(
+                            expression,
+                            orderByNode.isNullsLast(),
+                            orderByNode.isAscending(),
+                            false));
+        }
+        return orderByExpressions;
+    }
+
+    @Override
+    public List<OrderBy> getOutputOrderBys() {
+        return this.actualOutputOrderBys;
     }
 }

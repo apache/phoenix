@@ -51,6 +51,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.time.LocalDate;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Properties;
@@ -1823,6 +1824,33 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCastTimeStampToDate() throws Exception {
+        String tablename = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tablename +
+                " (PK INTEGER PRIMARY KEY, A_TIMESTAMP TIMESTAMP)";
+        Properties props = new Properties();
+        props.setProperty("phoenix.query.dateFormatTimeZone", TimeZone.getDefault().toString());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+
+        String localTime = LocalDate.now().toString();
+        conn.createStatement().execute("UPSERT INTO " + tablename +
+                " VALUES(1,TO_TIMESTAMP('"+ localTime + "'))");
+
+        conn.setAutoCommit(true);
+        try {
+            PreparedStatement statement =
+                    conn.prepareStatement("SELECT CAST(A_TIMESTAMP AS DATE) as A_DATE FROM " + tablename);
+
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertTrue (rs.getString(1).contains(localTime));
+            assertFalse (rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 
     @Test
     public void testTimestamp() throws Exception {

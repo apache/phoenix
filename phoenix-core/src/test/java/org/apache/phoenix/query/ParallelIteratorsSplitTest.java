@@ -498,7 +498,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public Cost getCost() {
                 return Cost.ZERO;
             }
-            
+
+            @Override
+            public List<OrderBy> getOutputOrderBys() {
+                return Collections.<OrderBy> emptyList();
+            }
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false, null, null);
         List<KeyRange> keyRanges = parallelIterators.getSplits();
         return keyRanges;

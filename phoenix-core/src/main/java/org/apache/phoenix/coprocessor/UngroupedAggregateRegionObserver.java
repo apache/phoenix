@@ -29,6 +29,7 @@ import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CON
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -54,6 +55,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -475,13 +477,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] deleteCF = null;
         byte[] emptyCF = null;
         Table targetHTable = null;
+        Connection targetHConn = null;
         boolean isPKChanging = false;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            targetHTable =
-                    ConnectionFactory.createConnection(upsertSelectConfig).getTable(
+            targetHConn = ConnectionFactory.createConnection(upsertSelectConfig);
+            targetHTable = targetHConn.getTable(
                         TableName.valueOf(projectedTable.getPhysicalName().getBytes()));
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
@@ -852,9 +855,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
             try {
-                if (targetHTable != null) {
-                    targetHTable.close();
-                }
+                tryClosingResourceSilently(targetHTable);
+                tryClosingResourceSilently(targetHConn);
             } finally {
                 try {
                     innerScanner.close();
@@ -898,6 +900,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         };
         return scanner;
 
+    }
+
+    private static void tryClosingResourceSilently(Closeable res) {
+        if (res != null) {
+            try {
+                res.close();
+            } catch (IOException e) {
+                logger.error("Closing resource: " + res + " failed: ", e);
+            }
+        }
     }
 
     private void checkForLocalIndexColumnFamilies(Region region,
