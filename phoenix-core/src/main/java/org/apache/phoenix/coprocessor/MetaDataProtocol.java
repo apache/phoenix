@@ -118,6 +118,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // Version at which we allow SYSTEM.CATALOG to split
     public static final int MIN_SPLITTABLE_SYSTEM_CATALOG = VersionUtil.encodeVersion("5", "1", "0");
 
+    // Version at and after which we will no longer expect client to serialize thresholdBytes for
+    // spooling into the scan
+    public static final int MIN_5_x_DISABLE_SERVER_SPOOL_THRESHOLD =
+            VersionUtil.encodeVersion("5", "1", "0");
+    public static final int MIN_4_x_DISABLE_SERVER_SPOOL_THRESHOLD =
+            VersionUtil.encodeVersion("4", "15", "0");
+
     // ALWAYS update this map whenever rolling out a new release (major, minor or patch release). 
     // Key is the SYSTEM.CATALOG timestamp for the version and value is the version string.
     private static final NavigableMap<Long, String> TIMESTAMP_VERSION_MAP = new TreeMap<>();

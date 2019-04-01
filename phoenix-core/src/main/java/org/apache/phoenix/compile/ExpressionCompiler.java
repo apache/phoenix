@@ -60,7 +60,6 @@ import org.apache.phoenix.expression.LongSubtractExpression;
 import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
-import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
@@ -117,9 +116,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -301,8 +298,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             int index = groupBy.getExpressions().indexOf(expression);
             if (index >= 0) {
                 isAggregate = true;
-                RowKeyValueAccessor accessor = new RowKeyValueAccessor(groupBy.getKeyExpressions(), index);
-                expression = new RowKeyColumnExpression(expression, accessor, groupBy.getKeyExpressions().get(index).getDataType());
+                expression = ExpressionUtil.convertGroupByExpressionToRowKeyColumnExpression(groupBy, expression, index);
             }
         }
         return expression;
@@ -586,11 +582,16 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression firstChildExpr = expressions.get(0);
         if(fromDataType == targetDataType) {
             return firstChildExpr;
-        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PLong.INSTANCE)) {
+        } else if ((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE ||
+                fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+                PLong.INSTANCE)) {
             return RoundDecimalExpression.create(expressions);
-        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE || fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
-          PDate.INSTANCE)) {
+        } else if (expressions.size() == 1 && fromDataType == PTimestamp.INSTANCE  &&
+                targetDataType.isCoercibleTo(PDate.INSTANCE)) {
+            return firstChildExpr;
+        } else if((fromDataType == PDecimal.INSTANCE || fromDataType == PTimestamp.INSTANCE ||
+                fromDataType == PUnsignedTimestamp.INSTANCE) && targetDataType.isCoercibleTo(
+                        PDate.INSTANCE)) {
             return RoundTimestampExpression.create(expressions);
         } else if(fromDataType.isCastableTo(targetDataType)) {
             return firstChildExpr;

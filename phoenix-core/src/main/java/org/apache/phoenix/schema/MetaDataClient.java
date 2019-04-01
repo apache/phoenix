@@ -586,7 +586,7 @@ public class MetaDataClient {
         return currentScn;
     }
 
-    private MetaDataMutationResult updateCache(PName origTenantId, String schemaName, String tableName,
+    public MetaDataMutationResult updateCache(PName origTenantId, String schemaName, String tableName,
             boolean alwaysHitServer, Long resolvedTimestamp) throws SQLException { // TODO: pass byte[] herez
         boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
         // System tables must always have a null tenantId
@@ -3159,6 +3159,9 @@ public class MetaDataClient {
             }
         } catch (TableNotFoundException e) {
             if (!ifExists) {
+                if (tableType == PTableType.INDEX)
+                    throw new IndexNotFoundException(e.getSchemaName(),
+                            e.getTableName(), e.getTimeStamp());
                 throw e;
             }
         }
@@ -3520,7 +3523,8 @@ public class MetaDataClient {
                     throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
-		List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ? origColumnDefs.size() : 0);
+        List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ?
+            origColumnDefs.size() : 0);
         PName tenantId = connection.getTenantId();
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3534,40 +3538,38 @@ public class MetaDataClient {
         try {
             connection.setAutoCommit(false);
 
-            List<ColumnDef> columnDefs = null;
-            if (table.isAppendOnlySchema()) {
+            List<ColumnDef> columnDefs;
+            if (table.isAppendOnlySchema() || ifNotExists) {
                 // only make the rpc if we are adding new columns
                 columnDefs = Lists.newArrayList();
                 for (ColumnDef columnDef : origColumnDefs) {
                     String familyName = columnDef.getColumnDefName().getFamilyName();
                     String columnName = columnDef.getColumnDefName().getColumnName();
-                    if (familyName!=null) {
+                    if (familyName != null) {
                         try {
                             PColumnFamily columnFamily = table.getColumnFamily(familyName);
                             columnFamily.getPColumnForColumnName(columnName);
                             if (!ifNotExists) {
-                                throw new ColumnAlreadyExistsException(schemaName, tableName, columnName);
+                                throw new ColumnAlreadyExistsException(schemaName, tableName,
+                                  columnName);
                             }
-                        }
-                        catch (ColumnFamilyNotFoundException | ColumnNotFoundException e){
+                        } catch (ColumnFamilyNotFoundException | ColumnNotFoundException e) {
                             columnDefs.add(columnDef);
                         }
-                    }
-                    else {
+                    } else {
                         try {
                             table.getColumnForColumnName(columnName);
                             if (!ifNotExists) {
-                                throw new ColumnAlreadyExistsException(schemaName, tableName, columnName);
+                                throw new ColumnAlreadyExistsException(schemaName, tableName,
+                                  columnName);
                             }
-                        }
-                        catch (ColumnNotFoundException e){
+                        } catch (ColumnNotFoundException e) {
                             columnDefs.add(columnDef);
                         }
                     }
                 }
-            }
-            else {
-                columnDefs = origColumnDefs == null ? Collections.<ColumnDef>emptyList() : origColumnDefs;
+            } else {
+                columnDefs = origColumnDefs == null ? Collections.emptyList() : origColumnDefs;
             }
 
             boolean retried = false;
@@ -4287,7 +4289,9 @@ public class MetaDataClient {
             String indexName = statement.getTable().getName().getTableName();
             boolean isAsync = statement.isAsync();
             String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
-            PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
+            PTable table = FromCompiler.getIndexResolver(statement, connection)
+                    .getTables().get(0).getTable();
+
             String schemaName = statement.getTable().getName().getSchemaName();
             String tableName = table.getTableName().getString();
 

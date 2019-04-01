@@ -179,7 +179,8 @@ public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
         EnvironmentEdgeManager.injectEdge(clock3);
 
         Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, "true");
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS, "true");
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, "true");
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         String viewName = null;

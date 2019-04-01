@@ -22,16 +22,22 @@ import static com.google.common.base.Preconditions.checkPositionIndex;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Queue;
 
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -68,6 +74,44 @@ public class OrderedResultIterator implements PeekingResultIterator {
         Tuple getResult() {
             return result;
         }
+
+        static long sizeOf(ResultEntry e) {
+          return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
+        }
+
+        private static long sizeof(List<KeyValue> kvs) {
+          long size = Bytes.SIZEOF_INT; // totalLen
+
+          for (KeyValue kv : kvs) {
+              size += kv.getLength();
+              size += Bytes.SIZEOF_INT; // kv.getLength
+          }
+
+          return size;
+        }
+
+        private static long sizeof(ImmutableBytesWritable[] sortKeys) {
+            long size = Bytes.SIZEOF_INT;
+            if (sortKeys != null) {
+                for (ImmutableBytesWritable sortKey : sortKeys) {
+                    if (sortKey != null) {
+                        size += sortKey.getLength();
+                    }
+                    size += Bytes.SIZEOF_INT;
+                }
+            }
+            return size;
+        }
+
+        private static List<KeyValue> toKeyValues(ResultEntry entry) {
+          Tuple result = entry.getResult();
+          int size = result.size();
+          List<KeyValue> kvs = new ArrayList<KeyValue>(size);
+          for (int i = 0; i < size; i++) {
+              kvs.add(PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i)));
+          }
+          return kvs;
+        }
     }
     
     /** A function that returns Nth key for a given {@link ResultEntry}. */
@@ -91,7 +135,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
         }
     };
 
-    private final int thresholdBytes;
+    private final boolean spoolingEnabled;
+    private final long thresholdBytes;
     private final Integer limit;
     private final Integer offset;
     private final ResultIterator delegate;
@@ -106,20 +151,22 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
     
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            int thresholdBytes, Integer limit, Integer offset) {
-        this(delegate, orderByExpressions, thresholdBytes, limit, offset, 0);
+            boolean spoolingEnabled, long thresholdBytes, Integer limit, Integer offset) {
+        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, 0);
     }
 
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            int thresholdBytes) throws SQLException {
-        this(delegate, orderByExpressions, thresholdBytes, null, null);
+            boolean spoolingEnabled, long thresholdBytes) throws SQLException {
+        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, null, null);
     }
 
-    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions, 
-            int thresholdBytes, Integer limit, Integer offset,int estimatedRowSize) {
+    public OrderedResultIterator(ResultIterator delegate,
+            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
+            long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
+        this.spoolingEnabled = spoolingEnabled;
         this.thresholdBytes = thresholdBytes;
         this.offset = offset == null ? 0 : offset;
         if (limit != null) {
@@ -208,8 +255,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
         List<Expression> expressions = Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
         final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
         try{
-            final BufferedSortedQueue queueEntries = new BufferedSortedQueue(comparator, limit,
-                    thresholdBytes);
+            final SizeAwareQueue<ResultEntry> queueEntries =
+                    PhoenixQueues.newResultEntrySortedQueue(comparator, limit, spoolingEnabled,
+                        thresholdBytes);
             resultIterator = new PeekingResultIterator() {
                 int count = 0;
 
@@ -249,7 +297,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 
                 @Override
                 public void close() throws SQLException {
-                    queueEntries.close();
+                    try {
+                      queueEntries.close();
+                    } catch (IOException e) {
+                      throw new SQLException(e);
+                    }
                 }
             };
             for (Tuple result = delegate.next(); result != null; result = delegate.next()) {

@@ -27,6 +27,7 @@ import java.util.Random;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.PowerFunction;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
@@ -48,25 +49,10 @@ import com.google.common.collect.Lists;
  * Unit tests for {@link PowerFunction}
  */
 public class PowerFunctionTest {
-    private static final double ZERO = 1e-9;
     private static final Expression ONE_POINT_FIVE = LiteralExpression.newConstant(1.5);
     private static final Expression TWO = LiteralExpression.newConstant(2);
     private static final Expression THREE = LiteralExpression.newConstant(3);
 
-    private static boolean twoDoubleEquals(double a, double b) {
-        if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
-        if (Double.isNaN(a)) return true;
-        if (Double.isInfinite(a) ^ Double.isInfinite(b)) return false;
-        if (Double.isInfinite(a)) {
-            if ((a > 0) ^ (b > 0)) return false;
-            else return true;
-        }
-        if (Math.abs(a - b) <= ZERO) {
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     private static boolean testExpression(LiteralExpression literal, LiteralExpression literal2,
             LiteralExpression literal3, double exptFor15, double exptFor2, double exptFor3)
@@ -83,7 +69,7 @@ public class PowerFunctionTest {
             Double result =
                     (Double) powerFunction15.getDataType().toObject(ptr,
                         powerFunction15.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptFor15));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptFor15));
         }
 
         Expression powerFunction2 = new PowerFunction(expressions2);
@@ -92,7 +78,7 @@ public class PowerFunctionTest {
             Double result =
                     (Double) powerFunction2.getDataType().toObject(ptr,
                         powerFunction2.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptFor2));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptFor2));
         }
         assertEquals(ret15, ret2);
 
@@ -102,7 +88,7 @@ public class PowerFunctionTest {
             Double result =
                     (Double) powerFunction3.getDataType().toObject(ptr,
                         powerFunction3.getSortOrder());
-            assertTrue(twoDoubleEquals(result.doubleValue(), exptFor3));
+            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptFor3));
         }
         assertEquals(ret15, ret3);
         return ret15;

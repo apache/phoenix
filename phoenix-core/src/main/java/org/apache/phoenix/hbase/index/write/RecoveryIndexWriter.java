@@ -26,10 +26,9 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.MasterNotRunningException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -57,17 +56,25 @@ public class RecoveryIndexWriter extends IndexWriter {
      * Directly specify the {@link IndexCommitter} and {@link IndexFailurePolicy}. Both are expected to be fully setup
      * before calling.
      * 
-     * @param committer
      * @param policy
      * @param env
+     * @param name
      * @throws IOException
-     * @throws ZooKeeperConnectionException
-     * @throws MasterNotRunningException
      */
     public RecoveryIndexWriter(IndexFailurePolicy policy, RegionCoprocessorEnvironment env, String name)
-            throws MasterNotRunningException, ZooKeeperConnectionException, IOException {
+            throws IOException {
         super(new TrackingParallelWriterIndexCommitter(), policy, env, name);
-        this.admin = ConnectionFactory.createConnection(env.getConfiguration()).getAdmin();
+        Connection hConn = null;
+        try {
+            hConn = ConnectionFactory.createConnection(env.getConfiguration());
+            this.admin = hConn.getAdmin();
+        } catch (Exception e) {
+            // Close the connection only if an exception occurs
+            if (hConn != null) {
+                hConn.close();
+            }
+            throw e;
+        }
     }
 
     @Override
@@ -124,10 +131,17 @@ public class RecoveryIndexWriter extends IndexWriter {
     public void stop(String why) {
         super.stop(why);
         if (admin != null) {
+            if (admin.getConnection() != null) {
+                try {
+                    admin.getConnection().close();
+                } catch (IOException e) {
+                    LOG.error("Closing the connection failed: ", e);
+                }
+            }
             try {
                 admin.close();
             } catch (IOException e) {
-                // closing silently
+                LOG.error("Closing the admin failed: ", e);
             }
         }
     }

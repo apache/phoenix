@@ -17,12 +17,23 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.Collections;
+import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.security.access.Permission.Action;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
+import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -84,5 +95,37 @@ public class SystemTablePermissionsIT extends BasePermissionsIT {
 
         // Make sure that the unprivileged user can now read the table
         verifyAllowed(readTable(TABLE_NAME), regularUser1);
+        //This verification is added to test PHOENIX-5178
+        superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+            @Override public Void run() throws Exception {
+                try {
+                    if (isNamespaceMapped) {
+                        grantPermissions(regularUser1.getShortName(),"SYSTEM", Action.ADMIN);
+                    }
+                    return null;
+                } catch (Throwable e) {
+                    throw new Exception(e);
+                }
+
+            }
+        });
+        if(isNamespaceMapped) {
+            verifyAllowed(new AccessTestAction() {
+                @Override public Object run() throws Exception {
+                    Properties props = new Properties();
+                    props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+                    //Impersonate meta connection
+                    try (Connection metaConnection = DriverManager.getConnection(getUrl(), props);
+                        Statement stmt = metaConnection.createStatement()) {
+                        stmt.executeUpdate("CREATE SCHEMA IF NOT EXISTS SYSTEM");
+                    }catch(NewerSchemaAlreadyExistsException e){
+
+                    }
+                    return null;
+                }
+            }, regularUser1);
+        }
     }
+
 }

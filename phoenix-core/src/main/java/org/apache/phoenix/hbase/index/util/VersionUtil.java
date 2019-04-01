@@ -73,4 +73,16 @@ public class VersionUtil {
         version |= (major << Byte.SIZE * 2);
         return version;
     }
+
+    public static int decodeMajorVersion(int encodedVersion) {
+        return (encodedVersion >> Byte.SIZE * 2);
+    }
+
+    public static int decodeMinorVersion(int encodedVersion) {
+        return (encodedVersion >> Byte.SIZE) & 0xFF;
+    }
+
+    public static int decodePatchVersion(int encodedVersion) {
+        return encodedVersion & 0xFF;
+    }
 }

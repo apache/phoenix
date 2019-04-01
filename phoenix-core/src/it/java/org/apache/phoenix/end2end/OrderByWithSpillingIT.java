@@ -30,7 +30,8 @@ public class OrderByWithSpillingIT extends OrderByIT {
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // do lot's of spooling!
-        props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+        props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
+        props.put(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 }

@@ -34,6 +34,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
+import org.apache.phoenix.schema.IndexNotFoundException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.schema.SchemaNotFoundException;
@@ -223,6 +224,12 @@ public enum SQLExceptionCode {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
             return new TableNotFoundException(info.getSchemaName(), info.getTableName());
+        }
+    }),
+    INDEX_UNDEFINED(1042, "42M06", "Index undefined.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new IndexNotFoundException(info.getSchemaName(), info.getTableName());
         }
     }),
     TABLE_ALREADY_EXIST(1013, "42M04", "Table already exists.", new Factory() {
@@ -459,8 +466,12 @@ public enum SQLExceptionCode {
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
     
-    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
-    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes"), 
+    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger" +
+            " than maximum allowed number of rows, try upserting rows in smaller batches or " +
+            "using autocommit on for deletes."),
+    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is " +
+            "bigger than maximum allowed number of bytes, try upserting rows in smaller batches " +
+            "or using autocommit on for deletes."),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
