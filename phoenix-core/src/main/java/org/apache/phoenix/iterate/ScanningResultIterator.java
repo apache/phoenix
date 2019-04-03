@@ -17,15 +17,6 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.BYTES_IN_REMOTE_RESULTS_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.NOT_SERVING_REGION_EXCEPTION_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REGIONS_SCANNED_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_CALLS_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_CALLS_METRIC_NAME;
-import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_RETRIES_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
@@ -59,12 +50,26 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
+    private final Scan scan;
     private final ScanMetricsHolder scanMetricsHolder;
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
 
+    // These metric names are how HBase refers them
+    // Since HBase stores these strings as static final, we are using the same here
+    static final String RPC_CALLS_METRIC_NAME = "RPC_CALLS";
+    static final String REMOTE_RPC_CALLS_METRIC_NAME = "REMOTE_RPC_CALLS";
+    static final String MILLIS_BETWEEN_NEXTS_METRIC_NAME = "MILLIS_BETWEEN_NEXTS";
+    static final String NOT_SERVING_REGION_EXCEPTION_METRIC_NAME = "NOT_SERVING_REGION_EXCEPTION";
+    static final String BYTES_IN_RESULTS_METRIC_NAME = "BYTES_IN_RESULTS";
+    static final String BYTES_IN_REMOTE_RESULTS_METRIC_NAME = "BYTES_IN_REMOTE_RESULTS";
+    static final String REGIONS_SCANNED_METRIC_NAME = "REGIONS_SCANNED";
+    static final String RPC_RETRIES_METRIC_NAME = "RPC_RETRIES";
+    static final String REMOTE_RPC_RETRIES_METRIC_NAME = "REMOTE_RPC_RETRIES";
+
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder) {
         this.scanner = scanner;
+        this.scan = scan;
         this.scanMetricsHolder = scanMetricsHolder;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
@@ -91,7 +96,7 @@ public class ScanningResultIterator implements ResultIterator {
     private void getScanMetrics() {
 
         if (scanMetricsEnabled && !scanMetricsUpdated) {
-            ScanMetrics scanMetrics = scanner.getScanMetrics();
+            ScanMetrics scanMetrics = scan.getScanMetrics();
             Map<String, Long> scanMetricsMap = scanMetrics.getMetricsMap();
             scanMetricsHolder.setScanMetricMap(scanMetricsMap);
 
