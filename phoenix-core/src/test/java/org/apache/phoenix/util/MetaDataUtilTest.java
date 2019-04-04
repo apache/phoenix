@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -27,6 +29,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.PrivateCellUtil;
+import org.apache.hadoop.hbase.RawCellBuilderFactory;
+import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.TagUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -38,9 +43,14 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+
+import java.util.Iterator;
+import java.util.List;
 
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -254,6 +264,38 @@ public class MetaDataUtilTest {
         Put put = new Put(ROW);
         KeyValueBuilder.addQuietly(put, kv);
         return put;
+    }
+
+    @Test
+    public void testConditionallyAddTagsToPutCells( ) {
+        List<Tag> tags = TagUtil.asList(VIEW_MODIFIED_PROPERTY_BYTES, 0, VIEW_MODIFIED_PROPERTY_BYTES.length);
+        assertEquals(tags.size(), 1);
+        Tag expectedTag = tags.get(0);
+
+        String version = VersionInfo.getVersion();
+        KeyValueBuilder builder = KeyValueBuilder.get(version);
+        KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(UPDATE_CACHE_FREQUENCY_BYTES), wrap(
+                PLong.INSTANCE.toBytes(0)));
+        Put put = new Put(ROW);
+        KeyValueBuilder.addQuietly(put, kv);
+
+        ExtendedCellBuilder cellBuilder = (ExtendedCellBuilder) RawCellBuilderFactory.create();
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, UPDATE_CACHE_FREQUENCY_BYTES, cellBuilder,
+                PInteger.INSTANCE.toBytes(1), VIEW_MODIFIED_PROPERTY_BYTES);
+
+        Cell cell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+
+        // To check the cell tag whether view has modified this property
+        assertTrue(Bytes.compareTo(expectedTag.getValueArray(), TagUtil.concatTags(EMPTY_BYTE_ARRAY, cell)) == 0);
+        assertTrue(Bytes.contains(TagUtil.concatTags(EMPTY_BYTE_ARRAY, cell), expectedTag.getValueArray()));
+
+        // To check tag data can be correctly deserialized
+        Iterator<Tag> tagIterator = PrivateCellUtil.tagsIterator(cell);
+        assertTrue(tagIterator.hasNext());
+        Tag actualTag = tagIterator.next();
+        assertTrue(Bytes.compareTo(actualTag.getValueArray(), actualTag.getValueOffset(), actualTag.getValueLength(),
+                expectedTag.getValueArray(), expectedTag.getValueOffset(), expectedTag.getValueLength()) == 0);
+        assertFalse(tagIterator.hasNext());
     }
 
 }
