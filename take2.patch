@@ -1,0 +1,207 @@
+From 99222d84e2a87d0bb1179758158efc33075e4b90 Mon Sep 17 00:00:00 2001
+From: Thomas D'Silva <tdsilva@apache.org>
+Date: Thu, 4 Apr 2019 16:34:24 -0700
+Subject: [PATCH] take 2
+
+---
+ .../org/apache/phoenix/end2end/BasePermissionsIT.java  | 15 +++------------
+ .../apache/phoenix/end2end/ChangePermissionsIT.java    | 18 ------------------
+ .../phoenix/end2end/SystemTablePermissionsIT.java      |  4 ----
+ .../apache/phoenix/end2end/TableDDLPermissionsIT.java  |  5 -----
+ 4 files changed, 3 insertions(+), 39 deletions(-)
+
+diff --git a/phoenix-core/src/it/java/org/apache/phoenix/end2end/BasePermissionsIT.java b/phoenix-core/src/it/java/org/apache/phoenix/end2end/BasePermissionsIT.java
+index 81a68b455..791059067 100644
+--- a/phoenix-core/src/it/java/org/apache/phoenix/end2end/BasePermissionsIT.java
++++ b/phoenix-core/src/it/java/org/apache/phoenix/end2end/BasePermissionsIT.java
+@@ -60,12 +60,14 @@ import org.apache.phoenix.query.QueryServices;
+ import org.apache.phoenix.util.PhoenixRuntime;
+ import org.junit.After;
+ import org.junit.BeforeClass;
++import org.junit.experimental.categories.Category;
+ import org.junit.runner.RunWith;
+ import org.junit.runners.Parameterized;
+ 
+ import com.google.common.base.Joiner;
+ import com.google.common.base.Throwables;
+ 
++@Category(NeedsOwnMiniClusterTest.class)
+ @RunWith(Parameterized.class)
+ public class BasePermissionsIT extends BaseTest {
+ 
+@@ -121,6 +123,7 @@ public class BasePermissionsIT extends BaseTest {
+ 
+     public BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
+         this.isNamespaceMapped = isNamespaceMapped;
++        startNewMiniCluster();
+     }
+ 
+     @BeforeClass
+@@ -129,10 +132,6 @@ public class BasePermissionsIT extends BaseTest {
+     }
+ 
+     void startNewMiniCluster() throws Exception {
+-        startNewMiniCluster(new Configuration());
+-    }
+-    
+-    void startNewMiniCluster(Configuration overrideConf) throws Exception{
+         if (null != testUtil) {
+             testUtil.shutdownMiniCluster();
+             testUtil = null;
+@@ -144,9 +143,6 @@ public class BasePermissionsIT extends BaseTest {
+         enablePhoenixHBaseAuthorization(config);
+         configureNamespacesOnServer(config);
+         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
+-        if (overrideConf != null) {
+-            config.addResource(overrideConf);
+-        }
+ 
+         testUtil.startMiniCluster(1);
+         initializeUsers(testUtil.getConfiguration());
+@@ -167,11 +163,6 @@ public class BasePermissionsIT extends BaseTest {
+         unprivilegedUser = User.createUserForTesting(configuration, "unprivilegedUser", new String[0]);
+     }
+ 
+-    private void configureRandomHMasterPort(Configuration config) {
+-        // Avoid multiple clusters trying to bind the master's info port (16010)
+-        config.setInt(HConstants.MASTER_INFO_PORT, 0);
+-    }
+-
+     void enablePhoenixHBaseAuthorization(Configuration config) {
+         config.set("hbase.superuser", SUPERUSER + "," + "superUser2");
+         config.set("hbase.security.authorization", Boolean.TRUE.toString());
+diff --git a/phoenix-core/src/it/java/org/apache/phoenix/end2end/ChangePermissionsIT.java b/phoenix-core/src/it/java/org/apache/phoenix/end2end/ChangePermissionsIT.java
+index 65f44c04f..b699c7abd 100644
+--- a/phoenix-core/src/it/java/org/apache/phoenix/end2end/ChangePermissionsIT.java
++++ b/phoenix-core/src/it/java/org/apache/phoenix/end2end/ChangePermissionsIT.java
+@@ -30,7 +30,6 @@ import org.junit.experimental.categories.Category;
+ /**
+  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
+  */
+-@Category(NeedsOwnMiniClusterTest.class)
+ public class ChangePermissionsIT extends BasePermissionsIT {
+ 
+     private static final Log LOG = LogFactory.getLog(ChangePermissionsIT.class);
+@@ -80,9 +79,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testRXPermsReqdForPhoenixConn() throws Exception {
+-
+-        startNewMiniCluster();
+-
+         if(isNamespaceMapped) {
+             // NS is enabled, CQSI tries creating SYSCAT, we get NamespaceNotFoundException exception for "SYSTEM" NS
+             // We create custom ADE and throw it (and ignore NamespaceNotFoundException)
+@@ -112,9 +108,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testSuperUserCanChangePerms() throws Exception {
+-
+-        startNewMiniCluster();
+-
+         // Grant System Table access to all users, else they can't create a Phoenix connection
+         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+ 
+@@ -137,9 +130,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testReadPermsOnTableIndexAndView() throws Exception {
+-
+-        startNewMiniCluster();
+-
+         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+ 
+         // Create new schema and grant CREATE permissions to a user
+@@ -198,9 +188,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testGroupUserPerms() throws Exception {
+-
+-        startNewMiniCluster();
+-
+         if(isNamespaceMapped) {
+             verifyAllowed(createSchema(SCHEMA_NAME), superUser1);
+         }
+@@ -229,9 +216,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testMultiTenantTables() throws Exception {
+-
+-        startNewMiniCluster();
+-
+         grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+ 
+         if(isNamespaceMapped) {
+@@ -276,8 +260,6 @@ public class ChangePermissionsIT extends BasePermissionsIT {
+      */
+     @Test
+     public void testCreateViewOnTableWithRXPermsOnSchema() throws Exception {
+-
+-        startNewMiniCluster();
+         grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+ 
+         if(isNamespaceMapped) {
+diff --git a/phoenix-core/src/it/java/org/apache/phoenix/end2end/SystemTablePermissionsIT.java b/phoenix-core/src/it/java/org/apache/phoenix/end2end/SystemTablePermissionsIT.java
+index 6da970b99..d89820f65 100644
+--- a/phoenix-core/src/it/java/org/apache/phoenix/end2end/SystemTablePermissionsIT.java
++++ b/phoenix-core/src/it/java/org/apache/phoenix/end2end/SystemTablePermissionsIT.java
+@@ -41,7 +41,6 @@ import org.junit.experimental.categories.Category;
+  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
+  * Uses HBase API directly to grant/revoke permissions
+  */
+-@Category(NeedsOwnMiniClusterTest.class)
+ public class SystemTablePermissionsIT extends BasePermissionsIT {
+ 
+     private static final String TABLE_NAME =
+@@ -53,9 +52,6 @@ public class SystemTablePermissionsIT extends BasePermissionsIT {
+ 
+     @Test
+     public void testSystemTablePermissions() throws Throwable {
+-
+-        startNewMiniCluster();
+-
+         verifyAllowed(createTable(TABLE_NAME), superUser1);
+         verifyAllowed(readTable(TABLE_NAME), superUser1);
+ 
+diff --git a/phoenix-core/src/it/java/org/apache/phoenix/end2end/TableDDLPermissionsIT.java b/phoenix-core/src/it/java/org/apache/phoenix/end2end/TableDDLPermissionsIT.java
+index 37073c393..45f828260 100644
+--- a/phoenix-core/src/it/java/org/apache/phoenix/end2end/TableDDLPermissionsIT.java
++++ b/phoenix-core/src/it/java/org/apache/phoenix/end2end/TableDDLPermissionsIT.java
+@@ -35,7 +35,6 @@ import org.junit.runners.Parameterized;
+ /**
+  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
+  */
+-@Category(NeedsOwnMiniClusterTest.class)
+ @RunWith(Parameterized.class)
+ public class TableDDLPermissionsIT extends BasePermissionsIT{
+ 
+@@ -44,7 +43,6 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
+     }
+     
+     private void grantSystemTableAccess() throws Exception{
+-        
+         try (Connection conn = getConnection()) {
+             if (isNamespaceMapped) {
+                 grantPermissions(regularUser1.getShortName(), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, Action.READ,
+@@ -88,10 +86,8 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
+ 
+     @Test
+     public void testSchemaPermissions() throws Throwable{
+-
+         if (!isNamespaceMapped) { return; }
+         try {
+-            startNewMiniCluster();
+             grantSystemTableAccess();
+             final String schemaName = "TEST_SCHEMA_PERMISSION";
+             superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+@@ -123,7 +119,6 @@ public class TableDDLPermissionsIT extends BasePermissionsIT{
+ 
+     @Test
+     public void testAutomaticGrantWithIndexAndView() throws Throwable {
+-        startNewMiniCluster();
+         final String schema = "TEST_INDEX_VIEW";
+         final String tableName = "TABLE_DDL_PERMISSION_IT";
+         final String phoenixTableName = schema + "." + tableName;
+-- 
+2.15.1
+

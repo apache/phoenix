@@ -1,0 +1,87 @@
+From 5c101c6c5cbc791e8115584169a273d92c1a820a Mon Sep 17 00:00:00 2001
+From: Thomas D'Silva <tdsilva@apache.org>
+Date: Mon, 18 Mar 2019 14:35:07 -0700
+Subject: [PATCH] PHOENIX-5062 Create a new repo for the phoenix connectors
+ (addendum)
+
+---
+ phoenix-assembly/pom.xml | 16 ----------------
+ phoenix-client/pom.xml   | 18 ------------------
+ pom.xml                  |  5 -----
+ 3 files changed, 39 deletions(-)
+
+diff --git a/phoenix-assembly/pom.xml b/phoenix-assembly/pom.xml
+index 4acffdb31..ac3642694 100644
+--- a/phoenix-assembly/pom.xml
++++ b/phoenix-assembly/pom.xml
+@@ -102,22 +102,6 @@
+       <groupId>org.apache.phoenix</groupId>
+       <artifactId>phoenix-core</artifactId>
+     </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-flume</artifactId>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-kafka</artifactId>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-pig</artifactId>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-spark</artifactId>
+-    </dependency>
+     <dependency>
+       <groupId>org.apache.omid</groupId>
+       <artifactId>omid-hbase-tools-hbase1.x</artifactId>
+diff --git a/phoenix-client/pom.xml b/phoenix-client/pom.xml
+index 4cf18d34f..8b4f778f0 100644
+--- a/phoenix-client/pom.xml
++++ b/phoenix-client/pom.xml
+@@ -361,23 +361,5 @@
+       <groupId>org.apache.phoenix</groupId>
+       <artifactId>phoenix-core</artifactId>
+     </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-flume</artifactId>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-pig</artifactId>
+-      <exclusions>
+-        <exclusion>
+-          <groupId>org.apache.pig</groupId>
+-          <artifactId>pig</artifactId>
+-        </exclusion>
+-      </exclusions>
+-    </dependency>
+-    <dependency>
+-      <groupId>org.apache.phoenix</groupId>
+-      <artifactId>phoenix-spark</artifactId>
+-    </dependency>
+   </dependencies>
+ </project>
+diff --git a/pom.xml b/pom.xml
+index d8de18531..0e7b414f5 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -24,12 +24,7 @@
+ 
+   <modules>
+     <module>phoenix-core</module>
+-    <module>phoenix-flume</module>
+-    <module>phoenix-kafka</module>
+-    <module>phoenix-pig</module>
+     <module>phoenix-pherf</module>
+-    <module>phoenix-spark</module>
+-    <module>phoenix-hive</module>
+     <module>phoenix-client</module>
+     <module>phoenix-server</module>
+     <module>phoenix-assembly</module>
+-- 
+2.15.1
+
