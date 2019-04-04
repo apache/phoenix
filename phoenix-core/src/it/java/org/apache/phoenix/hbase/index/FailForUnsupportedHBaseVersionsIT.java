@@ -22,8 +22,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -42,13 +40,16 @@ import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test that we correctly fail for versions of HBase that don't support current properties
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class FailForUnsupportedHBaseVersionsIT {
-    private static final Log LOG = LogFactory.getLog(FailForUnsupportedHBaseVersionsIT.class);
+    private static final Logger logger =
+            LoggerFactory.getLogger(FailForUnsupportedHBaseVersionsIT.class);
 
     /**
      * We don't support WAL Compression for HBase &lt; 0.94.9, so we shouldn't even allow the server
@@ -153,7 +154,7 @@ public class FailForUnsupportedHBaseVersionsIT {
                 // wait for the regionserver to abort - if this doesn't occur in the timeout, assume its
                 // broken.
                 while (!server.isAborted()) {
-                    LOG.debug("Waiting on regionserver to abort..");
+                    logger.debug("Waiting on regionserver to abort..");
                 }
             }
 

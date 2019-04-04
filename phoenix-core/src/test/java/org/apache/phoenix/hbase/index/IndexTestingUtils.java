@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -36,15 +34,15 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.hadoop.hbase.util.Bytes;
-
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Utility class for testing indexing
  */
 public class IndexTestingUtils {
 
-  private static final Log LOG = LogFactory.getLog(IndexTestingUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(IndexTestingUtils.class);
   private static final String MASTER_INFO_PORT_KEY = "hbase.master.info.port";
   private static final String RS_INFO_PORT_KEY = "hbase.regionserver.info.port";
   
@@ -66,7 +64,7 @@ public class IndexTestingUtils {
   @SuppressWarnings("javadoc")
   public static void verifyIndexTableAtTimestamp(Table index1, List<KeyValue> expected,
       long start, long end, byte[] startKey, byte[] endKey) throws IOException {
-    LOG.debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start
+    logger.debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start
         + ", " + end + "] and keys: [" + Bytes.toString(startKey) + ", " + Bytes.toString(endKey)
         + "].");
     Scan s = new Scan(startKey, endKey);
@@ -77,7 +75,7 @@ public class IndexTestingUtils {
     ResultScanner scanner = index1.getScanner(s);
     for (Result r : scanner) {
       received.addAll(r.listCells());
-      LOG.debug("Received: " + r.listCells());
+      logger.debug("Received: " + r.listCells());
     }
     scanner.close();
     assertEquals("Didn't get the expected kvs from the index table!", expected, received);

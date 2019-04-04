@@ -26,8 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.TableName;
@@ -49,13 +47,15 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
 public class TestParalleWriterIndexCommitter {
 
-  private static final Log LOG = LogFactory.getLog(TestParalleWriterIndexCommitter.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestParalleWriterIndexCommitter.class);
   @Rule
   public IndexTableName test = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
@@ -83,8 +83,8 @@ public class TestParalleWriterIndexCommitter {
   @SuppressWarnings({ "unchecked"})
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
-    LOG.info("Starting " + test.getTableNameString());
-    LOG.info("Current thread is interrupted: " + Thread.interrupted());
+    logger.info("Starting " + test.getTableNameString());
+    logger.info("Current thread is interrupted: " + Thread.interrupted());
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
     Configuration conf =new Configuration();
     Mockito.when(e.getConfiguration()).thenReturn(conf);

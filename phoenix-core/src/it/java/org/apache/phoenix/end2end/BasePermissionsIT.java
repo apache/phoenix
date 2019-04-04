@@ -39,8 +39,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -62,6 +60,8 @@ import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -69,7 +69,7 @@ import com.google.common.base.Throwables;
 @RunWith(Parameterized.class)
 public class BasePermissionsIT extends BaseTest {
 
-    private static final Log LOG = LogFactory.getLog(BasePermissionsIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(BasePermissionsIT.class);
 
     static String SUPERUSER;
 
@@ -278,7 +278,7 @@ public class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String grantStmtSQL = "GRANT '" + actions + "' ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " TO "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        LOG.info("Grant Permissions SQL: " + grantStmtSQL);
+                        logger.info("Grant Permissions SQL: " + grantStmtSQL);
                         assertFalse(stmt.execute(grantStmtSQL));
                     }
                 }
@@ -293,7 +293,7 @@ public class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     String grantStmtSQL = "GRANT '" + actions + "' TO " + " '" + user.getShortName() + "'";
-                    LOG.info("Grant Permissions SQL: " + grantStmtSQL);
+                    logger.info("Grant Permissions SQL: " + grantStmtSQL);
                     assertFalse(stmt.execute(grantStmtSQL));
                 }
                 return null;
@@ -315,7 +315,7 @@ public class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String revokeStmtSQL = "REVOKE ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " FROM "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
+                        logger.info("Revoke Permissions SQL: " + revokeStmtSQL);
                         assertFalse(stmt.execute(revokeStmtSQL));
                     }
                 }
@@ -331,7 +331,7 @@ public class BasePermissionsIT extends BaseTest {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     String revokeStmtSQL = "REVOKE FROM " +
                             ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                    LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
+                    logger.info("Revoke Permissions SQL: " + revokeStmtSQL);
                     assertFalse(stmt.execute(revokeStmtSQL));
                 }
                 return null;

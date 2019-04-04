@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.hbase.index.parallel;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Helper utility to make a thread pool from a configuration based on reasonable defaults and passed
@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.util.Pair;
  */
 public class ThreadPoolBuilder {
 
-  private static final Log LOG = LogFactory.getLog(ThreadPoolBuilder.class);
+  private static final Logger logger = LoggerFactory.getLogger(ThreadPoolBuilder.class);
   private static final long DEFAULT_TIMEOUT = 60;
   private static final int DEFAULT_MAX_THREADS = 1;// is there a better default?
   private Pair<String, Long> timeout;
@@ -72,7 +72,7 @@ public class ThreadPoolBuilder {
       maxThreads =
           key == null ? this.maxThreads.getSecond() : conf.getInt(key, this.maxThreads.getSecond());
     }
-    LOG.trace("Creating pool builder with max " + maxThreads + " threads ");
+    logger.trace("Creating pool builder with max " + maxThreads + " threads ");
     return maxThreads;
   }
 
@@ -84,7 +84,7 @@ public class ThreadPoolBuilder {
           key == null ? this.timeout.getSecond() : conf.getLong(key, this.timeout.getSecond());
     }
 
-    LOG.trace("Creating pool builder with core thread timeout of " + timeout + " seconds ");
+    logger.trace("Creating pool builder with core thread timeout of " + timeout + " seconds ");
     return timeout;
   }
 }

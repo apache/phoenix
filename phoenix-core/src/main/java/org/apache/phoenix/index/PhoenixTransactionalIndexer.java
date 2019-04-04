@@ -30,8 +30,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
@@ -62,6 +60,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.apache.phoenix.util.TransactionUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Do all the work of managing local index updates for a transactional table from a single coprocessor. Since the transaction
@@ -71,7 +71,7 @@ import org.apache.phoenix.util.TransactionUtil;
  */
 public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoprocessor {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixTransactionalIndexer.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixTransactionalIndexer.class);
 
     // Hack to get around not being able to save any state between
     // coprocessor calls. TODO: remove after HBASE-18127 when available
@@ -203,7 +203,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
             TracingUtils.addAnnotation(current, "index update count", context.indexUpdates.size());
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;
-            LOG.error(msg, t);
+            logger.error(msg, t);
             ServerUtil.throwIOException(msg, t);
         }
     }
@@ -230,7 +230,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
             }
         } catch (Throwable t) {
             String msg = "Failed to write index updates:" + context.indexUpdates;
-            LOG.error(msg, t);
+            logger.error(msg, t);
             ServerUtil.throwIOException(msg, t);
          } finally {
              removeBatchMutateContext(c);

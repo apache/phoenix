@@ -63,7 +63,7 @@ import org.apache.phoenix.util.QueryUtil;
  */
 
 public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
-    public static final Log LOG = LogFactory.getLog(TaskRegionObserver.class);
+    public static final Log logger = LogFactory.getLog(TaskRegionObserver.class);
 
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
@@ -175,7 +175,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                     try {
                         TaskType taskType = taskRecord.getTaskType();
                         if (!classMap.containsKey(taskType)) {
-                            LOG.warn("Don't know how to execute task type: " + taskType.name());
+                            logger.warn("Don't know how to execute task type: " + taskType.name());
                             continue;
                         }
 
@@ -228,7 +228,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
 
                     }
                     catch (Throwable t) {
-                        LOG.warn("Exception while running self healingtask. " +
+                        logger.warn("Exception while running self healingtask. " +
                                 "It will be retried in the next system task table scan : " +
                                 " taskType : " + taskRecord.getTaskType().name() +
                                 taskRecord.getSchemaName()  + "." + taskRecord.getTableName() +
@@ -237,13 +237,13 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                     }
                 }
             } catch (Throwable t) {
-                LOG.error("SelfHealingTask failed!", t);
+                logger.error("SelfHealingTask failed!", t);
             } finally {
                 if (connForTask != null) {
                     try {
                         connForTask.close();
                     } catch (SQLException ignored) {
-                        LOG.debug("SelfHealingTask can't close connection", ignored);
+                        logger.debug("SelfHealingTask can't close connection", ignored);
                     }
                 }
             }

@@ -22,8 +22,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.OutputCommitter;
@@ -31,13 +29,15 @@ import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link OutputFormat} implementation for Phoenix.
  *
  */
 public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<NullWritable,T> {
-    private static final Log LOG = LogFactory.getLog(PhoenixOutputFormat.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixOutputFormat.class);
     private final Set<String> propsToIgnore;
     
     public PhoenixOutputFormat() {
@@ -65,7 +65,7 @@ public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<Nul
         try {
             return new PhoenixRecordWriter<T>(context.getConfiguration(), propsToIgnore);
         } catch (SQLException e) {
-            LOG.error("Error calling PhoenixRecordWriter "  + e.getMessage());
+            logger.error("Error calling PhoenixRecordWriter "  + e.getMessage());
             throw new RuntimeException(e);
         }
     }

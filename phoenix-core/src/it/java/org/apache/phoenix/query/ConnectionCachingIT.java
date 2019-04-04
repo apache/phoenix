@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public class ConnectionCachingIT extends ParallelStatsEnabledIT {
-  private static final Logger LOG = LoggerFactory.getLogger(ConnectionCachingIT.class);
+  private static final Logger logger = LoggerFactory.getLogger(ConnectionCachingIT.class);
 
   @Parameters(name= "phoenix.scanner.lease.renew.enabled={0}")
   public static Iterable<String> data() {
@@ -65,7 +65,7 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
     // The test driver works correctly, the real one doesn't.
     String url = getUrl();
     url = url.replace(";" + PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM, "");
-    LOG.info("URL to use is: {}", url);
+    logger.info("URL to use is: {}", url);
 
     Connection conn = DriverManager.getConnection(url, props);
     long before = getNumCachedConnections(conn);
@@ -76,7 +76,7 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
     Thread.sleep(QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS / 2);
     long after = getNumCachedConnections(conn);
     for (int i = 0; i < 6; i++) {
-      LOG.info("Found {} connections cached", after);
+      logger.info("Found {} connections cached", after);
       if (after <= before) {
         break;
       }

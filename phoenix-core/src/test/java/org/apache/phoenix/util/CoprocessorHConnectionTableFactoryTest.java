@@ -21,8 +21,6 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -32,6 +30,8 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /*
  * This test is wrt to https://issues.apache.org/jira/browse/PHOENIX-4993.Test checks region
@@ -39,7 +39,8 @@ import org.junit.Test;
  */
 public class CoprocessorHConnectionTableFactoryTest extends BaseUniqueNamesOwnClusterIT {
   private static String ORG_PREFIX = "ORG";
-  private static final Log LOG = LogFactory.getLog(CoprocessorHConnectionTableFactoryTest.class);
+  private static final Logger logger =
+          LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryTest.class);
 
   @BeforeClass
   public static final void doSetup() throws Exception {
@@ -68,7 +69,7 @@ public class CoprocessorHConnectionTableFactoryTest extends BaseUniqueNamesOwnCl
       }
       conn.commit();
     } catch (Exception e) {
-      LOG.error("Client side exception:" + e);
+      logger.error("Client side exception:" + e);
     }
 
   }

@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  */
 public class End2EndTestDriver extends AbstractHBaseTool {
     
-    private static final Logger LOG = LoggerFactory.getLogger(End2EndTestDriver.class);
+    private static final Logger logger = LoggerFactory.getLogger(End2EndTestDriver.class);
     private static final String SHORT_REGEX_ARG = "r";
     private static final String SKIP_TESTS = "n";
     
@@ -80,7 +80,7 @@ public class End2EndTestDriver extends AbstractHBaseTool {
         try {
           testFilterRe = Pattern.compile(pattern);
         } catch (PatternSyntaxException e) {
-          LOG.error("Failed to find tests using pattern '" + pattern
+          logger.error("Failed to find tests using pattern '" + pattern
               + "'. Is it a valid Java regular expression?", e);
           throw e;
         }

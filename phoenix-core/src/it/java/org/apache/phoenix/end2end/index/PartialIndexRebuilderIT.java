@@ -80,7 +80,7 @@ import com.google.common.collect.Maps;
 @SuppressWarnings("deprecation")
 @RunWith(RunUntilFailure.class)
 public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger LOG = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
     private static final Random RAND = new Random(5);
     private static final int WAIT_AFTER_DISABLED = 5000;
     private static final long REBUILD_PERIOD = 50000;
@@ -138,7 +138,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                         Thread.interrupted();
                         throw new RuntimeException(e);
                     } catch (SQLException e) {
-                        LOG.error(e.getMessage(),e);
+                        logger.error(e.getMessage(),e);
                     } finally {
                         runRebuildOnce = false;
                     }

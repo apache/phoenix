@@ -16,8 +16,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -26,6 +24,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test that verifies a user can read Phoenix tables with a minimal set of permissions.
@@ -33,7 +33,7 @@ import org.junit.experimental.categories.Category;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ChangePermissionsIT extends BasePermissionsIT {
 
-    private static final Log LOG = LogFactory.getLog(ChangePermissionsIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(ChangePermissionsIT.class);
 
     private static final String SCHEMA_NAME = "CHANGEPERMSSCHEMA";
     private static final String TABLE_NAME =

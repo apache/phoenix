@@ -234,7 +234,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         }
     }
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixCanaryTool.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixCanaryTool.class);
 
     private static String getCurrentTimestamp() {
         return new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss.ms").format(new Date());
@@ -289,7 +289,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         try {
             Namespace cArgs = parseArgs(args);
             if (cArgs == null) {
-                LOG.error("Argument parsing failed.");
+                logger.error("Argument parsing failed.");
                 throw new RuntimeException("Argument parsing failed");
             }
 
@@ -326,7 +326,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             connection = getConnectionWithRetry(connectionURL);
 
             if (connection == null) {
-                LOG.error("Failed to get connection after multiple retries; the connection is null");
+                logger.error("Failed to get connection after multiple retries; the connection is null");
             }
 
             SimpleTimeLimiter limiter = new SimpleTimeLimiter();
@@ -338,10 +338,10 @@ public class PhoenixCanaryTool extends Configured implements Tool {
                     sink.clearResults();
 
                     // Execute tests
-                    LOG.info("Starting UpsertTableTest");
+                    logger.info("Starting UpsertTableTest");
                     sink.updateResults(new UpsertTableTest().runTest(connection));
 
-                    LOG.info("Starting ReadTableTest");
+                    logger.info("Starting ReadTableTest");
                     sink.updateResults(new ReadTableTest().runTest(connection));
                     return null;
 
@@ -354,7 +354,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             appInfo.setSuccessful(true);
 
         } catch (Exception e) {
-            LOG.error(Throwables.getStackTraceAsString(e));
+            logger.error(Throwables.getStackTraceAsString(e));
             appInfo.setMessage(Throwables.getStackTraceAsString(e));
             appInfo.setSuccessful(false);
 
@@ -372,11 +372,11 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         try{
             connection = getConnectionWithRetry(connectionURL, true);
         } catch (Exception e) {
-            LOG.info("Failed to get connection with namespace enabled", e);
+            logger.info("Failed to get connection with namespace enabled", e);
             try {
                 connection = getConnectionWithRetry(connectionURL, false);
             } catch (Exception ex) {
-                LOG.info("Failed to get connection without namespace enabled", ex);
+                logger.info("Failed to get connection without namespace enabled", ex);
             }
         }
         return connection;
@@ -392,7 +392,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
 
         RetryCounter retrier = new RetryCounter(MAX_CONNECTION_ATTEMPTS,
                 FIRST_TIME_RETRY_TIMEOUT, TimeUnit.MILLISECONDS);
-        LOG.info("Trying to get the connection with "
+        logger.info("Trying to get the connection with "
                 + retrier.getMaxAttempts() + " attempts with "
                 + "connectionURL :" + connectionURL
                 + "connProps :" + connProps);
@@ -400,11 +400,11 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             try {
                 connection = DriverManager.getConnection(connectionURL, connProps);
             } catch (SQLException e) {
-                LOG.info("Trying to establish connection with "
+                logger.info("Trying to establish connection with "
                         + retrier.getAttemptTimes() + " attempts", e);
             }
             if (connection != null) {
-                LOG.info("Successfully established connection within "
+                logger.info("Successfully established connection within "
                         + retrier.getAttemptTimes() + " attempts");
                 break;
             }
@@ -415,11 +415,11 @@ public class PhoenixCanaryTool extends Configured implements Tool {
 
     public static void main(final String[] args) {
         try {
-            LOG.info("Starting Phoenix Canary Test tool...");
+            logger.info("Starting Phoenix Canary Test tool...");
             ToolRunner.run(new PhoenixCanaryTool(), args);
         } catch (Exception e) {
-            LOG.error("Error in running Phoenix Canary Test tool. " + e);
+            logger.error("Error in running Phoenix Canary Test tool. " + e);
         }
-        LOG.info("Exiting Phoenix Canary Test tool...");
+        logger.info("Exiting Phoenix Canary Test tool...");
     }
 }

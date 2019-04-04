@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -81,6 +79,8 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -95,7 +95,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseQueryPlan implements QueryPlan {
-	private static final Log LOG = LogFactory.getLog(BaseQueryPlan.class);
+	private static final Logger logger = LoggerFactory.getLogger(BaseQueryPlan.class);
     protected static final long DEFAULT_ESTIMATED_SIZE = 10 * 1024; // 10 K
     
     protected final TableRef tableRef;
@@ -357,13 +357,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
         }
         
-        if (LOG.isDebugEnabled()) {
-        	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
+        if (logger.isDebugEnabled()) {
+            logger.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
-        if (LOG.isDebugEnabled()) {
-        	LOG.debug(LogUtil.addCustomAnnotations("Iterator ready: " + iterator, connection));
+        if (logger.isDebugEnabled()) {
+            logger.debug(LogUtil.addCustomAnnotations("Iterator ready: " + iterator, connection));
         }
 
         // wrap the iterator so we start/end tracing as we expect

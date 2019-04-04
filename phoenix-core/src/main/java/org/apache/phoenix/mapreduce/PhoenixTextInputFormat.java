@@ -50,7 +50,7 @@ public class PhoenixTextInputFormat extends TextInputFormat {
   }
 
   public static class PhoenixLineRecordReader extends RecordReader<LongWritable,Text> {
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixLineRecordReader.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixLineRecordReader.class);
     private final LineRecordReader rr;
     private PhoenixLineRecordReader(LineRecordReader rr) {
       this.rr = rr;
@@ -62,10 +62,10 @@ public class PhoenixTextInputFormat extends TextInputFormat {
       final Configuration conf = context.getConfiguration();
       final FileSplit split = (FileSplit) genericSplit;
       if (conf.getBoolean(SKIP_HEADER_KEY, false) && split.getStart() == 0) {
-        LOG.trace("Consuming first key-value from {}", genericSplit);
+        logger.trace("Consuming first key-value from {}", genericSplit);
         nextKeyValue();
       } else {
-        LOG.trace("Not configured to skip header or not the first input split: {}", split);
+        logger.trace("Not configured to skip header or not the first input split: {}", split);
       }
     }
 

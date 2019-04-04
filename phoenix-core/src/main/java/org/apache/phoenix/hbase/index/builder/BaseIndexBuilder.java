@@ -14,8 +14,6 @@ import java.lang.reflect.Constructor;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Increment;
@@ -27,6 +25,8 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Basic implementation of the {@link IndexBuilder} that doesn't do any actual work of indexing.
@@ -38,7 +38,7 @@ import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
  */
 public abstract class BaseIndexBuilder implements IndexBuilder {
     public static final String CODEC_CLASS_NAME_KEY = "org.apache.hadoop.hbase.index.codec.class";
-    private static final Log LOG = LogFactory.getLog(BaseIndexBuilder.class);
+    private static final Logger logger = LoggerFactory.getLogger(BaseIndexBuilder.class);
 
     protected boolean stopped;
     protected RegionCoprocessorEnvironment env;
@@ -120,7 +120,7 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
 
     @Override
     public void stop(String why) {
-        LOG.debug("Stopping because: " + why);
+        logger.debug("Stopping because: " + why);
         this.stopped = true;
     }
 

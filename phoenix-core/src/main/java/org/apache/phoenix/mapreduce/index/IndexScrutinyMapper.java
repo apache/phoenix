@@ -59,7 +59,7 @@ import com.google.common.base.Joiner;
  */
 public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, Text, Text> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IndexScrutinyMapper.class);
+    private static final Logger logger = LoggerFactory.getLogger(IndexScrutinyMapper.class);
     private Connection connection;
     private List<ColumnInfo> targetTblColumnMetadata;
     private long batchSize;
@@ -147,7 +147,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     PhoenixRuntime.generateColumnInfo(connection, qTargetTable, targetColNames);
             sourceTblColumnMetadata =
                     PhoenixRuntime.generateColumnInfo(connection, qSourceTable, sourceColNames);
-            LOG.info("Target table base query: " + targetTableQuery);
+            logger.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
@@ -162,7 +162,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             try {
                 res.close();
             } catch (Exception e) {
-                LOG.error("Closing resource: " + res + " failed :", e);
+                logger.error("Closing resource: " + res + " failed :", e);
             }
         }
     }
@@ -185,7 +185,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             }
             context.progress(); // Make sure progress is reported to Application Master.
         } catch (SQLException | IllegalArgumentException e) {
-            LOG.error(" Error while read/write of a record ", e);
+            logger.error(" Error while read/write of a record ", e);
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new IOException(e);
         }
@@ -201,7 +201,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 processBatch(context);
                 connection.close();
             } catch (SQLException e) {
-                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+                logger.error("Error while closing connection in the PhoenixIndexMapper class ", e);
                 throwException = new IOException(e);
             }
         }

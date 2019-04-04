@@ -33,7 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class XMLConfigParserTest {
-    private static final Logger LOG = LoggerFactory.getLogger(XMLConfigParserTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(XMLConfigParserTest.class);
   
     @Test
     public void testDTDInScenario() throws Exception {
@@ -45,7 +45,7 @@ public class XMLConfigParserTest {
             fail("The scenario should have failed to parse because it contains a DTD");
         } catch (UnmarshalException e) {
             // If we don't parse the DTD, the variable 'name' won't be defined in the XML
-            LOG.warn("Caught expected exception", e);
+            logger.warn("Caught expected exception", e);
             Throwable cause = e.getLinkedException();
             assertTrue("Cause was a " + cause.getClass(), cause instanceof XMLStreamException);
         }

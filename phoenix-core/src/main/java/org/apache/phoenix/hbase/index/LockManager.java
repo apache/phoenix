@@ -25,12 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -41,7 +41,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  *
  */
 public class LockManager {
-    private static final Log LOG = LogFactory.getLog(LockManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(LockManager.class);
 
     private final ConcurrentHashMap<ImmutableBytesPtr, RowLockContext> lockedRows =
             new ConcurrentHashMap<ImmutableBytesPtr, RowLockContext>();
@@ -99,7 +99,7 @@ public class LockManager {
             success = true;
             return result;
         } catch (InterruptedException ie) {
-            LOG.warn("Thread interrupted waiting for lock on row: " + rowKey);
+            logger.warn("Thread interrupted waiting for lock on row: " + rowKey);
             InterruptedIOException iie = new InterruptedIOException();
             iie.initCause(ie);
             if (traceScope != null) {

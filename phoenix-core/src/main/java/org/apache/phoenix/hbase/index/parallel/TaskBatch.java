@@ -22,9 +22,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Abortable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A group of {@link Task}s. The tasks are all bound together using the same {@link Abortable} (
@@ -32,7 +32,7 @@ import org.apache.hadoop.hbase.Abortable;
  * @param <V> expected result type from all the tasks
  */
 public class TaskBatch<V> implements Abortable {
-  private static final Log LOG = LogFactory.getLog(TaskBatch.class);
+  private static final Logger logger = LoggerFactory.getLogger(TaskBatch.class);
   private AtomicBoolean aborted = new AtomicBoolean();
   private List<Task<V>> tasks;
 
@@ -57,7 +57,7 @@ public class TaskBatch<V> implements Abortable {
     if (this.aborted.getAndSet(true)) {
       return;
     }
-    LOG.info("Aborting batch of tasks because " + why);
+    logger.info("Aborting batch of tasks because " + why);
   }
 
   @Override

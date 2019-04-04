@@ -90,7 +90,7 @@ import com.google.common.collect.Sets;
  */
 public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Cell> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MultiHfileOutputFormat.class);
+    private static final Logger logger = LoggerFactory.getLogger(MultiHfileOutputFormat.class);
 
     private static final String COMPRESSION_FAMILIES_CONF_KEY =
         "hbase.hfileoutputformat.families.compression";
@@ -204,7 +204,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
           private void rollWriters() throws IOException {
               for (WriterLength wl : this.writers.values()) {
                   if (wl.writer != null) {
-                      LOG.info("Writer=" + wl.writer.getPath() +
+                      logger.info("Writer=" + wl.writer.getPath() +
                               ((wl.written == 0)? "": ", wrote=" + wl.written));
                       close(wl.writer);
                   }
@@ -478,7 +478,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
     private static void writePartitions(Configuration conf, Path partitionsPath,
             Set<TableRowkeyPair> tablesStartKeys) throws IOException {
         
-        LOG.info("Writing partition information to " + partitionsPath);
+        logger.info("Writing partition information to " + partitionsPath);
         if (tablesStartKeys.isEmpty()) {
           throw new IllegalArgumentException("No regions passed");
         }
@@ -700,11 +700,11 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                conf.set(tableName, tableDefns);
                
                TargetTableRef tbl = TargetTableRefFunctions.FROM_JSON.apply(tableDefns);
-               LOG.info(" the table logical name is "+ tbl.getLogicalName());
+               logger.info(" the table logical name is "+ tbl.getLogicalName());
            }
        }
     
-       LOG.info("Configuring " + tablesStartKeys.size() + " reduce partitions to match current region count");
+       logger.info("Configuring " + tablesStartKeys.size() + " reduce partitions to match current region count");
        job.setNumReduceTasks(tablesStartKeys.size());
 
        configurePartitioner(job, tablesStartKeys);

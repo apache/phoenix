@@ -33,7 +33,7 @@ import com.google.common.annotations.VisibleForTesting;
 /** {@link UpsertExecutor} over {@link Map} objects, convert input record into {@link Map} objects by using regex. */
 public class RegexUpsertExecutor extends JsonUpsertExecutor {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(RegexUpsertExecutor.class);
+    protected static final Logger logger = LoggerFactory.getLogger(RegexUpsertExecutor.class);
 
     /** Testing constructor. Do not use in prod. */
     @VisibleForTesting
@@ -69,10 +69,10 @@ public class RegexUpsertExecutor extends JsonUpsertExecutor {
             preparedStatement.execute();
             upsertListener.upsertDone(++upsertCount);
         } catch (Exception e) {
-            if (LOG.isDebugEnabled()) {
+            if (logger.isDebugEnabled()) {
                 // Even though this is an error we only log it with debug logging because we're notifying the
                 // listener, and it can do its own logging if needed
-                LOG.debug("Error on record " + record + ", fieldIndex " + fieldIndex + ", colName " + colName, e);
+                logger.debug("Error on record " + record + ", fieldIndex " + fieldIndex + ", colName " + colName, e);
             }
             upsertListener.errorOnRecord(record, new Exception("fieldIndex: " + fieldIndex + ", colName " + colName, e));
         }

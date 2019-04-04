@@ -19,8 +19,8 @@ package org.apache.phoenix.call;
 
 import java.util.concurrent.Callable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Helper class to run a Call with a set of {@link CallWrapper}
@@ -38,7 +38,7 @@ public class CallRunner {
         public V call() throws E;
     }
 
-    private static final Log LOG = LogFactory.getLog(CallRunner.class);
+    private static final Logger logger = LoggerFactory.getLogger(CallRunner.class);
 
     private CallRunner() {
         // no ctor for util class
@@ -57,7 +57,7 @@ public class CallRunner {
                 try {
                     wrappers[i].after();
                 } catch (Exception e) {
-                    LOG.error("Failed to complete wrapper " + wrappers[i], e);
+                    logger.error("Failed to complete wrapper " + wrappers[i], e);
                 }
             }
         }

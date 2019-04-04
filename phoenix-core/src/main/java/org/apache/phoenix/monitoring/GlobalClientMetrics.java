@@ -114,7 +114,7 @@ public enum GlobalClientMetrics {
     GLOBAL_HBASE_COUNT_ROWS_SCANNED(COUNT_ROWS_SCANNED),
     GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED);
 
-    private static final Logger LOG = LoggerFactory.getLogger(GlobalClientMetrics.class);
+    private static final Logger logger = LoggerFactory.getLogger(GlobalClientMetrics.class);
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
     private MetricType metricType;
     private GlobalMetric metric;
@@ -143,7 +143,7 @@ public enum GlobalClientMetrics {
     }
 
     private static MetricRegistry createMetricRegistry() {
-        LOG.info("Creating Metric Registry for Phoenix Global Metrics");
+        logger.info("Creating Metric Registry for Phoenix Global Metrics");
         MetricRegistryInfo registryInfo = new MetricRegistryInfo("PHOENIX", "Phoenix Client Metrics",
                 "phoenix", "Phoenix,sub=CLIENT", true);
         return MetricRegistries.global().create(registryInfo);

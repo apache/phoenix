@@ -26,8 +26,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
@@ -52,9 +50,11 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
-    private static final Log LOG = LogFactory.getLog(InvalidIndexStateClientSideIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(InvalidIndexStateClientSideIT.class);
 
     @Test
     public void testCachedConnections() throws Throwable {
@@ -120,7 +120,7 @@ public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
                     }
                 };
         int version = VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, 13, PHOENIX_PATCH_NUMBER);
-        LOG.info("Client version: " + version);
+        logger.info("Client version: " + version);
         Table ht =
                 queryServices.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
@@ -133,7 +133,7 @@ public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
             assert (PIndexState.valueOf(result.getTable().getIndexes(0).getIndexState())
                     .equals(PIndexState.DISABLE));
         } catch (Exception e) {
-            LOG.error("Exception Occurred: " + e);
+            logger.error("Exception Occurred: " + e);
 
         } finally {
             Closeables.closeQuietly(ht);

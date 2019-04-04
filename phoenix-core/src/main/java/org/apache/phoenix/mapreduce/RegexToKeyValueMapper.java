@@ -46,7 +46,7 @@ import com.google.common.base.Preconditions;
  */
 public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(RegexToKeyValueMapper.class);
+    protected static final Logger logger = LoggerFactory.getLogger(RegexToKeyValueMapper.class);
 
     /** Configuration key for the regex */
     public static final String REGEX_CONFKEY = "phoenix.mapreduce.import.regex";
@@ -110,7 +110,9 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
 			Map<String, Object> data = new HashMap<>();
 			Matcher m = inputPattern.matcher(input);
 			if (m.groupCount() != columnInfoList.size()) {
-				LOG.debug(String.format("based on the regex and input, input fileds %s size doesn't match the table columns %s size", m.groupCount(), columnInfoList.size()));
+                logger.debug(String.format("based on the regex and input, input fileds %s size " +
+                        "doesn't match the table columns %s size",
+                        m.groupCount(), columnInfoList.size()));
 				return data;
 			}
 			

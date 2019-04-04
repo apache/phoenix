@@ -25,8 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -58,6 +56,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 
@@ -66,7 +66,7 @@ import com.google.common.collect.Maps;
  */
 public class DefaultStatisticsCollector implements StatisticsCollector {
 
-    private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
+    private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     
     final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     private final Table htable;
@@ -122,7 +122,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         } catch (SQLException e) {
             throw new IOException(e);
         }
-        LOG.info("Initialization complete for " +
+        logger.info("Initialization complete for " +
                 this.getClass() + " statistics collector for table " + tableName);
     }
 
@@ -141,12 +141,12 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     private void initGuidepostDepth() throws IOException, SQLException {
         if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {
             getGuidePostDepthFromStatement();
-            LOG.info("Guide post depth determined from SQL statement: " + guidePostDepth);
+            logger.info("Guide post depth determined from SQL statement: " + guidePostDepth);
         } else {
             long guidepostWidth = getGuidePostDepthFromSystemCatalog();
             if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
-                LOG.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
+                logger.info("Guide post depth determined from SYSTEM.CATALOG: " + guidePostDepth);
             } else {
                 this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
                         configuration.getInt(
@@ -156,7 +156,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                                 QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
                         region.getTableDescriptor());
-                LOG.info("Guide post depth determined from global configuration: " + guidePostDepth);
+                logger.info("Guide post depth determined from global configuration: " + guidePostDepth);
             }
         }
 
@@ -211,7 +211,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                 try {
                     htable.close();
                 } catch (IOException e) {
-                    LOG.warn("Failed to close " + htable.getName(), e);
+                    logger.warn("Failed to close " + htable.getName(), e);
                 }
             }
         }
@@ -250,7 +250,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                     EnvironmentEdgeManager.currentTimeMillis(), scan);
             commitStats(mutations);
         } catch (IOException e) {
-            LOG.error("Unable to update SYSTEM.STATS table.", e);
+            logger.error("Unable to update SYSTEM.STATS table.", e);
         }
     }
 
@@ -284,21 +284,21 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         for (ImmutableBytesPtr fam : fams) {
             if (delete) {
                 statsWriter.deleteStatsForRegion(region, this, fam, mutations);
-                LOG.info("Generated " + mutations.size() + " mutations to delete existing stats");
+                logger.info("Generated " + mutations.size() + " mutations to delete existing stats");
             }
 
             // If we've disabled stats, don't write any, just delete them
             if (this.guidePostDepth > 0) {
                 int oldSize = mutations.size();
                 statsWriter.addStats(this, fam, mutations, guidePostDepth);
-                LOG.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats");
+                logger.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats");
             }
         }
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
         statsWriter.commitStats(mutations, this);
-        LOG.info("Committed " + mutations.size() + " mutations for stats");
+        logger.info("Committed " + mutations.size() + " mutations for stats");
     }
 
     /**
@@ -387,7 +387,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
 
         ImmutableBytesPtr cfKey =
                 new ImmutableBytesPtr(store.getColumnFamilyDescriptor().getName());
-        LOG.info("StatisticsScanner created for table: "
+        logger.info("StatisticsScanner created for table: "
                 + tableName + " CF: " + store.getColumnFamilyName());
         return new StatisticsScanner(this, statsWriter, env, delegate, cfKey);
     }

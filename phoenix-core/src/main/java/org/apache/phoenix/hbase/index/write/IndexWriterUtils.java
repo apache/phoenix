@@ -22,9 +22,6 @@ import java.util.concurrent.ExecutorService;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Table;
@@ -36,10 +33,12 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class IndexWriterUtils {
 
-  private static final Log LOG = LogFactory.getLog(IndexWriterUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(IndexWriterUtils.class);
 
   /**
    * Maximum number of threads to allow per-table when writing. Each writer thread (from

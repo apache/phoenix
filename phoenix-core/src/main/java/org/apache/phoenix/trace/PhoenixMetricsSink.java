@@ -35,8 +35,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.configuration2.SubsetConfiguration;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.metrics2.AbstractMetric;
@@ -56,6 +54,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -78,7 +78,7 @@ import com.google.common.base.Joiner;
  */
 public class PhoenixMetricsSink implements MetricsSink {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixMetricsSink.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixMetricsSink.class);
 
     private static final String VARIABLE_VALUE = "?";
 
@@ -102,14 +102,14 @@ public class PhoenixMetricsSink implements MetricsSink {
     private String table;
     
     public PhoenixMetricsSink() {
-        LOG.info("Writing tracing metrics to phoenix table");
+        logger.info("Writing tracing metrics to phoenix table");
 
     }
 
     @Override
     public void init(SubsetConfiguration config) {
         Metrics.markSinkInitialized();
-        LOG.info("Phoenix tracing writer started");
+        logger.info("Phoenix tracing writer started");
     }
 
     /**
@@ -210,7 +210,7 @@ public class PhoenixMetricsSink implements MetricsSink {
         try {
             this.conn.commit();
         } catch (SQLException e) {
-            LOG.error("Failed to commit changes to table", e);
+            logger.error("Failed to commit changes to table", e);
         }
     }
 
@@ -270,7 +270,7 @@ public class PhoenixMetricsSink implements MetricsSink {
             } else if (tag.name().equals("Context")) {
                 // ignored
             } else {
-                LOG.error("Got an unexpected tag: " + tag);
+                logger.error("Got an unexpected tag: " + tag);
             }
         }
 
@@ -286,9 +286,9 @@ public class PhoenixMetricsSink implements MetricsSink {
         stmt += COMMAS.join(keys);
         stmt += ") VALUES (" + COMMAS.join(values) + ")";
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Logging metrics to phoenix table via: " + stmt);
-            LOG.trace("With tags: " + variableValues);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Logging metrics to phoenix table via: " + stmt);
+            logger.trace("With tags: " + variableValues);
         }
         try {
             PreparedStatement ps = conn.prepareStatement(stmt);
@@ -304,7 +304,7 @@ public class PhoenixMetricsSink implements MetricsSink {
             MutationState newState = plan.execute();
             state.join(newState);
         } catch (SQLException e) {
-            LOG.error("Could not write metric: \n" + record + " to prepared statement:\n" + stmt,
+            logger.error("Could not write metric: \n" + record + " to prepared statement:\n" + stmt,
                     e);
         }
     }

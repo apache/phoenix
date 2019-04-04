@@ -22,8 +22,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
@@ -37,13 +35,15 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Manage the building of index updates from primary table updates.
  */
 public class IndexBuildManager implements Stoppable {
 
-  private static final Log LOG = LogFactory.getLog(IndexBuildManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(IndexBuildManager.class);
   private final IndexBuilder delegate;
   private boolean stopped;
 

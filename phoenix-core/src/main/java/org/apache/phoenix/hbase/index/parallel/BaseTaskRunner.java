@@ -23,9 +23,9 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Abortable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
@@ -41,7 +41,7 @@ import com.google.common.util.concurrent.MoreExecutors;
  */
 public abstract class BaseTaskRunner implements TaskRunner {
 
-  private static final Log LOG = LogFactory.getLog(BaseTaskRunner.class);
+  private static final Logger logger = LoggerFactory.getLogger(BaseTaskRunner.class);
   protected ListeningExecutorService writerPool;
   private boolean stopped;
 
@@ -77,7 +77,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
 
   private void logAndNotifyAbort(Exception e, Abortable abort) {
     String msg = "Found a failed task because: " + e.getMessage();
-    LOG.error(msg, e);
+    logger.error(msg, e);
     abort.abort(msg, e.getCause());
   }
 
@@ -118,7 +118,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
     if (this.stopped) {
       return;
     }
-    LOG.info("Shutting down task runner because " + why);
+    logger.info("Shutting down task runner because " + why);
     this.writerPool.shutdownNow();
   }
 

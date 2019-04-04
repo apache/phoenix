@@ -26,8 +26,6 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -74,6 +72,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * For pre-0.94.9 instances, this class tests correctly deserializing WALEdits w/o compression. Post
@@ -91,7 +91,8 @@ import org.mockito.Mockito;
 @Ignore
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
-  public static final Log LOG = LogFactory.getLog(WALReplayWithIndexWritesAndCompressedWALIT.class);
+  public static final Logger logger =
+          LoggerFactory.getLogger(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
   public IndexTableName table = new IndexTableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";
@@ -147,7 +148,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     UTIL.startMiniZKCluster();
 
     Path hbaseRootDir = UTIL.getDFSCluster().getFileSystem().makeQualified(new Path("/hbase"));
-    LOG.info("hbase.rootdir=" + hbaseRootDir);
+    logger.info("hbase.rootdir=" + hbaseRootDir);
     UTIL.getConfiguration().set(HConstants.HBASE_DIR, hbaseRootDir.toString());
     UTIL.startMiniHBaseCluster(1, 1);
   }
@@ -292,7 +293,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     assertEquals("splits=" + splits, 1, splits.size());
     // Make sure the file exists
     assertTrue(fs.exists(splits.get(0)));
-    LOG.info("Split file=" + splits.get(0));
+    logger.info("Split file=" + splits.get(0));
     return splits.get(0);
   }
 
@@ -305,7 +306,7 @@ private int getKeyValueCount(Table table) throws IOException {
     int count = 0;
     for (Result res : results) {
       count += res.listCells().size();
-      LOG.debug(count + ") " + res);
+      logger.debug(count + ") " + res);
     }
     results.close();
 

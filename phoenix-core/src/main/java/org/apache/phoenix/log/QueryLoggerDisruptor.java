@@ -24,10 +24,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.lmax.disruptor.BlockingWaitStrategy;
@@ -44,7 +44,7 @@ public class QueryLoggerDisruptor implements Closeable{
     private boolean isClosed = false;
     //number of elements to create within the ring buffer.
     private static final int RING_BUFFER_SIZE = 8 * 1024;
-    private static final Log LOG = LogFactory.getLog(QueryLoggerDisruptor.class);
+    private static final Logger logger = LoggerFactory.getLogger(QueryLoggerDisruptor.class);
     private static final String DEFAULT_WAIT_STRATEGY = BlockingWaitStrategy.class.getName();
     
     public QueryLoggerDisruptor(Configuration configuration) throws SQLException{
@@ -76,7 +76,7 @@ public class QueryLoggerDisruptor implements Closeable{
 
         final QueryLogDetailsEventHandler[] handlers = { new QueryLogDetailsEventHandler(configuration) };
         disruptor.handleEventsWith(handlers);
-        LOG.info("Starting  QueryLoggerDisruptor for with ringbufferSize=" + disruptor.getRingBuffer().getBufferSize()
+        logger.info("Starting  QueryLoggerDisruptor for with ringbufferSize=" + disruptor.getRingBuffer().getBufferSize()
                 + ", waitStrategy=" + waitStrategy.getClass().getSimpleName() + ", " + "exceptionHandler="
                 + errorHandler + "...");
         disruptor.start();
@@ -103,7 +103,7 @@ public class QueryLoggerDisruptor implements Closeable{
     @Override
     public void close() throws IOException {
         isClosed = true;
-        LOG.info("Shutting down QueryLoggerDisruptor..");
+        logger.info("Shutting down QueryLoggerDisruptor..");
         try {
             //we can wait for 2 seconds, so that backlog can be committed
             disruptor.shutdown(2, TimeUnit.SECONDS);

@@ -113,7 +113,7 @@ import com.google.common.collect.Lists;
  */
 public class IndexTool extends Configured implements Tool {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IndexTool.class);
+    private static final Logger logger = LoggerFactory.getLogger(IndexTool.class);
 
     private String schemaName;
     private String dataTable;
@@ -645,7 +645,7 @@ public class IndexTool extends Configured implements Tool {
                     int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
                     String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
                     double samplingRate = rateOpt == null ? DEFAULT_SPLIT_SAMPLING_RATE : Double.parseDouble(rateOpt);
-                    LOG.info(String.format("Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s", indexTable, autosplit, autosplitNumRegions, samplingRate));
+                    logger.info(String.format("Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s", indexTable, autosplit, autosplitNumRegions, samplingRate));
                     splitIndexTable(connection.unwrap(PhoenixConnection.class), autosplit, autosplitNumRegions, samplingRate, configuration);
                 }
             }
@@ -662,11 +662,11 @@ public class IndexTool extends Configured implements Tool {
             job = jobFactory.getJob();
 
             if (!isForeground && useDirectApi) {
-                LOG.info("Running Index Build in Background - Submit async and exit");
+                logger.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
                 return 0;
             }
-            LOG.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
+            logger.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
             boolean result = job.waitForCompletion(true);
             
             if (result) {
@@ -674,7 +674,7 @@ public class IndexTool extends Configured implements Tool {
                     if (isLocalIndexBuild) {
                         validateSplitForLocalIndex(splitKeysBeforeJob, regionLocator);
                     }
-                    LOG.info("Loading HFiles from {}", outputPath);
+                    logger.info("Loading HFiles from {}", outputPath);
                     LoadIncrementalHFiles loader = new LoadIncrementalHFiles(configuration);
                     loader.doBulkLoad(outputPath, connection.unwrap(PhoenixConnection.class)
                             .getQueryServices().getAdmin(), htable, regionLocator);
@@ -685,11 +685,11 @@ public class IndexTool extends Configured implements Tool {
                 }
                 return 0;
             } else {
-                LOG.error("IndexTool job failed! Check logs for errors..");
+                logger.error("IndexTool job failed! Check logs for errors..");
                 return -1;
             }
         } catch (Exception ex) {
-            LOG.error("An exception occurred while performing the indexing job: "
+            logger.error("An exception occurred while performing the indexing job: "
                     + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
@@ -699,7 +699,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         connection.close();
                     } catch (SQLException e) {
-                        LOG.error("Failed to close connection ", e);
+                        logger.error("Failed to close connection ", e);
                         rethrowException = true;
                     }
                 }
@@ -707,7 +707,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         htable.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close htable ", e);
+                        logger.error("Failed to close htable ", e);
                         rethrowException = true;
                     }
                 }
@@ -715,7 +715,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         hConn.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close hconnection ", e);
+                        logger.error("Failed to close hconnection ", e);
                         rethrowException = true;
                     }
                 }
@@ -723,7 +723,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         regionLocator.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close regionLocator ", e);
+                        logger.error("Failed to close regionLocator ", e);
                         rethrowException = true;
                     }
                 }
@@ -731,7 +731,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         jobFactory.closeConnection();
                     } catch (SQLException e) {
-                        LOG.error("Failed to close jobFactory ", e);
+                        logger.error("Failed to close jobFactory ", e);
                         rethrowException = true;
                     }
                 }
@@ -753,7 +753,7 @@ public class IndexTool extends Configured implements Tool {
                         tempHConn.getRegionLocator(TableName.valueOf(qDataTable))) {
             numRegions = regionLocator.getStartKeys().length;
             if (autosplit && !(numRegions > autosplitNumRegions)) {
-                LOG.info(String.format(
+                logger.info(String.format(
                     "Will not split index %s because the data table only has %s regions, autoSplitNumRegions=%s",
                     pIndexTable.getPhysicalName(), numRegions, autosplitNumRegions));
                 return; // do nothing if # of regions is too low
@@ -839,7 +839,7 @@ public class IndexTool extends Configured implements Tool {
             String errMsg = "The index to build is local index and the split keys are not matching"
                     + " before and after running the job. Please rerun the job otherwise"
                     + " there may be inconsistencies between actual data and index data";
-            LOG.error(errMsg);
+            logger.error(errMsg);
             throw new Exception(errMsg);
         }
         return true;

@@ -32,7 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class XMLResultHandlerTest {
-    private static final Logger LOG = LoggerFactory.getLogger(XMLResultHandlerTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(XMLResultHandlerTest.class);
 
     @Test
     public void testDTDInResults() throws Exception {
@@ -45,7 +45,7 @@ public class XMLResultHandlerTest {
           fail("Expected to see an exception parsing the results with a DTD");
         } catch (UnmarshalException e) {
           // If we don't parse the DTD, the variable 'name' won't be defined in the XML
-          LOG.debug("Caught expected exception", e);
+          logger.debug("Caught expected exception", e);
           Throwable cause = e.getLinkedException();
           assertTrue("Cause was a " + cause.getClass(), cause instanceof XMLStreamException);
         }

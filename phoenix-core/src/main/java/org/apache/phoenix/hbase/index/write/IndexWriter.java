@@ -23,8 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -34,6 +32,8 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -47,7 +47,7 @@ import com.google.common.collect.Multimap;
  */
 public class IndexWriter implements Stoppable {
 
-  private static final Log LOG = LogFactory.getLog(IndexWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(IndexWriter.class);
   public static final String INDEX_COMMITTER_CONF_KEY = "index.writer.commiter.class";
   public static final String INDEX_FAILURE_POLICY_CONF_KEY = "index.writer.failurepolicy.class";
   private AtomicBoolean stopped = new AtomicBoolean(false);
@@ -154,8 +154,8 @@ public class IndexWriter implements Stoppable {
             boolean allowLocalUpdates, int clientVersion) throws IOException {
     try {
       write(toWrite, allowLocalUpdates, clientVersion);
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("Done writing all index updates!\n\t" + toWrite);
+      if (logger.isTraceEnabled()) {
+        logger.trace("Done writing all index updates!\n\t" + toWrite);
       }
     } catch (Exception e) {
       this.failurePolicy.handleFailure(toWrite, e);
@@ -227,7 +227,7 @@ public class IndexWriter implements Stoppable {
       // already stopped
       return;
     }
-    LOG.debug("Stopping because " + why);
+    logger.debug("Stopping because " + why);
     this.writer.stop(why);
     this.failurePolicy.stop(why);
   }

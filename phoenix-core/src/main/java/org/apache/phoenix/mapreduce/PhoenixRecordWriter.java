@@ -24,8 +24,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -33,6 +31,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Default {@link RecordWriter} implementation from Phoenix
@@ -40,7 +40,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
  */
 public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<NullWritable, T> {
     
-    private static final Log LOG = LogFactory.getLog(PhoenixRecordWriter.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixRecordWriter.class);
     
     private final Connection conn;
     private final PreparedStatement statement;
@@ -73,7 +73,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
         try {
             conn.commit();
          } catch (SQLException e) {
-             LOG.error("SQLException while performing the commit for the task.");
+             logger.error("SQLException while performing the commit for the task.");
              throw new RuntimeException(e);
           } finally {
             try {
@@ -81,7 +81,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
               conn.close();
             }
             catch (SQLException ex) {
-              LOG.error("SQLException while closing the connection for the task.");
+              logger.error("SQLException while closing the connection for the task.");
               throw new RuntimeException(ex);
             }
           }
@@ -94,7 +94,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
             numRecords++;
             statement.execute();
             if (numRecords % batchSize == 0) {
-                LOG.debug("commit called on a batch of size : " + batchSize);
+                logger.debug("commit called on a batch of size : " + batchSize);
                 conn.commit();
             }
         } catch (SQLException e) {

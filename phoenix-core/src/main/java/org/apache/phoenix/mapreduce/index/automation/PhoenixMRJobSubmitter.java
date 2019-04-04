@@ -39,8 +39,6 @@ import java.util.concurrent.TimeoutException;
 
 import javax.security.auth.login.AppConfigurationEntry;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -60,6 +58,8 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ZKBasedMasterElectionUtil;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -116,7 +116,7 @@ public class PhoenixMRJobSubmitter {
     private static final int JOB_SUBMIT_POOL_TIMEOUT = 5;
     private Configuration conf;
     private String zkQuorum;
-    private static final Log LOG = LogFactory.getLog(PhoenixMRJobSubmitter.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixMRJobSubmitter.class);
 
     public PhoenixMRJobSubmitter() throws IOException {
         this(null);
@@ -158,11 +158,11 @@ public class PhoenixMRJobSubmitter {
 
         switch (type) {
         case CAPACITY:
-            LOG.info("Applying the Capacity Scheduler Queue Configurations");
+            logger.info("Applying the Capacity Scheduler Queue Configurations");
             PhoenixMRJobUtil.updateCapacityQueueInfo(conf);
             break;
         case FAIR:
-            LOG.warn("Fair Scheduler type is not yet supported");
+            logger.warn("Fair Scheduler type is not yet supported");
             throw new IOException("Fair Scheduler is not yet supported");
         case NONE:
         default:
@@ -184,7 +184,7 @@ public class PhoenixMRJobSubmitter {
         AppConfigurationEntry entries[] =
                 javax.security.auth.login.Configuration.getConfiguration()
                         .getAppConfigurationEntry("Client");
-        LOG.info("Security - Fetched App Login Configuration Entries");
+        logger.info("Security - Fetched App Login Configuration Entries");
         if (entries != null) {
             for (AppConfigurationEntry entry : entries) {
                 if (entry.getOptions().get(PRINCIPAL) != null) {
@@ -194,12 +194,12 @@ public class PhoenixMRJobSubmitter {
                     keyTabPath = (String) entry.getOptions().get(KEYTAB);
                 }
             }
-            LOG.info("Security - Got Principal = " + principal + "");
+            logger.info("Security - Got Principal = " + principal + "");
             if (principal != null && keyTabPath != null) {
-                LOG.info("Security - Retreiving the TGT with principal:" + principal
+                logger.info("Security - Retreiving the TGT with principal:" + principal
                         + " and keytab:" + keyTabPath);
                 UserGroupInformation.loginUserFromKeytab(principal, keyTabPath);
-                LOG.info("Security - Retrieved TGT with principal:" + principal + " and keytab:"
+                logger.info("Security - Retrieved TGT with principal:" + principal + " and keytab:"
                         + keyTabPath);
             }
         }
@@ -237,7 +237,7 @@ public class PhoenixMRJobSubmitter {
 
         if (!ZKBasedMasterElectionUtil.acquireLock(zookeeperWatcher, PHOENIX_LOCKS_PARENT,
             AUTO_INDEX_BUILD_LOCK_NAME)) {
-            LOG.info("Some other node is already running Automated Index Build. Skipping execution!");
+            logger.info("Some other node is already running Automated Index Build. Skipping execution!");
             return -1;
         }
         // 1) Query Phoenix SYSTEM.CATALOG table to get a list of all candidate indexes to be built
@@ -247,22 +247,22 @@ public class PhoenixMRJobSubmitter {
 
         // Get Candidate indexes to be built
         Map<String, PhoenixAsyncIndex> candidateJobs = getCandidateJobs();
-        LOG.info("Candidate Indexes to be built as seen from SYSTEM.CATALOG - " + candidateJobs);
+        logger.info("Candidate Indexes to be built as seen from SYSTEM.CATALOG - " + candidateJobs);
 
         // Get already scheduled Jobs list from Yarn Resource Manager
         Set<String> submittedJobs = getSubmittedYarnApps();
-        LOG.info("Already Submitted/Running MR index build jobs - " + submittedJobs);
+        logger.info("Already Submitted/Running MR index build jobs - " + submittedJobs);
 
         // Get final jobs to submit
         Set<PhoenixAsyncIndex> jobsToSchedule = getJobsToSubmit(candidateJobs, submittedJobs);
 
-        LOG.info("Final indexes to be built - " + jobsToSchedule);
+        logger.info("Final indexes to be built - " + jobsToSchedule);
         List<Future<Boolean>> results = new ArrayList<Future<Boolean>>(jobsToSchedule.size());
 
         int failedJobSubmissionCount = 0;
         int timedoutJobSubmissionCount = 0;
         ExecutorService jobSubmitPool = Executors.newFixedThreadPool(10);
-        LOG.info("Attempt to submit MR index build jobs for - " + jobsToSchedule);
+        logger.info("Attempt to submit MR index build jobs for - " + jobsToSchedule);
 
         try {
             for (PhoenixAsyncIndex indexToBuild : jobsToSchedule) {
@@ -285,7 +285,7 @@ public class PhoenixMRJobSubmitter {
             PhoenixMRJobUtil.shutdown(jobSubmitPool);
         }
 
-        LOG.info("Result of Attempt to Submit MR index build Jobs - Jobs attempted = "
+        logger.info("Result of Attempt to Submit MR index build Jobs - Jobs attempted = "
                 + jobsToSchedule.size() + " ; Failed to Submit = " + failedJobSubmissionCount
                 + " ; Timed out = " + timedoutJobSubmissionCount);
         return failedJobSubmissionCount;
@@ -312,7 +312,7 @@ public class PhoenixMRJobSubmitter {
                 + "," + YarnApplication.state.RUNNING);
         int rmPort = PhoenixMRJobUtil.getRMPort(conf);
         String response = PhoenixMRJobUtil.getJobsInformationFromRM(rmHost, rmPort, urlParams);
-        LOG.debug("Already Submitted/Running Apps = " + response);
+        logger.debug("Already Submitted/Running Apps = " + response);
         JSONObject jobsJson = new JSONObject(response);
         JSONObject appsJson = jobsJson.optJSONObject(YarnApplication.APPS_ELEMENT);
         Set<String> yarnApplicationSet = new HashSet<String>();

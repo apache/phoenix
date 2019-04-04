@@ -32,8 +32,6 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -58,11 +56,12 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ServerUtil {
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
-    private static final Log LOG = LogFactory.getLog(ServerUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(ServerUtil.class);
     
     private static final String FORMAT = "ERROR %d (%s): %s";
     private static final Pattern PATTERN = Pattern.compile("ERROR (\\d+) \\((\\w+)\\): (.*)");
@@ -342,7 +341,7 @@ public class ServerUtil {
                     try {
                         connection.close();
                     } catch (IOException e) {
-                        LOG.warn("Unable to close coprocessor connection", e);
+                        logger.warn("Unable to close coprocessor connection", e);
                     }
                 }
                 connections.clear();

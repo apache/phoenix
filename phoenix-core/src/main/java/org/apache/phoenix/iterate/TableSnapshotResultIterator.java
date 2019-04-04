@@ -24,8 +24,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -40,7 +38,8 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Iterator to scan over a HBase snapshot based on input HBase Scan object.
@@ -52,7 +51,7 @@ import org.apache.phoenix.util.ServerUtil;
  */
 public class TableSnapshotResultIterator implements ResultIterator {
 
-  private static final Log LOG = LogFactory.getLog(TableSnapshotResultIterator.class);
+  private static final Logger logger = LoggerFactory.getLogger(TableSnapshotResultIterator.class);
 
   private final Scan scan;
   private ResultIterator scanIterator;
@@ -101,7 +100,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     }
 
     this.regions.sort(RegionInfo.COMPARATOR);
-    LOG.info("Initialization complete with " + regions.size() + " valid regions");
+    logger.info("Initialization complete with " + regions.size() + " valid regions");
   }
 
   /**

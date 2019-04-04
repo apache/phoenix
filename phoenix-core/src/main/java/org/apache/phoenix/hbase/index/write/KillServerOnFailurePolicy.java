@@ -19,13 +19,13 @@ package org.apache.phoenix.hbase.index.write;
 
 import java.io.IOException;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
 
@@ -34,7 +34,7 @@ import com.google.common.collect.Multimap;
  */
 public class KillServerOnFailurePolicy implements IndexFailurePolicy {
 
-  private static final Log LOG = LogFactory.getLog(KillServerOnFailurePolicy.class);
+  private static final Logger logger = LoggerFactory.getLogger(KillServerOnFailurePolicy.class);
   private Stoppable stoppable;
 
   @Override
@@ -64,7 +64,7 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
     // notify the regionserver of the failure
     String msg =
         "Could not update the index table, killing server region because couldn't write to an index table";
-    LOG.error(msg, cause);
+    logger.error(msg, cause);
     throw new FatalIndexBuildingFailureException(msg,cause);
   }
 

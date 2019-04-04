@@ -20,11 +20,11 @@ package org.apache.phoenix.log;
 import java.util.Map;
 import java.util.UUID;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
@@ -41,7 +41,7 @@ public class QueryLogger {
     private LogLevel logLevel;
     private Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
     private boolean isSynced;
-    private static final Log LOG = LogFactory.getLog(QueryLoggerDisruptor.class);
+    private static final Logger logger = LoggerFactory.getLogger(QueryLoggerDisruptor.class);
     
     private QueryLogger(PhoenixConnection connection) {
         this.queryId = UUID.randomUUID().toString();
@@ -105,15 +105,15 @@ public class QueryLogger {
         try {
             queryLogBuilder.put(queryLogInfo, info);
         } catch (Exception e) {
-            LOG.warn("Unable to add log info because of " + e.getMessage());
+            logger.warn("Unable to add log info because of " + e.getMessage());
         }
     }
     
     private boolean publishLogs(RingBufferEventTranslator translator) {
         if (queryDisruptor == null) { return false; }
         boolean isLogged = queryDisruptor.tryPublish(translator);
-        if (!isLogged && LOG.isDebugEnabled()) {
-            LOG.debug("Unable to write query log in table as ring buffer queue is full!!");
+        if (!isLogged && logger.isDebugEnabled()) {
+            logger.debug("Unable to write query log in table as ring buffer queue is full!!");
         }
         return isLogged;
     }

@@ -61,8 +61,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -75,6 +73,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -89,7 +89,7 @@ import com.google.common.collect.Sets;
  */
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixMetricsIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixMetricsIT.class);
 
     @Test
     public void testResetGlobalPhoenixMetrics() throws Exception {
@@ -207,9 +207,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
 
         for (int i = 0; i < MAX_RETRIES; i++) {
-            LOG.info("Verifying Global Metrics from Hadoop Sink, Retry: " + (i + 1));
+            logger.info("Verifying Global Metrics from Hadoop Sink, Retry: " + (i + 1));
             if (verifyMetricsFromSinkOnce(expectedMetrics)) {
-                LOG.info("Values from Hadoop Metrics Sink match actual values");
+                logger.info("Values from Hadoop Metrics Sink match actual values");
                 return true;
             }
             try {
@@ -231,7 +231,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                         long expectedValue = value;
                         long actualValue = metric.value().longValue();
                         if (expectedValue != actualValue) {
-                            LOG.warn("Metric from Hadoop Sink: " + metric.name() + " didn't match expected.");
+                            logger.warn("Metric from Hadoop Sink: " + metric.name() + " didn't match expected.");
                             return false;
                         }
                         expectedMetrics.remove(metric.name());

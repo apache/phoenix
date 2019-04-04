@@ -17,8 +17,6 @@
  */
 package org.apache.hadoop.hbase.ipc;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
@@ -26,6 +24,10 @@ import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.SimpleRpcSchedulerFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
 
 import com.google.common.base.Preconditions;
 
@@ -35,8 +37,8 @@ import com.google.common.base.Preconditions;
  */
 public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixRpcSchedulerFactory.class);
-
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
+    private static final Marker fatal = MarkerFactory.getMarker("FATAL");
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
 
@@ -48,7 +50,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
             // happens in <=0.98.4 where the scheduler factory is not visible
             delegate = new SimpleRpcSchedulerFactory().create(conf, priorityFunction, abortable);
         } catch (IllegalAccessError e) {
-            LOG.fatal(VERSION_TOO_OLD_FOR_INDEX_RPC);
+            logger.error(fatal, VERSION_TOO_OLD_FOR_INDEX_RPC);
             throw e;
         }
 
@@ -61,7 +63,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
         // validate index and metadata priorities are not the same
         Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
-        LOG.info("Using custom Phoenix Index RPC Handling with index rpc priority " + indexPriority + " and metadata rpc priority " + metadataPriority);
+        logger.info("Using custom Phoenix Index RPC Handling with index rpc priority " + indexPriority + " and metadata rpc priority " + metadataPriority);
 
         PhoenixRpcScheduler scheduler =
                 new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority, priorityFunction,abortable);

@@ -27,11 +27,11 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -40,7 +40,7 @@ import com.google.common.collect.ImmutableMap;
  * 
  */
 public class TableLogWriter implements LogWriter {
-    private static final Log LOG = LogFactory.getLog(LogWriter.class);
+    private static final Logger logger = LoggerFactory.getLogger(LogWriter.class);
     private Connection connection;
     private boolean isClosed;
     private PreparedStatement upsertStatement;
@@ -84,7 +84,7 @@ public class TableLogWriter implements LogWriter {
     @Override
     public void write(RingBufferEvent event) throws SQLException, IOException, ClassNotFoundException {
         if (isClosed()) {
-            LOG.warn("Unable to commit query log as Log committer is already closed");
+            logger.warn("Unable to commit query log as Log committer is already closed");
             return;
         }
         if (connection == null) {

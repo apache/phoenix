@@ -25,8 +25,6 @@ import java.util.List;
 import java.util.Locale;
 
 import org.apache.commons.lang3.BooleanUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
@@ -37,6 +35,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.VarBinaryFormatter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.force.db.i18n.LinguisticSort;
 import com.force.i18n.LocaleUtils;
@@ -87,7 +87,7 @@ import com.force.i18n.LocaleUtils;
 		@FunctionParseNode.Argument(allowedTypes = { PInteger.class }, defaultValue = "null", isConstant = true) })
 public class CollationKeyFunction extends ScalarFunction {
 
-	private static final Log LOG = LogFactory.getLog(CollationKeyFunction.class);
+	private static final Logger logger = LoggerFactory.getLogger(CollationKeyFunction.class);
 
 	public static final String NAME = "COLLATION_KEY";
 
@@ -114,8 +114,8 @@ public class CollationKeyFunction extends ScalarFunction {
 			return false;
 		}
 		String inputString = (String) PVarchar.INSTANCE.toObject(ptr, expression.getSortOrder());
-		if (LOG.isTraceEnabled()) {
-			LOG.trace("CollationKey inputString: " + inputString);
+		if (logger.isTraceEnabled()) {
+			logger.trace("CollationKey inputString: " + inputString);
 		}
 
 		if (inputString == null) {
@@ -124,8 +124,8 @@ public class CollationKeyFunction extends ScalarFunction {
 
 		byte[] collationKeyByteArray = collator.getCollationKey(inputString).toByteArray();
 
-		if (LOG.isTraceEnabled()) {
-			LOG.trace("CollationKey bytes: " + VarBinaryFormatter.INSTANCE.format(collationKeyByteArray));
+		if (logger.isTraceEnabled()) {
+			logger.trace("CollationKey bytes: " + VarBinaryFormatter.INSTANCE.format(collationKeyByteArray));
 		}
 
 		ptr.set(collationKeyByteArray);
@@ -138,19 +138,19 @@ public class CollationKeyFunction extends ScalarFunction {
 		Integer collatorStrength = getLiteralValue(3, Integer.class);
 		Integer collatorDecomposition = getLiteralValue(4, Integer.class);
 
-		if (LOG.isTraceEnabled()) {
+		if (logger.isTraceEnabled()) {
 			StringBuilder logInputsMessage = new StringBuilder();
 			logInputsMessage.append("Input (literal) arguments:").append("localeISOCode: " + localeISOCode)
 					.append(", useSpecialUpperCaseCollator: " + useSpecialUpperCaseCollator)
 					.append(", collatorStrength: " + collatorStrength)
 					.append(", collatorDecomposition: " + collatorDecomposition);
-			LOG.trace(logInputsMessage);
+			logger.trace(logInputsMessage.toString());
 		}
 
 		Locale locale = LocaleUtils.get().getLocaleByIsoCode(localeISOCode);
 
-		if (LOG.isTraceEnabled()) {
-			LOG.trace(String.format("Locale: " + locale.toLanguageTag()));
+		if (logger.isTraceEnabled()) {
+			logger.trace(String.format("Locale: " + locale.toLanguageTag()));
 		}
 
 		LinguisticSort linguisticSort = LinguisticSort.get(locale);
@@ -166,8 +166,8 @@ public class CollationKeyFunction extends ScalarFunction {
 			collator.setDecomposition(collatorDecomposition);
 		}
 
-		if (LOG.isTraceEnabled()) {
-			LOG.trace(String.format("Collator: [strength: %d, decomposition: %d], Special-Upper-Case: %s",
+		if (logger.isTraceEnabled()) {
+			logger.trace(String.format("Collator: [strength: %d, decomposition: %d], Special-Upper-Case: %s",
 					collator.getStrength(), collator.getDecomposition(),
 					BooleanUtils.isTrue(useSpecialUpperCaseCollator)));
 		}

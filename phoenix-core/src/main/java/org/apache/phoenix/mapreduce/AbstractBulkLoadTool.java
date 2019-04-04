@@ -76,7 +76,7 @@ import com.google.common.collect.Lists;
  */
 public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
+    protected static final Logger logger = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
 
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
@@ -195,10 +195,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
             PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
-            LOG.info("Configuring HBase connection to {}", info);
+            logger.info("Configuring HBase connection to {}", info);
             for (Map.Entry<String,String> entry : info.asProps()) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Setting {} = {}", entry.getKey(), entry.getValue());
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Setting {} = {}", entry.getKey(), entry.getValue());
                 }
                 conf.set(entry.getKey(), entry.getValue());
             }
@@ -209,8 +209,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
 
         final Connection conn = QueryUtil.getConnection(conf);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
+        if (logger.isDebugEnabled()) {
+            logger.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
                     qualifiedTableName);
         }
         List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
@@ -318,7 +318,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             // give subclasses their hook
             setupJob(job);
 
-            LOG.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
+            logger.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
             boolean success = job.waitForCompletion(true);
 
             if (success) {
@@ -328,7 +328,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                                 TableName.valueOf(qualifiedTableName));
                         if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob,
                                 regionLocator.getStartKeys())) {
-                            LOG.error("The table " + qualifiedTableName + " has local indexes and"
+                            logger.error("The table " + qualifiedTableName + " has local indexes and"
                                     + " there is split key mismatch before and after running"
                                     + " bulkload job. Please rerun the job otherwise there may be"
                                     + " inconsistencies between actual data and index data.");
@@ -338,11 +338,11 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                         if (regionLocator != null) regionLocator.close();
                     }
                 }
-                LOG.info("Loading HFiles from {}", outputPath);
+                logger.info("Loading HFiles from {}", outputPath);
                 completebulkload(conf,outputPath,tablesToBeLoaded);
-                LOG.info("Removing output directory {}", outputPath);
+                logger.info("Removing output directory {}", outputPath);
                 if(!outputPath.getFileSystem(conf).delete(outputPath, true)) {
-                    LOG.error("Failed to delete the output directory {}", outputPath);
+                    logger.error("Failed to delete the output directory {}", outputPath);
                 }
                 return 0;
             } else {
@@ -364,10 +364,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             try(org.apache.hadoop.hbase.client.Connection hbaseConn =
                     ConnectionFactory.createConnection(conf);
                     Table htable = hbaseConn.getTable(TableName.valueOf(tableName))) {
-                LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
+                logger.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
                 loader.doBulkLoad(tableOutputPath, hbaseConn.getAdmin(), htable,
                         hbaseConn.getRegionLocator(TableName.valueOf(tableName)));
-                LOG.info("Incremental load complete for table=" + tableName);
+                logger.info("Incremental load complete for table=" + tableName);
             }
         }
     }

@@ -13,8 +13,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -25,6 +23,8 @@ import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Build covered indexes for phoenix updates.
@@ -36,7 +36,7 @@ import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
  * bloated index that needs to be cleaned up by a background process.
  */
 public class NonTxIndexBuilder extends BaseIndexBuilder {
-    private static final Log LOG = LogFactory.getLog(NonTxIndexBuilder.class);
+    private static final Logger logger = LoggerFactory.getLogger(NonTxIndexBuilder.class);
 
     protected LocalHBaseState localTable;
 
@@ -55,8 +55,8 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
 
         batchMutationAndAddUpdates(manager, state, mutation, indexMetaData);
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Found index updates for Mutation: " + mutation + "\n" + manager);
+        if (logger.isTraceEnabled()) {
+            logger.trace("Found index updates for Mutation: " + mutation + "\n" + manager);
         }
 
         return manager.toMap();

@@ -31,8 +31,6 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -74,6 +72,8 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
 
@@ -85,7 +85,7 @@ import com.google.common.collect.Multimap;
 
 public class TestWALRecoveryCaching {
 
-  private static final Log LOG = LogFactory.getLog(TestWALRecoveryCaching.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestWALRecoveryCaching.class);
   private static final long ONE_SEC = 1000;
   private static final long ONE_MIN = 60 * ONE_SEC;
   private static final long TIMEOUT = ONE_MIN;
@@ -117,10 +117,10 @@ public class TestWALRecoveryCaching {
                 org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
                 org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
-        LOG.debug("Restoring logs for index table");
+        logger.debug("Restoring logs for index table");
         if (allowIndexTableToRecover != null) {
           allowIndexTableToRecover.await();
-          LOG.debug("Completed index table recovery wait latch");
+          logger.debug("Completed index table recovery wait latch");
         }
       } catch (InterruptedException e) {
         Assert.fail("Should not be interrupted while waiting to allow the index to restore WALs.");
@@ -140,9 +140,9 @@ public class TestWALRecoveryCaching {
     @Override
     public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted,
         Exception cause) throws IOException {
-      LOG.debug("Found index update failure!");
+      logger.debug("Found index update failure!");
       if (allowIndexTableToRecover != null) {
-        LOG.info("failed index write on WAL recovery - allowing index table to be restored.");
+        logger.info("failed index write on WAL recovery - allowing index table to be restored.");
         allowIndexTableToRecover.countDown();
       }
       super.handleFailure(attempted, cause);
@@ -219,25 +219,25 @@ public class TestWALRecoveryCaching {
       Bytes.toBytes(indexedTableName)));
 
     // log all the current state of the server
-    LOG.info("Current Server/Region paring: ");
+    logger.info("Current Server/Region paring: ");
     for (RegionServerThread t : util.getMiniHBaseCluster().getRegionServerThreads()) {
       // check all the conditions for the server to be done
       HRegionServer server = t.getRegionServer();
       if (server.isStopping() || server.isStopped() || server.isAborted()) {
-        LOG.info("\t== Offline: " + server.getServerName());
+        logger.info("\t== Offline: " + server.getServerName());
         continue;
       }
       
       List<HRegion> regions = server.getRegions();
-      LOG.info("\t" + server.getServerName() + " regions: " + regions);
+      logger.info("\t" + server.getServerName() + " regions: " + regions);
     }
 
-    LOG.debug("Killing server " + shared);
+    logger.debug("Killing server " + shared);
     util.getMiniHBaseCluster().killRegionServer(shared);
-    LOG.debug("Waiting on server " + shared + "to die");
+    logger.debug("Waiting on server " + shared + "to die");
     util.getMiniHBaseCluster().waitForRegionServerToStop(shared, TIMEOUT);
     // force reassign the regions from the table
-    // LOG.debug("Forcing region reassignment from the killed server: " + shared);
+    // logger.debug("Forcing region reassignment from the killed server: " + shared);
     // for (HRegion region : online) {
     // util.getMiniHBaseCluster().getMaster().assign(region.getRegionName());
     // }
@@ -260,7 +260,7 @@ public class TestWALRecoveryCaching {
     ResultScanner scanner = index.getScanner(s);
     int count = 0;
     for (Result r : scanner) {
-      LOG.info("Got index table result:" + r);
+      logger.info("Got index table result:" + r);
       count++;
     }
     assertEquals("Got an unexpected found of index rows", 1, count);
@@ -318,7 +318,7 @@ public class TestWALRecoveryCaching {
         // find the regionserver that matches the passed server
         List<HRegion> online = getRegionsFromServerForTable(cluster, server, table);
 
-        LOG.info("Shutting down and reassigning regions from " + server);
+        logger.info("Shutting down and reassigning regions from " + server);
         cluster.stopRegionServer(server);
         cluster.waitForRegionServerToStop(server, TIMEOUT);
 
@@ -327,13 +327,13 @@ public class TestWALRecoveryCaching {
           cluster.getMaster().getAssignmentManager().assign(region.getRegionInfo());
         }
 
-        LOG.info("Starting region server:" + server.getHostname());
+        logger.info("Starting region server:" + server.getHostname());
         cluster.startRegionServer(server.getHostname(), server.getPort());
 
         cluster.waitForRegionServerToStart(server.getHostname(), server.getPort(), TIMEOUT);
 
         // start a server to get back to the base number of servers
-        LOG.info("STarting server to replace " + server);
+        logger.info("STarting server to replace " + server);
         cluster.startRegionServer();
         break;
       }

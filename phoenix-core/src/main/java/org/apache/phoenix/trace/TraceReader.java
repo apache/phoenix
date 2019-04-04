@@ -28,8 +28,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -37,6 +35,8 @@ import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.LogUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.primitives.Longs;
@@ -46,7 +46,7 @@ import com.google.common.primitives.Longs;
  */
 public class TraceReader {
 
-    private static final Log LOG = LogFactory.getLog(TraceReader.class);
+    private static final Logger logger = LoggerFactory.getLogger(TraceReader.class);
     private final Joiner comma = Joiner.on(',');
     private String knownColumns;
     {
@@ -146,7 +146,7 @@ public class TraceReader {
                     orphan.parent = spanInfo;
                     spanInfo.children.add(orphan);
                     // / its no longer an orphan
-                    LOG.trace(addCustomAnnotations("Found parent for span: " + span));
+                    logger.trace(addCustomAnnotations("Found parent for span: " + span));
                     orphans.remove(i--);
                 }
             }
@@ -156,7 +156,7 @@ public class TraceReader {
                 parentSpan.children.add(spanInfo);
             } else if (parent != Span.ROOT_SPAN_ID) {
                 // add the span to the orphan pile to check for the remaining spans we see
-                LOG.info(addCustomAnnotations("No parent span found for span: " + span + " (root span id: "
+                logger.info(addCustomAnnotations("No parent span found for span: " + span + " (root span id: "
                         + Span.ROOT_SPAN_ID + ")"));
                 orphans.add(spanInfo);
             }
@@ -213,7 +213,7 @@ public class TraceReader {
                         + MetricInfo.TRACE.columnName + "=" + traceid + " AND "
                         + MetricInfo.PARENT.columnName + "=" + parent + " AND "
                         + MetricInfo.SPAN.columnName + "=" + span;
-        LOG.trace(addCustomAnnotations("Requesting columns with: " + request));
+        logger.trace(addCustomAnnotations("Requesting columns with: " + request));
         ResultSet results = conn.createStatement().executeQuery(request);
         List<String> cols = new ArrayList<String>();
         while (results.next()) {
@@ -222,7 +222,7 @@ public class TraceReader {
             }
         }
         if (cols.size() < count) {
-            LOG.error(addCustomAnnotations("Missing tags! Expected " + count + ", but only got " + cols.size()
+            logger.error(addCustomAnnotations("Missing tags! Expected " + count + ", but only got " + cols.size()
                     + " tags from rquest " + request));
         }
         return cols;

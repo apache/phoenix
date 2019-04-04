@@ -38,8 +38,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Pair;
@@ -56,6 +54,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -68,7 +68,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * batch commit size.
  */
 public class TraceWriter {
-    private static final Log LOG = LogFactory.getLog(TraceWriter.class);
+    private static final Logger logger = LoggerFactory.getLogger(TraceWriter.class);
 
     private static final String VARIABLE_VALUE = "?";
 
@@ -105,9 +105,9 @@ public class TraceWriter {
 
         traceSpanReceiver = getTraceSpanReceiver();
         if (traceSpanReceiver == null) {
-            LOG.warn(
+            logger.warn(
                 "No receiver has been initialized for TraceWriter. Traces will not be written.");
-            LOG.warn("Restart Phoenix to try again.");
+            logger.warn("Restart Phoenix to try again.");
             return;
         }
 
@@ -119,7 +119,7 @@ public class TraceWriter {
             executor.scheduleAtFixedRate(new FlushMetrics(), 0, 10, TimeUnit.SECONDS);
         }
 
-        LOG.info("Writing tracing metrics to phoenix table");
+        logger.info("Writing tracing metrics to phoenix table");
     }
 
     @VisibleForTesting
@@ -142,8 +142,8 @@ public class TraceWriter {
             while (!traceSpanReceiver.isSpanAvailable()) {
                 Span span = traceSpanReceiver.getSpan();
                 if (null == span) break;
-                if (LOG.isTraceEnabled()) {
-                    LOG.trace("Span received: " + span.toJson());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Span received: " + span.toJson());
                 }
                 addToBatch(span);
                 counter++;
@@ -217,9 +217,9 @@ public class TraceWriter {
             stmt += COMMAS.join(keys);
             stmt += ") VALUES (" + COMMAS.join(values) + ")";
 
-            if (LOG.isTraceEnabled()) {
-                LOG.trace("Logging metrics to phoenix table via: " + stmt);
-                LOG.trace("With tags: " + variableValues);
+            if (logger.isTraceEnabled()) {
+                logger.trace("Logging metrics to phoenix table via: " + stmt);
+                logger.trace("With tags: " + variableValues);
             }
             try {
                 PreparedStatement ps = conn.prepareStatement(stmt);
@@ -237,7 +237,7 @@ public class TraceWriter {
                 MutationState newState = plan.execute();
                 state.join(newState);
             } catch (SQLException e) {
-                LOG.error("Could not write metric: \n" + span + " to prepared statement:\n" + stmt,
+                logger.error("Could not write metric: \n" + span + " to prepared statement:\n" + stmt,
                     e);
             }
         }
@@ -272,14 +272,14 @@ public class TraceWriter {
                 createTable(conn, tableName);
             }
 
-            LOG.info(
+            logger.info(
                 "Created new connection for tracing " + conn.toString() + " Table: " + tableName);
             return conn;
         } catch (Exception e) {
-            LOG.error("Tracing will NOT be pursued. New connection failed for tracing Table: "
+            logger.error("Tracing will NOT be pursued. New connection failed for tracing Table: "
                     + tableName,
                 e);
-            LOG.error("Restart Phoenix to retry.");
+            logger.error("Restart Phoenix to retry.");
             return null;
         }
     }
@@ -324,7 +324,7 @@ public class TraceWriter {
         try {
             conn.commit();
         } catch (SQLException e) {
-            LOG.error(
+            logger.error(
                 "Unable to commit traces on conn: " + conn.toString() + " to table: " + tableName,
                 e);
         }

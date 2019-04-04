@@ -49,7 +49,7 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDU
 public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
@@ -58,7 +58,7 @@ public class PhoenixIndexImportDirectReducer extends
 
             updateTasksTable(context);
         } catch (SQLException e) {
-            LOG.error(" Failed to update the status to Active");
+            logger.error(" Failed to update the status to Active");
             throw new RuntimeException(e.getMessage());
         }
     }

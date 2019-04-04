@@ -17,20 +17,20 @@
  */
 package org.apache.phoenix.hbase.index;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Abortable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * TEst helper to stub out an {@link Abortable} when needed.
  */
 public class StubAbortable implements Abortable {
-  private static final Log LOG = LogFactory.getLog(StubAbortable.class);
+  private static final Logger logger = LoggerFactory.getLogger(StubAbortable.class);
   private boolean abort;
 
   @Override
   public void abort(String reason, Throwable e) {
-    LOG.info("Aborting: " + reason, e);
+    logger.info("Aborting: " + reason, e);
     abort = true;
   }
 

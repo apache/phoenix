@@ -31,8 +31,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
@@ -43,6 +41,8 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.Stat;
 import org.codehaus.jettison.json.JSONException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -71,7 +71,7 @@ public class PhoenixMRJobUtil {
     public static final int RM_CONNECT_TIMEOUT_MILLIS = 10 * 1000;
     public static final int RM_READ_TIMEOUT_MILLIS = 10 * 60 * 1000;
 
-    private static final Log LOG = LogFactory.getLog(PhoenixMRJobUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixMRJobUtil.class);
 
     public static final String PHOENIX_MR_SCHEDULER_TYPE_NAME = "phoenix.index.mr.scheduler.type";
 
@@ -101,11 +101,11 @@ public class PhoenixMRJobUtil {
                         byte[] data = zk.getData(path, zkw, new Stat());
                         ActiveRMInfoProto proto = ActiveRMInfoProto.parseFrom(data);
                         proto.getRmId();
-                        LOG.info("Active RmId : " + proto.getRmId());
+                        logger.info("Active RmId : " + proto.getRmId());
 
                         activeRMHost =
                                 config.get(YarnConfiguration.RM_HOSTNAME + "." + proto.getRmId());
-                        LOG.info("activeResourceManagerHostname = " + activeRMHost);
+                        logger.info("activeResourceManagerHostname = " + activeRMHost);
 
                     }
                 }
@@ -140,7 +140,7 @@ public class PhoenixMRJobUtil {
             }
 
             url = urlBuilder.toString();
-            LOG.info("Attempt to get running/submitted jobs information from RM URL = " + url);
+            logger.info("Attempt to get running/submitted jobs information from RM URL = " + url);
 
             URL obj = new URL(url);
             con = (HttpURLConnection) obj.openConnection();
@@ -155,7 +155,7 @@ public class PhoenixMRJobUtil {
             if (con != null) con.disconnect();
         }
 
-        LOG.info("Result of attempt to get running/submitted jobs from RM - URL=" + url
+        logger.info("Result of attempt to get running/submitted jobs from RM - URL=" + url
                 + ",ResponseCode=" + con.getResponseCode() + ",Response=" + response);
 
         return response;
@@ -182,16 +182,16 @@ public class PhoenixMRJobUtil {
 
     public static void shutdown(ExecutorService pool) throws InterruptedException {
         pool.shutdown();
-        LOG.debug("Shutdown called");
+        logger.debug("Shutdown called");
         pool.awaitTermination(200, TimeUnit.MILLISECONDS);
-        LOG.debug("Await termination called to wait for 200 msec");
+        logger.debug("Await termination called to wait for 200 msec");
         if (!pool.isShutdown()) {
             pool.shutdownNow();
-            LOG.debug("Await termination called to wait for 200 msec");
+            logger.debug("Await termination called to wait for 200 msec");
             pool.awaitTermination(100, TimeUnit.MILLISECONDS);
         }
         if (!pool.isShutdown()) {
-            LOG.warn("Pool did not shutdown");
+            logger.warn("Pool did not shutdown");
         }
     }
 
@@ -222,7 +222,7 @@ public class PhoenixMRJobUtil {
         conf.setInt(MRJobConfig.MAP_MEMORY_MB, mapMemoryMB);
         conf.set(MRJobConfig.MAP_JAVA_OPTS, XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
 
-        LOG.info("Queue Name=" + conf.get(MRJobConfig.QUEUE_NAME) + ";" + "Map Meory MB="
+        logger.info("Queue Name=" + conf.get(MRJobConfig.QUEUE_NAME) + ";" + "Map Meory MB="
                 + conf.get(MRJobConfig.MAP_MEMORY_MB) + ";" + "Map Java Opts="
                 + conf.get(MRJobConfig.MAP_JAVA_OPTS));
     }

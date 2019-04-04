@@ -54,7 +54,7 @@ import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends ParallelStatsDisabledIT {
-    private static final Logger LOG = LoggerFactory.getLogger(OrphanViewToolIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(OrphanViewToolIT.class);
 
     private final boolean isMultiTenant;
     private final boolean columnEncoded;
@@ -211,7 +211,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         }
         int count = reader.getLineNumber();
         if (count != lineCount)
-            LOG.debug(count + " != " + lineCount);
+            logger.debug(count + " != " + lineCount);
         assertTrue(count == lineCount);
     }
 

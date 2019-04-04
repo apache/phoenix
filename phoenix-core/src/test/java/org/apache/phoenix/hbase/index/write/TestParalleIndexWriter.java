@@ -26,8 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
@@ -52,13 +50,15 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
 public class TestParalleIndexWriter {
 
-  private static final Log LOG = LogFactory.getLog(TestParalleIndexWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestParalleIndexWriter.class);
   @Rule
   public IndexTableName test = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
@@ -86,8 +86,8 @@ public class TestParalleIndexWriter {
   @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
-    LOG.info("Starting " + test.getTableNameString());
-    LOG.info("Current thread is interrupted: " + Thread.interrupted());
+    logger.info("Starting " + test.getTableNameString());
+    logger.info("Current thread is interrupted: " + Thread.interrupted());
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
     ExecutorService exec = Executors.newFixedThreadPool(1);

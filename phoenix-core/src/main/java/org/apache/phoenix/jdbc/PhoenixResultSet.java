@@ -51,8 +51,6 @@ import java.util.Map;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -94,6 +92,8 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SQLCloseable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
@@ -127,7 +127,7 @@ import org.apache.phoenix.util.SchemaUtil;
  */
 public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixResultSet.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixResultSet.class);
 
     private final static String STRING_FALSE = "0";
     private final static BigDecimal BIG_DECIMAL_FALSE = BigDecimal.valueOf(0);
@@ -924,7 +924,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public void setFetchSize(int rows) throws SQLException {
-        LOG.warn("Ignoring setFetchSize(" + rows + ")");
+        logger.warn("Ignoring setFetchSize(" + rows + ")");
     }
 
     @Override

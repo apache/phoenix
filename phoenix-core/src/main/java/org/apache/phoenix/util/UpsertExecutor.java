@@ -61,7 +61,7 @@ public abstract class UpsertExecutor<RECORD, FIELD> implements Closeable {
         void errorOnRecord(RECORD record, Throwable throwable);
     }
 
-    private static final Logger LOG = LoggerFactory.getLogger(UpsertExecutor.class);
+    private static final Logger logger = LoggerFactory.getLogger(UpsertExecutor.class);
 
     protected final Connection conn;
     protected final List<ColumnInfo> columnInfos;
@@ -77,7 +77,7 @@ public abstract class UpsertExecutor<RECORD, FIELD> implements Closeable {
         PreparedStatement preparedStatement;
         try {
             String upsertSql = QueryUtil.constructUpsertStatement(tableName, columnInfoList);
-            LOG.info("Upserting SQL data with {}", upsertSql);
+            logger.info("Upserting SQL data with {}", upsertSql);
             preparedStatement = conn.prepareStatement(upsertSql);
         } catch (SQLException e) {
             throw new RuntimeException(e);

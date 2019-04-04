@@ -17,8 +17,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -37,6 +35,8 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
 
@@ -55,7 +55,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
     public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
-    private static final Log LOG = LogFactory.getLog(ParallelWriterIndexCommitter.class);
+    private static final Logger logger = LoggerFactory.getLogger(ParallelWriterIndexCommitter.class);
 
     private HTableFactory retryingFactory;
     private HTableFactory noRetriesfactory;
@@ -143,8 +143,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     // early exit, if that's the case
                     throwFailureIfDone();
 
-                    if (LOG.isTraceEnabled()) {
-                        LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     Table table = null;
                     try {
@@ -158,9 +158,9 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 return null;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isDebugEnabled()) {
-                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
-                                            + ignord);
+                                if (logger.isDebugEnabled()) {
+                                    logger.debug("indexRegion.batchMutate failed and fall back " +
+                                            "to HTable.batch(). Got error=" + ignord);
                                 }
                             }
                         }
@@ -200,7 +200,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
         } catch (EarlyExitFailure e) {
             propagateFailure(e);
         } catch (ExecutionException e) {
-            LOG.error("Found a failed index update!");
+            logger.error("Found a failed index update!");
             propagateFailure(e.getCause());
         }
 
@@ -228,7 +228,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      */
     @Override
     public void stop(String why) {
-        LOG.info("Shutting down " + this.getClass().getSimpleName() + " because " + why);
+        logger.info("Shutting down " + this.getClass().getSimpleName() + " because " + why);
         this.pool.stop(why);
         this.retryingFactory.shutdown();
         this.noRetriesfactory.shutdown();

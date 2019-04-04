@@ -20,8 +20,8 @@ package org.apache.phoenix.hbase.index.parallel;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -32,7 +32,7 @@ import com.google.common.util.concurrent.ListenableFuture;
  */
 public class QuickFailingTaskRunner extends BaseTaskRunner {
 
-  static final Log LOG = LogFactory.getLog(QuickFailingTaskRunner.class);
+  static final Logger logger = LoggerFactory.getLogger(QuickFailingTaskRunner.class);
 
   /**
    * @param service thread pool to which {@link Task}s are submitted. This service is then 'owned'

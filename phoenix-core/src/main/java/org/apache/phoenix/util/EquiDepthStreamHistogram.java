@@ -22,10 +22,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -47,7 +47,7 @@ import com.google.common.base.Preconditions;
  *  comes out to basically O(log(T))
  */
 public class EquiDepthStreamHistogram {
-    private static final Log LOG = LogFactory.getLog(EquiDepthStreamHistogram.class);
+    private static final Logger logger = LoggerFactory.getLogger(EquiDepthStreamHistogram.class);
 
     // used in maxSize calculation for each bar
     private static final double MAX_COEF = 1.7;
@@ -175,8 +175,8 @@ public class EquiDepthStreamHistogram {
         } else {
             smallerBar.incrementCount(countToDistribute);
         }
-        if (LOG.isTraceEnabled()) {
-            LOG.trace(String.format("Split orig=%s , newLeft=%s , newRight=%s", origBar, newLeft, newRight));
+        if (logger.isTraceEnabled()) {
+            logger.trace(String.format("Split orig=%s , newLeft=%s , newRight=%s", origBar, newLeft, newRight));
         }
         bars.remove(origBar);
         bars.add(newLeft);
@@ -230,8 +230,8 @@ public class EquiDepthStreamHistogram {
         bars.subList(currMinIdx, currMinIdx + 2).clear(); // remove minBars
         bars.add(newBar);
         Collections.sort(bars);
-        if (LOG.isTraceEnabled()) {
-            LOG.trace(String.format("Merged left=%s , right=%s , newBar=%s", leftBar, rightBar, newBar));
+        if (logger.isTraceEnabled()) {
+            logger.trace(String.format("Merged left=%s , right=%s , newBar=%s", leftBar, rightBar, newBar));
         }
         return true;
     }

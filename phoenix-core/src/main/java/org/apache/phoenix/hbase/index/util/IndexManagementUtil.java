@@ -26,8 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -46,6 +44,8 @@ import org.apache.phoenix.hbase.index.covered.Batch;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Longs;
@@ -66,7 +66,7 @@ public class IndexManagementUtil {
     public static final String WAL_EDIT_CODEC_CLASS_KEY = "hbase.regionserver.wal.codec";
 
     private static final String INDEX_HLOG_READER_CLASS_NAME = "org.apache.hadoop.hbase.regionserver.wal.IndexedHLogReader";
-    private static final Log LOG = LogFactory.getLog(IndexManagementUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(IndexManagementUtil.class);
 
     public static boolean isWALEditCodecSet(Configuration conf) {
         // check to see if the WALEditCodec is installed
@@ -198,11 +198,11 @@ public class IndexManagementUtil {
         try {
             throw e;
         } catch (IOException | FatalIndexBuildingFailureException e1) {
-            LOG.info("Rethrowing " + e);
+            logger.info("Rethrowing " + e);
             throw e1;
         }
         catch (Throwable e1) {
-            LOG.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
+            logger.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
             throw new IndexBuildingFailureException("Failed to build index for unexpected reason!", e1);
         }
     }

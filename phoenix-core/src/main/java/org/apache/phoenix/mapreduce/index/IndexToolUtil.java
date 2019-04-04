@@ -38,7 +38,7 @@ public class IndexToolUtil {
 
 	private static final String ALTER_INDEX_QUERY_TEMPLATE = "ALTER INDEX IF EXISTS %s ON %s %s";  
     
-	private static final Logger LOG = LoggerFactory.getLogger(IndexToolUtil.class);
+	private static final Logger logger = LoggerFactory.getLogger(IndexToolUtil.class);
 	
 	/**
 	 * Updates the index state.
@@ -74,7 +74,7 @@ public class IndexToolUtil {
         Preconditions.checkNotNull(connection);
         final String alterQuery = String.format(ALTER_INDEX_QUERY_TEMPLATE,indexTable,masterTable,state.name());
         connection.createStatement().execute(alterQuery);
-        LOG.info(" Updated the status of the index {} to {} " , indexTable , state.name());
+        logger.info(" Updated the status of the index {} to {} " , indexTable , state.name());
     }
 	
 }

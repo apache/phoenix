@@ -20,8 +20,6 @@ package org.apache.phoenix.hbase.index.covered.data;
 import java.util.Iterator;
 import java.util.SortedSet;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
@@ -34,6 +32,8 @@ import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Like the HBase {@link MemStore}, but without all that extra work around maintaining snapshots and
@@ -74,7 +74,7 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
  */
 public class IndexMemStore implements KeyValueStore {
 
-  private static final Log LOG = LogFactory.getLog(IndexMemStore.class);
+  private static final Logger logger = LoggerFactory.getLogger(IndexMemStore.class);
   private IndexKeyValueSkipListSet kvset;
   private CellComparator comparator;
 
@@ -101,8 +101,8 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void add(Cell kv, boolean overwrite) {
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("Inserting: " + toString(kv));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Inserting: " + toString(kv));
     }
     // if overwriting, we will always update
     if (!overwrite) {
@@ -112,17 +112,17 @@ public class IndexMemStore implements KeyValueStore {
       kvset.add(kv);
     }
 
-    if (LOG.isTraceEnabled()) {
+    if (logger.isTraceEnabled()) {
       dump();
     }
   }
 
   private void dump() {
-    LOG.trace("Current kv state:\n");
+    logger.trace("Current kv state:\n");
     for (Cell kv : this.kvset) {
-      LOG.trace("KV: " + toString(kv));
+      logger.trace("KV: " + toString(kv));
     }
-    LOG.trace("========== END MemStore Dump ==================\n");
+    logger.trace("========== END MemStore Dump ==================\n");
   }
 
   private String toString(Cell kv) {
@@ -132,12 +132,12 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void rollback(Cell kv) {
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("Rolling back: " + toString(kv));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Rolling back: " + toString(kv));
     }
     // If the key is in the store, delete it
     this.kvset.remove(kv);
-    if (LOG.isTraceEnabled()) {
+    if (logger.isTraceEnabled()) {
       dump();
     }
   }

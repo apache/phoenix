@@ -31,8 +31,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
@@ -59,9 +57,11 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestIndexWriter {
-  private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(TestIndexWriter.class);
   @Rule
   public IndexTableName testName = new IndexTableName();
   private final byte[] row = Bytes.toBytes("row");
@@ -93,8 +93,8 @@ public class TestIndexWriter {
    */
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
-    LOG.info("Starting " + testName.getTableNameString());
-    LOG.info("Current thread is interrupted: " + Thread.interrupted());
+    logger.info("Starting " + testName.getTableNameString());
+    logger.info("Current thread is interrupted: " + Thread.interrupted());
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -181,13 +181,13 @@ public class TestIndexWriter {
         Mockito.doAnswer(new Answer<Void>() {
             @Override
             public Void answer(InvocationOnMock invocation) throws Throwable {
-                LOG.info("Write started");
+                logger.info("Write started");
                 writeStartedLatch.countDown();
                 // when we interrupt the thread for shutdown, we should see this throw an interrupt too
                 try {
                     waitOnAbortedLatch.await();
                 } catch (InterruptedException e) {
-                    LOG.info("Correctly interrupted while writing!");
+                    logger.info("Correctly interrupted while writing!");
                     throw e;
                 }
                 return null;

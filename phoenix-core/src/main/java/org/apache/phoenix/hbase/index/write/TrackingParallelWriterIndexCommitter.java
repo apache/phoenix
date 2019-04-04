@@ -19,8 +19,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
@@ -42,6 +40,8 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
 
@@ -67,7 +67,8 @@ import com.google.common.collect.Multimap;
  * client.
  */
 public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
-    private static final Log LOG = LogFactory.getLog(TrackingParallelWriterIndexCommitter.class);
+    private static final Logger logger =
+            LoggerFactory.getLogger(TrackingParallelWriterIndexCommitter.class);
 
     public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
@@ -165,15 +166,16 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                 return Boolean.TRUE;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isTraceEnabled()) {
-                                    LOG.trace("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
-                                            + ignord);
+                                if (logger.isTraceEnabled()) {
+                                    logger.trace("indexRegion.batchMutate failed and fall " +
+                                            "back to HTable.batch(). Got error=" + ignord);
                                 }
                             }
                         }
 
-                        if (LOG.isTraceEnabled()) {
-                            LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("Writing index update:" + mutations + " to table: "
+                                    + tableReference);
                         }
                         // if the client can retry index writes, then we don't need to retry here
                         HTableFactory factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
@@ -207,7 +209,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
         List<Boolean> results = null;
         try {
-            LOG.debug("Waiting on index update tasks to complete...");
+            logger.debug("Waiting on index update tasks to complete...");
             results = this.pool.submitUninterruptible(tasks);
         } catch (ExecutionException e) {
             throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
@@ -240,7 +242,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
     @Override
     public void stop(String why) {
-        LOG.info("Shutting down " + this.getClass().getSimpleName());
+        logger.info("Shutting down " + this.getClass().getSimpleName());
         this.pool.stop(why);
         this.retryingFactory.shutdown();
         this.noRetriesFactory.shutdown();

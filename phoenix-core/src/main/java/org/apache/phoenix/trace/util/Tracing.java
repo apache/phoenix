@@ -26,8 +26,6 @@ import java.util.concurrent.Callable;
 
 import javax.annotation.Nullable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.htrace.HTraceConfiguration;
 import org.apache.phoenix.call.CallRunner;
@@ -46,6 +44,8 @@ import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.htrace.wrappers.TraceCallable;
 import org.apache.htrace.wrappers.TraceRunnable;
 import org.apache.phoenix.trace.TraceWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -56,7 +56,7 @@ import com.sun.istack.NotNull;
  */
 public class Tracing {
 
-    private static final Log LOG = LogFactory.getLog(Tracing.class);
+    private static final Logger logger = LoggerFactory.getLogger(Tracing.class);
 
     private static final String SEPARATOR = ".";
     // Constants for tracing across the wire
@@ -275,14 +275,14 @@ public class Tracing {
                 traceWriter.start();
             }
         } catch (RuntimeException e) {
-            LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
+            logger.warn("Tracing will outputs will not be written to any metrics sink! No "
                     + "TraceMetricsSink found on the classpath", e);
         } catch (IllegalAccessError e) {
             // This is an issue when we have a class incompatibility error, such as when running
             // within SquirrelSQL which uses an older incompatible version of commons-collections.
             // Seeing as this only results in disabling tracing, we swallow this exception and just
             // continue on without tracing.
-            LOG.warn("Class incompatibility while initializing metrics, metrics will be disabled", e);
+            logger.warn("Class incompatibility while initializing metrics, metrics will be disabled", e);
         }
         initialized = true;
     }

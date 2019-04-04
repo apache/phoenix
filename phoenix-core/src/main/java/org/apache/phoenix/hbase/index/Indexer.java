@@ -29,8 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -86,6 +84,8 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -113,7 +113,7 @@ import com.google.common.collect.Multimap;
  */
 public class Indexer implements RegionObserver, RegionCoprocessor {
 
-  private static final Log LOG = LogFactory.getLog(Indexer.class);
+  private static final Logger logger = LoggerFactory.getLogger(Indexer.class);
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
   private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
   
@@ -234,7 +234,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                 StoreFailuresInCachePolicy.class, IndexFailurePolicy.class);
           IndexFailurePolicy policy =
               policyClass.getConstructor(PerRegionIndexWriteCache.class).newInstance(failedIndexEdits);
-          LOG.debug("Setting up recovery writter with failure policy: " + policy.getClass());
+          logger.debug("Setting up recovery writter with failure policy: " + policy.getClass());
           recoveryWriter =
               new RecoveryIndexWriter(policy, indexWriterEnv, serverName + "-recovery-writer");
         } catch (Exception ex) {
@@ -242,7 +242,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         }
       } catch (NoSuchMethodError ex) {
           disabled = true;
-          LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
+          logger.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
       }
   }
 
@@ -321,8 +321,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("preIncrementAfterRowLock", duration, slowPreIncrementThreshold));
+              if (logger.isDebugEnabled()) {
+                  logger.debug(getCallTooSlowMessage("preIncrementAfterRowLock", duration, slowPreIncrementThreshold));
               }
               metricSource.incrementSlowDuplicateKeyCheckCalls();
           }
@@ -345,8 +345,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("preBatchMutate", duration, slowIndexPrepareThreshold));
+              if (logger.isDebugEnabled()) {
+                  logger.debug(getCallTooSlowMessage("preBatchMutate", duration, slowIndexPrepareThreshold));
               }
               metricSource.incrementNumSlowIndexPrepareCalls();
           }
@@ -497,8 +497,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("indexPrepare", duration, slowIndexPrepareThreshold));
+              if (logger.isDebugEnabled()) {
+                  logger.debug(getCallTooSlowMessage("indexPrepare", duration, slowIndexPrepareThreshold));
               }
               metricSource.incrementNumSlowIndexPrepareCalls();
           }
@@ -568,8 +568,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
            removeBatchMutateContext(c);
            long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
            if (duration >= slowIndexWriteThreshold) {
-               if (LOG.isDebugEnabled()) {
-                   LOG.debug(getCallTooSlowMessage("postBatchMutateIndispensably", duration, slowIndexWriteThreshold));
+               if (logger.isDebugEnabled()) {
+                   logger.debug(getCallTooSlowMessage("postBatchMutateIndispensably", duration, slowIndexWriteThreshold));
                }
                metricSource.incrementNumSlowIndexWriteCalls();
            }
@@ -608,8 +608,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexWriteThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("indexWrite", duration, slowIndexWriteThreshold));
+              if (logger.isDebugEnabled()) {
+                  logger.debug(getCallTooSlowMessage("indexWrite", duration, slowIndexWriteThreshold));
               }
               metricSource.incrementNumSlowIndexWriteCalls();
           }
@@ -666,7 +666,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           return;
         }
 
-        LOG.info("Found some outstanding index updates that didn't succeed during"
+        logger.info("Found some outstanding index updates that didn't succeed during"
                 + " WAL replay - attempting to replay now.");
 
         // do the usual writer stuff, killing the server again, if we can't manage to make the index
@@ -674,14 +674,14 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         try {
             writer.writeAndKillYourselfOnFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IOException e) {
-                LOG.error("During WAL replay of outstanding index updates, "
+                logger.error("During WAL replay of outstanding index updates, "
                         + "Exception is thrown instead of killing server during index writing", e);
         }
     } finally {
          long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
          if (duration >= slowPostOpenThreshold) {
-             if (LOG.isDebugEnabled()) {
-                 LOG.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
+             if (logger.isDebugEnabled()) {
+                 logger.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
              }
              metricSource.incrementNumSlowPostOpenCalls();
          }
@@ -716,8 +716,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("preWALRestore", duration, slowPreWALRestoreThreshold));
+              if (logger.isDebugEnabled()) {
+                  logger.debug(getCallTooSlowMessage("preWALRestore", duration, slowPreWALRestoreThreshold));
               }
               metricSource.incrementNumSlowPreWALRestoreCalls();
           }

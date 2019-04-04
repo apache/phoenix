@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -68,6 +66,8 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
@@ -80,9 +80,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     private ArrayList<MasterObserver> accessControllers;
     private boolean accessCheckEnabled;
     private UserProvider userProvider;
-    public static final Log LOG = LogFactory.getLog(PhoenixAccessController.class);
-    private static final Log AUDITLOG =
-            LogFactory.getLog("SecurityLogger."+PhoenixAccessController.class.getName());
+    public static final Logger logger = LoggerFactory.getLogger(PhoenixAccessController.class);
+    private static final Logger AUDITLOG =
+            LoggerFactory.getLogger("SecurityLogger."+PhoenixAccessController.class.getName());
     
     @Override
     public Optional<MetaDataEndpointObserver> getPhoenixObserver() {
@@ -123,7 +123,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
         if (!this.accessCheckEnabled) {
-            LOG.warn("PhoenixAccessController has been loaded with authorization checks disabled.");
+            logger.warn("PhoenixAccessController has been loaded with authorization checks disabled.");
         }
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
             this.env = (PhoenixMetaDataControllerEnvironment)env;
@@ -536,8 +536,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 }
               }
             }
-        } else if (LOG.isDebugEnabled()) {
-            LOG.debug("No permissions found for table=" + table + " or namespace=" + table.getNamespaceAsString());
+        } else if (logger.isDebugEnabled()) {
+            logger.debug("No permissions found for table=" + table + " or namespace=" + table.getNamespaceAsString());
         }
         return false;
     }
@@ -562,7 +562,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     }
 
     private static final class Superusers {
-        private static final Log LOG = LogFactory.getLog(Superusers.class);
+        private static final Logger logger = LoggerFactory.getLogger(Superusers.class);
 
         /** Configuration key for superusers */
         public static final String SUPERUSER_CONF_KEY = org.apache.hadoop.hbase.security.Superusers.SUPERUSER_CONF_KEY; // Not getting a name
@@ -590,8 +590,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     + "authorization checks for internal operations will not work correctly!");
             }
 
-            if (LOG.isTraceEnabled()) {
-                LOG.trace("Current user name is " + systemUser.getShortName());
+            if (logger.isTraceEnabled()) {
+                logger.trace("Current user name is " + systemUser.getShortName());
             }
             String currentUser = systemUser.getShortName();
             String[] superUserList = conf.getStrings(SUPERUSER_CONF_KEY, new String[0]);

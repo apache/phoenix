@@ -22,13 +22,13 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
 import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Sink for request traces ({@link SpanReceiver}) that pushes writes to {@link TraceWriter} in a
@@ -64,7 +64,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
  */
 public class TraceSpanReceiver implements SpanReceiver {
 
-    private static final Log LOG = LogFactory.getLog(TraceSpanReceiver.class);
+    private static final Logger logger = LoggerFactory.getLogger(TraceSpanReceiver.class);
 
     private static final int CAPACITY = QueryServicesOptions.withDefaults().getTracingTraceBufferSize();
 
@@ -77,11 +77,11 @@ public class TraceSpanReceiver implements SpanReceiver {
     @Override
     public void receiveSpan(Span span) {
         if (span.getTraceId() != 0 && spanQueue.offer(span)) {
-            if (LOG.isTraceEnabled()) {
-                LOG.trace("Span buffered to queue " + span.toJson());
+            if (logger.isTraceEnabled()) {
+                logger.trace("Span buffered to queue " + span.toJson());
             }
-        } else if (span.getTraceId() != 0 && LOG.isDebugEnabled()) {
-                LOG.debug("Span NOT buffered due to overflow in queue " + span.toJson());
+        } else if (span.getTraceId() != 0 && logger.isDebugEnabled()) {
+                logger.debug("Span NOT buffered due to overflow in queue " + span.toJson());
         }
     }
 

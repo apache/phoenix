@@ -59,7 +59,7 @@ import org.slf4j.LoggerFactory;
 public class FormatToKeyValueReducer
         extends Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(FormatToKeyValueReducer.class);
+    protected static final Logger logger = LoggerFactory.getLogger(FormatToKeyValueReducer.class);
 
 
     protected List<String> tableNames;

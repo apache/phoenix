@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.metrics;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Metrics {
 
-    private static final Log LOG = LogFactory.getLog(Metrics.class);
+    private static final Logger logger = LoggerFactory.getLogger(Metrics.class);
 
   private static volatile MetricsSystem manager = DefaultMetricsSystem.instance();
 
@@ -35,13 +35,13 @@ public class Metrics {
     public static MetricsSystem initialize() {
         // if the jars aren't on the classpath, then we don't start the metrics system
         if (manager == null) {
-            LOG.warn("Phoenix metrics could not be initialized - no MetricsManager found!");
+            logger.warn("Phoenix metrics could not be initialized - no MetricsManager found!");
             return null;
         }
         // only initialize the metrics system once
         synchronized (Metrics.class) {
             if (!initialized) {
-                LOG.info("Initializing metrics system: " + Metrics.METRICS_SYSTEM_NAME);
+                logger.info("Initializing metrics system: " + Metrics.METRICS_SYSTEM_NAME);
                 manager.init(Metrics.METRICS_SYSTEM_NAME);
                 initialized = true;
             }
@@ -60,7 +60,7 @@ public class Metrics {
 
     public static void ensureConfigured() {
         if (!sinkInitialized) {
-            LOG.warn("Phoenix metrics2/tracing sink was not started. Should be it be?");
+            logger.warn("Phoenix metrics2/tracing sink was not started. Should be it be?");
         }
     }
 }

@@ -34,8 +34,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -83,6 +81,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.SQLCloseables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -90,7 +90,7 @@ import com.google.common.collect.Sets;
 import org.apache.phoenix.util.ServerUtil;
 
 public class HashJoinPlan extends DelegateQueryPlan {
-    private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
+    private static final Logger logger = LoggerFactory.getLogger(HashJoinPlan.class);
     private static final Random RANDOM = new Random();
 
     private final SelectStatement statement;
@@ -553,9 +553,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     } else {
                         cacheId = Bytes.toBytes(RANDOM.nextLong());
                     }
-                    LOG.debug("Using cache ID " + Hex.encodeHexString(cacheId) + " for " + queryString);
+                    logger.debug("Using cache ID " + Hex.encodeHexString(cacheId) + " for " + queryString);
                     if (cache == null) {
-                        LOG.debug("Making RPC to add cache " + Hex.encodeHexString(cacheId));
+                        logger.debug("Making RPC to add cache " + Hex.encodeHexString(cacheId));
                         cache = parent.hashClient.addHashCache(ranges, cacheId, iterator,
                                 plan.getEstimatedSize(), hashExpressions, singleValueOnly, usePersistentCache,
                                 parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
@@ -564,7 +564,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                         boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
                         if (!isSet && (endTime
                                 - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                            LOG.warn(addCustomAnnotations(
+                            logger.warn(addCustomAnnotations(
                                 "Hash plan [" + index
                                         + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.",
                                 parent.delegate.getContext().getConnection()));

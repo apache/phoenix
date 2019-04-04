@@ -24,10 +24,10 @@ import java.io.PushbackInputStream;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.codec.Codec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class is a copy paste version of org.apache.hadoop.hbase.codec.BaseDecoder class. 
@@ -36,7 +36,7 @@ import org.apache.hadoop.hbase.codec.Codec;
  * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
  */
 public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
-  protected static final Log LOG = LogFactory.getLog(BinaryCompatibleBaseDecoder.class);
+  protected static final Logger logger = LoggerFactory.getLogger(BinaryCompatibleBaseDecoder.class);
 
   protected final InputStream in;
   private Cell current = null;
@@ -79,11 +79,11 @@ public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
     try {
       isEof = this.in.available() == 0;
     } catch (Throwable t) {
-      LOG.trace("Error getting available for error message - ignoring", t);
+      logger.trace("Error getting available for error message - ignoring", t);
     }
     if (!isEof) throw ioEx;
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("Partial cell read caused by EOF", ioEx);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Partial cell read caused by EOF", ioEx);
     }
     EOFException eofEx = new EOFException("Partial cell read");
     eofEx.initCause(ioEx);

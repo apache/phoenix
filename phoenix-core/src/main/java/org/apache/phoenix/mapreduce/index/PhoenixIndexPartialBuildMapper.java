@@ -59,7 +59,7 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWritable, IntWritable> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexPartialBuildMapper.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixIndexPartialBuildMapper.class);
 
     private PhoenixConnection connection;
 
@@ -92,7 +92,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
                     services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                         QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
             batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
-            LOG.info("Mutation Batch Size = " + batchSize);
+            logger.info("Mutation Batch Size = " + batchSize);
             this.mutations = Lists.newArrayListWithExpectedSize(batchSize);
             maintainers=new ImmutableBytesPtr(PhoenixConfigurationUtil.getIndexMaintainers(configuration));
         } catch (SQLException e) {
@@ -142,7 +142,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
             // Make sure progress is reported to Application Master.
             context.progress();
         } catch (SQLException e) {
-            LOG.error(" Error {}  while read/write of a record ", e.getMessage());
+            logger.error(" Error {}  while read/write of a record ", e.getMessage());
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         }
@@ -167,7 +167,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
                 new IntWritable(0));
             super.cleanup(context);
         } catch (SQLException e) {
-            LOG.error(" Error {}  while read/write of a record ", e.getMessage());
+            logger.error(" Error {}  while read/write of a record ", e.getMessage());
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         } finally {
@@ -180,7 +180,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
             try {
                 this.connection.close();
             } catch (SQLException e) {
-                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+                logger.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
         }
         if (this.writer != null) {

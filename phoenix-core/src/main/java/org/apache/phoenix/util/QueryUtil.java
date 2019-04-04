@@ -31,8 +31,6 @@ import java.util.Properties;
 import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -50,6 +48,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -59,7 +59,7 @@ import com.google.common.collect.Lists;
 
 public final class QueryUtil {
 
-    private static final Log LOG = LogFactory.getLog(QueryUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(QueryUtil.class);
 
     /**
      *  Column family name index within ResultSet resulting from {@link DatabaseMetaData#getColumns(String, String, String, String)}
@@ -353,7 +353,7 @@ public final class QueryUtil {
             throws SQLException, ClassNotFoundException {
         setServerConnection(props);
         String url = getConnectionUrl(props, null, principal);
-        LOG.info("Creating connection with the jdbc url: " + url);
+        logger.info("Creating connection with the jdbc url: " + url);
         return DriverManager.getConnection(url, props);
     }
 
@@ -365,7 +365,7 @@ public final class QueryUtil {
     private static Connection getConnection(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
         String url = getConnectionUrl(props, conf);
-        LOG.info("Creating connection with the jdbc url: " + url);
+        logger.info("Creating connection with the jdbc url: " + url);
         props = PropertiesUtil.combineProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }

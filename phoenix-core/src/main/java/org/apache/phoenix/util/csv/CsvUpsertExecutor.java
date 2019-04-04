@@ -54,7 +54,7 @@ import com.google.common.base.Function;
 /** {@link UpsertExecutor} over {@link CSVRecord}s. */
 public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CsvUpsertExecutor.class);
+    private static final Logger logger = LoggerFactory.getLogger(CsvUpsertExecutor.class);
 
     protected final String arrayElementSeparator;
 
@@ -95,10 +95,10 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             preparedStatement.execute();
             upsertListener.upsertDone(++upsertCount);
         } catch (Exception e) {
-            if (LOG.isDebugEnabled()) {
+            if (logger.isDebugEnabled()) {
                 // Even though this is an error we only log it with debug logging because we're notifying the
                 // listener, and it can do its own logging if needed
-                LOG.debug("Error on CSVRecord " + csvRecord, e);
+                logger.debug("Error on CSVRecord " + csvRecord, e);
             }
             upsertListener.errorOnRecord(csvRecord, e);
         }

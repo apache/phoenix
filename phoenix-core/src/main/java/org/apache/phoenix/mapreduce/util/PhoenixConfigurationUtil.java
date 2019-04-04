@@ -29,8 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -57,6 +55,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -69,7 +69,7 @@ import com.google.common.collect.Lists;
  */
 public final class PhoenixConfigurationUtil {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixInputFormat.class);
 
     public static final String SESSION_ID = "phoenix.sessionid";
     
@@ -333,7 +333,7 @@ public final class PhoenixConfigurationUtil {
             List<String> upsertColumnList =
                     PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
             if(!upsertColumnList.isEmpty()) {
-                LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s,"
+                logger.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s,"
                                 + " upsertColumnList=%s ",!upsertColumnList.isEmpty(),
                         upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)));
             }
@@ -358,11 +358,11 @@ public final class PhoenixConfigurationUtil {
         if (!upsertColumnNames.isEmpty()) {
             // Generating UPSERT statement without column name information.
             upsertStmt = QueryUtil.constructUpsertStatement(tableName, columnMetadataList);
-            LOG.info("Phoenix Custom Upsert Statement: "+ upsertStmt);
+            logger.info("Phoenix Custom Upsert Statement: "+ upsertStmt);
         } else {
             // Generating UPSERT statement without column name information.
             upsertStmt = QueryUtil.constructGenericUpsertStatement(tableName, columnMetadataList.size());
-            LOG.info("Phoenix Generic Upsert Statement: " + upsertStmt);
+            logger.info("Phoenix Generic Upsert Statement: " + upsertStmt);
         }
         configuration.set(UPSERT_STATEMENT, upsertStmt);
         return upsertStmt;
@@ -403,7 +403,7 @@ public final class PhoenixConfigurationUtil {
             final Configuration configuration) {
     	List<String> selectColumnList = PhoenixConfigurationUtil.getSelectColumnNames(configuration);
         if(!selectColumnList.isEmpty()) {
-            LOG.info(String.format("UseSelectColumns=%s, selectColumnList.size()=%s, selectColumnList=%s "
+            logger.info(String.format("UseSelectColumns=%s, selectColumnList.size()=%s, selectColumnList=%s "
                     ,!selectColumnList.isEmpty(), selectColumnList.size(), Joiner.on(",").join(selectColumnList)
                     ));
         }
@@ -421,7 +421,7 @@ public final class PhoenixConfigurationUtil {
         final List<ColumnInfo> columnMetadataList = getSelectColumnMetadataList(configuration);
         final String conditions = configuration.get(INPUT_TABLE_CONDITIONS);
         selectStmt = QueryUtil.constructSelectStatement(tableName, columnMetadataList, conditions);
-        LOG.info("Select Statement: "+ selectStmt);
+        logger.info("Select Statement: "+ selectStmt);
         configuration.set(SELECT_STATEMENT, selectStmt);
         return selectStmt;
     }

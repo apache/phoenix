@@ -24,8 +24,6 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Optional;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -46,6 +44,8 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -61,7 +61,7 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver implements RegionCoprocessor {
 
-    private static final Log LOG = LogFactory.getLog(ScanRegionObserver.class);
+    private static final Logger logger = LoggerFactory.getLogger(ScanRegionObserver.class);
     public static final byte[] DYN_COLS_METADATA_CELL_QUALIFIER = Bytes.toBytes("D#");
     public static final String DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION =
             "_DynColsMetadataStoredForMutation";
@@ -132,8 +132,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver implements Reg
             Put dynColShadowCellsPut = null;
             if (m instanceof Put && Bytes.equals(m.getAttribute(
                     DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION), TRUE_BYTES)) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Adding dynamic column metadata for table: " + tableName + ". Put :" +
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Adding dynamic column metadata for table: " + tableName + ". Put :" +
                             m.toString());
                 }
                 NavigableMap<byte[], List<Cell>> famCellMap = m.getFamilyCellMap();
@@ -181,8 +181,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver implements Reg
         ByteArrayOutputStream qual = new ByteArrayOutputStream();
         qual.write(DYN_COLS_METADATA_CELL_QUALIFIER);
         qual.write(dynCol.getColumnQualifierBytes());
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Storing shadow cell for dynamic column metadata for dynamic column : " +
+        if (logger.isTraceEnabled()) {
+            logger.trace("Storing shadow cell for dynamic column metadata for dynamic column : " +
                     dynCol.getFamilyName().getString() + "." + dynCol.getName().getString());
         }
         return qual.toByteArray();

@@ -29,8 +29,6 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.impl.MilliSpan;
@@ -42,6 +40,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing connections, as well as
@@ -50,7 +50,7 @@ import org.junit.Before;
 
 public class BaseTracingTestIT extends ParallelStatsDisabledIT {
 
-    private static final Log LOG = LogFactory.getLog(BaseTracingTestIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(BaseTracingTestIT.class);
 
     protected CountDownLatch latch;
     protected int defaultTracingThreadPoolForTest = 1;
@@ -154,7 +154,7 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
                 }
                 return connection;
             } catch (SQLException e) {
-                LOG.error("New connection failed for tracing Table: " + tableName, e);
+                logger.error("New connection failed for tracing Table: " + tableName, e);
                 return null;
             }
         }
@@ -170,7 +170,7 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
                 executor.shutdownNow();
                 executor.awaitTermination(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
-                LOG.error("Failed to stop the thread. ", e);
+                logger.error("Failed to stop the thread. ", e);
             }
         }
 

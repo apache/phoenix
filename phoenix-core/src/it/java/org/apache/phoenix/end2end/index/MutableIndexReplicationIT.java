@@ -33,8 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -64,6 +62,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 
@@ -78,7 +78,7 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class MutableIndexReplicationIT extends BaseTest {
 
-    private static final Log LOG = LogFactory.getLog(MutableIndexReplicationIT.class);
+    private static final Logger logger = LoggerFactory.getLogger(MutableIndexReplicationIT.class);
 
     public static final String SCHEMA_NAME = "";
     public static final String DATA_TABLE_NAME = "T";
@@ -137,7 +137,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf1 = utility1.getConfiguration();
         zkw1 = new ZKWatcher(conf1, "cluster1", null, true);
         admin=ConnectionFactory.createConnection(conf1).getAdmin();
-        LOG.info("Setup first Zk");
+        logger.info("Setup first Zk");
 
         // Base conf2 on conf1 so it gets the right zk cluster, and general cluster configs
         conf2 = HBaseConfiguration.create(conf1);
@@ -150,7 +150,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         utility2.setZkCluster(miniZK);
         zkw2 = new ZKWatcher(conf2, "cluster2", null, true);
 
-        LOG.info("Setup second Zk");
+        logger.info("Setup second Zk");
         utility1.startMiniCluster(2);
         utility2.startMiniCluster(2);
       //replicate from cluster 1 -> cluster 2, but not back again
@@ -158,14 +158,14 @@ public class MutableIndexReplicationIT extends BaseTest {
     }
 
     private static void setupDriver() throws Exception {
-        LOG.info("Setting up phoenix driver");
+        logger.info("Setting up phoenix driver");
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
         URL = getLocalClusterUrl(utility1);
-        LOG.info("Connecting driver to "+URL);
+        logger.info("Connecting driver to "+URL);
         driver = initAndRegisterTestDriver(URL, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -204,7 +204,7 @@ public class MutableIndexReplicationIT extends BaseTest {
             //create it as-is on the remote cluster
             admin2.createTable(desc);
 
-            LOG.info("Enabling replication on source table: "+tableName);
+            logger.info("Enabling replication on source table: "+tableName);
             ColumnFamilyDescriptor[] cols = desc.getColumnFamilies();
             assertEquals(1, cols.length);
             // add the replication scope to the column
@@ -214,7 +214,7 @@ public class MutableIndexReplicationIT extends BaseTest {
             admin.disableTable(desc.getTableName());
             admin.modifyTable(desc);
             admin.enableTable(desc.getTableName());
-            LOG.info("Replication enabled on source table: "+tableName);
+            logger.info("Replication enabled on source table: "+tableName);
         }
 
 
@@ -241,7 +241,7 @@ public class MutableIndexReplicationIT extends BaseTest {
 
         // other table can't be reached through Phoenix right now - would need to change how we
         // lookup tables. For right now, we just go through an HTable
-        LOG.info("Looking up tables in replication target");
+        logger.info("Looking up tables in replication target");
         TableName[] tables = admin2.listTableNames();
         org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(utility2.getConfiguration());
         Table remoteTable = hbaseConn.getTable(tables[0]);
@@ -253,7 +253,7 @@ public class MutableIndexReplicationIT extends BaseTest {
             if (ensureAnyRows(remoteTable)) {
                 break;
             }
-            LOG.info("Sleeping for " + REPLICATION_WAIT_TIME_MILLIS
+            logger.info("Sleeping for " + REPLICATION_WAIT_TIME_MILLIS
                     + " for edits to get replicated");
             Thread.sleep(REPLICATION_WAIT_TIME_MILLIS);
         }
@@ -266,7 +266,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         ResultScanner scanner = remoteTable.getScanner(scan);
         boolean found = false;
         for (Result r : scanner) {
-            LOG.info("got row: " + r);
+            logger.info("got row: " + r);
             found = true;
         }
         scanner.close();
