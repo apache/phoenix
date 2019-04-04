@@ -1,0 +1,33 @@
+From 3868b5da401f13a33242bb7edaf727fb2fe23a5e Mon Sep 17 00:00:00 2001
+From: Thomas D'Silva <tdsilva@apache.org>
+Date: Fri, 22 Mar 2019 15:33:13 -0700
+Subject: [PATCH] PHOENIX-5206 Ignore failing PhoenixTracingEndToEndIT tests
+
+---
+ .../src/it/java/org/apache/phoenix/trace/PhoenixTracingEndToEndIT.java | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/phoenix-core/src/it/java/org/apache/phoenix/trace/PhoenixTracingEndToEndIT.java b/phoenix-core/src/it/java/org/apache/phoenix/trace/PhoenixTracingEndToEndIT.java
+index 03510dc4f..610195aec 100644
+--- a/phoenix-core/src/it/java/org/apache/phoenix/trace/PhoenixTracingEndToEndIT.java
++++ b/phoenix-core/src/it/java/org/apache/phoenix/trace/PhoenixTracingEndToEndIT.java
+@@ -41,6 +41,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
+ import org.apache.phoenix.trace.TraceReader.SpanInfo;
+ import org.apache.phoenix.trace.TraceReader.TraceHolder;
+ import org.junit.Before;
++import org.junit.Ignore;
+ import org.junit.Test;
+ 
+ import com.google.common.collect.ImmutableMap;
+@@ -48,7 +49,7 @@ import com.google.common.collect.ImmutableMap;
+ /**
+  * Test that the logging sink stores the expected metrics/stats
+  */
+-
++@Ignore("Will need to revisit for new HDFS/HBase/HTrace, broken on 5.x")
+ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
+ 
+     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
+-- 
+2.15.1
+

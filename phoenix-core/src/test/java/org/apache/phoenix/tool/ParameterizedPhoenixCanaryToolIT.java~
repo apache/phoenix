@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.phoenix.end2end.ChangePermissionsIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
