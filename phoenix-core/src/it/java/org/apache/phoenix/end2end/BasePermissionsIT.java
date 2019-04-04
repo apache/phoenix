@@ -16,11 +16,37 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import com.google.common.base.Joiner;
+import com.google.common.base.Throwables;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.AuthUtil;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.LocalHBaseCluster;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
+import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Before;
+import org.junit.FixMethodOrder;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runners.MethodSorters;
 
 import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
@@ -32,45 +58,25 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.AuthUtil;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.security.AccessDeniedException;
-import org.apache.hadoop.hbase.security.User;
-import org.apache.hadoop.hbase.security.access.AccessControlClient;
-import org.apache.hadoop.hbase.security.access.Permission;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.After;
-import org.junit.BeforeClass;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
-
-@RunWith(Parameterized.class)
-public class BasePermissionsIT extends BaseTest {
+@Category(NeedsOwnMiniClusterTest.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+public abstract class BasePermissionsIT extends BaseTest {
 
     private static final Log LOG = LogFactory.getLog(BasePermissionsIT.class);
 
-    static String SUPERUSER;
+    static String SUPER_USER = System.getProperty("user.name");
 
     static HBaseTestingUtility testUtil;
     static final Set<String> PHOENIX_SYSTEM_TABLES =
@@ -97,8 +103,8 @@ public class BasePermissionsIT extends BaseTest {
     // Instead use org.apache.hadoop.hbase.security.User class for testing purposes.
 
     // Super User has all the access
-    User superUser1 = null;
-    User superUser2 = null;
+    static User superUser1 = null;
+    static User superUser2 = null;
 
     // Regular users are granted and revoked permissions as needed
     User regularUser1 = null;
@@ -118,20 +124,22 @@ public class BasePermissionsIT extends BaseTest {
 
     boolean isNamespaceMapped;
 
+    private String schemaName;
+    private String tableName;
+    private String fullTableName;
+    private String idx1TableName;
+    private String idx2TableName;
+    private String idx3TableName;
+    private String localIdx1TableName;
+    private String view1TableName;
+    private String view2TableName;
+
     public BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
+        this.tableName = generateUniqueName();
     }
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        SUPERUSER = System.getProperty("user.name");
-    }
-
-    void startNewMiniCluster() throws Exception {
-        startNewMiniCluster(new Configuration());
-    }
-    
-    void startNewMiniCluster(Configuration overrideConf) throws Exception{
+    public static void initCluster(boolean isNamespaceMapped) throws Exception {
         if (null != testUtil) {
             testUtil.shutdownMiniCluster();
             testUtil = null;
@@ -141,38 +149,46 @@ public class BasePermissionsIT extends BaseTest {
 
         Configuration config = testUtil.getConfiguration();
         enablePhoenixHBaseAuthorization(config);
-        configureNamespacesOnServer(config);
-        configureRandomHMasterPort(config);
-        if (overrideConf != null) {
-            config.addResource(overrideConf);
-        }
+        configureNamespacesOnServer(config, isNamespaceMapped);
+        config.setInt(HConstants.MASTER_INFO_PORT, -1);
 
         testUtil.startMiniCluster(1);
-        initializeUsers(testUtil.getConfiguration());
+        superUser1 = User.createUserForTesting(config, SUPER_USER, new String[0]);
+        superUser2 = User.createUserForTesting(config, "superUser2", new String[0]);
     }
 
-    private void initializeUsers(Configuration configuration) {
+    @Before
+    public void initUsersAndTables() {
+        Configuration configuration = testUtil.getConfiguration();
 
-        superUser1 = User.createUserForTesting(configuration, SUPERUSER, new String[0]);
-        superUser2 = User.createUserForTesting(configuration, "superUser2", new String[0]);
+        regularUser1 = User.createUserForTesting(configuration, "regularUser1_"
+                + generateUniqueName(), new String[0]);
+        regularUser2 = User.createUserForTesting(configuration, "regularUser2_"
+                + generateUniqueName(), new String[0]);
+        regularUser3 = User.createUserForTesting(configuration, "regularUser3_"
+                + generateUniqueName(), new String[0]);
+        regularUser4 = User.createUserForTesting(configuration, "regularUser4_"
+                + generateUniqueName(), new String[0]);
 
-        regularUser1 = User.createUserForTesting(configuration, "regularUser1", new String[0]);
-        regularUser2 = User.createUserForTesting(configuration, "regularUser2", new String[0]);
-        regularUser3 = User.createUserForTesting(configuration, "regularUser3", new String[0]);
-        regularUser4 = User.createUserForTesting(configuration, "regularUser4", new String[0]);
+        groupUser = User.createUserForTesting(testUtil.getConfiguration(), "groupUser_"
+                + generateUniqueName() , new String[] {GROUP_SYSTEM_ACCESS});
 
-        groupUser = User.createUserForTesting(testUtil.getConfiguration(), "groupUser", new String[] {GROUP_SYSTEM_ACCESS});
+        unprivilegedUser = User.createUserForTesting(configuration, "unprivilegedUser_"
+                + generateUniqueName(), new String[0]);
 
-        unprivilegedUser = User.createUserForTesting(configuration, "unprivilegedUser", new String[0]);
+        schemaName = generateUniqueName();
+        tableName = generateUniqueName();
+        fullTableName = schemaName + "." + tableName;
+        idx1TableName = tableName + "_IDX1";
+        idx2TableName = tableName + "_IDX2";
+        idx3TableName = tableName + "_IDX3";
+        localIdx1TableName = tableName + "_LIDX1";
+        view1TableName = tableName + "_V1";
+        view2TableName = tableName + "_V2";
     }
 
-    private void configureRandomHMasterPort(Configuration config) {
-        // Avoid multiple clusters trying to bind the master's info port (16010)
-        config.setInt(HConstants.MASTER_INFO_PORT, -1);
-    }
-
-    void enablePhoenixHBaseAuthorization(Configuration config) {
-        config.set("hbase.superuser", SUPERUSER + "," + "superUser2");
+    private static void enablePhoenixHBaseAuthorization(Configuration config) {
+        config.set("hbase.superuser", SUPER_USER + "," + "superUser2");
         config.set("hbase.security.authorization", Boolean.TRUE.toString());
         config.set("hbase.security.exec.permission.checks", Boolean.TRUE.toString());
         config.set("hbase.coprocessor.master.classes",
@@ -187,21 +203,8 @@ public class BasePermissionsIT extends BaseTest {
         config.set("hbase.regionserver.wal.codec", "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
     }
 
-    void configureNamespacesOnServer(Configuration conf) {
+    private static void configureNamespacesOnServer(Configuration conf, boolean isNamespaceMapped) {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
-    }
-
-    @Parameterized.Parameters(name = "isNamespaceMapped={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
-        return Arrays.asList(false, true);
-    }
-
-    @After
-    public void cleanup() throws Exception {
-        if (testUtil != null) {
-            testUtil.shutdownMiniCluster();
-            testUtil = null;
-        }
     }
 
     public static HBaseTestingUtility getUtility(){
@@ -689,8 +692,8 @@ public class BasePermissionsIT extends BaseTest {
         }
     }
 
-    void verifyAllowed(User user, TableDDLPermissionsIT.AccessTestAction... actions) throws Exception {
-        for (TableDDLPermissionsIT.AccessTestAction action : actions) {
+    void verifyAllowed(User user, AccessTestAction... actions) throws Exception {
+        for (AccessTestAction action : actions) {
             try {
                 Object obj = user.runAs(action);
                 if (obj != null && obj instanceof List<?>) {
@@ -716,8 +719,8 @@ public class BasePermissionsIT extends BaseTest {
     }
 
     /** This passes only if desired exception is caught for all users. */
-    <T> void verifyDenied(User user, Class<T> exception, TableDDLPermissionsIT.AccessTestAction... actions) throws Exception {
-        for (TableDDLPermissionsIT.AccessTestAction action : actions) {
+    <T> void verifyDenied(User user, Class<T> exception, AccessTestAction... actions) throws Exception {
+        for (AccessTestAction action : actions) {
             try {
                 user.runAs(action);
                 fail("Expected exception was not thrown for user '" + user.getShortName() + "'");
@@ -760,5 +763,458 @@ public class BasePermissionsIT extends BaseTest {
         String msg = ade.getMessage();
         assertTrue("Exception contained unexpected message: '" + msg + "'",
                 !msg.contains("is not the scanner owner"));
+    }
+
+    @Test
+    public void testSystemTablePermissions() throws Throwable {
+        verifyAllowed(createTable(tableName), superUser1);
+        verifyAllowed(readTable(tableName), superUser1);
+
+        Set<String> tables = getHBaseTables();
+        if(isNamespaceMapped) {
+            assertTrue("HBase tables do not include expected Phoenix tables: " + tables,
+                    tables.containsAll(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES));
+        } else {
+            assertTrue("HBase tables do not include expected Phoenix tables: " + tables,
+                    tables.containsAll(PHOENIX_SYSTEM_TABLES));
+        }
+
+        // Grant permission to the system tables for the unprivileged user
+        superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+                try {
+                    if(isNamespaceMapped) {
+                        grantPermissions(regularUser1.getShortName(),
+                                PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, Permission.Action.EXEC, Permission.Action.READ);
+                    } else {
+                        grantPermissions(regularUser1.getShortName(), PHOENIX_SYSTEM_TABLES,
+                                Permission.Action.EXEC, Permission.Action.READ);
+                    }
+                    grantPermissions(regularUser1.getShortName(),
+                            Collections.singleton(tableName), Permission.Action.READ,Permission.Action.EXEC);
+                } catch (Throwable e) {
+                    if (e instanceof Exception) {
+                        throw (Exception) e;
+                    } else {
+                        throw new Exception(e);
+                    }
+                }
+                return null;
+            }
+        });
+
+        // Make sure that the unprivileged user can now read the table
+        verifyAllowed(readTable(tableName), regularUser1);
+        //This verification is added to test PHOENIX-5178
+        superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+            @Override public Void run() throws Exception {
+                try {
+                    if (isNamespaceMapped) {
+                        grantPermissions(regularUser1.getShortName(),"SYSTEM", Permission.Action.ADMIN);
+                    }
+                    return null;
+                } catch (Throwable e) {
+                    throw new Exception(e);
+                }
+
+            }
+        });
+        if(isNamespaceMapped) {
+            verifyAllowed(new AccessTestAction() {
+                @Override public Object run() throws Exception {
+                    Properties props = new Properties();
+                    props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
+                    //Impersonate meta connection
+                    try (Connection metaConnection = DriverManager.getConnection(getUrl(), props);
+                         Statement stmt = metaConnection.createStatement()) {
+                        stmt.executeUpdate("CREATE SCHEMA IF NOT EXISTS SYSTEM");
+                    }catch(NewerSchemaAlreadyExistsException e){
+
+                    }
+                    return null;
+                }
+            }, regularUser1);
+        }
+    }
+
+    private void grantSystemTableAccess(User superUser, User... users) throws Exception {
+        for(User user : users) {
+            if(isNamespaceMapped) {
+                verifyAllowed(grantPermissions("RX", user, QueryConstants.SYSTEM_SCHEMA_NAME, true), superUser);
+            } else {
+                verifyAllowed(grantPermissions("RX", user, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser);
+            }
+            verifyAllowed(grantPermissions("RWX", user, SYSTEM_SEQUENCE_IDENTIFIER, false), superUser);
+            verifyAllowed(grantPermissions("RWX", user, SYSTEM_MUTEX_IDENTIFIER, false), superUser);
+        }
+    }
+
+    private void revokeSystemTableAccess(User superUser, User... users) throws Exception {
+        for(User user : users) {
+            if(isNamespaceMapped) {
+                verifyAllowed(revokePermissions(user, QueryConstants.SYSTEM_SCHEMA_NAME, true), superUser);
+            } else {
+                verifyAllowed(revokePermissions(user, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser);
+            }
+            verifyAllowed(revokePermissions(user, SYSTEM_SEQUENCE_IDENTIFIER, false), superUser);
+            verifyAllowed(revokePermissions(user, SYSTEM_MUTEX_IDENTIFIER, false), superUser);
+        }
+    }
+
+    /**
+     * Verify that READ and EXECUTE permissions are required on SYSTEM tables to get a Phoenix Connection
+     * Tests grant revoke permissions per user 1. if NS enabled -> on namespace 2. If NS disabled -> on tables
+     */
+    @Test
+    // this test needs to be run first
+    public void aTestRXPermsReqdForPhoenixConn() throws Exception {
+        if(isNamespaceMapped) {
+            // NS is enabled, CQSI tries creating SYSCAT, we get NamespaceNotFoundException exception for "SYSTEM" NS
+            // We create custom ADE and throw it (and ignore NamespaceNotFoundException)
+            // This is because we didn't had CREATE perms to create "SYSTEM" NS
+            verifyDenied(getConnectionAction(), AccessDeniedException.class, regularUser1);
+        } else {
+            // NS is disabled, CQSI tries creating SYSCAT, Two cases here
+            // 1. First client ever --> Gets ADE, runs client server compatibility check again and gets TableNotFoundException since SYSCAT doesn't exist
+            // 2. Any other client --> Gets ADE, runs client server compatibility check again and gets AccessDeniedException since it doesn't have EXEC perms
+            verifyDenied(getConnectionAction(), TableNotFoundException.class, regularUser1);
+        }
+
+        // Phoenix Client caches connection per user
+        // If we grant permissions, get a connection and then revoke it, we can still get the cached connection
+        // However it will fail for other read queries
+        // Thus this test grants and revokes for 2 users, so that both functionality can be tested.
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2);
+        verifyAllowed(getConnectionAction(), regularUser1);
+        revokeSystemTableAccess(superUser1, regularUser2);
+        verifyDenied(getConnectionAction(), AccessDeniedException.class, regularUser2);
+    }
+
+    /**
+     * Superuser grants admin perms to user1, who will in-turn grant admin perms to user2
+     * Not affected with namespace props
+     * Tests grant revoke permissions on per user global level
+     */
+    @Test
+    public void testSuperUserCanChangePerms() throws Exception {
+        // Grant System Table access to all users, else they can't create a Phoenix connection
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+
+        verifyAllowed(grantPermissions("A", regularUser1), superUser1);
+
+        verifyAllowed(readTableWithoutVerification(PhoenixDatabaseMetaData.SYSTEM_CATALOG), regularUser1);
+        verifyAllowed(grantPermissions("A", regularUser2), regularUser1);
+
+        verifyAllowed(revokePermissions(regularUser1), superUser1);
+        verifyDenied(grantPermissions("A", regularUser3), AccessDeniedException.class, regularUser1);
+
+        // Don't grant ADMIN perms to unprivilegedUser, thus unprivilegedUser is unable to control other permissions.
+        verifyAllowed(getConnectionAction(), unprivilegedUser);
+        verifyDenied(grantPermissions("ARX", regularUser4), AccessDeniedException.class, unprivilegedUser);
+    }
+
+    /**
+     * Test to verify READ permissions on table, indexes and views
+     * Tests automatic grant revoke of permissions per user on a table
+     */
+    @Test
+    public void testReadPermsOnTableIndexAndView() throws Exception {
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+
+        // Create new schema and grant CREATE permissions to a user
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(schemaName), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, schemaName, true), superUser1);
+        } else {
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
+        }
+
+        // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
+        verifyAllowed(createTable(fullTableName), regularUser1);
+        verifyAllowed(readTable(fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx1TableName, fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx2TableName, fullTableName), regularUser1);
+        verifyAllowed(createLocalIndex(localIdx1TableName, fullTableName), regularUser1);
+        verifyAllowed(createView(view1TableName, fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx3TableName, view1TableName), regularUser1);
+
+        // RegularUser2 doesn't have any permissions. It can get a PhoenixConnection
+        // However it cannot query table, indexes or views without READ perms
+        verifyAllowed(getConnectionAction(), regularUser2);
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTable(fullTableName, idx1TableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTable(view1TableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTableWithoutVerification(schemaName + "." + idx1TableName), AccessDeniedException.class, regularUser2);
+
+        // Grant READ permissions to RegularUser2 on the table
+        // Permissions should propagate automatically to relevant physical tables such as global index and view index.
+        verifyAllowed(grantPermissions("RX", regularUser2, fullTableName, false), regularUser1);
+        // Granting permissions directly to index tables should fail
+        verifyDenied(grantPermissions("W", regularUser2, schemaName + "." + idx1TableName, false), AccessDeniedException.class, regularUser1);
+        // Granting permissions directly to views should fail. We expect TableNotFoundException since VIEWS are not physical tables
+        verifyDenied(grantPermissions("W", regularUser2, schemaName + "." + view1TableName, false), TableNotFoundException.class, regularUser1);
+
+        // Verify that all other access are successful now
+        verifyAllowed(readTable(fullTableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, idx1TableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, idx2TableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, localIdx1TableName), regularUser2);
+        verifyAllowed(readTableWithoutVerification(schemaName + "." + idx1TableName), regularUser2);
+        verifyAllowed(readTable(view1TableName), regularUser2);
+        verifyAllowed(readMultiTenantTableWithIndex(view1TableName), regularUser2);
+
+        // Revoke READ permissions to RegularUser2 on the table
+        // Permissions should propagate automatically to relevant physical tables such as global index and view index.
+        verifyAllowed(revokePermissions(regularUser2, fullTableName, false), regularUser1);
+        // READ query should fail now
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTableWithoutVerification(schemaName + "." + idx1TableName), AccessDeniedException.class, regularUser2);
+    }
+
+    /**
+     * Verifies permissions for users present inside a group
+     */
+    @Test
+    public void testGroupUserPerms() throws Exception {
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(schemaName), superUser1);
+        }
+        verifyAllowed(createTable(fullTableName), superUser1);
+
+        // Grant SYSTEM table access to GROUP_SYSTEM_ACCESS and regularUser1
+        verifyAllowed(grantPermissions("RX", GROUP_SYSTEM_ACCESS, PHOENIX_SYSTEM_TABLES_IDENTIFIERS, false), superUser1);
+        grantSystemTableAccess(superUser1, regularUser1);
+
+        // Grant Permissions to Groups (Should be automatically applicable to all users inside it)
+        verifyAllowed(grantPermissions("ARX", GROUP_SYSTEM_ACCESS, fullTableName, false), superUser1);
+        verifyAllowed(readTable(fullTableName), groupUser);
+
+        // GroupUser is an admin and can grant perms to other users
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser1);
+        verifyAllowed(grantPermissions("RX", regularUser1, fullTableName, false), groupUser);
+        verifyAllowed(readTable(fullTableName), regularUser1);
+
+        // Revoke the perms and try accessing data again
+        verifyAllowed(revokePermissions(GROUP_SYSTEM_ACCESS, fullTableName, false), superUser1);
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, groupUser);
+    }
+
+    /**
+     * Tests permissions for MultiTenant Tables and view index tables
+     */
+    @Test
+    public void testMultiTenantTables() throws Exception {
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(schemaName), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, schemaName, true), superUser1);
+        } else {
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
+        }
+
+        // Create MultiTenant Table (View Index Table should be automatically created)
+        // At this point, the index table doesn't contain any data
+        verifyAllowed(createMultiTenantTable(fullTableName), regularUser1);
+
+        // RegularUser2 doesn't have access yet, RegularUser1 should have RWXCA on the table
+        verifyDenied(readMultiTenantTableWithoutIndex(fullTableName), AccessDeniedException.class, regularUser2);
+
+        // Grant perms to base table (Should propagate to View Index as well)
+        verifyAllowed(grantPermissions("RX", regularUser2, fullTableName, false), regularUser1);
+        // Try reading full table
+        verifyAllowed(readMultiTenantTableWithoutIndex(fullTableName), regularUser2);
+
+        // Create tenant specific views on the table using tenant specific Phoenix Connection
+        verifyAllowed(createView(view1TableName, fullTableName, "o1"), regularUser1);
+        verifyAllowed(createView(view2TableName, fullTableName, "o2"), regularUser1);
+
+        // Create indexes on those views using tenant specific Phoenix Connection
+        // It is not possible to create indexes on tenant specific views without tenant connection
+        verifyAllowed(createIndex(idx1TableName, view1TableName, "o1"), regularUser1);
+        verifyAllowed(createIndex(idx2TableName, view2TableName, "o2"), regularUser1);
+
+        // Read the tables as regularUser2, with and without the use of Index table
+        // If perms are propagated correctly, then both of them should work
+        // The test checks if the query plan uses the index table by searching for "_IDX_" string
+        // _IDX_ is the prefix used with base table name to derieve the name of view index table
+        verifyAllowed(readMultiTenantTableWithIndex(view1TableName, "o1"), regularUser2);
+        verifyAllowed(readMultiTenantTableWithoutIndex(view2TableName, "o2"), regularUser2);
+    }
+
+    /**
+     * Grant RX permissions on the schema to regularUser1,
+     * Creating view on a table with that schema by regularUser1 should be allowed
+     */
+    @Test
+    public void testCreateViewOnTableWithRXPermsOnSchema() throws Exception {
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, regularUser3);
+
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(schemaName), superUser1);
+            verifyAllowed(createTable(fullTableName), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, schemaName, true), superUser1);
+        } else {
+            verifyAllowed(createTable(fullTableName), superUser1);
+            verifyAllowed(grantPermissions("RX", regularUser1, surroundWithDoubleQuotes(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE), true), superUser1);
+        }
+        verifyAllowed(createView(view1TableName, fullTableName), regularUser1);
+    }
+
+    protected void grantSystemTableAccess() throws Exception{
+        try (Connection conn = getConnection()) {
+            if (isNamespaceMapped) {
+                grantPermissions(regularUser1.getShortName(), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, Permission.Action.READ,
+                        Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortName(), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                // Local Index requires WRITE permission on SYSTEM.SEQUENCE TABLE.
+                grantPermissions(regularUser1.getName(), Collections.singleton("SYSTEM:SEQUENCE"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getName(), Collections.singleton("SYSTEM:SEQUENCE"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM:MUTEX"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+
+            } else {
+                grantPermissions(regularUser1.getName(), PHOENIX_SYSTEM_TABLES, Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getName(), PHOENIX_SYSTEM_TABLES, Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), PHOENIX_SYSTEM_TABLES, Permission.Action.READ, Permission.Action.EXEC);
+                // Local Index requires WRITE permission on SYSTEM.SEQUENCE TABLE.
+                grantPermissions(regularUser1.getName(), Collections.singleton("SYSTEM.SEQUENCE"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getName(), Collections.singleton("SYSTEM:SEQUENCE"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(regularUser1.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortName(), Collections.singleton("SYSTEM.MUTEX"), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+            }
+        } catch (Throwable e) {
+            if (e instanceof Exception) {
+                throw (Exception)e;
+            } else {
+                throw new Exception(e);
+            }
+        }
+    }
+
+    @Test
+    public void testAutomaticGrantWithIndexAndView() throws Throwable {
+        final String schema = "TEST_INDEX_VIEW";
+        final String tableName = "TABLE_DDL_PERMISSION_IT";
+        final String phoenixTableName = schema + "." + tableName;
+        final String indexName1 = tableName + "_IDX1";
+        final String indexName2 = tableName + "_IDX2";
+        final String lIndexName1 = tableName + "_LIDX1";
+        final String viewName1 = schema+"."+tableName + "_V1";
+        final String viewName2 = schema+"."+tableName + "_V2";
+        final String viewName3 = schema+"."+tableName + "_V3";
+        final String viewName4 = schema+"."+tableName + "_V4";
+        final String viewIndexName1 = tableName + "_VIDX1";
+        final String viewIndexName2 = tableName + "_VIDX2";
+        grantSystemTableAccess();
+        try {
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser1);
+                        //Neded Global ADMIN for flush operation during drop table
+                        AccessControlClient.grant(getUtility().getConnection(),regularUser1.getName(), Permission.Action.ADMIN);
+                        if (isNamespaceMapped) {
+                            grantPermissions(regularUser1.getName(), schema, Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), schema, Permission.Action.CREATE);
+
+                        } else {
+                            grantPermissions(regularUser1.getName(),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+
+                        }
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            verifyAllowed(createTable(phoenixTableName), regularUser1);
+            verifyAllowed(createIndex(indexName1, phoenixTableName), regularUser1);
+            verifyAllowed(createView(viewName1, phoenixTableName), regularUser1);
+            verifyAllowed(createLocalIndex(lIndexName1, phoenixTableName), regularUser1);
+            verifyAllowed(createIndex(viewIndexName1, viewName1), regularUser1);
+            verifyAllowed(createIndex(viewIndexName2, viewName1), regularUser1);
+            verifyAllowed(createView(viewName4, viewName1), regularUser1);
+            verifyAllowed(readTable(phoenixTableName), regularUser1);
+
+            verifyDenied(createIndex(indexName2, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(createView(viewName2, phoenixTableName),AccessDeniedException.class,  unprivilegedUser);
+            verifyDenied(createView(viewName3, viewName1), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(dropView(viewName1), AccessDeniedException.class, unprivilegedUser);
+
+            verifyDenied(dropIndex(indexName1, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(dropTable(phoenixTableName), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(rebuildIndex(indexName1, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(addColumn(phoenixTableName, "val1"), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(dropColumn(phoenixTableName, "val"), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), AccessDeniedException.class, unprivilegedUser);
+
+            // Granting read permission to unprivileged user, now he should be able to create view but not index
+            grantPermissions(unprivilegedUser.getShortName(),
+                    Collections.singleton(
+                            SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
+                    Permission.Action.READ, Permission.Action.EXEC);
+            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                    Collections.singleton(
+                            SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
+                    Permission.Action.READ, Permission.Action.EXEC);
+            verifyDenied(createIndex(indexName2, phoenixTableName), AccessDeniedException.class, unprivilegedUser);
+            verifyAllowed(createView(viewName2, phoenixTableName), unprivilegedUser);
+            verifyAllowed(createView(viewName3, viewName1), unprivilegedUser);
+
+            // Grant create permission in namespace
+            if (isNamespaceMapped) {
+                grantPermissions(unprivilegedUser.getShortName(), schema, Permission.Action.CREATE);
+            } else {
+                grantPermissions(unprivilegedUser.getShortName(), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(),
+                        Permission.Action.CREATE);
+            }
+
+            // we should be able to read the data from another index as well to which we have not given any access to
+            // this user
+            verifyAllowed(readTable(phoenixTableName, indexName1), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName), regularUser1);
+            verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser1);
+            verifyAllowed(addColumn(phoenixTableName, "val1"), regularUser1);
+            verifyAllowed(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), regularUser1);
+            verifyAllowed(dropView(viewName1), regularUser1);
+            verifyAllowed(dropView(viewName2), regularUser1);
+            verifyAllowed(dropColumn(phoenixTableName, "val1"), regularUser1);
+            verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser1);
+            verifyAllowed(dropTable(phoenixTableName), regularUser1);
+
+            // check again with super users
+            verifyAllowed(createTable(phoenixTableName), superUser2);
+            verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
+            verifyAllowed(createView(viewName1, phoenixTableName), superUser2);
+            verifyAllowed(readTable(phoenixTableName), superUser2);
+            verifyAllowed(dropView(viewName1), superUser2);
+            verifyAllowed(dropTable(phoenixTableName), superUser2);
+
+        } finally {
+            revokeAll();
+        }
     }
 }
