@@ -25,7 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class SizeTrackingServerAggregators extends ServerAggregators {
-    private static final Logger logger = LoggerFactory.getLogger(SizeTrackingServerAggregators.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SizeTrackingServerAggregators.class);
 
     private final MemoryChunk chunk;
     private final int sizeIncrease;
@@ -50,7 +50,7 @@ public class SizeTrackingServerAggregators extends ServerAggregators {
             expressions[i].reset();
         }
         while(dsize > chunk.getSize()) {
-            logger.info("Request: {}, resizing {} by 1024*1024", dsize, chunk.getSize());
+            LOGGER.info("Request: {}, resizing {} by 1024*1024", dsize, chunk.getSize());
             chunk.resize(chunk.getSize() + sizeIncrease);
         }
         memoryUsed = dsize;

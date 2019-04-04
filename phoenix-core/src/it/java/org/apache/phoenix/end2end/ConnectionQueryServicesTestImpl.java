@@ -50,7 +50,7 @@ import com.google.common.collect.Sets;
  * @since 0.1
  */
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
-    private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesTestImpl.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionQueryServicesTestImpl.class);
     protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
     // Track open connections to free them on close as unit tests don't always do this.
     private Set<PhoenixConnection> connections = Sets.newHashSet();
@@ -85,7 +85,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
                         try {
                             service.close();
                         } catch (IOException e) {
-                            logger.warn(e.getMessage(), e);
+                            LOGGER.warn(e.getMessage(), e);
                         }
                     }
                 }

@@ -90,7 +90,7 @@ public class AggregatePlan extends BaseQueryPlan {
     private final Expression having;
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
-    private static final Logger logger = LoggerFactory.getLogger(AggregatePlan.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AggregatePlan.class);
     private boolean isSerial;
     private OrderBy actualOutputOrderBy;
 
@@ -112,7 +112,7 @@ public class AggregatePlan extends BaseQueryPlan {
         boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
         boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table.getTable(), orderBy, context); 
         if (hasSerialHint && !canBeExecutedSerially) {
-            logger.warn("This query cannot be executed serially. Ignoring the hint");
+            LOGGER.warn("This query cannot be executed serially. Ignoring the hint");
         }
         this.isSerial = hasSerialHint && canBeExecutedSerially;
         this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, groupBy, context);

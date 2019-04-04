@@ -39,7 +39,7 @@ import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
 class MultiThreadedRunner implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultiThreadedRunner.class);
     private Query query;
     private ThreadTime threadTime;
     private PhoenixUtil pUtil = PhoenixUtil.create();
@@ -86,7 +86,7 @@ class MultiThreadedRunner implements Runnable {
      */
     @Override
     public void run() {
-        logger.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
+        LOGGER.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
         Long start = System.currentTimeMillis();
         for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
@@ -107,7 +107,7 @@ class MultiThreadedRunner implements Runnable {
         // Make sure all result have been dumped before exiting
         resultManager.flush();
 
-        logger.info("\n\nThread exiting." + threadName + "\n\n");
+        LOGGER.info("\n\nThread exiting." + threadName + "\n\n");
     }
 
     private synchronized ThreadTime getThreadTime() {
@@ -137,7 +137,7 @@ class MultiThreadedRunner implements Runnable {
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
-            logger.info("Executing: " + statementString);
+            LOGGER.info("Executing: " + statementString);
             
             if (scenario.getWriteParams() != null) {
             	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);

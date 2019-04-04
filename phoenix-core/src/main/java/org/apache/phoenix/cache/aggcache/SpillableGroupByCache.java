@@ -93,7 +93,7 @@ import org.slf4j.LoggerFactory;
 
 public class SpillableGroupByCache implements GroupByCache {
 
-    private static final Logger logger = LoggerFactory.getLogger(SpillableGroupByCache.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SpillableGroupByCache.class);
 
     // Min size of 1st level main memory cache in bytes --> lower bound
     private static final int SPGBY_CACHE_MIN_SIZE = 4096; // 4K
@@ -148,13 +148,13 @@ public class SpillableGroupByCache implements GroupByCache {
         try {
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
         } catch (InsufficientMemoryException ime) {
-            logger.error("Requested Map size exceeds memory limit, please decrease max size via config paramter: "
+            LOGGER.error("Requested Map size exceeds memory limit, please decrease max size via config paramter: "
                     + GROUPBY_MAX_CACHE_SIZE_ATTRIB);
             throw ime;
         }
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("Instantiating LRU groupby cache of element size: " + maxCacheSize);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Instantiating LRU groupby cache of element size: " + maxCacheSize);
         }
 
         // LRU cache implemented as LinkedHashMap with access order
@@ -240,8 +240,8 @@ public class SpillableGroupByCache implements GroupByCache {
             if (rowAggregators == null) {
                 // No, key never spilled before, create a new tuple
                 rowAggregators = aggregators.newAggregators(env.getConfiguration());
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new aggregate bucket for row key "
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Adding new aggregate bucket for row key "
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()));
                 }
             }
@@ -359,8 +359,8 @@ public class SpillableGroupByCache implements GroupByCache {
                 ImmutableBytesWritable key = ce.getKey();
                 Aggregator[] aggs = ce.getValue();
                 byte[] value = aggregators.toBytes(aggs);
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new distinct group: "
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Adding new distinct group: "
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()) + " with aggregators "
                             + aggs.toString() + " value = " + Bytes.toStringBinary(value));
                 }

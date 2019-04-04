@@ -79,7 +79,7 @@ public class TableResultIterator implements ResultIterator {
     private final long renewLeaseThreshold;
     private final QueryPlan plan;
     private final ParallelScanGrouper scanGrouper;
-    private static final Logger logger = LoggerFactory.getLogger(TableResultIterator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TableResultIterator.class);
     private Tuple lastTuple = null;
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     @GuardedBy("renewLeaseLock")
@@ -187,7 +187,7 @@ public class TableResultIterator implements ResultIterator {
                             }
                         }
                         plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName());
-                        logger.debug(
+                        LOGGER.debug(
                                 "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                         if (retry <= 0) {
                             throw e1;

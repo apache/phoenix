@@ -35,7 +35,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class QueryExecutor implements Workload {
-    private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryExecutor.class);
     private List<DataModel> dataModels;
     private String queryHint;
     private final boolean exportCSV;
@@ -113,7 +113,7 @@ public class QueryExecutor implements Workload {
                         }
                     }
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    LOGGER.warn("", e);
                 }
             }
         };
@@ -163,7 +163,7 @@ public class QueryExecutor implements Workload {
                     resultManager.write(dataModelResults, ruleApplier);
                     resultManager.flush();
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    LOGGER.warn("", e);
                 }
             }
         };
@@ -201,7 +201,7 @@ public class QueryExecutor implements Workload {
                     try {
                         thread.get();
                     } catch (ExecutionException e) {
-                        logger.error("", e);
+                        LOGGER.error("", e);
                     }
                 }
             }
@@ -236,7 +236,7 @@ public class QueryExecutor implements Workload {
                     try {
                         thread.get();
                     } catch (ExecutionException e) {
-                        logger.error("", e);
+                        LOGGER.error("", e);
                     }
                 }
             }
@@ -259,7 +259,7 @@ public class QueryExecutor implements Workload {
         queryResult.getThreadTimes().add(threadTime);
         threadTime.setThreadName(name);
         queryResult.setHint(this.queryHint);
-        logger.info("\nExecuting query " + queryResult.getStatement());
+        LOGGER.info("\nExecuting query " + queryResult.getStatement());
         Runnable thread;
         if (workloadExecutor.isPerformance()) {
             thread =

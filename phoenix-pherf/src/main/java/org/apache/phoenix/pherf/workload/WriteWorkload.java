@@ -52,7 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class WriteWorkload implements Workload {
-    private static final Logger logger = LoggerFactory.getLogger(WriteWorkload.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(WriteWorkload.class);
 
     public static final String USE_BATCH_API_PROPERTY = "pherf.default.dataloader.batchApi";
 
@@ -169,7 +169,7 @@ public class WriteWorkload implements Workload {
                     resultUtil.write(dataLoadThreadTime);
 
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    LOGGER.warn("", e);
                 }
             }
         };
@@ -177,7 +177,7 @@ public class WriteWorkload implements Workload {
 
     private synchronized void exec(DataLoadTimeSummary dataLoadTimeSummary,
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
-        logger.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
+        LOGGER.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
         
         // Execute any pre dataload scenario DDLs
         pUtil.executeScenarioDdl(scenario.getPreScenarioDdls(), scenario.getTenantId(), dataLoadTimeSummary);
@@ -188,11 +188,11 @@ public class WriteWorkload implements Workload {
 
         // Update Phoenix Statistics
         if (this.generateStatistics == GeneratePhoenixStats.YES) {
-        	logger.info("Updating Phoenix table statistics...");
+            LOGGER.info("Updating Phoenix table statistics...");
         	pUtil.updatePhoenixStats(scenario.getTableName(), scenario);
-        	logger.info("Stats update done!");
+            LOGGER.info("Stats update done!");
         } else {
-        	logger.info("Phoenix table stats update not requested.");
+            LOGGER.info("Phoenix table stats update not requested.");
         }
         
         // Execute any post data load scenario DDLs before starting query workload
@@ -212,7 +212,7 @@ public class WriteWorkload implements Workload {
                     pUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
                             scenario.getTableNameWithoutSchemaName(), pUtil.getConnection(scenario.getTenantId()));
             int threadRowCount = rowCalculator.getNext();
-            logger.info(
+            LOGGER.info(
                     "Kick off thread (#" + i + ")for upsert with (" + threadRowCount + ") rows.");
             Future<Info>
                     write =
@@ -237,11 +237,11 @@ public class WriteWorkload implements Workload {
             Info writeInfo = write.get();
             sumRows += writeInfo.getRowCount();
             sumDuration += writeInfo.getDuration();
-            logger.info("Executor (" + this.hashCode() + ") writes complete with row count ("
+            LOGGER.info("Executor (" + this.hashCode() + ") writes complete with row count ("
                     + writeInfo.getRowCount() + ") in Ms (" + writeInfo.getDuration() + ")");
         }
         long testDuration = System.currentTimeMillis() - start;
-        logger.info("Writes completed with total row count (" + sumRows
+        LOGGER.info("Writes completed with total row count (" + sumRows
                 + ") with total elapsed time of (" + testDuration
                 + ") ms and total CPU execution time of (" + sumDuration + ") ms");
         dataLoadTimeSummary
@@ -295,7 +295,7 @@ public class WriteWorkload implements Workload {
                             try {
                                 connection.commit();
                                 duration = System.currentTimeMillis() - last;
-                                logger.info("Writer (" + Thread.currentThread().getName()
+                                LOGGER.info("Writer (" + Thread.currentThread().getName()
                                         + ") committed Batch. Total " + getBatchSize()
                                         + " rows for this thread (" + this.hashCode() + ") in ("
                                         + duration + ") Ms");
@@ -306,7 +306,7 @@ public class WriteWorkload implements Workload {
                                         System.currentTimeMillis() - logStartTime);
                                 }
                             } catch (SQLException e) {
-                                logger.warn("SQLException in commit operation", e);
+                                LOGGER.warn("SQLException in commit operation", e);
                             }
 
                             logStartTime = System.currentTimeMillis();
@@ -343,7 +343,7 @@ public class WriteWorkload implements Workload {
                         try {
                             connection.commit();
                             duration = System.currentTimeMillis() - start;
-                            logger.info("Writer ( " + Thread.currentThread().getName()
+                            LOGGER.info("Writer ( " + Thread.currentThread().getName()
                                     + ") committed Final Batch. Duration (" + duration + ") Ms");
                             connection.close();
                         } catch (SQLException e) {

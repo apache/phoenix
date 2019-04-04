@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
 
 public class XMLConfigParser {
 
-    private static final Logger logger = LoggerFactory.getLogger(XMLConfigParser.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(XMLConfigParser.class);
     private String filePattern;
     private List<DataModel> dataModels;
     private List<Scenario> scenarios = null;
@@ -121,7 +121,7 @@ public class XMLConfigParser {
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
         String fName = PherfConstants.RESOURCE_SCENARIO + "/" + file.getFileName().toString();
-        logger.info("Open config file: " + fName);
+        LOGGER.info("Open config file: " + fName);
         XMLStreamReader xmlReader = xif.createXMLStreamReader(
             new StreamSource(XMLConfigParser.class.getResourceAsStream(fName)));
         return (DataModel) jaxbUnmarshaller.unmarshal(xmlReader);

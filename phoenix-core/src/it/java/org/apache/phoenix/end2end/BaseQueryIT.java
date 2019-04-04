@@ -84,7 +84,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected String tableName;
     protected String indexName;
 
-    private static final Logger logger = LoggerFactory.getLogger(BaseQueryIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseQueryIT.class);
 
     public BaseQueryIT(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
@@ -102,7 +102,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
                         date = new Date(System.currentTimeMillis()), null, getUrl(),
                         tableDDLOptions);
         } catch (Exception e) {
-            logger.error("Exception when creating aTable ", e);
+            LOGGER.error("Exception when creating aTable ", e);
             throw e;
         }
         this.indexName = generateUniqueName();
@@ -113,7 +113,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 conn.createStatement().execute(this.indexDDL);
             } catch (Exception e) {
-                logger.error("Exception while creating index: " + indexDDL, e);
+                LOGGER.error("Exception while creating index: " + indexDDL, e);
                 throw e;
             }
         }

@@ -33,7 +33,7 @@ import java.sql.Connection;
 import java.util.Collection;
 
 public class SchemaReader {
-    private static final Logger logger = LoggerFactory.getLogger(SchemaReader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SchemaReader.class);
     private final PhoenixUtil pUtil;
     private Collection<Path> resourceList;
     private final String searchPattern;
@@ -64,7 +64,7 @@ public class SchemaReader {
         try {
             connection = pUtil.getConnection(null);
             for (Path file : resourceList) {
-                logger.info("\nApplying schema to file: " + file);
+                LOGGER.info("\nApplying schema to file: " + file);
                 pUtil.executeStatement(resourceToString(file), connection);
             }
         } finally {
@@ -88,12 +88,12 @@ public class SchemaReader {
     }
 
     private void read() throws Exception {
-        logger.debug("Trying to match resource pattern: " + searchPattern);
+        LOGGER.debug("Trying to match resource pattern: " + searchPattern);
         System.out.println("Trying to match resource pattern: " + searchPattern);
 
         resourceList = null;
         resourceList = resourceUtil.getResourceList(searchPattern);
-        logger.info("File resourceList Loaded: " + resourceList);
+        LOGGER.info("File resourceList Loaded: " + resourceList);
         System.out.println("File resourceList Loaded: " + resourceList);
         if (resourceList.isEmpty()) {
             throw new FileLoaderException("Could not load Schema Files");

@@ -30,7 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class MultithreadedDiffer implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultithreadedDiffer.class);
     private Thread t;
     private Query query;
     private ThreadTime threadTime;
@@ -81,7 +81,7 @@ class MultithreadedDiffer implements Runnable {
      * Executes verification runs for a minimum of number of execution or execution duration
      */
     public void run() {
-        logger.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
+        LOGGER.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
         Long start = System.currentTimeMillis();
         for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
@@ -92,6 +92,6 @@ class MultithreadedDiffer implements Runnable {
                 e.printStackTrace();
             }
         }
-        logger.info("\n\nThread exiting." + t.getName() + "\n\n");
+        LOGGER.info("\n\nThread exiting." + t.getName() + "\n\n");
     }
 }

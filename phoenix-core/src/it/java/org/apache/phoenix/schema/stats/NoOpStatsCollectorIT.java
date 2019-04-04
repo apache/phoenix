@@ -18,8 +18,6 @@
 package org.apache.phoenix.schema.stats;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryServices;
@@ -32,6 +30,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Array;
 import java.sql.Connection;
@@ -52,7 +52,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 @Category(NeedsOwnMiniClusterTest.class)
 public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
 
-    private static final Log LOG = LogFactory.getLog(NoOpStatsCollectorIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(NoOpStatsCollectorIT.class);
 
     private String fullTableName;
     private String physicalTableName;
@@ -89,7 +89,7 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
     @Test
     public void testStatsCollectionViaSql() throws SQLException {
         String updateStatisticsSql = "UPDATE STATISTICS " + fullTableName;
-        LOG.info("Running SQL to collect stats: " + updateStatisticsSql);
+        LOGGER.info("Running SQL to collect stats: " + updateStatisticsSql);
         Statement stmt = conn.createStatement();
         try {
             stmt.execute(updateStatisticsSql);
@@ -107,7 +107,7 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testStatsCollectionDuringMajorCompaction() throws Exception {
-        LOG.info("Running major compaction on table: " + physicalTableName);
+        LOGGER.info("Running major compaction on table: " + physicalTableName);
         TestUtil.doMajorCompaction(conn, physicalTableName);
 
         String q1 = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + physicalTableName + "'";

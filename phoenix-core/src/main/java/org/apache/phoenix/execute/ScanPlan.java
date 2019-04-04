@@ -88,7 +88,7 @@ import org.slf4j.LoggerFactory;
  * @since 0.1
  */
 public class ScanPlan extends BaseQueryPlan {
-    private static final Logger logger = LoggerFactory.getLogger(ScanPlan.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScanPlan.class);
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
@@ -139,7 +139,7 @@ public class ScanPlan extends BaseQueryPlan {
             boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table, orderBy, context); 
             if (!canBeExecutedSerially) { 
                 if (hasSerialHint) {
-                    logger.warn("This query cannot be executed serially. Ignoring the hint");
+                    LOGGER.warn("This query cannot be executed serially. Ignoring the hint");
                 }
                 return false;
             }

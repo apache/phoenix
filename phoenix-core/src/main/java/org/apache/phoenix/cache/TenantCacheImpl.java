@@ -50,7 +50,7 @@ import com.google.common.cache.RemovalNotification;
  * @since 0.1
  */
 public class TenantCacheImpl implements TenantCache {
-    private static final Logger logger = LoggerFactory.getLogger(TenantCacheImpl.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TenantCacheImpl.class);
     private final int maxTimeToLiveMs;
     private final int maxPersistenceTimeToLiveMs;
     private final MemoryManager memoryManager;
@@ -199,7 +199,7 @@ public class TenantCacheImpl implements TenantCache {
     }
 
     synchronized private void evictInactiveEntries(long bytesNeeded) {
-        logger.debug("Trying to evict inactive cache entries to free up " + bytesNeeded + " bytes");
+        LOGGER.debug("Trying to evict inactive cache entries to free up " + bytesNeeded + " bytes");
         CacheEntry[] entries = getPersistentServerCaches().asMap().values().toArray(new CacheEntry[]{});
         Arrays.sort(entries);
         long available = this.getMemoryManager().getAvailableMemory();
@@ -208,7 +208,7 @@ public class TenantCacheImpl implements TenantCache {
             ImmutableBytesPtr cacheId = entry.getCacheId();
             getPersistentServerCaches().invalidate(cacheId);
             available = this.getMemoryManager().getAvailableMemory();
-            logger.debug("Evicted cache ID " + Bytes.toLong(cacheId.get()) + ", we now have " + available + " bytes available");
+            LOGGER.debug("Evicted cache ID " + Bytes.toLong(cacheId.get()) + ", we now have " + available + " bytes available");
         }
     }
 
@@ -273,7 +273,7 @@ public class TenantCacheImpl implements TenantCache {
         }
         entry.decrementLiveQueryCount();
         if (!entry.isLive()) {
-            logger.debug("Cache ID " + Bytes.toLong(cacheId.get()) + " is no longer live, invalidate it");
+            LOGGER.debug("Cache ID " + Bytes.toLong(cacheId.get()) + " is no longer live, invalidate it");
             getServerCaches().invalidate(cacheId);
         }
     }
