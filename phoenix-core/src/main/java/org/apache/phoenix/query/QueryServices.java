@@ -367,6 +367,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK =
             "phoenix.allow.system.catalog.rollback";
 
+    // Phoenix parameter used to indicate what implementation is used for providing the client
+    // stats guide post cache.
+    // QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS is used if this is not provided
+    public static final String GUIDE_POSTS_CACHE_FACTORY_CLASS = "phoenix.guide.posts.cache.factory.class";
+
     /**
      * Get executor service used for parallel scans
      */

@@ -29,6 +29,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -109,7 +110,7 @@ import com.google.common.collect.Maps;
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
-    
+    private static final QueryServicesHelper queryServicesHelper = new QueryServicesHelper();
     private final ReadOnlyProps props;
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
@@ -147,10 +148,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
-        this.guidePostsCache = new GuidePostsCache(this, config);
+
         // set replication required parameter
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
+
+        this.guidePostsCache = queryServicesHelper.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
+                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), this, config);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -600,7 +604,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public GuidePostsInfo getTableStats(GuidePostsKey key) {
-        GuidePostsInfo info = guidePostsCache.getCache().getIfPresent(key);
+        GuidePostsInfo info = null;
+        try {
+            info = guidePostsCache.get(key);
+        } catch(ExecutionException e){
+            return GuidePostsInfo.NO_GUIDEPOST;
+        }
         if (null == info) {
           return GuidePostsInfo.NO_GUIDEPOST;
         }

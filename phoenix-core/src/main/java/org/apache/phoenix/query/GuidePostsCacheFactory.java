@@ -14,27 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.query;
 
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.GuidePostsKey;
-import java.util.concurrent.ExecutionException;
+import org.apache.hadoop.conf.Configuration;
+
+/**
+ * Interface for configurable GuidePostsCache interface construction
+ * Class is meant to be defined in the ConnectionQueryServices property
+ * Implementations must provide a default constructor
+ */
+public interface GuidePostsCacheFactory {
+
+    /**
+     *
+     * @return GuidePostsCache interface
+     */
+    GuidePostsCache getGuidePostsCacheInterface(ConnectionQueryServices queryServices, Configuration config);
 
 
-public interface GuidePostsCache {
-    GuidePostsInfo get(GuidePostsKey key) throws ExecutionException;
-
-    void put(GuidePostsKey key, GuidePostsInfo info);
-
-    void invalidate(GuidePostsKey key);
-
-    void invalidateAll();
-
-    void invalidateAll(byte[] physicalName);
-
-    void invalidateAll(TableDescriptor htableDesc);
-
-    void invalidateAll(PTable table);
 }
