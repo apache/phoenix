@@ -387,6 +387,8 @@ public class QueryServicesOptions {
 
 	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
 
+    public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
