@@ -519,7 +519,7 @@ public class KeyRange implements Writable {
         return Lists.transform(keys, POINT);
     }
 
-    private static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
+    public static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
         int result = Boolean.compare(rowKeyRange1.upperUnbound(), rowKeyRange2.upperUnbound());
         if (result != 0) {
             return result;
@@ -528,7 +528,7 @@ public class KeyRange implements Writable {
         if (result != 0) {
             return result;
         }
-        return Boolean.compare(rowKeyRange2.isUpperInclusive(), rowKeyRange1.isUpperInclusive());
+        return Boolean.compare(rowKeyRange1.isUpperInclusive(), rowKeyRange2.isUpperInclusive());
     }
 
     public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {
