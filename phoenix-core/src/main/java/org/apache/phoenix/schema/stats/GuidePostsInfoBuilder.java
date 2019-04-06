@@ -17,124 +17,114 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PrefixByteEncoder;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.apache.phoenix.query.KeyRange;
 
-/*
- * Builder to help in adding guidePosts and building guidePostInfo. This is used when we are collecting stats or reading stats for a table.
+/**
+ * Builder to help in adding guidePosts and building guidePostInfo.
+ * This is used when we are collecting stats or reading stats for a table.
  */
-
 public class GuidePostsInfoBuilder {
-    private PrefixByteEncoder encoder;
+    /**
+     * The targeted size of the guide post chunk measured in the number of guide posts.
+     */
+    private final int targetedChunkSize;
+
+    /**
+     * Guide posts organized in chunks
+     */
+    private List<GuidePostChunk> guidePostChunks;
+
+    /**
+     * Builder for the guide post chunk
+     */
+    private GuidePostChunkBuilder chunkBuilder;
+
+    /**
+     * The index of the guide post chunk in the chunk array
+     */
+    private int guidePostChunkIndex;
+
+    /**
+     * Use to track the lower bound of generated guide post chunks.
+     * It's always exclusive.
+     */
     private ImmutableBytesWritable lastRow;
-    private ImmutableBytesWritable guidePosts=new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
+
+    /**
+     * The total count of guide posts collected
+     */
     private int guidePostsCount;
-    
-    /**
-     * The rowCount that is flattened across the total number of guide posts.
-     */
-    private long rowCount = 0;
 
-    /**
-     * Maximum length of a guidePost collected
-     */
-    private int maxLength;
-    private DataOutputStream output;
-    private TrustedByteArrayOutputStream stream;
-    private List<Long> rowCounts = new ArrayList<Long>();
-    private List<Long> byteCounts = new ArrayList<Long>();
-    private List<Long> guidePostsTimestamps = new ArrayList<Long>();
-
-    public boolean isEmpty() {
-        return rowCounts.size() == 0;
-    }
-    
-    public List<Long> getRowCounts() {
-        return rowCounts;
+    public GuidePostsInfoBuilder() {
+        this(1);
     }
 
-    public List<Long> getByteCounts() {
-        return byteCounts;
-    }
-
-    public List<Long> getGuidePostsTimestamps() {
-        return guidePostsTimestamps;
-    }
-
-    public int getMaxLength() {
-        return maxLength;
-    }
-    public GuidePostsInfoBuilder(){
-        this.stream = new TrustedByteArrayOutputStream(1);
-        this.output = new DataOutputStream(stream);
-        this.encoder=new PrefixByteEncoder();
-        lastRow = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
-    }
-
-    public boolean addGuidePostOnCollection(ImmutableBytesWritable row, long byteCount,
-            long rowCount) {
-        /*
-         * When collecting guideposts, we don't care about the time at which guide post is being
-         * created/updated at. So passing it as 0 here. The update/create timestamp is important
-         * when we are reading guideposts out of the SYSTEM.STATS table.
-         */
-        return trackGuidePost(row, byteCount, rowCount, 0);
+    public GuidePostsInfoBuilder(int targetedChunkSize){
+        this.targetedChunkSize = targetedChunkSize;
+        this.guidePostChunks = Lists.newArrayListWithExpectedSize(1);
+        this.guidePostChunkIndex = 0;
+        this.lastRow = new ImmutableBytesWritable(KeyRange.UNBOUND);
+        this.guidePostsCount = 0;
     }
 
     /**
      * Track a new guide post
      * @param row number of rows in the guidepost
-     * @param byteCount number of bytes in the guidepost
-     * @param updateTimestamp time at which guidepost was created/updated.
-     * @throws IOException
+     * @param estimation estimation of the guidepost
      */
-    public boolean trackGuidePost(ImmutableBytesWritable row, long byteCount, long rowCount,
-            long updateTimestamp) {
+    public boolean trackGuidePost(ImmutableBytesWritable row, GuidePostEstimation estimation) {
         if (row.getLength() != 0 && lastRow.compareTo(row) < 0) {
-            try {
-                encoder.encode(output, row.get(), row.getOffset(), row.getLength());
-                rowCounts.add(rowCount);
-                byteCounts.add(byteCount);
-                guidePostsTimestamps.add(updateTimestamp);
-                this.guidePostsCount++;
-                this.maxLength = encoder.getMaxLength();
-                lastRow = row;
-                return true;
-            } catch (IOException e) {
-                return false;
+            if (chunkBuilder == null) {
+                chunkBuilder = new GuidePostChunkBuilder(lastRow.get(), targetedChunkSize);
             }
+
+            boolean added = chunkBuilder.trackGuidePost(row, estimation);
+            if (added) {
+                guidePostsCount++;
+                if (chunkBuilder.getGuidePostsCount() == targetedChunkSize) {
+                    GuidePostChunk chunk = chunkBuilder.build(guidePostChunkIndex);
+                    guidePostChunks.add(chunk);
+                    guidePostChunkIndex++;
+                    chunkBuilder = null;
+                }
+            }
+
+            lastRow = row;
+            return added;
         }
+
         return false;
     }
 
     public GuidePostsInfo build() {
-        this.guidePosts.set(stream.getBuffer(), 0, stream.size());
-        GuidePostsInfo guidePostsInfo = new GuidePostsInfo(this.byteCounts, this.guidePosts, this.rowCounts,
-                this.maxLength, this.guidePostsCount, this.guidePostsTimestamps);
-        return guidePostsInfo;
+        return build(new GuidePostEstimation());
     }
 
-    public void incrementRowCount() {
-        this.rowCount++;
+    public GuidePostsInfo build(GuidePostEstimation extraEstimation) {
+        if (chunkBuilder != null) {
+            GuidePostChunk chunk = chunkBuilder.build(guidePostChunkIndex);
+            guidePostChunks.add(chunk);
+            guidePostChunkIndex++;
+            chunkBuilder = null;
+        }
+
+        byte[] lowerBound = KeyRange.UNBOUND;
+        if (guidePostChunks.size() > 0) {
+            lowerBound = guidePostChunks.get(guidePostChunks.size() - 1).getKeyRange().getUpperRange();
+        }
+
+        GuidePostChunk endingChunk = GuidePostChunkBuilder.buildEndingChunk(guidePostChunkIndex, lowerBound, extraEstimation);
+        guidePostChunks.add(endingChunk);
+        guidePostChunkIndex++;
+
+        return new GuidePostsInfo(null, guidePostsCount, guidePostChunks);
     }
 
-    public void resetRowCount() {
-        this.rowCount = 0;
+    public int getGuidePostsCount() {
+        return guidePostsCount;
     }
-
-    public long getRowCount() {
-        return rowCount;
-    }
-    
-    public boolean hasGuidePosts() {
-        return guidePostsCount > 0;
-    }
-
 }

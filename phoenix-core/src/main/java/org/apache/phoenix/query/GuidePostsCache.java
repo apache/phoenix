@@ -18,6 +18,7 @@ package org.apache.phoenix.query;
 
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+
 import java.util.concurrent.ExecutionException;
 
 
@@ -29,5 +30,4 @@ public interface GuidePostsCache {
     void invalidate(GuidePostsKey key);
 
     void invalidateAll();
-
 }

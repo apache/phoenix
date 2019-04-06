@@ -596,39 +596,6 @@ public class TestUtil {
         return keyRanges;
     }
 
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName) throws SQLException {
-        return getGuidePostsList(conn, tableName, null, null, null, null);
-    }
-
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String where)
-            throws SQLException {
-        return getGuidePostsList(conn, tableName, null, null, null, where);
-    }
-
-    public static Collection<GuidePostsInfo> getGuidePostsList(Connection conn, String tableName, String pkCol,
-            byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
-        String whereClauseStart = (lowerRange == null && upperRange == null ? ""
-                : " WHERE "
-                        + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") + (upperRange != null ? (pkCol + " < ?")
-                                : "")));
-        String whereClause = whereClauseSuffix == null ? whereClauseStart
-                : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
-        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
-        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-        if (lowerRange != null) {
-            pstmt.setBytes(1, lowerRange);
-        }
-        if (upperRange != null) {
-            pstmt.setBytes(lowerRange != null ? 2 : 1, upperRange);
-        }
-        pstmt.execute();
-        TableRef tableRef = pstmt.getQueryPlan().getTableRef();
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable table = tableRef.getTable();
-        GuidePostsInfo info = pconn.getQueryServices().getTableStats(new GuidePostsKey(table.getName().getBytes(), SchemaUtil.getEmptyColumnFamily(table)));
-        return Collections.singletonList(info);
-    }
-
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
         analyzeTable(conn, tableName, false);
     }

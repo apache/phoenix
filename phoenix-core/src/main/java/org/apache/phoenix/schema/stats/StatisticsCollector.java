@@ -55,6 +55,11 @@ public interface StatisticsCollector extends Closeable {
     void collectStatistics(List<Cell> results);
 
     /**
+     * Generate guide posts for the remaining data with size less than GPWidth
+     */
+    void flushGuidePosts();
+
+    /**
      * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
      * @throws IOException 
      */
@@ -63,7 +68,7 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Retrieve the calculated guide post info for the given column family.
      */
-    GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam);
+    GuidePostChunk getGuidePosts(ImmutableBytesPtr fam);
 
     /**
      * Retrieve the guide post depth during stats collection

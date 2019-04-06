@@ -29,6 +29,9 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Array;
 import java.sql.Connection;
@@ -191,7 +194,6 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
     private void collectStatistics(Connection conn, String fullTableName,
                                    String guidePostWidth) throws Exception {
-
         if (collectStatsOnSnapshot) {
             collectStatsOnSnapshot(conn, fullTableName, guidePostWidth);
             invalidateStats(conn, fullTableName);
@@ -229,8 +231,10 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             fail("Exception when running UpdateStatisticsTool for " + tableName + " Exception: " + e);
         } finally {
             Job job = tool.getJob();
-            assertEquals("MR Job should have been configured with UPDATE_STATS job type",
-                    job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
+            if (job != null) {
+                assertEquals("MR Job should have been configured with UPDATE_STATS job type",
+                        job.getConfiguration().get(MAPREDUCE_JOB_TYPE), UPDATE_STATS.name());
+            }
         }
     }
 
@@ -284,8 +288,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 4-CHUNK 1 ROWS " + (columnEncoded ? "28" : TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? "38" : "34") + " BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
-                "CLIENT MERGE SORT",
+                "CLIENT 4-CHUNK 1 ROWS " + (columnEncoded ? (mutable ? 64 : 75) : (TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? 136 : 60)) +
+                        " BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" + "CLIENT MERGE SORT",
                 explainPlan);
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName + " WHERE k = 'a'");
         explainPlan = QueryUtil.getExplainPlan(rs);
@@ -566,12 +570,16 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
 
         ResultSet rs;
+        String actualExplainPlan;
         collectStatistics(conn, fullTableName);
         List<KeyRange> keyRanges = getAllSplits(conn, fullTableName);
         assertEquals(26, keyRanges.size());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 26-CHUNK 25 ROWS " + (columnEncoded ? ( mutable ? "12530" : "13902" ) : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? "25044" : "12420") + " BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
-                QueryUtil.getExplainPlan(rs));
+        actualExplainPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals(
+                "CLIENT 26-CHUNK 25 ROWS " + (columnEncoded ? ( mutable ? "12530" : "14190" ) : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? "25320" : "12420") +
+                        " BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
+                actualExplainPlan);
 
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(physicalTableName));
@@ -579,9 +587,9 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
         collectStatistics(conn, fullTableName, Long.toString(1000));
         keyRanges = getAllSplits(conn, fullTableName);
-        boolean oneCellPerColFamliyStorageScheme = !mutable && columnEncoded;
+        boolean oneCellPerColFamilyStorageScheme = !mutable && columnEncoded;
         boolean hasShadowCells = TransactionFactory.Provider.OMID.name().equals(transactionProvider);
-        assertEquals(oneCellPerColFamliyStorageScheme ? 13 : hasShadowCells ? 23 : 12, keyRanges.size());
+        assertEquals(oneCellPerColFamilyStorageScheme ? 14 : hasShadowCells ? 24 : 13, keyRanges.size());
 
         rs = conn
                 .createStatement()
@@ -591,30 +599,30 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
 
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
-        assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 12252 : 13624 ) : hasShadowCells ? 24756 : 12144, rs.getInt(3));
-        assertEquals(oneCellPerColFamliyStorageScheme ? 12 : hasShadowCells ? 22 : 11, rs.getInt(4));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(columnEncoded ? ( mutable ? 12530 : 14190 ) : hasShadowCells ? 25320 : 12420, rs.getInt(3));
+        assertEquals(oneCellPerColFamilyStorageScheme ? 13 : hasShadowCells ? 23 : 12, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("B", rs.getString(1));
-        assertEquals(oneCellPerColFamliyStorageScheme ? 24 : 20, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 5600 : 6972 ) : hasShadowCells ? 11260 : 5540, rs.getInt(3));
-        assertEquals(oneCellPerColFamliyStorageScheme ? 6 : hasShadowCells ? 10 : 5, rs.getInt(4));
+        assertEquals(oneCellPerColFamilyStorageScheme ? 25 : 20, rs.getInt(2));
+        assertEquals(columnEncoded ? ( mutable ? 5600 : 7260 ) : hasShadowCells ? 11260 : 5540, rs.getInt(3));
+        assertEquals(oneCellPerColFamilyStorageScheme ? 7 : hasShadowCells ? 10 : 5, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("C", rs.getString(1));
-        assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : hasShadowCells ? 13520 : 6652, rs.getInt(3));
-        assertEquals(hasShadowCells ? 12 : 6, rs.getInt(4));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(columnEncoded ? ( mutable ? 7005 : 7280 ) : hasShadowCells ? 14085 : 6930, rs.getInt(3));
+        assertEquals(hasShadowCells ? 13 : 7, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("D", rs.getString(1));
-        assertEquals(24, rs.getInt(2));
-        assertEquals(columnEncoded ? ( mutable ? 6724 : 6988 ) : hasShadowCells ? 13520 : 6652, rs.getInt(3));
-        assertEquals(hasShadowCells ? 12 : 6, rs.getInt(4));
+        assertEquals(25, rs.getInt(2));
+        assertEquals(columnEncoded ? ( mutable ? 7005 : 7280 ) : hasShadowCells ? 14085 : 6930, rs.getInt(3));
+        assertEquals(hasShadowCells ? 13 : 7, rs.getInt(4));
 
         assertFalse(rs.next());
-        
+
         // Disable stats
         conn.createStatement().execute("ALTER TABLE " + fullTableName + 
                 " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=0");
@@ -626,8 +634,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
-                QueryUtil.getExplainPlan(rs));
+        actualExplainPlan = QueryUtil.getExplainPlan(rs);
+        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName, actualExplainPlan);
     }
 
     @Test
@@ -734,31 +742,30 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private void verifyGuidePostGenerated(ConnectionQueryServices queryServices,
-            String tableName, String[] familyNames,
-            long guidePostWidth, boolean emptyGuidePostExpected) throws Exception {
+            String tableName, String[] familyNames, Long[] expectedEstimatedSizes, Long[] expectedRowCounts) throws Exception {
         try (Table statsHTable =
                 queryServices.getTable(
                         SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                                 queryServices.getProps()).getName())) {
-            for (String familyName : familyNames) {
+            for (int i =0; i < familyNames.length; i++) {
                 GuidePostsInfo gps =
-                        StatisticsUtil.readStatistics(statsHTable,
-                                new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes(familyName)),
+                        StatisticsUtil.readStatistics(new GuidePostsInfoBuilder(), statsHTable,
+                                new GuidePostsKey(Bytes.toBytes(tableName), Bytes.toBytes(familyNames[i])),
                                 HConstants.LATEST_TIMESTAMP);
-                assertTrue(emptyGuidePostExpected ? gps.isEmptyGuidePost() : !gps.isEmptyGuidePost());
-                assertTrue(gps.getByteCounts()[0] >= guidePostWidth);
-                assertTrue(gps.getGuidePostTimestamps()[0] > 0);
+                assertEquals((long)expectedEstimatedSizes[i], gps.getTotalEstimation().getByteCount());
+                assertEquals((long)expectedRowCounts[i], gps.getTotalEstimation().getRowCount());
+                assertTrue(gps.getTotalEstimation().getTimestamp() > 0);
             }
         }
     }
 
     @Test
-    public void testEmptyGuidePostGeneratedWhenDataSizeLessThanGPWidth() throws Exception {
+    public void testGuidePostGeneratedWhenDataSizeLessThanGPWidth() throws Exception {
         try (Connection conn = getConnection()) {
             long guidePostWidth = 20000000;
             conn.createStatement()
                     .execute("CREATE TABLE " + fullTableName
-                            + " ( k INTEGER, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH="
+                            + " ( k INTEGER, c1.a bigint, c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) GUIDE_POSTS_WIDTH="
                             + guidePostWidth + ", SALT_BUCKETS = 4");
             conn.createStatement().execute("upsert into " + fullTableName + " values (100,1,3)");
             conn.createStatement().execute("upsert into " + fullTableName + " values (101,2,4)");
@@ -766,7 +773,8 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             collectStatistics(conn, fullTableName);
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
-            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, true);
+            verifyGuidePostGenerated(queryServices, physicalTableName,
+                    new String[] {"C1", "C2"}, new Long[] {138L, 74L}, new Long[] {2L, 2L});
         }
     }
 
@@ -786,17 +794,17 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             ConnectionQueryServices queryServices =
                     conn.unwrap(PhoenixConnection.class).getQueryServices();
 
-            // The table only has one row. All cells just has one version, and the data size of the row
-            // is less than the guide post width, so we generate empty guide post.
-            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, true);
-
+            // The table only has one row. All cells just has one version.
+            verifyGuidePostGenerated(queryServices, physicalTableName,
+                    new String[] {"C1", "C2"}, new Long[] {67L, 36L}, new Long[] {1L, 1L});
             conn.createStatement().execute("upsert into " + fullTableName + " values (100,101,4)");
             conn.commit();
             collectStatistics(conn, fullTableName);
 
             // We updated the row. Now each cell has two versions, and the data size of the row
-            // is >= the guide post width, so we generate non-empty guide post.
-            verifyGuidePostGenerated(queryServices, physicalTableName, new String[] {"C1", "C2"}, guidePostWidth, false);
+            // is >= the guide post width.
+            verifyGuidePostGenerated(queryServices, physicalTableName,
+                    new String[] {"C1", "C2"}, new Long[] {134L, 72L}, new Long[] {1L, 1L});
         }
     }
 

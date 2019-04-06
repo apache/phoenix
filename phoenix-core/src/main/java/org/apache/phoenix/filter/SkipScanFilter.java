@@ -66,6 +66,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private List<List<KeyRange>> slots;
     // How far each slot spans minus one. We only handle a single column span currently
     private int[] slotSpan;
+
     // schema of the row key
     private RowKeySchema schema;
     private boolean includeMultipleVersions;
@@ -128,9 +129,16 @@ public class SkipScanFilter extends FilterBase implements Writable {
         this.includeMultipleVersions = includeMultipleVersions;
     }
 
-    // Exposed for testing.
     public List<List<KeyRange>> getSlots() {
         return slots;
+    }
+
+    public int[] getSlotSpan() {
+        return slotSpan;
+    }
+
+    public RowKeySchema getSchema() {
+        return schema;
     }
 
     @Override

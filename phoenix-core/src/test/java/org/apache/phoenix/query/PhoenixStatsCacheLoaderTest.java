@@ -24,8 +24,11 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.Weigher;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.stats.GuidePostEstimation;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 
@@ -45,13 +48,22 @@ public class PhoenixStatsCacheLoaderTest {
      * {@link PhoenixStatsLoader} test implementation for the Stats Loader.
      */
     protected class TestStatsLoaderImpl implements PhoenixStatsLoader {
-        private int maxLength = 1;
+        private int guidePostsCount = 1;
         private final CountDownLatch firstTimeRefreshedSignal;
         private final CountDownLatch secondTimeRefreshedSignal;
 
         public TestStatsLoaderImpl(CountDownLatch firstTimeRefreshedSignal, CountDownLatch secondTimeRefreshedSignal) {
             this.firstTimeRefreshedSignal = firstTimeRefreshedSignal;
             this.secondTimeRefreshedSignal = secondTimeRefreshedSignal;
+        }
+
+        private GuidePostsInfo loadStats() {
+            GuidePostsInfoBuilder builder = new GuidePostsInfoBuilder();
+            for (int i = 0; i < guidePostsCount; i++) {
+                GuidePostEstimation estimation = new GuidePostEstimation(1, 1, 0);
+                builder.trackGuidePost(new ImmutableBytesWritable(PInteger.INSTANCE.toBytes(i)), estimation);
+            }
+            return builder.build();
         }
 
         @Override
@@ -63,9 +75,9 @@ public class PhoenixStatsCacheLoaderTest {
 
         @Override
         public GuidePostsInfo loadStats(GuidePostsKey statsKey) throws Exception {
-            return new GuidePostsInfo(Collections.<Long> emptyList(),
-                    new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY),
-                    Collections.<Long> emptyList(), maxLength++, 0, Collections.<Long> emptyList());
+            GuidePostsInfo guidePostsInfo = loadStats();
+            guidePostsCount++;
+            return guidePostsInfo;
         }
 
         @Override
@@ -73,9 +85,9 @@ public class PhoenixStatsCacheLoaderTest {
             firstTimeRefreshedSignal.countDown();
             secondTimeRefreshedSignal.countDown();
 
-            return new GuidePostsInfo(Collections.<Long> emptyList(),
-                    new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY),
-                    Collections.<Long> emptyList(), maxLength++, 0, Collections.<Long> emptyList());
+            GuidePostsInfo guidePostsInfo = loadStats();
+            guidePostsCount++;
+            return guidePostsInfo;
         }
     }
 
@@ -129,7 +141,7 @@ public class PhoenixStatsCacheLoaderTest {
         try {
             GuidePostsKey guidePostsKey = new GuidePostsKey(new byte[4], new byte[4]);
             GuidePostsInfo guidePostsInfo = getStats(cache, guidePostsKey);
-            assertTrue(guidePostsInfo.getMaxLength() == 1);
+            assertTrue(guidePostsInfo.getGuidePostsCount() == 1);
 
             // Note: With Guava cache, automatic refreshes are performed when the first stale request for an entry occurs.
 
@@ -139,14 +151,14 @@ public class PhoenixStatsCacheLoaderTest {
             sleep(150);
             guidePostsInfo = getStats(cache, guidePostsKey);
             // Refresh has been triggered for its first time, but still could get the old value
-            assertTrue(guidePostsInfo.getMaxLength() >= 1);
+            assertTrue(guidePostsInfo.getGuidePostsCount() >= 1);
             firstTimeRefreshedSignal.await();
 
             sleep(150);
             guidePostsInfo = getStats(cache, guidePostsKey);
             // Now the second time refresh has been triggered by the above getStats() call, the first time Refresh has completed
             // and the cache entry has been updated for sure.
-            assertTrue(guidePostsInfo.getMaxLength() >= 2);
+            assertTrue(guidePostsInfo.getGuidePostsCount() >= 2);
             secondTimeRefreshedSignal.await();
         }
         catch (InterruptedException e) {

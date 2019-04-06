@@ -346,7 +346,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             }
                         }
                         throw e;
-                    }catch (RuntimeException e) {
+                    } catch (RuntimeException e) {
                         
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.

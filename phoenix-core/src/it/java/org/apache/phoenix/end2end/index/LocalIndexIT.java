@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
+import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledBasicIT.getByteRowEstimates;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
@@ -56,7 +56,6 @@ import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;

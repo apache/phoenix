@@ -70,10 +70,14 @@ import org.apache.phoenix.util.ServerUtil;
 
 import com.google.protobuf.ServiceException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
  */
 public class StatisticsWriter implements Closeable {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GuidePostsInfo.class);
 
     public static StatisticsWriter newWriter(PhoenixConnection conn, String tableName, long clientTimeStamp)
             throws SQLException {
@@ -82,8 +86,7 @@ public class StatisticsWriter implements Closeable {
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, configuration);
         Table statsWriterTable = conn.getQueryServices().getTable(physicalTableName.getName());
         Table statsReaderTable = conn.getQueryServices().getTable(physicalTableName.getName());
-        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
-                newClientTimeStamp);
+        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName, newClientTimeStamp);
         return statsTable;
     }
 
@@ -164,35 +167,46 @@ public class StatisticsWriter implements Closeable {
      *             remaining list of stats to update
      */
     @SuppressWarnings("deprecation")
-    public void addStats(StatisticsCollector tracker, ImmutableBytesPtr cfKey,
+    public void addStats(Region region, StatisticsCollector tracker, ImmutableBytesPtr cfKey,
                          List<Mutation> mutations, long guidePostDepth) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == DefaultStatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;
-        if (useMaxTimeStamp) { // When using max timestamp, we write the update time later because we only know the ts
-                               // now
+        if (useMaxTimeStamp) { // When using max timestamp, we write the update time later because we only know the ts now
             timeStamp = tracker.getMaxTimeStamp();
             mutations.add(getLastStatsUpdatedTimePut(timeStamp));
         }
-        GuidePostsInfo gps = tracker.getGuidePosts(cfKey);
+
+        GuidePostChunk gps = tracker.getGuidePosts(cfKey);
         if (gps != null) {
-            long[] byteCounts = gps.getByteCounts();
-            long[] rowCounts = gps.getRowCounts();
-            ImmutableBytesWritable keys = gps.getGuidePosts();
-            boolean hasGuidePosts = keys.getLength() > 0;
-            if (hasGuidePosts) {
+            ImmutableBytesWritable encodedKeys = gps.getEncodedGuidePosts();
+            if (LOGGER.isDebugEnabled()) {
+                GuidePostEstimation totalEstimation = gps.getTotalEstimation();
+                LOGGER.debug((encodedKeys.getLength() > 0 ? "Add guide posts" : "Add empty guide post") +
+                        " for Region with Start Key [" + Bytes.toStringBinary(region.getRegionInfo().getStartKey()) + "]" +
+                        "; Table Name: " + Bytes.toStringBinary(tableName) +
+                        "; Column Family: " + Bytes.toStringBinary(cfKey.copyBytesIfNecessary()) +
+                        "; Estimation: " + totalEstimation.toString() +
+                        "; Guide Posts Count: " + gps.getGuidePostsCount() +
+                        "; Guide Posts Key Length: " + encodedKeys.getLength());
+            }
+
+            if (encodedKeys.getLength() > 0) {
                 int guidePostCount = 0;
-                try (ByteArrayInputStream stream = new ByteArrayInputStream(keys.get(), keys.getOffset(), keys.getLength())) {
+                try (ByteArrayInputStream stream = new ByteArrayInputStream(
+                        encodedKeys.get(), encodedKeys.getOffset(), encodedKeys.getLength())) {
                     DataInput input = new DataInputStream(stream);
-                    PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
+                    PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getDecodingBufferSize());
                     do {
                         ImmutableBytesWritable ptr = decoder.decode(input);
-                        addGuidepost(cfKey, mutations, ptr, byteCounts[guidePostCount], rowCounts[guidePostCount], timeStamp);
+                        GuidePostEstimation estimation = gps.getEstimation(guidePostCount);
+                        addGuidepost(cfKey, mutations, ptr, estimation.getByteCount(), estimation.getRowCount(), timeStamp);
                         guidePostCount++;
                     } while (decoder != null);
-                } catch (EOFException e) { // Ignore as this signifies we're done
-
+                } catch (EOFException e) {
+                    // Ignore as this signifies we're done. Do nothing here.
                 }
+
                 // If we've written guideposts with a guidepost key, then delete the
                 // empty guidepost indicator that may have been written by other
                 // regions.
@@ -200,17 +214,14 @@ public class StatisticsWriter implements Closeable {
                 Delete delete = new Delete(rowKey, timeStamp);
                 mutations.add(delete);
             } else {
-                /*
-                 * When there is not enough data in the region, we create a guide post with empty
-                 * key with the estimated amount of data in it as the guide post width. We can't
-                 * determine the expected number of rows here since we don't have the PTable and the
-                 * associated schema available to make the row size estimate. We instead will
-                 * compute it on the client side when reading out guideposts from the SYSTEM.STATS
-                 * table in StatisticsUtil#readStatistics(HTableInterface statsHTable,
-                 * GuidePostsKey key, long clientTimeStamp).
-                 */
-                addGuidepost(cfKey, mutations, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY, guidePostDepth,
-                    0, timeStamp);
+                // When there is not enough data in the region, we create a guide post with empty
+                // key with the estimated amount of data in it as the guide post width. We can't
+                // determine the expected number of rows here since we don't have the PTable and the
+                // associated schema available to make the row size estimate. We instead will
+                // compute it on the client side when reading out guideposts from the SYSTEM.STATS
+                // table in StatisticsUtil#readStatistics(HTableInterface statsHTable,
+                // GuidePostsKey key, long clientTimeStamp).
+                addGuidepost(cfKey, mutations, ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY, guidePostDepth, 0, timeStamp);
             }
         }
     }

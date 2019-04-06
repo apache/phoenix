@@ -87,8 +87,10 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
     private static final String DDL = "CREATE TABLE " + TABLE_NAME + " (id char(3) NOT NULL PRIMARY KEY, \"value\" integer)";
     private static final byte[] Ka1A = Bytes.toBytes("a1A");
     private static final byte[] Ka1B = Bytes.toBytes("a1B");
+    private static final byte[] Ka1C = Bytes.toBytes("a1C");
     private static final byte[] Ka1E = Bytes.toBytes("a1E");
     private static final byte[] Ka1G = Bytes.toBytes("a1G");
+    private static final byte[] Ka1H = Bytes.toBytes("a1H");
     private static final byte[] Ka1I = Bytes.toBytes("a1I");
     private static final byte[] Ka2A = Bytes.toBytes("a2A");
 
@@ -115,7 +117,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
         List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
         List<KeyRange> ranges = getSplits(tableRef, scan, regions, scanRanges);
         assertEquals("Unexpected number of splits: " + ranges.size(), expectedSplits.size(), ranges.size());
-        for (int i=0; i<expectedSplits.size(); i++) {
+        for (int i = 0; i < expectedSplits.size(); i++) {
             assertEquals(expectedSplits.get(i), ranges.get(i));
         }
     }
@@ -188,8 +190,8 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                         }},
                     new int[] {1,1,1},
                     new KeyRange[] {
-                        getKeyRange("a0A", true, Ka1A, false),
-                        getKeyRange(Ka1A, true, Ka1B, false),
+                        getKeyRange("a0A", true, "a0A\00", false),
+                        getKeyRange("a1A", true, "a1A\00", false),
                 }));
         // Scan range spans third, split into 3 due to concurrency config.
         testCases.addAll(
@@ -234,7 +236,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                         getKeyRange("a1F", true, Ka1G, false),
                         getKeyRange(Ka1G, true, "a1H", false),
                 }));
-        // Scan range spans more than 3 range, no split.
+        // Scan range spans more than 3 ranges, no split.
         testCases.addAll(
                 foreach(new KeyRange[][]{
                         {
@@ -251,15 +253,15 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
                     new int[] {1,1,1},
                     new KeyRange[] {
                         getKeyRange(Ka1A, true, Ka1B, false),
-                        getKeyRange(Ka1B, true, Ka1E, false),
-                        getKeyRange(Ka1G, true, Ka1I, false),
+                        getKeyRange(Ka1C, true, Ka1E, false),
+                        getKeyRange(Ka1G, true, Ka1H, false),
                         getKeyRange(Ka2A, true, nextKey("b2G"), false)
                 }));
         return testCases;
     }
 
     private static RowKeySchema buildSchema(int[] widths) {
-        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(10);
+        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(widths.length);
         for (final int width : widths) {
             builder.addField(new PDatum() {
                 @Override

@@ -83,11 +83,13 @@ import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
 import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.STATS_TARGETED_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
@@ -99,7 +101,6 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -249,6 +250,8 @@ public class QueryServicesOptions {
     // Allow stats collection to be initiated by client multiple times immediately
     public static final int DEFAULT_MIN_STATS_UPDATE_FREQ_MS = 0;
     public static final int DEFAULT_STATS_CACHE_THREAD_POOL_SIZE = 4;
+    // The default targeted count of guide posts in a chunk
+    public static final int DEFAULT_STATS_TARGETED_CHUNK_SIZE = 128;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 
@@ -422,6 +425,7 @@ public class QueryServicesOptions {
             .setIfUnset(STATS_UPDATE_FREQ_MS_ATTRIB, DEFAULT_STATS_UPDATE_FREQ_MS)
             .setIfUnset(MIN_STATS_UPDATE_FREQ_MS_ATTRIB, DEFAULT_MIN_STATS_UPDATE_FREQ_MS)
             .setIfUnset(STATS_CACHE_THREAD_POOL_SIZE, DEFAULT_STATS_CACHE_THREAD_POOL_SIZE)
+            .setIfUnset(STATS_TARGETED_CHUNK_SIZE, DEFAULT_STATS_TARGETED_CHUNK_SIZE)
             .setIfUnset(CALL_QUEUE_ROUND_ROBIN_ATTRIB, DEFAULT_CALL_QUEUE_ROUND_ROBIN)
             .setIfUnset(MAX_MUTATION_SIZE_ATTRIB, DEFAULT_MAX_MUTATION_SIZE)
             .setIfUnset(ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, DEFAULT_FORCE_ROW_KEY_ORDER)
@@ -700,6 +704,10 @@ public class QueryServicesOptions {
         return config.getInt(SCAN_CACHE_SIZE_ATTRIB, DEFAULT_SCAN_CACHE_SIZE);
     }
 
+    public int getStatsTargetedChunkSize() {
+        return config.getInt(STATS_TARGETED_CHUNK_SIZE, DEFAULT_STATS_TARGETED_CHUNK_SIZE);
+    }
+
     public QueryServicesOptions setMaxServerCacheTTLMs(int ttl) {
         return set(MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, ttl);
     }
@@ -857,6 +865,11 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
         config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);
+        return this;
+    }
+
+    public QueryServicesOptions setStatsTargetedChunkSize(int targetedChunkSize) {
+        config.setInt(STATS_TARGETED_CHUNK_SIZE, targetedChunkSize);
         return this;
     }
 }

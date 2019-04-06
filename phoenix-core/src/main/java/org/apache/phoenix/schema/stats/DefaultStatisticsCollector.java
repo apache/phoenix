@@ -21,10 +21,12 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Sets;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -41,10 +43,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -67,11 +71,13 @@ import com.google.common.collect.Maps;
 public class DefaultStatisticsCollector implements StatisticsCollector {
 
     private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
-    
-    final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
+
+    final Map<ImmutableBytesPtr, Pair<GuidePostEstimation, GuidePostChunkBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
+    final Set<ImmutableBytesPtr> writableGuidePosts = Sets.newHashSet();
     private final Table htable;
     private StatisticsWriter statsWriter;
-    final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
+    final Pair<GuidePostEstimation, GuidePostChunkBuilder> cachedGuidePosts;
+    final ImmutableBytesPtr cachedColumnFamilyKey;
     final byte[] guidePostWidthBytes;
     final byte[] guidePostPerRegionBytes;
     // Where to look for GUIDE_POSTS_WIDTH in SYSTEM.CATALOG
@@ -104,10 +110,12 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         this.tableName = tableName;
         // in a compaction we know the one family ahead of time
         if (family != null) {
-            ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
-            cachedGuidePosts = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
-            guidePostsInfoWriterMap.put(cfKey, cachedGuidePosts);
+            cachedColumnFamilyKey = new ImmutableBytesPtr(family);
+            cachedGuidePosts = new Pair<GuidePostEstimation, GuidePostChunkBuilder>(
+                    new GuidePostEstimation(), new GuidePostChunkBuilder());
+            guidePostsInfoWriterMap.put(cachedColumnFamilyKey, cachedGuidePosts);
         } else {
+            cachedColumnFamilyKey = null;
             cachedGuidePosts = null;
         }
 
@@ -159,7 +167,6 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                 LOG.info("Guide post depth determined from global configuration: " + guidePostDepth);
             }
         }
-
     }
 
     private long getGuidePostDepthFromSystemCatalog() throws IOException, SQLException {
@@ -246,23 +253,34 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     public void updateStatistics(Region region, Scan scan) {
         try {
             List<Mutation> mutations = new ArrayList<Mutation>();
-            writeStatistics(region, true, mutations,
-                    EnvironmentEdgeManager.currentTimeMillis(), scan);
+            flushGuidePosts();
+            writeStatistics(region, true, mutations, EnvironmentEdgeManager.currentTimeMillis(), scan);
             commitStats(mutations);
         } catch (IOException e) {
             LOG.error("Unable to update SYSTEM.STATS table.", e);
         }
     }
 
+    @Override
+    public void flushGuidePosts() {
+        if (currentRow != null) {
+            // For each given column family, create a guide post for the remaining data
+            // if its byte count isn't 0.
+            trackGuidePosts(currentRow, true);
+        }
+    }
+
     private void writeStatistics(final Region region, boolean delete, List<Mutation> mutations, long currentTime, Scan scan)
             throws IOException {
-        Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
+        String regionStartKey = Bytes.toStringBinary(region.getRegionInfo().getStartKey());
+        LOG.info("Collect Statistics on Region with Start Key [" + regionStartKey + "]");
+
         // Update the statistics table.
         // Delete statistics for a region if no guide posts are collected for that region during
         // UPDATE STATISTICS. This will not impact a stats collection of single column family during
         // compaction as guidePostsInfoWriterMap cannot be empty in this case.
         if (cachedGuidePosts == null) {
-            // We're either collecting stats for the data table or the local index table, but not both
+            // We're either collecting stats for the data table or the local index table, but not both.
             // We can determine this based on the column families in the scan being prefixed with the
             // local index column family prefix. We always explicitly specify the local index column
             // families when we're collecting stats for a local index.
@@ -276,99 +294,165 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                     continue;
                 }
                 if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
-                    Pair<Long, GuidePostsInfoBuilder> emptyGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
+                    Pair<GuidePostEstimation, GuidePostChunkBuilder> emptyGps =
+                            new Pair<GuidePostEstimation, GuidePostChunkBuilder>(new GuidePostEstimation(), new GuidePostChunkBuilder());
                     guidePostsInfoWriterMap.put(cfKey, emptyGps);
                 }
             }
         }
+
+        Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
         for (ImmutableBytesPtr fam : fams) {
             if (delete) {
+                int oldSize = mutations.size();
                 statsWriter.deleteStatsForRegion(region, this, fam, mutations);
-                LOG.info("Generated " + mutations.size() + " mutations to delete existing stats");
+                LOG.info("Generated " + (mutations.size() - oldSize) + " mutations to delete existing stats for table [" +
+                        tableName + "], Column Family [" + Bytes.toStringBinary(fam.copyBytesIfNecessary()) + "]" +
+                        " on Region with Start Key [" + regionStartKey + "]");
             }
 
             // If we've disabled stats, don't write any, just delete them
             if (this.guidePostDepth > 0) {
                 int oldSize = mutations.size();
-                statsWriter.addStats(this, fam, mutations, guidePostDepth);
-                LOG.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats");
+                statsWriter.addStats(region, this, fam, mutations, guidePostDepth);
+                LOG.info("Generated " + (mutations.size() - oldSize) + " mutations for new stats for table [" +
+                        tableName + "], Column Family [" + Bytes.toStringBinary(fam.copyBytesIfNecessary()) + "]" +
+                        " on Region with Start Key [" + regionStartKey + "]");
             }
         }
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
         statsWriter.commitStats(mutations, this);
-        LOG.info("Committed " + mutations.size() + " mutations for stats");
+        LOG.info("Committed " + mutations.size() + " mutations for stats for table [" + tableName + "]" +
+                " on Region with Start Key [" + Bytes.toStringBinary(region.getRegionInfo().getStartKey()) + "]");
+    }
+
+    /**
+     * For each given column family on track, add a new guide post.
+     *
+     * @param rowKey
+     * @param flushAll
+     *            true or false. If it is true, we'll generate a guide post even when the
+     *            accumulated byte count is > 0 and < guidePostDepth.
+     */
+    private void trackGuidePosts(ImmutableBytesWritable rowKey, boolean flushAll) {
+        if (flushAll) {
+            Iterator<Map.Entry<ImmutableBytesPtr, Pair<GuidePostEstimation, GuidePostChunkBuilder>>>
+                    iter = guidePostsInfoWriterMap.entrySet().iterator();
+
+            while (iter.hasNext()) {
+                Map.Entry<ImmutableBytesPtr, Pair<GuidePostEstimation, GuidePostChunkBuilder>> entry = iter.next();
+                long byteCount = entry.getValue().getFirst().getByteCount();
+                if (byteCount > 0 && byteCount < guidePostDepth) {
+                    // For the entries with byte count >= guidePostDepth, it's already in writableGuidePosts.
+                    writableGuidePosts.add(entry.getKey());
+                }
+            }
+        }
+
+        for (ImmutableBytesPtr cfKey : writableGuidePosts) {
+            Pair<GuidePostEstimation, GuidePostChunkBuilder> gps = guidePostsInfoWriterMap.get(cfKey);
+            assert (gps != null);
+            GuidePostEstimation estimation = gps.getFirst(); // Pair<Byte count, Row count>
+            GuidePostChunkBuilder builder = gps.getSecond();
+
+            // When collecting guideposts, we don't care about the time at which guide post is being
+            // created/updated at. So passing it as 0 here. The update/create timestamp is important
+            // when we are reading guideposts out of the SYSTEM.STATS table.
+            if (builder.trackGuidePost(rowKey, estimation)) {
+                estimation.setByteCount(0l);
+                estimation.setRowCount(0l);
+            }
+        }
+
+        writableGuidePosts.clear();
     }
 
     /**
      * Update the current statistics based on the latest batch of key-values from the underlying scanner
-     * 
+     *
      * @param results
      *            next batch of {@link KeyValue}s
+     *
      * @throws IOException 
      */
     @Override
     public void collectStatistics(final List<Cell> results) {
         // A guide posts depth of zero disables the collection of stats
-        if (guidePostDepth == 0 || results.size() == 0) {
+        if (guidePostDepth == 0) {
             return;
         }
-        Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
-        boolean incrementRow = false;
-        Cell c = results.get(0);
-        ImmutableBytesWritable row = new ImmutableBytesWritable(c.getRowArray(), c.getRowOffset(), c.getRowLength());
-        /*
-         * During compaction, it is possible that HBase will not return all the key values when
-         * internalScanner.next() is called. So we need the below check to avoid counting a row more
-         * than once.
-         */
-        if (currentRow == null || !row.equals(currentRow)) {
-            currentRow = row;
-            incrementRow = true;
-        }
-        for (Cell cell : results) {
-            KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
-            maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
-            Pair<Long, GuidePostsInfoBuilder> gps;
-            if (cachedGuidePosts == null) {
-                ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(),
-                        kv.getFamilyLength());
-                gps = guidePostsInfoWriterMap.get(cfKey);
-                if (gps == null) {
-                    gps = new Pair<Long, GuidePostsInfoBuilder>(0l,
-                            new GuidePostsInfoBuilder());
-                    guidePostsInfoWriterMap.put(cfKey, gps);
+
+        if (results.size() > 0) {
+            Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
+            boolean incrementRow = false;
+            Cell c = results.get(0);
+            ImmutableBytesWritable
+                    row =
+                    new ImmutableBytesWritable(c.getRowArray(), c.getRowOffset(), c.getRowLength());
+            /*
+             * During compaction, it is possible that HBase will not return all the key values when
+             * internalScanner.next() is called. So we need the below check to avoid counting a row more
+             * than once.
+             */
+            if (currentRow == null || !row.equals(currentRow)) {
+                if (currentRow != null && writableGuidePosts.size() > 0) {
+                    trackGuidePosts(currentRow, false);
                 }
-                if (famMap.get(cfKey) == null) {
-                    famMap.put(cfKey, true);
-                    gps.getSecond().incrementRowCount();
-                }
-            } else {
-                gps = cachedGuidePosts;
-                if (incrementRow) {
-                    cachedGuidePosts.getSecond().incrementRowCount();
-                    incrementRow = false;
-                }
+
+                currentRow = row;
+                incrementRow = true;
             }
-            int kvLength = kv.getLength();
-            long byteCount = gps.getFirst() + kvLength;
-            gps.setFirst(byteCount);
-            if (byteCount >= guidePostDepth) {
-                if (gps.getSecond().addGuidePostOnCollection(row, byteCount, gps.getSecond().getRowCount())) {
-                    gps.setFirst(0l);
-                    gps.getSecond().resetRowCount();
+
+            for (Cell cell : results) {
+                KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
+                maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
+                Pair<GuidePostEstimation, GuidePostChunkBuilder> gps; // Pair<Byte count, Row count>
+                ImmutableBytesPtr cfKey;
+                if (cachedGuidePosts == null) {
+                    cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
+                    gps = guidePostsInfoWriterMap.get(cfKey);
+                    if (gps == null) {
+                        gps = new Pair<GuidePostEstimation, GuidePostChunkBuilder>(
+                                new GuidePostEstimation(), new GuidePostChunkBuilder());
+                        guidePostsInfoWriterMap.put(cfKey, gps);
+                    }
+                    if (incrementRow && famMap.get(cfKey) == null) {
+                        famMap.put(cfKey, true);
+                        gps.getFirst().addRowCount(1);
+                        // Don't set incrementRow to false here, otherwise we'll increase the row count for
+                        // the first column family only instead of increasing for all column families
+                    }
+                } else {
+                    cfKey = cachedColumnFamilyKey;
+                    gps = cachedGuidePosts;
+                    if (incrementRow) {
+                        gps.getFirst().setRowCount(gps.getFirst().getRowCount() + 1);
+                        incrementRow = false;
+                    }
+                }
+
+                gps.getFirst().addByteCount(kv.getLength());
+                if (gps.getFirst().getByteCount() >= guidePostDepth) {
+                    writableGuidePosts.add(cfKey);
                 }
             }
         }
     }
 
     @Override
-    public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
-        Pair<Long, GuidePostsInfoBuilder> pair = guidePostsInfoWriterMap.get(fam);
+    public GuidePostChunk getGuidePosts(ImmutableBytesPtr fam) {
+        Pair<GuidePostEstimation, GuidePostChunkBuilder> pair = guidePostsInfoWriterMap.get(fam);
         if (pair != null) {
-            return pair.getSecond().build();
+            GuidePostChunk guidePostChunk = pair.getSecond().build(0);
+            if (guidePostChunk == null) {
+                return GuidePostChunkBuilder.buildEndingChunk(
+                        0, KeyRange.UNBOUND, new GuidePostEstimation());
+            }
+            return guidePostChunk;
         }
+
         return null;
     }
 
@@ -383,9 +467,8 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env,
-                                                   Store store, InternalScanner delegate) {
-
+    public InternalScanner createCompactionScanner(
+            RegionCoprocessorEnvironment env, Store store, InternalScanner delegate) {
         ImmutableBytesPtr cfKey =
                 new ImmutableBytesPtr(store.getFamily().getName());
         LOG.info("StatisticsScanner created for table: "

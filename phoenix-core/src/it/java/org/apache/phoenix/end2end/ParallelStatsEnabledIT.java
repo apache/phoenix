@@ -18,6 +18,9 @@
 
 package org.apache.phoenix.end2end;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Map;
 
 import org.apache.phoenix.query.BaseTest;
@@ -29,6 +32,8 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+
 /**
  * Base class for tests whose methods run in parallel with statistics enabled.
  * You must create unique names using {@link #generateUniqueName()} for each
@@ -36,9 +41,8 @@ import com.google.common.collect.Maps;
  */
 @Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseTest {
-
     @BeforeClass
-    public static final void doSetup() throws Exception {
+    public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
@@ -50,5 +54,10 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     @AfterClass
     public static void tearDownMiniCluster() throws Exception {
         BaseTest.tearDownMiniClusterIfBeyondThreshold();
+    }
+
+    protected static Connection getTenantConnection(String tenantId) throws SQLException {
+        String url = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
+        return DriverManager.getConnection(url);
     }
 }

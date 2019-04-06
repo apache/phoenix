@@ -95,65 +95,65 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
-        try(org.apache.hadoop.hbase.client.Connection connection =
+        try (org.apache.hadoop.hbase.client.Connection connection =
                     HBaseFactoryProvider.getHConnectionFactory().createConnection(config)) {
-        RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
-                .getTableRef().getTable().getPhysicalName().toString()));
-        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
-                .getAdmin());
+            RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
+                    .getTableRef().getTable().getPhysicalName().toString()));
+            RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
+                    .getAdmin());
 
-        final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
-        for (List<Scan> scans : qplan.getScans()) {
-            // Get the region location
-            HRegionLocation location = regionLocator.getRegionLocation(
-                    scans.get(0).getStartRow(),
-                    false
-            );
+            final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
+            for (List<Scan> scans : qplan.getScans()) {
+                // Get the region location
+                HRegionLocation location = regionLocator.getRegionLocation(
+                        scans.get(0).getStartRow(),
+                        false
+                );
 
-            String regionLocation = location.getHostname();
+                String regionLocation = location.getHostname();
 
-            // Get the region size
-            long regionSize = sizeCalculator.getRegionSize(
-                    location.getRegionInfo().getRegionName()
-            );
+                // Get the region size
+                long regionSize = sizeCalculator.getRegionSize(
+                        location.getRegionInfo().getRegionName()
+                );
 
-            // Generate splits based off statistics, or just region splits?
-            boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
+                // Generate splits based off statistics, or just region splits?
+                boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
 
-            if(splitByStats) {
-                for(Scan aScan: scans) {
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
-                                .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
-                                aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
-                                .getBatch() + "] and  regionLocation : " + regionLocation);
+                if (splitByStats) {
+                    for (Scan aScan: scans) {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
+                                    .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
+                                    aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
+                                    .getBatch() + "] and  regionLocation : " + regionLocation);
+                        }
+
+                        psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
                     }
-
-                    psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
-                }
                 } else {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
-                            .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
-                            .size() - 1).getStopRow()));
-                    LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
-                            .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
-                            "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
-                            + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
-                            regionLocation);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
+                                .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
+                                .size() - 1).getStopRow()));
+                        LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
+                                .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
+                                "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
+                                + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
+                                regionLocation);
 
-                    for (int i = 0, limit = scans.size(); i < limit; i++) {
-                        LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
-                                .toStringBinary(scans.get(i).getAttribute
-                                        (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                        for (int i = 0, limit = scans.size(); i < limit; i++) {
+                            LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
+                                    .toStringBinary(scans.get(i).getAttribute
+                                            (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                        }
                     }
-                }
 
-                psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+                    psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+                }
             }
+            return psplits;
         }
-        return psplits;
-    }
     }
     
     /**
@@ -171,7 +171,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
             final Properties overridingProps = new Properties();
-            if(txnScnValue==null && currentScnValue!=null) {
+            if (txnScnValue==null && currentScnValue!=null) {
                 overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
             }
             if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){

@@ -483,7 +483,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         initAvgGroupTable(conn, tableName, "");
-        testAvgGroupByOrderPreserving(conn, tableName, 4);
+        testAvgGroupByOrderPreserving(conn, tableName, 7);
     }
     
     protected void initAvgGroupTable(Connection conn, String tableName, String tableProps) throws SQLException {

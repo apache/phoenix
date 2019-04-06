@@ -63,19 +63,6 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
     
     private final Object lock = new Object();
 
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock (long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
-    }
-
     @Test
     public void testSynchronousDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();

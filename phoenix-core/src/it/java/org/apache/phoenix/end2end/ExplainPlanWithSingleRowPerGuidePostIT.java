@@ -18,10 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -40,13 +38,10 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -55,352 +50,7 @@ import com.google.common.collect.Lists;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
-public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
-
-    private static String tableA;
-    private static String tableB;
-    private static String tableWithLargeGPWidth;
-    private static String indexOnA;
-    private static final long largeGpWidth = 2 * 1000 * 1000L;
-
-    @BeforeClass
-    public static void createTables() throws Exception {
-        tableA = generateUniqueName();
-        initDataAndStats(tableA, 20L);
-        tableB = generateUniqueName();
-        initDataAndStats(tableB, 20L);
-        tableWithLargeGPWidth = generateUniqueName();
-        initDataAndStats(tableWithLargeGPWidth, largeGpWidth);
-        indexOnA = generateUniqueName();
-        createIndex(indexOnA, tableA, 20);
-    }
-
-    private static void createIndex(String indexName, String table, long guidePostWidth)
-            throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(
-                "CREATE INDEX " + indexName + " ON " + table + " (c1.a) INCLUDE (c2.b) ");
-            conn.createStatement().execute("UPDATE STATISTICS " + indexName);
-        }
-    }
-
-    private static void initDataAndStats(String tableName, Long guidePostWidth) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement()
-                    .execute("CREATE TABLE " + tableName
-                            + " (k INTEGER PRIMARY KEY, c1.a bigint, c2.b bigint)"
-                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth);
-            conn.createStatement().execute("upsert into " + tableName + " values (100,1,3)");
-            conn.createStatement().execute("upsert into " + tableName + " values (101,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (102,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (103,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (104,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (105,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (106,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (107,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (108,2,4)");
-            conn.createStatement().execute("upsert into " + tableName + " values (109,2,4)");
-            conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
-        }
-    }
-
-    private static Connection getTenantConnection(String tenantId) throws SQLException {
-        String url = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-        return DriverManager.getConnection(url);
-    }
-
-    @Test
-    public void testBytesRowsForSelectWhenKeyOutOfRange() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " where k >= ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(200);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 0L, info.estimatedBytes);
-            assertEquals((Long) 0L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForPointSelectWithLimitGreaterThanPointLookupSize() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " where k in (? ,?) limit 4";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(103); binds.add(104);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSelectWithLimit() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " where c1.a in (?,?) limit 3";
-        String noIndexSQL = "SELECT /*+ NO_INDEX */ * FROM " + tableA + " where c1.a in (?,?) limit 3";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(1); binds.add(2);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 264L, info.estimatedBytes);
-            assertEquals((Long) 3L, info.estimatedRows);
-            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
-
-            info = getByteRowEstimates(conn, noIndexSQL, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSelectWithLimitIgnored() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " where (c1.a > c2.b) limit 1";
-        List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 691L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSelectWhenKeyInRange() throws Exception {
-        String sql = "SELECT * FROM " + tableB + " where k >= ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSelectOnIndex() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " where c1.a >= ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(0);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 691L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForUnion() throws Exception {
-        String sql =
-                "SELECT /*+ NO_INDEX */ * FROM " + tableA + " UNION ALL SELECT * FROM " + tableB;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, Lists.newArrayList());
-            assertEquals((Long) (2 * 634L), info.estimatedBytes);
-            assertEquals((Long) (2 * 10L), info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testEstimatesForUnionWithTableWithLargeGpWidth() throws Exception {
-        // For table with largeGpWidth, a guide post is generated that has the
-        // byte size estimate of guide post width.
-        String sql =
-                "SELECT /*+ NO_INDEX */ * FROM " + tableA + " UNION ALL SELECT * FROM " + tableB
-                        + " UNION ALL SELECT * FROM " + tableWithLargeGPWidth;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, Lists.newArrayList());
-            assertEquals((Long) (2 * 634 + largeGpWidth), info.estimatedBytes);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForHashJoin() throws Exception {
-        String sql =
-                "SELECT ta.c1.a, ta.c2.b FROM " + tableA + " ta JOIN " + tableB
-                        + " tb ON ta.k = tb.k";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, Lists.newArrayList());
-            assertEquals((Long) (634L), info.estimatedBytes);
-            assertEquals((Long) (10L), info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSortMergeJoin() throws Exception {
-        String sql =
-                "SELECT /*+ NO_INDEX USE_SORT_MERGE_JOIN */ ta.c1.a, ta.c2.b FROM " + tableA
-                        + " ta JOIN " + tableB + " tb ON ta.k = tb.k";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, Lists.newArrayList());
-            assertEquals((Long) (2 * 634L), info.estimatedBytes);
-            assertEquals((Long) (2 * 10L), info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForAggregateQuery() throws Exception {
-        String sql = "SELECT count(*) FROM " + tableA + " where k >= ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForUpsertSelectServerSide() throws Exception {
-        String sql = "UPSERT INTO " + tableA + " SELECT * FROM " + tableB;
-        List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(true);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForUpsertSelectClientSide() throws Exception {
-        String sql = "UPSERT INTO " + tableB + " SELECT * FROM " + tableB;
-        List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(false);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForUpsertValues() throws Exception {
-        String sql = "UPSERT INTO " + tableA + " VALUES (?, ?, ?)";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(99);
-        binds.add(99);
-        binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 0L, info.estimatedBytes);
-            assertEquals((Long) 0L, info.estimatedRows);
-            assertEquals((Long) 0L, info.estimateInfoTs);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForDeleteServerSide() throws Exception {
-        String sql = "DELETE FROM " + tableA + " where k >= ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(true);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 634L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertTrue(info.estimateInfoTs > 0);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForDeleteClientSideExecutedSerially() throws Exception {
-        String sql = "DELETE FROM " + tableA + " where k >= ? LIMIT 2";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(99);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(false);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForPointDelete() throws Exception {
-        String sql = "DELETE FROM " + tableA + " where k = ?";
-        List<Object> binds = Lists.newArrayList();
-        binds.add(100);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(false);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 0L, info.estimatedBytes);
-            assertEquals((Long) 0L, info.estimatedRows);
-            assertEquals((Long) 0L, info.estimateInfoTs);
-        }
-    }
-
-    @Test
-    public void testBytesRowsForSelectExecutedSerially() throws Exception {
-        String sql = "SELECT * FROM " + tableA + " LIMIT 2";
-        List<Object> binds = Lists.newArrayList();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(false);
-            Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 176L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertEquals((Long) StatisticsUtil.NOT_STATS_BASED_TS, info.estimateInfoTs);
-        }
-    }
-
-    public static class Estimate {
-        final Long estimatedBytes;
-        final Long estimatedRows;
-        final Long estimateInfoTs;
-
-        public Long getEstimatedBytes() {
-            return estimatedBytes;
-        }
-
-        public Long getEstimatedRows() {
-            return estimatedRows;
-        }
-
-        public Long getEstimateInfoTs() {
-            return estimateInfoTs;
-        }
-
-        Estimate(Long rows, Long bytes, Long ts) {
-            this.estimatedBytes = bytes;
-            this.estimatedRows = rows;
-            this.estimateInfoTs = ts;
-        }
-    }
-
-    public static Estimate getByteRowEstimates(Connection conn, String sql, List<Object> bindValues)
-            throws Exception {
-        String explainSql = "EXPLAIN " + sql;
-        Long estimatedBytes = null;
-        Long estimatedRows = null;
-        Long estimateInfoTs = null;
-        try (PreparedStatement statement = conn.prepareStatement(explainSql)) {
-            int paramIdx = 1;
-            for (Object bind : bindValues) {
-                statement.setObject(paramIdx++, bind);
-            }
-            ResultSet rs = statement.executeQuery(explainSql);
-            rs.next();
-            estimatedBytes =
-                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN);
-            estimatedRows =
-                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
-            estimateInfoTs =
-                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN);
-        }
-        return new Estimate(estimatedRows, estimatedBytes, estimateInfoTs);
-    }
-
+public class ExplainPlanWithSingleRowPerGuidePostIT extends ParallelStatsEnabledIT {
     @Test
     public void testSettingUseStatsForParallelizationProperty() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -426,8 +76,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             ddl = "CREATE TABLE " + table + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)";
             conn.createStatement().execute(ddl);
 
-            // because we didn't set the property, PTable.useStatsForParallelization() should return
-            // null
+            // Because we didn't set the property, PTable.useStatsForParallelization() should return null
             assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), null);
         }
     }
@@ -452,6 +101,25 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         }
     }
 
+    /**
+     * In this test case, when using tenant specific connection, a query for a tenant will also count
+     * the first guide post of the next tenant. This is because we'll use MapReduce job to update
+     * stats, and the job currently update stats for the base table as a whole in which guide posts
+     * won't align with the tenants' boundaries, i.e., a guide post could contain multiple tenants'
+     * estimated info.
+     *
+     * We also ignore the case when not all regions have guide posts available. This happens because
+     * stats collection is atomic operation on region level instead of table level. For now we ignore
+     * this case due to the following reasons:
+     * 1. When not all regions have guide posts available, we return null estimation timestamp, but
+     *    it still very confusing for customer to decide to use the estimation from stats or not. We
+     *    need to fundamentally resolve this issue by providing atomicity on table level.
+     * 2. Currently, we can prevent the case from happening by successfully collecting stats for a
+     *    whole table before enabling stats for use. By doing in this way, even some regions haven't
+     *    been updated stats for long time, there is only stale stats instead of incomplete stats.
+     *
+     * @throws Exception
+     */
     @Test
     public void testBytesRowsForSelectOnTenantViews() throws Exception {
         String tenant1View = generateUniqueName();
@@ -463,58 +131,64 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         String tenant2 = "tenant2";
         String tenant3 = "tenant3";
         String tenant4 = "tenant4";
+        Long estimatedBytesPerRow = 81L;
         MyClock clock = new MyClock(1000);
         createMultitenantTableAndViews(tenant1View, tenant2View, tenant3View, tenant4View, tenant1, tenant2,
             tenant3, tenant4, multiTenantBaseTable, clock);
 
-        // query the entire multitenant table
+        // query the entire multi-tenant table
         String sql = "SELECT * FROM " + multiTenantBaseTable + " WHERE ORGID >= ?";
         List<Object> binds = Lists.newArrayList();
         binds.add("tenant0");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 681L, info.estimatedBytes);
-            assertEquals((Long) 10L, info.estimatedRows);
-            assertNull(info.estimateInfoTs); // unknown/null because region (* - tenant1) has no guideposts
+            assertEquals((Long) 10L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
         }
         binds.clear();
-        long prevTenantBytes;
         // query tenant1 view
         try (Connection conn = getTenantConnection(tenant1)) {
             sql = "SELECT * FROM " + tenant1View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 119L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertNull(info.estimateInfoTs); // unknown/null because scan occurs in first region because of start key versus slightly larger region boundary
+            // One guide post one row. Internal query key range [tenant 1, tenant 2) hits
+            // 3 guide posts and the last guide post has end key 'tenant 2'.
+            assertEquals((Long) 3L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
         }
         // query tenant2 view
         try (Connection conn = getTenantConnection(tenant2)) {
             sql = "SELECT * FROM " + tenant2View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) (prevTenantBytes=119L), info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertEquals((Long) clock.currentTime(), info.estimateInfoTs);
+            // One guide post one row. Internal query key range [tenant 2, tenant 3) hits
+            // 3 guide posts and the last guide post has end key 'tenant 3'.
+            assertEquals((Long) 3L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
         }
         // query tenant3 view
         try (Connection conn = getTenantConnection(tenant3)) {
             sql = "SELECT * FROM " + tenant3View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 443L, info.estimatedBytes);
-            assertEquals((Long) 6L, info.estimatedRows);
-            assertEquals((Long) clock.currentTime(), info.estimateInfoTs);
+            // One guide post one row. Internal query key range [tenant 3, tenant 4) hits
+            // 6 guide posts and the last guide post has end key 'tenant 3', and there
+            // is no more guide posts after 'tenant 3'.
+            assertEquals((Long) 6L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
         }
-        /*
-         * Now we will add some rows to tenant1view an run update stats on it. We will do this after
-         * advancing our clock by 1000 seconds. This way we can check that only the region for
-         * tenant1 will have updated guidepost with the new timestamp.
-         */
+
+        // Now we will add some rows to tenant2view and run update stats on it. We will do this
+        // after advancing our clock by 1000 seconds. This way we can check that only the region
+        // for tenant2 will have updated guidepost with the new timestamp.
         long prevGuidePostTimestamp = clock.currentTime();
         clock.advanceTime(1000);
         try {
             EnvironmentEdgeManager.injectEdge(clock);
-            // Update tenant1 view
+            // Update tenant2 view
             try (Connection conn = getTenantConnection(tenant2)) {
-                // upsert a few rows for tenantView
+                // Upsert a few rows for tenantView
                 conn.createStatement()
                         .executeUpdate("UPSERT INTO " + tenant2View + " VALUES (11, 11, 11)");
                 conn.createStatement()
@@ -528,62 +202,76 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 conn.createStatement()
                         .executeUpdate("UPSERT INTO " + tenant2View + " VALUES (16, 16, 16)");
                 conn.commit();
-                // run update stats on the tenantView
+                // Run update stats on the tenantView2. We generate two scans [tenant2, tenant2'1)
+                // and [tenant2'1, tenant3). Because [tenant2, tenant2'1) is in the first region,
+                // the stats on the tenantView1 in the first region will also be updated.
                 conn.createStatement().executeUpdate("UPDATE STATISTICS " + tenant2View);
                 // get estimates now and check if they were updated as expected
                 sql = "SELECT * FROM " + tenant2View;
                 Estimate info = getByteRowEstimates(conn, sql, Collections.emptyList());
-                assertTrue(info.estimatedBytes > prevTenantBytes);
-                assertEquals((Long) 8L, info.estimatedRows);
-                assertEquals((Long) clock.currentTime(), info.estimateInfoTs);
+                // One guide post one row. Internal query key range [tenant 2, tenant 3) hits
+                // 9 guide posts and the last guide post has end key 'tenant 3'.
+                assertEquals((Long) 9L, info.getEstimatedRows());
+                assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+                // Use the last update time of the first guide post of 'tenant 3'.
+                assertEquals((Long) prevGuidePostTimestamp, info.getEstimateInfoTs());
             }
         } finally {
             EnvironmentEdgeManager.reset();
         }
-        // Now check estimates again for tenantView1 and tenantView3. They should stay the same.
+
+        // Now check estimates again for tenantView1. It should stay the same.
         try (Connection conn = getTenantConnection(tenant1)) {
             sql = "SELECT * FROM " + tenant1View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 119L, info.estimatedBytes);
-            assertEquals((Long) 2L, info.estimatedRows);
-            assertNull(info.estimateInfoTs);
+            // One guide post one row. Internal query key range [tenant 1, tenant 2) hits
+            // 3 guide posts and the last guide post has end key 'tenant 2'.
+            assertEquals((Long) 3L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            // The stats on the tenantView1 has been updated while we updated stats on the tenantView2.
+            // See the comments above for explanation.
+            assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
         }
+        // Now check estimates again for tenantView3. It should stay the same.
         try (Connection conn = getTenantConnection(tenant3)) {
             sql = "SELECT * FROM " + tenant3View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 443L, info.estimatedBytes);
-            assertEquals((Long) 6L, info.estimatedRows);
-            assertEquals((Long) prevGuidePostTimestamp, info.estimateInfoTs);
+            // One guide post one row. Internal query key range [tenant 3, tenant 4) hits
+            // 6 guide posts and the last guide post has end key 'tenant 3', because there
+            // is no more guide posts after 'tenant 3'.
+            assertEquals((Long) 6L, info.getEstimatedRows());
+            assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+            assertEquals((Long) prevGuidePostTimestamp, info.getEstimateInfoTs());
         }
-        /*
-         * Now let's query the base table and see estimates. Because we use the minimum timestamp
-         * for all guideposts that we will be scanning, the timestamp for the estimate info for this
-         * query should be prevGuidePostTimestamp.
-         */
+        // Now let's query the base table and see estimates. Because we use the minimum timestamp
+        // for all guideposts that we will be scanning, the timestamp for the estimate info for this
+        // query should be prevGuidePostTimestamp.
         binds.clear();
         binds.add("tenant0");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             sql = "SELECT * FROM " + multiTenantBaseTable + " WHERE ORGID >= ?";
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 1167L, info.estimatedBytes);
-            assertEquals((Long) 16L, info.estimatedRows);
-            assertNull(info.estimateInfoTs);
+            assertEquals((Long)(estimatedBytesPerRow * 16), info.getEstimatedBytes());
+            assertEquals((Long) 16L, info.getEstimatedRows());
+            assertEquals((Long) prevGuidePostTimestamp, info.getEstimateInfoTs());
         }
         // query tenant4 view
         binds.clear();
         try (Connection conn = getTenantConnection(tenant4)) {
             sql = "SELECT * FROM " + tenant4View;
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) (prevTenantBytes=0L), info.estimatedBytes);
-            assertEquals((Long) 0L, info.estimatedRows);
-            assertNull(info.estimateInfoTs); // Unknown b/c second region of tenant4 has no gps
+            assertEquals((Long) 0L, info.getEstimatedBytes());
+            assertEquals((Long) 0L, info.getEstimatedRows());
+            // There is no guide posts for tenantView4, so we use its' neighbor(tenant3)'s timestamp.
+            assertEquals((Long) prevGuidePostTimestamp, info.getEstimateInfoTs());
         }
+
         clock.advanceTime(1000);
         try {
             EnvironmentEdgeManager.injectEdge(clock);
             // Update tenant4 view
             try (Connection conn = getTenantConnection(tenant4)) {
-                // upsert a few rows for tenantView
+                // Upsert a few rows for tenantView4
                 conn.createStatement()
                     .executeUpdate("UPSERT INTO " + tenant4View + " VALUES (6, 17,17)");
                 conn.createStatement()
@@ -591,18 +279,31 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 conn.commit();
                 // run update stats on the tenantView
                 conn.createStatement().executeUpdate("UPDATE STATISTICS " + tenant4View);
-                // get estimates now and check if they were updated as expected
+
+                // Get estimates now and check if they were updated as expected
                 sql = "SELECT * FROM " + tenant4View;
                 Estimate info = getByteRowEstimates(conn, sql, Collections.emptyList());
-                assertTrue(info.estimatedBytes > prevTenantBytes);
-                assertEquals((Long) 119L, info.estimatedBytes);
-                assertEquals((Long) 2L, info.estimatedRows);
-                assertEquals((Long) clock.currentTime(), info.estimateInfoTs);
+                // One guide post one row. Internal query key range [tenant 4, tenant 5) hits
+                // 2 guide posts and the last guide post has end key 'tenant 4', because there
+                // is no more guide posts after 'tenant 4'.
+                assertEquals((Long) 2L, info.getEstimatedRows());
+                assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+                assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
+
                 sql = "SELECT * FROM " + tenant4View + " WHERE pk2 >= 6";
                 info = getByteRowEstimates(conn, sql, Collections.emptyList());
-                assertEquals((Long) 119L, info.estimatedBytes);
-                assertEquals((Long) 2L, info.estimatedRows);
-                assertEquals((Long) clock.currentTime(), info.estimateInfoTs);
+                // Hit 1 guide post with end key Tenant4'7. The guide post with end key Tenant4'6
+                // is ignored because it only contains one row for sure. It's called estimation for a reason.
+                assertEquals((Long) 1L, info.getEstimatedRows());
+                assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+                assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
+
+                sql = "SELECT * FROM " + tenant4View + " WHERE pk2 >= 5";
+                info = getByteRowEstimates(conn, sql, Collections.emptyList());
+                // Hit 2 guide post with end keys Tenant4'6 and Tenant4'7.
+                assertEquals((Long) 2L, info.getEstimatedRows());
+                assertEquals((Long)(estimatedBytesPerRow * info.getEstimatedRows()), info.getEstimatedBytes());
+                assertEquals((Long) clock.currentTime(), info.getEstimateInfoTs());
             }
         } finally {
             EnvironmentEdgeManager.reset();
@@ -720,11 +421,10 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private void testSelectQueriesWithFilters(boolean useStatsForParallelization) throws Exception {
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            int guidePostWidth = 20;
             String ddl =
                     "CREATE TABLE " + tableName + " (k INTEGER PRIMARY KEY, a bigint, b bigint)"
-                            + " GUIDE_POSTS_WIDTH=" + guidePostWidth
-                            + ", USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization + " SPLIT ON (102, 105, 108)";
+                            + " USE_STATS_FOR_PARALLELIZATION=" + useStatsForParallelization
+                            + " SPLIT ON (102, 105, 108)";
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("upsert into " + tableName + " values (100,100,3)");
             conn.createStatement().execute("upsert into " + tableName + " values (101,101,4)");
@@ -741,8 +441,10 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         }
         List<Object> binds = Lists.newArrayList();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            // query whose start key is before any data
-            String sql = "SELECT a FROM " + tableName + " WHERE K >= 99";
+            int[] result;
+
+            // Query without any filter. Query Key Range (UNBOUND, UNBOUND).
+            String sql = "SELECT a FROM " + tableName;
             ResultSet rs = conn.createStatement().executeQuery(sql);
             int i = 0;
             int numRows = 10;
@@ -751,31 +453,49 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 i++;
             }
             assertEquals(numRows, i);
+            // Hit all guide posts.
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10L, info.getEstimatedRows());
-            assertEquals((Long) 720L, info.getEstimatedBytes());
+            assertEquals((Long) 1000L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            // query whose start key is after any data
+            // Query whose start key is before any data. Query Key Range [99, UNBOUND).
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 99";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 10;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            assertEquals(numRows, i);
+            // Hit all guide posts.
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 10L, info.getEstimatedRows());
+            assertEquals((Long) 1000L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key is after any data. Query Key Range [110, UNBOUND).
             sql = "SELECT a FROM " + tableName + " WHERE K >= 110";
             rs = conn.createStatement().executeQuery(sql);
             assertFalse(rs.next());
+            // Hit zero guide posts.
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 0L, info.getEstimatedRows());
             assertEquals((Long) 0L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            // Query whose end key is before any data
+            // Query whose end key is before any data. Query Key Range (UNBOUND, 98].
             sql = "SELECT a FROM " + tableName + " WHERE K <= 98";
             rs = conn.createStatement().executeQuery(sql);
             assertFalse(rs.next());
+            // Hit the first guide post.
             info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 0L, info.getEstimatedRows());
-            assertEquals((Long) 0L, info.getEstimatedBytes());
+            assertEquals((Long) 1L, info.getEstimatedRows());
+            assertEquals((Long) 100L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            // Query whose end key is after any data. In this case, we return the estimate as
-            // scanning all the guide posts.
+            // Query whose end key is after any data. Query Key Range (UNBOUND, 110].
             sql = "SELECT a FROM " + tableName + " WHERE K <= 110";
             rs = conn.createStatement().executeQuery(sql);
             i = 0;
@@ -785,35 +505,34 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 i++;
             }
             assertEquals(numRows, i);
+            // Hit all guide posts.
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10L, info.getEstimatedRows());
-            assertEquals((Long) 720L, info.getEstimatedBytes());
+            assertEquals((Long) 1000L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            // Query whose start key and end key is before any data. In this case,
-            // we return the estimate as scanning the first guide post
-            sql = "SELECT a FROM " + tableName + " WHERE K <= 90 AND K >= 80";
+            // Query whose start key and end key is before any data. Query Key Range [80, 90].
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 80 AND K <= 90";
             rs = conn.createStatement().executeQuery(sql);
             assertFalse(rs.next());
+            // Hit the first guide post.
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 1L, info.getEstimatedRows());
+            assertEquals((Long) 100L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key and end key is after any data. Query Key Range (120, 130).
+            sql = "SELECT a FROM " + tableName + " WHERE K > 120 AND K < 130";
+            rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
+            // Hit zero guide posts.
             info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 0L, info.getEstimatedRows());
             assertEquals((Long) 0L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
 
-            // Query whose start key and end key is after any data. In this case, we return the
-            // estimate as
-            // scanning no guide post
-            sql = "SELECT a FROM " + tableName + " WHERE K <= 130 AND K >= 120";
-            rs = conn.createStatement().executeQuery(sql);
-            assertFalse(rs.next());
-            info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 0L, info.getEstimatedRows());
-            assertEquals((Long) 0L, info.getEstimatedBytes());
-            assertTrue(info.getEstimateInfoTs() > 0);
-
-            // Query whose start key is before and end key is between data. In this case, we return
-            // the estimate as scanning no guide post
-            sql = "SELECT a FROM " + tableName + " WHERE K <= 102 AND K >= 90";
+            // Query whose start key is before and end key is between data. Query Key Range [90, 102].
+            sql = "SELECT a FROM " + tableName + " WHERE K >=90 AND K <= 102";
             rs = conn.createStatement().executeQuery(sql);
             i = 0;
             numRows = 3;
@@ -821,29 +540,74 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 assertEquals(100 + i, rs.getInt(1));
                 i++;
             }
+            assertEquals(numRows, i);
+            // Hit the first 4 guide posts including the guide post with end key 103. The reason
+            // is that the query key range [90, 102] is internally translated into [90, 103),
+            // so the query key range will consistently hit the first 4 guide posts which have 4
+            // estimated count of rows in total. The actual count of rows scanned is 3. The gap is
+            // because in our test case, one guide post only has 1 row.
             info = getByteRowEstimates(conn, sql, binds);
             // Depending on the guidepost boundary, this estimate
-            // can be slightly off. It's called estimate for a reason.
+            // can be slightly off. It's called estimation for a reason.
+            assertEquals((Long) 4L, info.getEstimatedRows());
+            assertEquals((Long) 400L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key is before and end key is between data. Query Key Range [90, 102).
+            sql = "SELECT a FROM " + tableName + " WHERE K >=90 AND K < 102";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 2;
+            while (rs.next()) {
+                assertEquals(100 + i, rs.getInt(1));
+                i++;
+            }
+            assertEquals(numRows, i);
+            // Hit the first 3 guide posts including the guide post with end key 102.
+            info = getByteRowEstimates(conn, sql, binds);
+            // Depending on the guidepost boundary, this estimate
+            // can be slightly off. It's called estimation for a reason.
             assertEquals((Long) 3L, info.getEstimatedRows());
-            assertEquals((Long) 160L, info.getEstimatedBytes());
+            assertEquals((Long) 300L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
-            // Query whose start key is between and end key is after data.
-            sql = "SELECT a FROM " + tableName + " WHERE K <= 120 AND K >= 100";
+
+            // Query whose start key is between and end key is after data. Query Key Range [105, 120].
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 105 AND K <= 120";
             rs = conn.createStatement().executeQuery(sql);
             i = 0;
-            numRows = 10;
+            numRows = 5;
+            result = new int[] { 105, 106, 107, 108, 109 };
             while (rs.next()) {
-                assertEquals(100 + i, rs.getInt(1));
-                i++;
+                assertEquals(result[i++], rs.getInt(1));
             }
+            assertEquals(numRows, i);
             info = getByteRowEstimates(conn, sql, binds);
-            // Depending on the guidepost boundary, this estimate
-            // can be slightly off. It's called estimate for a reason.
-            assertEquals((Long) 10L, info.getEstimatedRows());
-            assertEquals((Long) 720L, info.getEstimatedBytes());
+            // Hit 4 guide posts with end keys 106, 107, 108, 109. The guide post with end key 105
+            // is ignored because it only contains one row for sure. It's called estimation for a reason.
+            assertEquals((Long) 4L, info.getEstimatedRows());
+            assertEquals((Long) 400L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key is between and end key is after data. Query Key Range (105, 120].
+            sql = "SELECT a FROM " + tableName + " WHERE K > 105 AND K <= 120";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 4;
+            result = new int[] { 106, 107, 108, 109 };
+            while (rs.next()) {
+                assertEquals(result[i++], rs.getInt(1));
+            }
+            assertEquals(numRows, i);
+            info = getByteRowEstimates(conn, sql, binds);
+            // Hit 3 guide posts with end keys 107, 108, 109. The query key range used internal is [106, 121).
+            // The guide post with end key 106 is ignored because it only contains one row for sure. It's called
+            // estimate for a reason.
+            assertEquals((Long) 3L, info.getEstimatedRows());
+            assertEquals((Long) 300L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
             // Query whose start key and end key are both between data.
-            sql = "SELECT a FROM " + tableName + " WHERE K <= 109 AND K >= 100";
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 100 AND K < 110";
             rs = conn.createStatement().executeQuery(sql);
             i = 0;
             numRows = 10;
@@ -851,11 +615,67 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 assertEquals(100 + i, rs.getInt(1));
                 i++;
             }
+            assertEquals(numRows, i);
             info = getByteRowEstimates(conn, sql, binds);
-            // Depending on the guidepost boundary, this estimate
-            // can be slightly off. It's called estimate for a reason.
-            assertEquals((Long) 10L, info.getEstimatedRows());
-            assertEquals((Long) 720L, info.getEstimatedBytes());
+            // Hit 9 guide posts with end keys 101, 102, ..., 109. The guide post with end key 100
+            // is ignored because it only contains one row for sure. It's called estimation for a reason.
+            assertEquals((Long) 9L, info.getEstimatedRows());
+            assertEquals((Long) 900L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key and end key are both between data. The query key range is [101, 107],
+            // and both start key and end key are the last key in a region.
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 101 AND K <= 107";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 7;
+            result = new int[] { 101, 102, 103, 104, 105, 106, 107 };
+            while (rs.next()) {
+                assertEquals(result[i++], rs.getInt(1));
+            }
+            assertEquals(numRows, i);
+            info = getByteRowEstimates(conn, sql, binds);
+            // Hit 9 guide posts with end keys 102, 103, ..., 108. The guide post with end key 101
+            // is ignored because it only contains one row for sure. It's called estimation for a reason.
+            assertEquals((Long) 7L, info.getEstimatedRows());
+            assertEquals((Long) 700L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query whose start key and end key are both between data. The query key range is [102, 108],
+            // and both start key and end key are the first key in a region.
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 102 AND K <= 108";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 7;
+            result = new int[] { 102, 103, 104, 105, 106, 107, 108 };
+            while (rs.next()) {
+                assertEquals(result[i++], rs.getInt(1));
+            }
+            assertEquals(numRows, i);
+            info = getByteRowEstimates(conn, sql, binds);
+            // Hit 9 guide posts with end keys 103, 104, ..., 109. The guide post with end key 102
+            // is ignored because it only contains one row for sure. It's called estimation for a reason.
+            assertEquals((Long) 7L, info.getEstimatedRows());
+            assertEquals((Long) 700L, info.getEstimatedBytes());
+            assertTrue(info.getEstimateInfoTs() > 0);
+
+            // Query with multiple scan ranges, and each range's start key and end key are both between data.
+            // Query Key Ranges [101, 104), (106, 108]
+            sql = "SELECT a FROM " + tableName + " WHERE K >= 101 AND K < 104 OR K > 106 AND K <= 108";
+            rs = conn.createStatement().executeQuery(sql);
+            i = 0;
+            numRows = 5;
+            result = new int[] { 101, 102, 103, 107, 108 };
+            while (rs.next()) {
+                assertEquals(result[i++], rs.getInt(1));
+            }
+            assertEquals(numRows, i);
+            // Hit 6 guide posts with end keys 102, 103, 104, 108 and 109. For Query Key Ranges
+            // [101, 104) and [107, 109) used internal, we ignore the guide posts with end key
+            // 101, 107 and count the guide post with end key 109.
+            info = getByteRowEstimates(conn, sql, binds);
+            assertEquals((Long) 5L, info.getEstimatedRows());
+            assertEquals((Long) 500L, info.getEstimatedBytes());
             assertTrue(info.getEstimateInfoTs() > 0);
         }
     }
@@ -930,23 +750,6 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             }
         } finally {
             EnvironmentEdgeManager.reset();
-        }
-    }
-
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock(long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
-
-        public void advanceTime(long t) {
-            this.time += t;
         }
     }
 
@@ -1032,7 +835,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
              * Because we ran update stats only for tenant1View, there is only partial guidepost
              * info available for tenant2View.
              */
-            assertEquals((Long) 1L, info.estimatedRows);
+            assertEquals((Long) 1L, info.getEstimatedRows());
             // ok now run update stats for tenant2 view
             conn.createStatement().execute("UPDATE STATISTICS " + tenant2View);
             /*
@@ -1040,7 +843,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
              * available now.
              */
             info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 6L, info.estimatedRows);
+            assertEquals((Long) 6L, info.getEstimatedRows());
         }
     }
 
@@ -1237,5 +1040,4 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 PhoenixConfigurationUtil
                         .getStatsForParallelizationProp(tenantConn.unwrap(PhoenixConnection.class), viewIndex));
     }
-
 }

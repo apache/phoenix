@@ -144,6 +144,7 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -417,6 +418,47 @@ public abstract class BaseTest {
         }
     }
 
+    public static class Estimate {
+        final Long estimatedBytes;
+        final Long estimatedRows;
+        final Long estimateInfoTs;
+
+        public Long getEstimatedBytes() {
+            return estimatedBytes;
+        }
+
+        public Long getEstimatedRows() {
+            return estimatedRows;
+        }
+
+        public Long getEstimateInfoTs() {
+            return estimateInfoTs;
+        }
+
+        Estimate(Long rows, Long bytes, Long ts) {
+            this.estimatedBytes = bytes;
+            this.estimatedRows = rows;
+            this.estimateInfoTs = ts;
+        }
+    }
+
+    protected static class MyClock extends EnvironmentEdge {
+        public volatile long time;
+
+        public MyClock(long time) {
+            this.time = time;
+        }
+
+        @Override
+        public long currentTime() {
+            return time;
+        }
+
+        public void advanceTime(long t) {
+            this.time += t;
+        }
+    }
+
     private static ExecutorService tearDownClusterService =
             Executors.newSingleThreadExecutor(new TearDownMiniClusterThreadFactory());
 
@@ -426,13 +468,36 @@ public abstract class BaseTest {
         }
         return url;
     }
-    
+
     private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;
         }
         return url;
+    }
+
+    public static Estimate getByteRowEstimates(Connection conn, String sql, List<Object> bindValues)
+            throws Exception {
+        String explainSql = "EXPLAIN " + sql;
+        Long estimatedBytes = null;
+        Long estimatedRows = null;
+        Long estimateInfoTs = null;
+        try (PreparedStatement statement = conn.prepareStatement(explainSql)) {
+            int paramIdx = 1;
+            for (Object bind : bindValues) {
+                statement.setObject(paramIdx++, bind);
+            }
+            ResultSet rs = statement.executeQuery(explainSql);
+            rs.next();
+            estimatedBytes =
+                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN);
+            estimatedRows =
+                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+            estimateInfoTs =
+                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN);
+        }
+        return new Estimate(estimatedRows, estimatedBytes, estimateInfoTs);
     }
 
     /**

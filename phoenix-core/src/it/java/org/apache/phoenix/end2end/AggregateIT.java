@@ -185,9 +185,9 @@ public class AggregateIT extends BaseAggregateIT {
         assertEquals(13,rs.getInt(1));
         testAvgGroupByOrderPreserving(conn, tableName, 13);
         conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=100");
-        testAvgGroupByOrderPreserving(conn, tableName, 6);
+        testAvgGroupByOrderPreserving(conn, tableName, 8);
         conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=null");
-        testAvgGroupByOrderPreserving(conn, tableName, 4);
+        testAvgGroupByOrderPreserving(conn, tableName, 7);
     }
 
     @Override
