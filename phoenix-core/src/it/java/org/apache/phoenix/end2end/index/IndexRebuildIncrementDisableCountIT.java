@@ -172,7 +172,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
             String sqlStr = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)"; 
             PreparedStatement stmt = conn.prepareStatement(sqlStr);
             for (int i = 0; i < 10000; i++) {
-                stmt.setString(1, getRandomOrgId(maxOrgId);
+                stmt.setString(1, getRandomOrgId(maxOrgId));
                 stmt.setInt(2, i);
                 stmt.setInt(3, i + 1);
                 stmt.setInt(4, i + 2);
