@@ -615,13 +615,39 @@ public class MetaDataUtil {
         }
     }
 
-    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+    public static String getOldViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString(); }
         return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
     }
 
+    public static String getOldViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId); }
+        return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
+    }
+
+    public static SequenceKey getOldViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets,
+                                                      boolean isNamespaceMapped) {
+        // Create global sequence of the form: <prefixed base table name><tenant id>
+        // rather than tenant-specific sequence, as it makes it much easier
+        // to cleanup when the physical table is dropped, as we can delete
+        // all global sequences leading with <prefix> + physical name.
+        String schemaName = getOldViewIndexSequenceSchemaName(physicalName, isNamespaceMapped);
+        String tableName = getOldViewIndexSequenceName(physicalName, PNameFactory.newName(tenantId), isNamespaceMapped);
+        return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
+    }
+
+    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) {
+            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(physicalName.getString(),
+                MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
+            return SchemaUtil.getSchemaNameFromFullName(baseTableName);
+        } else {
+            return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
+        }
+
+    }
+
     public static String getViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
-        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX; }
         return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
     }
 
