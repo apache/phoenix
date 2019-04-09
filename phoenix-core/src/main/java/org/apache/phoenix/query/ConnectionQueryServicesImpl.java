@@ -71,7 +71,9 @@ import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -225,6 +227,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
+import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
@@ -3419,6 +3422,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // See PHOENIX-3955
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
                     syncTableAndIndexProperties(metaConnection, getAdmin());
+                    //Combine view index id sequences for the same physical view index table
+                    //to avoid collisions. See PHOENIX-5132 and PHOENIX-5138
+                    UpgradeUtil.mergeViewIndexIdSequences(this, metaConnection);
                 }
             }
 

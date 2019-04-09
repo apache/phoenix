@@ -36,11 +36,13 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -53,6 +55,7 @@ import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -106,6 +109,9 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SequenceAllocation;
+import org.apache.phoenix.schema.SequenceAlreadyExistsException;
+import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBinary;
@@ -2230,15 +2236,13 @@ public class UpgradeUtil {
         String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
         String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
         // create new entry with new schema format
-        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SELECT  REGEXP_SPLIT("
-                + PhoenixDatabaseMetaData.SEQUENCE_NAME + ",'_')[3] ,\'" + newSchemaName + "\',\'" + newSequenceName
+        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SELECT NULL,\'" + newSchemaName +
+            "\',\'" + newSequenceName
                 + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY + "," + CACHE_SIZE + "," + MIN_VALUE
                 + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG + " FROM "
                 + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
                 + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'";
         connection.createStatement().executeUpdate(upsert);
-        // delete old sequence
-        MetaDataUtil.deleteViewIndexSequences(connection, oldPhysicalName, false);
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName,
@@ -2294,6 +2298,106 @@ public class UpgradeUtil {
             logger.info(String.format("Upgrading view %s for tenantId %s..", viewName,tenantId));
             UpgradeUtil.upgradeTable(conn, viewName);
             prevTenantId = tenantId;
+        }
+    }
+
+    public static void mergeViewIndexIdSequences(ConnectionQueryServices cqs, PhoenixConnection metaConnection)
+        throws SQLException{
+         /* before PHOENIX-5132, there was a per-tenant sequence to generate view index ids,
+           which could cause problems if global and tenant-owned view indexes were mixed for the
+           same physical base table. Now there's just one sequence for all view indexes of the same
+           physical table, but we have to check to see if there are any legacy sequences, and
+           merge them into a single sequence equal to max + 101 (for a safety margin)
+           of the largest legacy sequence to avoid collisons.
+         */
+         //map of physical table names to view index sequences
+        Map<String, List<SequenceKey>> sequenceTableMap = new HashMap<>();
+        DatabaseMetaData metaData = metaConnection.getMetaData();
+
+        try (ResultSet sequenceRS = metaData.getTables(null, null,
+            "%" + MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX + "%",
+            new String[] {PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE})) {
+            while (sequenceRS.next()) {
+                String tenantId = sequenceRS.getString(TABLE_CAT);
+                String schemaName = sequenceRS.getString(TABLE_SCHEM);
+                String sequenceName = sequenceRS.getString(TABLE_NAME);
+                int numBuckets = sequenceRS.getInt(SALT_BUCKETS);
+                SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, numBuckets);
+                String baseTableName;
+                //under the old naming convention, view index sequences
+                // of non-namespace mapped tables stored their physical table name in the sequence schema for
+                //some reason. Namespace-mapped tables stored it in the sequence name itself.
+                //Note the difference between VIEW_INDEX_SEQUENCE_PREFIX (_SEQ_)
+                //and VIEW_INDEX_SEQUENCE_NAME_PREFIX (_ID_)
+                if (schemaName != null && schemaName.contains(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX)) {
+                    baseTableName = schemaName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX, "");
+                } else {
+                    baseTableName = SchemaUtil.getTableName(schemaName,
+                        sequenceName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX, ""));
+                }
+                if (!sequenceTableMap.containsKey(baseTableName)) {
+                    sequenceTableMap.put(baseTableName, new ArrayList<SequenceKey>());
+                }
+                sequenceTableMap.get(baseTableName).add(key);
+            }
+        }
+        for (String baseTableName : sequenceTableMap.keySet()){
+            Map<SequenceKey, Long> currentSequenceValues = new HashMap<SequenceKey, Long>();
+            long maxViewIndexId = Long.MIN_VALUE;
+            PName name = PNameFactory.newName(baseTableName);
+            boolean hasNamespaceMapping =
+                SchemaUtil.isNamespaceMappingEnabled(null, cqs.getConfiguration()) ||
+                    cqs.getProps().getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, false);
+            List<SequenceKey> existingSequenceKeys = sequenceTableMap.get(baseTableName);
+            for (SequenceKey sequenceKey : existingSequenceKeys){
+                long[] currentValueArray = new long[1];
+                SQLException[] sqlExceptions = new SQLException[1];
+                cqs.incrementSequences(
+                    Lists.newArrayList(new SequenceAllocation(sequenceKey, 1L)),
+                    EnvironmentEdgeManager.currentTimeMillis(),
+                    currentValueArray, new SQLException[1]);
+
+                if (sqlExceptions[0] != null) {
+                    logger.error("Unable to convert view index sequence because of error. " +
+                        "It will need to be converted manually, " +
+                        " or there's a risk that two view indexes of the same base table " +
+                        "will have colliding view index ids.", sqlExceptions[0]);
+                    continue;
+                }
+                if (currentValueArray[0] > maxViewIndexId){
+                    maxViewIndexId = currentValueArray[0];
+                }
+                currentSequenceValues.put(sequenceKey, currentValueArray[0]);
+            }
+            //just in case someone is creating a view index RIGHT NOW, increment maxViewIndexId
+            //by 100 to make very sure there are no collisions
+            maxViewIndexId += 100;
+            try {
+                //In one case (namespaced-mapped base table, global view index), the new sequence
+                //is the same as the old sequence, so rather than create it we just increment it
+                //to the right value.
+                SequenceKey newSequenceKey = new SequenceKey(null, MetaDataUtil.getViewIndexSequenceSchemaName(name, hasNamespaceMapping),
+                    MetaDataUtil.getViewIndexSequenceName(name, null, hasNamespaceMapping), cqs.getSequenceSaltBuckets());
+                if (currentSequenceValues.containsKey(newSequenceKey)){
+                    long incrementValue = maxViewIndexId - currentSequenceValues.get(newSequenceKey);
+                    SQLException[] incrementExceptions = new SQLException[1];
+                    List<SequenceAllocation> incrementAllocations = Lists.newArrayList(new SequenceAllocation(newSequenceKey, incrementValue));
+                    cqs.incrementSequences(incrementAllocations, EnvironmentEdgeManager.currentTimeMillis(),
+                        new long[1], incrementExceptions);
+                    if (incrementExceptions[0] != null){
+                        throw incrementExceptions[0];
+                    }
+                } else {
+                    cqs.createSequence(null, newSequenceKey.getSchemaName(),
+                        newSequenceKey.getSequenceName(), maxViewIndexId, 1, 1,
+                        Long.MIN_VALUE, Long.MAX_VALUE,
+                        false, EnvironmentEdgeManager.currentTimeMillis());
+                }
+            } catch(SequenceAlreadyExistsException sae) {
+                logger.info("Tried to create view index sequence "
+                    + SchemaUtil.getTableName(sae.getSchemaName(), sae.getSequenceName()) +
+                    " during upgrade but it already existed. This is probably fine.");
+            }
         }
     }
 

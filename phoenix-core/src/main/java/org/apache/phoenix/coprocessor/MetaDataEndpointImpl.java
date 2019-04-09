@@ -2347,26 +2347,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
                     try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                         PName physicalName = parentTable.getPhysicalName();
-                        int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
-                        SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
-                            nSequenceSaltBuckets, parentTable.isNamespaceMapped() );
-                        // TODO Review Earlier sequence was created at (SCN-1/LATEST_TIMESTAMP) and incremented at the client max(SCN,dataTable.getTimestamp), but it seems we should
-                        // use always LATEST_TIMESTAMP to avoid seeing wrong sequence values by different connection having SCN
-                        // or not.
-                        long sequenceTimestamp = HConstants.LATEST_TIMESTAMP;
-                        try {
-                            connection.getQueryServices().createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
-                                Long.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
-                        } catch (SequenceAlreadyExistsException e) {
-                        }
-                        long[] seqValues = new long[1];
-                        SQLException[] sqlExceptions = new SQLException[1];
-                        connection.getQueryServices().incrementSequences(Collections.singletonList(new SequenceAllocation(key, 1)),
-                            HConstants.LATEST_TIMESTAMP, seqValues, sqlExceptions);
-                        if (sqlExceptions[0] != null) {
-                            throw sqlExceptions[0];
-                        }
-                        long seqValue = seqValues[0];
+                        long seqValue = getViewIndexSequenceValue(connection, tenantIdStr, parentTable, physicalName);
                         Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
 
                         NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
@@ -2479,6 +2460,33 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
         }
+    }
+
+    private long getViewIndexSequenceValue(PhoenixConnection connection, String tenantIdStr, PTable parentTable, PName physicalName) throws SQLException {
+        int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
+
+        SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
+            nSequenceSaltBuckets, parentTable.isNamespaceMapped() );
+        // Earlier sequence was created at (SCN-1/LATEST_TIMESTAMP) and incremented at the client max(SCN,dataTable.getTimestamp), but it seems we should
+        // use always LATEST_TIMESTAMP to avoid seeing wrong sequence values by different connection having SCN
+        // or not.
+        long sequenceTimestamp = HConstants.LATEST_TIMESTAMP;
+        try {
+            connection.getQueryServices().createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
+                Long.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
+        } catch (SequenceAlreadyExistsException e) {
+            //someone else got here first and created the sequence, or it was pre-existing. Not a problem.
+        }
+
+
+        long[] seqValues = new long[1];
+        SQLException[] sqlExceptions = new SQLException[1];
+        connection.getQueryServices().incrementSequences(Collections.singletonList(new SequenceAllocation(key, 1)),
+            HConstants.LATEST_TIMESTAMP, seqValues, sqlExceptions);
+        if (sqlExceptions[0] != null) {
+            throw sqlExceptions[0];
+        }
+        return seqValues[0];
     }
 
     public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes, byte[] schemaName, byte[] tableName)
