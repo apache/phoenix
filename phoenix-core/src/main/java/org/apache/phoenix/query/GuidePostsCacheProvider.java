@@ -21,30 +21,30 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.PhoenixNonRetryableRuntimeException;
+import org.apache.phoenix.util.InstanceResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class QueryServicesHelper {
+public class GuidePostsCacheProvider {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(QueryServicesHelper.class);
-
-    // Singleton protected by synchronized method
-    static GuidePostsCacheFactory guidePostsCacheFactory = null;
+    private static final Logger LOGGER = LoggerFactory.getLogger(GuidePostsCacheProvider.class);
 
     @VisibleForTesting
-    synchronized GuidePostsCacheFactory loadAndGetGuidePostsCacheFactory(String classString) {
+    GuidePostsCacheFactory loadAndGetGuidePostsCacheFactory(String classString) {
         Preconditions.checkNotNull(classString);
+        GuidePostsCacheFactory guidePostsCacheFactory = null;
+
         if (guidePostsCacheFactory == null) {
             try {
                 Class clazz = ClassLoader.getSystemClassLoader().loadClass(classString);
-                Object o = clazz.newInstance();
+                Object o = InstanceResolver.getSingleton(clazz,null);
                 if (!(o instanceof GuidePostsCacheFactory)) {
                     String msg = String.format("Class %s not an instance of GuidePostsCacheFactory", classString);
                     LOGGER.error(msg);
                     throw new PhoenixNonRetryableRuntimeException(msg);
                 }
                 guidePostsCacheFactory = (GuidePostsCacheFactory)o;
-            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+            } catch (ClassNotFoundException e) {
                 LOGGER.error(String.format("Could not load/instantiate class %s", classString), e);
                 throw new PhoenixNonRetryableRuntimeException(e);
             }
@@ -52,17 +52,12 @@ public class QueryServicesHelper {
         return guidePostsCacheFactory;
     }
 
-    public GuidePostsCache getGuidePostsCache(String classStr, ConnectionQueryServices queryServices, Configuration config) {
+    public GuidePostsCacheWrapper getGuidePostsCache(String classStr, ConnectionQueryServices queryServices, Configuration config) {
         GuidePostsCacheFactory
                 guidePostCacheFactory = loadAndGetGuidePostsCacheFactory(classStr);
         GuidePostsCache
                 guidePostsCache =
                 guidePostCacheFactory.getGuidePostsCacheInterface(queryServices, config);
-        return guidePostsCache;
-    }
-
-    @VisibleForTesting
-    synchronized static void initialize() {
-        guidePostsCacheFactory = null;
+        return new GuidePostsCacheWrapper(guidePostsCache);
     }
 }

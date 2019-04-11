@@ -32,7 +32,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class QueryServicesHelperTest {
+public class GuidePostsCacheProviderTest {
 
     static GuidePostsCache testCache = null;
 
@@ -85,12 +85,11 @@ public class QueryServicesHelperTest {
         }
     }
 
-    private QueryServicesHelper helper;
+    private GuidePostsCacheProvider helper;
 
     @Before public void init(){
         TestGuidePostsCacheFactory.count = 0;
-        QueryServicesHelper.initialize();
-        helper = new QueryServicesHelper();
+        helper = new GuidePostsCacheProvider();
     }
 
 
@@ -190,16 +189,16 @@ public class QueryServicesHelperTest {
     }
 
     @Test
-    public void getGuidePostsCache(){
+    public void getGuidePostsCacheWrapper(){
         testCache = Mockito.mock(GuidePostsCache.class);
         ConnectionQueryServices mockQueryServices = Mockito.mock(ConnectionQueryServices.class);
         Configuration mockConfiguration = Mockito.mock(Configuration.class);
-        GuidePostsCache
+        GuidePostsCacheWrapper
                 value =
                 helper.getGuidePostsCache(TestGuidePostsCacheFactory.class.getTypeName(),
                         mockQueryServices, mockConfiguration);
-        assertEquals(testCache,value);
-
+        value.invalidateAll();
+        Mockito.verify(testCache,Mockito.atLeastOnce()).invalidateAll();
     }
 
 }

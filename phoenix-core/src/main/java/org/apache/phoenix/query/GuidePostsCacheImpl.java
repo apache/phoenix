@@ -16,24 +16,17 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
-
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalCause;
@@ -48,11 +41,10 @@ import com.google.common.cache.Weigher;
 public class GuidePostsCacheImpl implements GuidePostsCache {
     private static final Logger logger = LoggerFactory.getLogger(GuidePostsCacheImpl.class);
 
-    private final ConnectionQueryServices queryServices;
     private final LoadingCache<GuidePostsKey, GuidePostsInfo> cache;
 
-    public GuidePostsCacheImpl(ConnectionQueryServices queryServices, Configuration config) {
-        this.queryServices = Objects.requireNonNull(queryServices);
+    public GuidePostsCacheImpl(PhoenixStatsCacheLoader cacheLoader, Configuration config) {
+        Preconditions.checkNotNull(cacheLoader);
 
         // Number of millis to expire cache values after write
         final long statsUpdateFrequency = config.getLong(
@@ -64,10 +56,7 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
 
-        final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
 
-        PhoenixStatsCacheLoader cacheLoader = new PhoenixStatsCacheLoader(
-                isStatsEnabled ? new StatsLoaderImpl() : new EmptyStatsLoader(), config);
 
         cache = CacheBuilder.newBuilder()
                 // Refresh entries a given amount of time after they were written
@@ -84,27 +73,6 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
                 .removalListener(new PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries need to be refreshed
                 .build(cacheLoader);
-    }
-
-    /**
-     * {@link PhoenixStatsLoader} implementation for the Stats Loader.
-     * Empty stats loader if stats are disabled
-     */
-    protected class EmptyStatsLoader implements PhoenixStatsLoader {
-        @Override
-        public boolean needsLoad() {
-            return false;
-        }
-
-        @Override
-        public GuidePostsInfo loadStats(GuidePostsKey statsKey) throws Exception {
-            return GuidePostsInfo.NO_GUIDEPOST;
-        }
-
-        @Override
-        public GuidePostsInfo loadStats(GuidePostsKey statsKey, GuidePostsInfo prevGuidepostInfo) throws Exception {
-            return GuidePostsInfo.NO_GUIDEPOST;
-        }
     }
 
     /**
@@ -154,41 +122,6 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
     @Override
     public void invalidateAll() {
         getCache().invalidateAll();
-    }
-
-    /**
-     * Removes all mappings where the {@link org.apache.phoenix.schema.stats.GuidePostsKey#getPhysicalName()}
-     * equals physicalName. Because all keys in the map must be iterated, this method should be avoided.
-     * @param physicalName
-     */
-    @Override
-    public void invalidateAll(byte[] physicalName) {
-        for (GuidePostsKey key : getCache().asMap().keySet()) {
-            if (Bytes.compareTo(key.getPhysicalName(), physicalName) == 0) {
-                invalidate(key);
-            }
-        }
-    }
-
-    @Override
-    public void invalidateAll(TableDescriptor htableDesc) {
-        byte[] tableName = htableDesc.getTableName().getName();
-        for (byte[] fam : htableDesc.getColumnFamilyNames()) {
-            invalidate(new GuidePostsKey(tableName, fam));
-        }
-    }
-
-    @Override
-    public void invalidateAll(PTable table) {
-        byte[] physicalName = table.getPhysicalName().getBytes();
-        List<PColumnFamily> families = table.getColumnFamilies();
-        if (families.isEmpty()) {
-            invalidate(new GuidePostsKey(physicalName, SchemaUtil.getEmptyColumnFamily(table)));
-        } else {
-            for (PColumnFamily family : families) {
-                invalidate(new GuidePostsKey(physicalName, family.getName().getBytes()));
-            }
-        }
     }
 
     /**

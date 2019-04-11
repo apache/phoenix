@@ -110,7 +110,8 @@ import com.google.common.collect.Maps;
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
-    private static final QueryServicesHelper queryServicesHelper = new QueryServicesHelper();
+    private static final GuidePostsCacheProvider
+            GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     private final ReadOnlyProps props;
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
@@ -119,7 +120,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
-    private final GuidePostsCache guidePostsCache;
+    private final GuidePostsCacheWrapper guidePostsCache;
     private final Configuration config;
 
     private User user;
@@ -153,7 +154,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
 
-        this.guidePostsCache = queryServicesHelper.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
+        this.guidePostsCache = GUIDE_POSTS_CACHE_PROVIDER.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
                 QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), this, config);
     }
 

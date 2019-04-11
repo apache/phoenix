@@ -32,9 +32,4 @@ public interface GuidePostsCache {
 
     void invalidateAll();
 
-    void invalidateAll(byte[] physicalName);
-
-    void invalidateAll(TableDescriptor htableDesc);
-
-    void invalidateAll(PTable table);
 }

@@ -18,8 +18,13 @@
 package org.apache.phoenix.query;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
 
 public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
 
@@ -27,6 +32,33 @@ public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
 
     @Override public GuidePostsCache getGuidePostsCacheInterface(ConnectionQueryServices queryServices, Configuration config) {
         LOGGER.debug("DefaultGuidePostsCacheFactory guide post cache construction.");
-        return new GuidePostsCacheImpl(queryServices, config);
+
+        final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
+
+        PhoenixStatsCacheLoader cacheLoader = new PhoenixStatsCacheLoader(
+                isStatsEnabled ? new StatsLoaderImpl(queryServices) : new EmptyStatsLoader(), config);
+
+        return new GuidePostsCacheImpl(cacheLoader, config);
+    }
+
+    /**
+     * {@link PhoenixStatsLoader} implementation for the Stats Loader.
+     * Empty stats loader if stats are disabled
+     */
+    static class EmptyStatsLoader implements PhoenixStatsLoader {
+        @Override
+        public boolean needsLoad() {
+            return false;
+        }
+
+        @Override
+        public GuidePostsInfo loadStats(GuidePostsKey statsKey) throws Exception {
+            return GuidePostsInfo.NO_GUIDEPOST;
+        }
+
+        @Override
+        public GuidePostsInfo loadStats(GuidePostsKey statsKey, GuidePostsInfo prevGuidepostInfo) throws Exception {
+            return GuidePostsInfo.NO_GUIDEPOST;
+        }
     }
 }

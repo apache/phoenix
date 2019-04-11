@@ -22,6 +22,12 @@ class StatsLoaderImpl implements PhoenixStatsLoader {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GuidePostsCacheImpl.class);
 
+    private final ConnectionQueryServices queryServices;
+
+    public StatsLoaderImpl(ConnectionQueryServices queryServices){
+        this.queryServices = queryServices;
+    }
+
     @Override
     public boolean needsLoad() {
         // For now, whenever it's called, we try to load stats from stats table
