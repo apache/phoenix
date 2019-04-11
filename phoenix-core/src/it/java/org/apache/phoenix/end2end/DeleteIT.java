@@ -791,10 +791,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_MUTATIONS, allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
-            //Statement stmt = conn.createStatement();
-			PreparedStatement preStmt = conn.prepareStatement("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + ? + ",'value')");  
-            for (int i = 0; i < numRecords ; i++) {
-                //stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+            String command = "UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + ? + ",'value')"
+			PreparedStatement preStmt = conn.prepareStatement(command);  
+            for (int i = 0; i < numRecords ; i++) {                
 				preStmt.setBigDecimal(1, new BigDecimal(i));
 				preStmt.executeUpdate();
             }
