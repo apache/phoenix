@@ -491,8 +491,14 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             } catch (IOException e) {
                 SQLException inferredE = ServerUtil.parseLocalOrRemoteServerException(e);
                 if (inferredE == null || inferredE.getErrorCode() != SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
-                    // if it's not an index write exception, throw exception, to be handled normally in caller's try-catch
-                    throw e;
+                    // If this call is from phoenix client, we also need to check if SQLException
+                    // error is INDEX_METADATA_NOT_FOUND or not
+                    // if it's not an INDEX_METADATA_NOT_FOUND, throw exception,
+                    // to be handled normally in caller's try-catch
+                    if (inferredE.getErrorCode() != SQLExceptionCode.INDEX_METADATA_NOT_FOUND
+                            .getErrorCode()) {
+                        throw e;
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
