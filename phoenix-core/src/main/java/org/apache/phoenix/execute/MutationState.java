@@ -987,6 +987,9 @@ public class MutationState implements SQLCloseable {
                             if (shouldRetryIndexedMutation) {
                                 // if there was an index write failure, retry the mutation in a loop
                                 final Table finalHTable = hTable;
+                                final ImmutableBytesWritable finalindexMetaDataPtr =
+                                        indexMetaDataPtr;
+                                final PTable finalPTable = table;
                                 PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
                                     @Override
                                     public void doMutation() throws IOException {
@@ -995,12 +998,37 @@ public class MutationState implements SQLCloseable {
                                         } catch (InterruptedException e) {
                                             Thread.currentThread().interrupt();
                                             throw new IOException(e);
+                                        } catch (IOException e) {
+                                            e = updateTableRegionCacheIfNecessary(e);
+                                            throw e;
                                         }
                                     }
 
                                     @Override
                                     public List<Mutation> getMutationList() {
                                         return mutationBatch;
+                                    }
+
+                                    private IOException
+                                            updateTableRegionCacheIfNecessary(IOException ioe) {
+                                        SQLException sqlE =
+                                                ServerUtil.parseLocalOrRemoteServerException(ioe);
+                                        if (sqlE != null
+                                                && sqlE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
+                                                        .getErrorCode()) {
+                                            try {
+                                                connection.getQueryServices().clearTableRegionCache(
+                                                    finalHTable.getName().getName());
+                                                IndexMetaDataCacheClient.setMetaDataOnMutations(
+                                                    connection, finalPTable, mutationBatch,
+                                                    finalindexMetaDataPtr);
+                                            } catch (SQLException e) {
+                                                return ServerUtil.createIOException(
+                                                    "Exception during updating index meta data cache",
+                                                    ioe);
+                                            }
+                                        }
+                                        return ioe;
                                     }
                                 }, iwe, connection, connection.getQueryServices().getProps());
                             } else {
