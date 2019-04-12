@@ -38,7 +38,7 @@ public class DropTableIT extends ParallelStatsDisabledIT {
         String dropTable = String.format("DROP TABLE IF EXISTS %s", tableName);
         PreparedStatement pstmt = conn.prepareStatement(dropTable);
         for (int i = 0; i < 5; i++) {
-          assertFalse(stmt.execute());
+          assertFalse(pstmt.execute());
         }
       }
     }

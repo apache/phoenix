@@ -168,7 +168,6 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
     private static void mutateRandomly(Connection conn, String tableName, int maxOrgId) {
         try {
 
-            Statement stmt = conn.createStatement();
             String sqlStr = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)"; 
             PreparedStatement stmt = conn.prepareStatement(sqlStr);
             for (int i = 0; i < 10000; i++) {

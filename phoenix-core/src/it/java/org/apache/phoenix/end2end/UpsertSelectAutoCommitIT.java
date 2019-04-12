@@ -241,7 +241,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(
                 "UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "+ tableName + "_seq, 1)");
         conn.commit();
-        PreparedStatement stmt = conn.parareStatement("UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " SELECT NEXT VALUE FOR "+ tableName + "_seq, val FROM " + tableName);
         for (int i=0; i<6; i++) {
             int upsertCount = stmt.executeUpdate();
             conn.commit();

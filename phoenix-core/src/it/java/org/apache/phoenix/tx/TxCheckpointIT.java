@@ -107,9 +107,9 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
         stmt.execute("UPSERT INTO " + fullTableName + " VALUES (NEXT VALUE FOR " + seqName + ",1)");
         String sqlStr = "UPSERT INTO " + fullTableName + " SELECT NEXT VALUE FOR " + seqName + ", val FROM " + fullTableName;
-        PreparedStatement stmt = conn.prepareStatement(sqlStr);
+        PreparedStatement pstmt = conn.prepareStatement(sqlStr);
         for (int i=0; i<6; i++) {
-            int upsertCount = stmt.executeUpdate();
+            int upsertCount = pstmt.executeUpdate();
             assertEquals((int)Math.pow(2, i), upsertCount);
         }
         conn.close();
