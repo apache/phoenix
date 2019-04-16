@@ -22,7 +22,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
-import org.apache.hadoop.hbase.util.Base64;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 
@@ -201,7 +201,7 @@ public class TenantIdByteConversionTest {
 
         //Binary
         byte[] bytes = new byte[] {0, 1, 2, 3};
-        String byteString = new String( Base64.encodeBytes(bytes) );
+        String byteString = new String( Base64.getEncoder().encode(bytes) );
         testCases.add(new Object[] {
                 getDataSchema(PBinary.INSTANCE, SortOrder.getDefault()),
                 false,

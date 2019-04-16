@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.0.0-HBase-2.0-cdh6.0.1</version>
+    <version>5.0.0-HBase-2.1.0-cdh6.1.1</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Server</name>
