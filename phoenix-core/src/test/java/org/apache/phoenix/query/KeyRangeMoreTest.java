@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
@@ -168,6 +169,19 @@ public class KeyRangeMoreTest extends TestCase {
             }
             listIntersectAndAssert(rowKeyRanges1,rowKeyRanges2,expected);
         }
+    }
+
+    @Test
+    public void testHBaseConstants() {
+        byte[] key = {0,7};
+        KeyRange key1 = KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY,key);
+        assertTrue(key1.lowerUnbound());
+
+        KeyRange key2 = KeyRange.getKeyRange(key,HConstants.EMPTY_BYTE_ARRAY);
+        assertTrue(key2.upperUnbound());
+
+        KeyRange key3 = KeyRange.getKeyRange(HConstants.EMPTY_BYTE_ARRAY,HConstants.EMPTY_BYTE_ARRAY);
+        assertEquals(KeyRange.EVERYTHING_RANGE, key3);
     }
 
     @Test

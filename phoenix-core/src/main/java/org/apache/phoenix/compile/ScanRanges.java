@@ -694,4 +694,127 @@ public class ScanRanges {
         return rowTimestampRange;
     }
 
+    /**
+     * Produces the list of KeyRanges representing the fully qualified row key by calling into ScanUtil.setKey
+     * repeatedly for every combination of KeyRanges in the ranges field. The bounds will be set according to the
+     * properties of the setKey method.
+     * 
+     * @return list of KeyRanges representing the fully qualified rowkey, coalesced
+     */
+    public List<KeyRange> getRowKeyRanges() {
+        // If its scanRanges are everything or nothing, then we short circuit and leave
+        // as schema is not filled in
+        if (isEverything()) { return Lists.newArrayList(KeyRange.EVERYTHING_RANGE); }
+        if (isDegenerate()) { return Lists.newArrayList(KeyRange.EMPTY_RANGE); }
+
+        List<KeyRange> queryRowKeyRanges = Lists.newArrayListWithExpectedSize(this.ranges.size());
+
+
+        // If scanRanges.ranges has no information then should be in the scanRanges.scanRange
+        if (ranges.size() == 0) {
+            queryRowKeyRanges.add(this.getScanRange());
+        } else { // We have a composite key need the row key from the combination
+            // make a copy of ranges as we may add items to fully qualify our rowkey
+            List<List<KeyRange>> newRanges = new ArrayList<>(this.getRanges());
+
+            int[] slotSpans = this.getSlotSpans();
+
+            // If the ranges here do not qualify all the keys then those keys are unbound
+            if (newRanges.size() < schema.getMaxFields()) {
+                int originalSize = newRanges.size();
+                for (int i = 0; i < schema.getMaxFields() - originalSize; i++) {
+                    newRanges.add(Lists.newArrayList(KeyRange.EVERYTHING_RANGE));
+                }
+                slotSpans = new int[schema.getMaxFields()];
+                System.arraycopy(this.getSlotSpans(), 0, slotSpans, 0, this.getSlotSpans().length);
+            }
+
+            // Product to bound our counting loop for safety
+            int rangesPermutationsCount = 1;
+            for (int i = 0; i < newRanges.size(); i++) {
+                rangesPermutationsCount *= newRanges.get(i).size();
+            }
+
+            // Have to construct the intersection
+            List<KeyRange> expandedRanges = Lists.newArrayListWithCapacity(rangesPermutationsCount);
+            int[] positions = new int[slotSpans.length];
+
+            int maxKeyLength = SchemaUtil.getMaxKeyLength(schema, newRanges);
+            byte[] keyBuffer = new byte[maxKeyLength];
+
+            // Counting Loop
+            int count = 0;
+            while (count < rangesPermutationsCount) {
+                byte[] lowerBound;
+                byte[] upperBound;
+
+                // Note ScanUtil.setKey internally handles the upper/lower exclusive from a Scan
+                // point of view. It would be good to break it out in the future for rowkey
+                // construction vs ScanKey construction To handle differences between
+                // hbase 2 and hbase 1 scan boundaries
+                int result = ScanUtil.setKey(schema, newRanges, slotSpans, positions, KeyRange.Bound.LOWER, keyBuffer,
+                        0, 0, slotSpans.length);
+
+                if (result < 0) {
+                    // unbound
+                    lowerBound = KeyRange.UNBOUND;
+                } else {
+                    lowerBound = Arrays.copyOf(keyBuffer, result);
+                }
+
+                result = ScanUtil.setKey(schema, newRanges, slotSpans, positions, KeyRange.Bound.UPPER, keyBuffer, 0, 0,
+                        slotSpans.length);
+
+                if (result < 0) {
+                    // unbound
+                    upperBound = KeyRange.UNBOUND;
+                } else {
+                    upperBound = Arrays.copyOf(keyBuffer, result);
+                }
+
+
+                /*
+                 * This is already considered inside of ScanUtil.setKey we may want to refactor to pull these out.
+                 * range/single    boundary       bound      increment
+                 *  range          inclusive      lower         no
+                 *  range          inclusive      upper         yes, at the end if occurs at any slots.
+                 *  range          exclusive      lower         yes
+                 *  range          exclusive      upper         no
+                 *  single         inclusive      lower         no
+                 *  single         inclusive      upper         yes, at the end if it is the last slots.
+                 */
+
+                boolean lowerInclusive = true;
+                // Don't send a null range, send an empty range.
+                if (lowerBound.length == 0 && upperBound.length == 0) {
+                    lowerInclusive = false;
+                }
+
+                KeyRange keyRange = KeyRange.getKeyRange(lowerBound, lowerInclusive, upperBound, false);
+                expandedRanges.add(keyRange);
+
+                // update position
+                // This loops through all settings of each of the primary keys by counting from
+                // the trailing edge based on the number of settings of that key.
+                int i;
+                for (i = positions.length - 1; i >= 0; i--) {
+                    if (positions[i] < newRanges.get(i).size() - 1) {
+                        positions[i]++;
+                        break;
+                    } else {
+                        positions[i] = 0;
+                    }
+                }
+
+                if (i < 0) {
+                    break;
+                }
+                count++;
+            }
+            queryRowKeyRanges.addAll(expandedRanges);
+        }
+
+        return queryRowKeyRanges;
+    }
+
 }
