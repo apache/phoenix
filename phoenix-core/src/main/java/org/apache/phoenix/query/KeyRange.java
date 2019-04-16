@@ -519,16 +519,44 @@ public class KeyRange implements Writable {
         return Lists.transform(keys, POINT);
     }
 
-    public static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
-        int result = Boolean.compare(rowKeyRange1.upperUnbound(), rowKeyRange2.upperUnbound());
+    /**
+     * Compare the upper ranges of this key range and the given key range. The latter is represented
+     * by (binary array, offset, length, whether it's inclusive or not)
+     *
+     * @param b   binary array
+     * @param o   offset
+     * @param l   length
+     * @param isInclusive is upper range represented in (b, o, l) inclusive or not
+     * @return
+     *        < 0, the first key range's upper range < the second key range's upper range
+     *        = 0, the first key range's upper range = the second key range's upper range
+     *        > 0, the first key range's upper range > the second key range's upper range
+     */
+    public int compareUpperRange(byte[] b, int o, int l, boolean isInclusive) {
+        int result = Boolean.compare(upperUnbound(), b == KeyRange.UNBOUND);
         if (result != 0) {
             return result;
         }
-        result = Bytes.BYTES_COMPARATOR.compare(rowKeyRange1.getUpperRange(), rowKeyRange2.getUpperRange());
+        result = Bytes.BYTES_RAWCOMPARATOR.compare(upperRange, 0, upperRange.length, b, o, l);
         if (result != 0) {
             return result;
         }
-        return Boolean.compare(rowKeyRange1.isUpperInclusive(), rowKeyRange2.isUpperInclusive());
+        return Boolean.compare(isUpperInclusive(), isInclusive);
+    }
+
+    /**
+     * Compare the upper ranges of the two given key ranges
+     *
+     * @param rowKeyRange1
+     * @param rowKeyRange2
+     * @return
+     *        < 0, the first key range's upper range < the second key range's upper range
+     *        = 0, the first key range's upper range = the second key range's upper range
+     *        > 0, the first key range's upper range > the second key range's upper range
+     */
+    public static int compareUpperRange(KeyRange rowKeyRange1, KeyRange rowKeyRange2) {
+        return rowKeyRange1.compareUpperRange(rowKeyRange2.getUpperRange(), 0,
+                rowKeyRange2.getUpperRange().length, rowKeyRange2.isUpperInclusive());
     }
 
     public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {

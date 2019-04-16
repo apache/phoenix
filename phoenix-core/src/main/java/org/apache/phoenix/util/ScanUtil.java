@@ -953,4 +953,88 @@ public class ScanUtil {
     public static void setClientVersion(Scan scan, int version) {
         scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
     }
+
+    /**
+     * Split the key ranges into multiple groups along the given boundaries
+     *
+     * @param boundaries
+     *     The boundaries is a byte[] list like "b0, b1, ..., bn" which forms
+     *     space (UNBOUND, b0), [b0, b1), ..., [bn, UNBOUND). Every boundary
+     *     can't be null or empty.
+     * @param keyRanges
+     *     The key ranges to split along the given boundaries. Coalesced.
+     * @return
+     *     List<Pair<RangeIndex, Query Key Range List in the range>>.
+     *     N boundaries split the key space into N+1 ranges. Here each pair
+     *     is the index of of such a range and the query key ranges belongs
+     *     to that range.
+     */
+    public static List<Pair<Integer, List<KeyRange>>> splitKeyRangesByBoundaries(
+            List<byte[]> boundaries, List<KeyRange> keyRanges) {
+        if (boundaries == null || keyRanges == null || keyRanges.size() == 0) {
+            return null;
+        }
+
+        int countOfBoundaries = boundaries.size();
+        int countOfKeyRanges = keyRanges.size();
+        int indexOfBoundary = 0;
+        int indexOfKeyRange = 0;
+
+        List<Pair<Integer, List<KeyRange>>> keyRangesGrouped = Lists.newArrayListWithExpectedSize(1);
+        List<KeyRange> keyRangesOfGroup = Lists.<KeyRange>newArrayList();
+
+        KeyRange currentKeyRange = null;
+        while (indexOfKeyRange < countOfKeyRanges) {
+            if (currentKeyRange == null) {
+                currentKeyRange = keyRanges.get(indexOfKeyRange);
+            }
+
+            if (indexOfBoundary >= countOfBoundaries) {
+                keyRangesOfGroup.add(currentKeyRange);
+                currentKeyRange = null;
+                // Move to next key range
+                indexOfKeyRange++;
+                continue;
+            }
+
+            byte[] boundary = boundaries.get(indexOfBoundary);
+            assert (boundary != null && boundary.length > 0);
+            int lowerToUpper = currentKeyRange.compareLowerToUpperBound(
+                    boundary, 0, boundary.length, false, ASC_FIXED_WIDTH_COMPARATOR);
+            if (lowerToUpper < 0) {
+                int upperToUpper = currentKeyRange.compareUpperRange(boundary, 0, boundary.length, false);
+                if (upperToUpper >= 0) {
+                    keyRangesOfGroup.add(KeyRange.getKeyRange(
+                            currentKeyRange.getLowerRange(), currentKeyRange.isLowerInclusive(), boundary, false));
+                    if (upperToUpper > 0) {
+                        currentKeyRange = KeyRange.getKeyRange(boundary, true,
+                                currentKeyRange.getUpperRange(), currentKeyRange.isUpperInclusive());
+                    } else {
+                        currentKeyRange = null;
+                        indexOfKeyRange++;
+                    }
+                } else {
+                    keyRangesOfGroup.add(currentKeyRange);
+                    currentKeyRange = null;
+                    // Move to next key range
+                    indexOfKeyRange++;
+                    continue;
+                }
+            }
+
+            if (keyRangesOfGroup.size() > 0) {
+                keyRangesGrouped.add(new Pair<Integer, List<KeyRange>>(indexOfBoundary, keyRangesOfGroup));
+                keyRangesOfGroup = Lists.<KeyRange>newArrayList();
+            }
+
+            // Move to next boundary
+            indexOfBoundary++;
+        }
+
+        if (keyRangesOfGroup.size() > 0) {
+            keyRangesGrouped.add(new Pair<Integer, List<KeyRange>>(indexOfBoundary, keyRangesOfGroup));
+        }
+
+        return keyRangesGrouped;
+    }
 }
