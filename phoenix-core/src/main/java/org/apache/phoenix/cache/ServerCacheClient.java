@@ -278,9 +278,10 @@ public class ServerCacheClient {
                 // Keep track of servers we've sent to and only send once
                 byte[] regionStartKey = entry.getRegion().getStartKey();
                 byte[] regionEndKey = entry.getRegion().getEndKey();
-                if ( ! servers.contains(entry) && 
-                        keyRanges.intersectRegion(regionStartKey, regionEndKey,
-                                cacheUsingTable.getIndexType() == IndexType.LOCAL)) {
+                if (!servers.contains(entry) &&
+                        (usePersistentCache ||
+                                keyRanges.intersectRegion(regionStartKey, regionEndKey,
+                                        cacheUsingTable.getIndexType() == IndexType.LOCAL))) {
                     // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
@@ -310,7 +311,7 @@ public class ServerCacheClient {
                         }
                     }));
                 } else {
-                    if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry", connection));}
+                    if (LOG.isTraceEnabled()) {LOG.trace(addCustomAnnotations("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry", connection));}
                 }
             }
             
@@ -349,7 +350,7 @@ public class ServerCacheClient {
                 }
             }
         }
-        if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Cache " + cacheId + " successfully added to servers.", connection));}
+        if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Cache " + Hex.encodeHexString(cacheId) + " successfully added to servers.", connection));}
         return hashCacheSpec;
     }
     
@@ -376,7 +377,7 @@ public class ServerCacheClient {
              * to.
              */
             if (LOG.isDebugEnabled()) {
-                LOG.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection));
+                LOG.debug(addCustomAnnotations("Removing Cache " + Hex.encodeHexString(cacheId) + " from servers.", connection));
             }
             for (HRegionLocation entry : locations) {
              // Call once per server
