@@ -30,35 +30,11 @@ public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultGuidePostsCacheFactory.class);
 
-    @Override public GuidePostsCache getGuidePostsCacheInterface(ConnectionQueryServices queryServices, Configuration config) {
+    @Override public GuidePostsCache getGuidePostsCache(PhoenixStatsLoader phoenixStatsLoader, Configuration config) {
         LOGGER.debug("DefaultGuidePostsCacheFactory guide post cache construction.");
-
-        final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
-
-        PhoenixStatsCacheLoader cacheLoader = new PhoenixStatsCacheLoader(
-                isStatsEnabled ? new StatsLoaderImpl(queryServices) : new EmptyStatsLoader(), config);
+        PhoenixStatsCacheLoader cacheLoader = new PhoenixStatsCacheLoader(phoenixStatsLoader, config);
 
         return new GuidePostsCacheImpl(cacheLoader, config);
     }
-
-    /**
-     * {@link PhoenixStatsLoader} implementation for the Stats Loader.
-     * Empty stats loader if stats are disabled
-     */
-    static class EmptyStatsLoader implements PhoenixStatsLoader {
-        @Override
-        public boolean needsLoad() {
-            return false;
-        }
-
-        @Override
-        public GuidePostsInfo loadStats(GuidePostsKey statsKey) throws Exception {
-            return GuidePostsInfo.NO_GUIDEPOST;
-        }
-
-        @Override
-        public GuidePostsInfo loadStats(GuidePostsKey statsKey, GuidePostsInfo prevGuidepostInfo) throws Exception {
-            return GuidePostsInfo.NO_GUIDEPOST;
-        }
-    }
 }
+

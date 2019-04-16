@@ -56,8 +56,6 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
 
-
-
         cache = CacheBuilder.newBuilder()
                 // Refresh entries a given amount of time after they were written
                 .refreshAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)

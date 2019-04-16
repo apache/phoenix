@@ -30,7 +30,5 @@ public interface GuidePostsCacheFactory {
      *
      * @return GuidePostsCache interface
      */
-    GuidePostsCache getGuidePostsCacheInterface(ConnectionQueryServices queryServices, Configuration config);
-
-
+    GuidePostsCache getGuidePostsCache(PhoenixStatsLoader phoenixStatsLoader, Configuration config);
 }

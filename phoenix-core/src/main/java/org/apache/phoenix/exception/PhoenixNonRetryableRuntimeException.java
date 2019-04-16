@@ -18,9 +18,7 @@
 package org.apache.phoenix.exception;
 
 public class PhoenixNonRetryableRuntimeException extends RuntimeException {
-    public PhoenixNonRetryableRuntimeException() {
-        super();
-    }
+    public PhoenixNonRetryableRuntimeException() { }
 
     public PhoenixNonRetryableRuntimeException(String msg) {
         super(msg);

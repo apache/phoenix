@@ -25,25 +25,43 @@ import org.apache.phoenix.util.InstanceResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
+import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
+
 public class GuidePostsCacheProvider {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GuidePostsCacheProvider.class);
 
+    GuidePostsCacheFactory guidePostsCacheFactory = null;
+
     @VisibleForTesting
     GuidePostsCacheFactory loadAndGetGuidePostsCacheFactory(String classString) {
         Preconditions.checkNotNull(classString);
-        GuidePostsCacheFactory guidePostsCacheFactory = null;
-
         if (guidePostsCacheFactory == null) {
             try {
+
                 Class clazz = ClassLoader.getSystemClassLoader().loadClass(classString);
-                Object o = InstanceResolver.getSingleton(clazz,null);
-                if (!(o instanceof GuidePostsCacheFactory)) {
-                    String msg = String.format("Class %s not an instance of GuidePostsCacheFactory", classString);
+                if(!GuidePostsCacheFactory.class.isAssignableFrom(clazz)){
+                    String msg = String.format("Could not load/instantiate class %s is not an instance of GuidePostsCacheFactory", classString);
                     LOGGER.error(msg);
                     throw new PhoenixNonRetryableRuntimeException(msg);
                 }
-                guidePostsCacheFactory = (GuidePostsCacheFactory)o;
+
+                List<GuidePostsCacheFactory>
+                        factoryList = InstanceResolver.get(GuidePostsCacheFactory.class,null);
+                for(GuidePostsCacheFactory factory : factoryList){
+                    if (clazz.isInstance(factory)) {
+                        guidePostsCacheFactory = factory;
+                        LOGGER.info(String.format("Sucessfully loaded class for GuidePostsCacheFactor of type: %s",classString));
+                    }
+                }
+                if(guidePostsCacheFactory == null){
+                    String msg = String.format("Could not load/instantiate class %s", classString);
+                    LOGGER.error(msg);
+                    throw new PhoenixNonRetryableRuntimeException(msg);
+                }
             } catch (ClassNotFoundException e) {
                 LOGGER.error(String.format("Could not load/instantiate class %s", classString), e);
                 throw new PhoenixNonRetryableRuntimeException(e);
@@ -53,11 +71,14 @@ public class GuidePostsCacheProvider {
     }
 
     public GuidePostsCacheWrapper getGuidePostsCache(String classStr, ConnectionQueryServices queryServices, Configuration config) {
+        final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
+        PhoenixStatsLoader phoenixStatsLoader = isStatsEnabled ? new StatsLoaderImpl(queryServices) : new EmptyStatsLoader();
+
         GuidePostsCacheFactory
                 guidePostCacheFactory = loadAndGetGuidePostsCacheFactory(classStr);
         GuidePostsCache
                 guidePostsCache =
-                guidePostCacheFactory.getGuidePostsCacheInterface(queryServices, config);
+                guidePostCacheFactory.getGuidePostsCache(phoenixStatsLoader, config);
         return new GuidePostsCacheWrapper(guidePostsCache);
     }
 }
