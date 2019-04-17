@@ -27,7 +27,9 @@
       <directory>${project.basedir}/../phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-*-client.jar</include>
+        <include>phoenix-client-${project.version}.jar</include>
+        <!-- deprecated jar name, which we now have a symlink for -->
+        <include>phoenix-${project.version}-client.jar</include>
       </includes>
     </fileSet>
     <fileSet>
