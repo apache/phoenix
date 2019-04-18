@@ -2169,7 +2169,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM || tableType == PTableType.VIEW) {
                 // Handle any child views that exist
                 TableViewFinder tableViewFinderResult = findChildViews(region, tenantId, table, clientVersion, !isCascade);
                 if (tableViewFinderResult.hasViews()) {
@@ -2191,7 +2191,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 acquireLock(region, viewKey, locks);
                                 MetaDataMutationResult result = doDropTable(viewKey, viewTenantId, viewSchemaName,
                                         viewName, null, PTableType.VIEW, rowsToDelete, invalidateList, locks,
-                                        tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
+                                        tableNamesToDelete, sharedTablesToDelete, true, clientVersion);
                                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { return result; }
                             }
                         }
