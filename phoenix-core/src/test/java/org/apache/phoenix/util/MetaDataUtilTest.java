@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -28,6 +30,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.ByteBufferUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -37,9 +40,13 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 
 import static org.apache.hadoop.hbase.HConstants.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
@@ -226,6 +233,48 @@ public class MetaDataUtilTest {
         Put put = new Put(ROW);
         KeyValueBuilder.addQuietly(put, builder, kv);
         return put;
+    }
+
+    @Test
+    public void testConditionallyAddTagsToPutCells( ) {
+        List<Tag> tags = Tag.asList(VIEW_MODIFIED_PROPERTY_BYTES, 0, VIEW_MODIFIED_PROPERTY_BYTES.length);
+        assertEquals(tags.size(), 1);
+        Tag expectedTag = tags.get(0);
+
+        String version = VersionInfo.getVersion();
+        KeyValueBuilder builder = KeyValueBuilder.get(version);
+        KeyValue kv = builder.buildPut(wrap(ROW), wrap(TABLE_FAMILY_BYTES), wrap(UPDATE_CACHE_FREQUENCY_BYTES), wrap(
+                PLong.INSTANCE.toBytes(0)));
+        Put put = new Put(ROW);
+        KeyValueBuilder.addQuietly(put, null, kv);
+
+        MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, UPDATE_CACHE_FREQUENCY_BYTES, PInteger.INSTANCE.toBytes(1), VIEW_MODIFIED_PROPERTY_BYTES);
+
+        Cell cell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+
+        // To check the cell tag whether view has modified this property
+        assertTrue(Bytes.compareTo(expectedTag.getBuffer(), concatTags(EMPTY_BYTE_ARRAY, cell)) == 0);
+        assertTrue(Bytes.contains(concatTags(EMPTY_BYTE_ARRAY, cell), expectedTag.getBuffer()));
+
+        // To check tag data can be correctly deserialized
+        byte[] tagsBytes = CellUtil.getTagArray(cell);
+        Iterator<Tag> tagIterator = CellUtil.tagsIterator(tagsBytes, 0, tagsBytes.length);
+        assertTrue(tagIterator.hasNext());
+        Tag actualTag = tagIterator.next();
+        assertTrue(Bytes.compareTo(actualTag.getBuffer(), actualTag.getTagOffset(), actualTag.getTagLength(),
+                expectedTag.getBuffer(), expectedTag.getTagOffset(), expectedTag.getTagLength()) == 0);
+        assertFalse(tagIterator.hasNext());
+    }
+
+    private static byte[] concatTags(byte[] tags, Cell cell) {
+        int cellTagsLen = cell.getTagsLength();
+        if (cellTagsLen == 0) {
+            return tags;
+        }
+        byte[] b = new byte[tags.length + cellTagsLen];
+        int pos = Bytes.putBytes(b, 0, tags, 0, tags.length);
+        Bytes.putBytes(b, pos, cell.getTagsArray(), cell.getTagsOffset(), cellTagsLen);
+        return b;
     }
 
 }
