@@ -803,9 +803,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
                 overAllQueryMetrics.startResultSetWatch();
             }
             currentRow = scanner.next();
-            if (currentRow == null) {
-                close();
-            }else{
+            if (currentRow != null) {
                 count++;
             }
             rowProjector.reset();
