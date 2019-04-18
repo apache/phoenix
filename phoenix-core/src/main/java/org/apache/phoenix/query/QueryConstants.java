@@ -161,7 +161,9 @@ public interface QueryConstants {
     public static final int NANOS_IN_SECOND = BigDecimal.valueOf(Math.pow(10, 9)).intValue();
     public static final int DIVERGED_VIEW_BASE_COLUMN_COUNT = -100;
     public static final int BASE_TABLE_BASE_COLUMN_COUNT = -1;
-    
+
+    // custom TagType
+    public static final byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
      * are reserved for special column qualifiers returned by Phoenix co-processors.
