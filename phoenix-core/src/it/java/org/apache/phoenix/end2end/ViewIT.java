@@ -428,7 +428,7 @@ public class ViewIT extends BaseViewIT {
         ddl = "CREATE LOCAL INDEX idx on " + fullViewName1 + "(v2)";
         conn.createStatement().execute(ddl);
         String fullViewName2 = SchemaUtil.getTableName(viewSchemaName, "V_" + generateUniqueName());
-        ddl = "CREATE VIEW " + fullViewName2 + "(v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 10";
+        ddl = "CREATE VIEW " + fullViewName2 + "(v3 VARCHAR) AS SELECT * FROM " + fullViewName1 + " WHERE k > 10";
         conn.createStatement().execute(ddl);
 
         validateCannotDropTableWithChildViewsWithoutCascade(conn, fullTableName);
