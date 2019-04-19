@@ -507,9 +507,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
-                if (lhsMaxLength != null && lhsMaxLength != rhsLiteral.length()) {
-                    return LiteralExpression.newConstant(false, rhs.getDeterminism());
-                }
                 if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
                   CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
                   if (pattern.equals(rhsLiteral)) {
