@@ -32,6 +32,7 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -467,5 +468,32 @@ public class DistinctCountIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         conn.close();
+    }
+
+    @Test
+    public void testDistinctCountLimitBug5217() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 integer not null , " +
+                    " pk2 integer not null, " +
+                    " v integer, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY (pk1,pk2))";
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+tableName+"(pk1,pk2,v) VALUES (1,1,1)");
+            conn.createStatement().execute("UPSERT INTO "+tableName+"(pk1,pk2,v) VALUES (2,2,2)");
+            conn.commit();
+
+            sql = "select count(distinct pk1) from " + tableName + " limit 1";
+            ResultSet rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{Long.valueOf(2L)}});
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
     }
 }

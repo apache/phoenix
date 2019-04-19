@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -262,19 +263,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
             }
-            int cols = plan.getGroupBy().getOrderPreservingColumnCount();
+            GroupBy groupBy = plan.getGroupBy();
+            int cols = groupBy.getOrderPreservingColumnCount();
             if (cols > 0 && keyOnlyFilter &&
                 !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
                 cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
-                plan.getGroupBy().isOrderPreserving() &&
-                (context.getAggregationManager().isEmpty() || plan.getGroupBy().isUngroupedAggregate())) {
-                
-                ScanUtil.andFilterAtEnd(scan,
-                        new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),
-                                cols));
-                if (plan.getLimit() != null) { // We can push the limit to the server
-                    ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
-                }
+                groupBy.isOrderPreserving() &&
+                (context.getAggregationManager().isEmpty() || groupBy.isUngroupedAggregate())) {
+
+                    ScanUtil.andFilterAtEnd(scan,
+                            new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),cols));
+                    if (!groupBy.isUngroupedAggregate() && plan.getLimit() != null) {
+                        // We can push the limit to the server,but for UngroupedAggregate
+                        // we can not push the limit.
+                        ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
+                    }
             }
             scan.setAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME, new byte[]{table.getEncodingScheme().getSerializedMetadataValue()});
             scan.setAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME, new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()});
