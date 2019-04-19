@@ -68,6 +68,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -1125,5 +1126,16 @@ public class TestUtil {
         } catch (IOException e) {
             return -1;
         }
+    }
+
+    public static boolean hasFilter(Scan scan, Class<? extends Filter> filterClass) {
+        Iterator<Filter> filterIter = ScanUtil.getFilterIterator(scan);
+        while(filterIter.hasNext()) {
+            Filter filter = filterIter.next();
+            if(filterClass.isInstance(filter)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
