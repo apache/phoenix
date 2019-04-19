@@ -77,7 +77,7 @@ import com.google.protobuf.RpcController;
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     private PhoenixMetaDataControllerEnvironment env;
-    private ArrayList<MasterObserver> accessControllers;
+    private volatile ArrayList<MasterObserver> accessControllers;
     private boolean accessCheckEnabled;
     private UserProvider userProvider;
     public static final Log LOG = LogFactory.getLog(PhoenixAccessController.class);
