@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -4956,6 +4957,30 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(queryPlan.getOrderBy() == (!desc ? OrderBy.REV_ROW_KEY_ORDER_BY : OrderBy.FWD_ROW_KEY_ORDER_BY));
         } finally {
             if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testDistinctCountLimitBug5217() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 integer not null , " +
+                    " pk2 integer not null, " +
+                    " v integer, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY (pk1,pk2))";
+            conn.createStatement().execute(sql);
+
+            sql = "select count(distinct pk1) from " + tableName + " limit 1";
+            QueryPlan plan =  TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = plan.getContext().getScan();
+            assertFalse(TestUtil.hasFilter(scan, PageFilter.class));
+        } finally {
+            if(conn!=null) {
                 conn.close();
             }
         }
