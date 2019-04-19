@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
@@ -65,6 +66,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -1066,5 +1068,16 @@ public class TestUtil {
             }
         }
         assertTrue(!rs.next());
+    }
+
+    public static boolean hasFilter(Scan scan, Class<? extends Filter> filterClass) {
+        Iterator<Filter> filterIter = ScanUtil.getFilterIterator(scan);
+        while(filterIter.hasNext()) {
+            Filter filter = filterIter.next();
+            if(filterClass.isInstance(filter)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
