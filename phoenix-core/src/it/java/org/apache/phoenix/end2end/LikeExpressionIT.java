@@ -430,4 +430,28 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         rs = select.executeQuery();
         assertFalse(rs.next());
     }
+    //associated to PHOENIX-5173 jira
+    @Test
+    public void testLikeExpressionWithoutWildcards() throws Exception {
+        String table = generateUniqueName();
+        final String createTable = "CREATE TABLE "
+                + table + " (ID BIGINT NOT NULL PRIMARY KEY, USER_NAME VARCHAR(255))";
+        final String upsertTable = "UPSERT INTO " + table + " VALUES(1, 'Some Name')";
+        String likeSelect = "SELECT * FROM " + table + " WHERE USER_NAME LIKE 'Some Name'";
+        String iLikeSelect = "SELECT * FROM " + table + " WHERE USER_NAME ILIKE 'soMe nAme'";
+
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute(createTable);
+            conn.createStatement().executeUpdate(upsertTable);
+            try(ResultSet rs = conn.createStatement().executeQuery(likeSelect)) {
+                assertTrue(rs.next());
+                assertFalse(rs.next());
+            }
+            try(ResultSet rs = conn.createStatement().executeQuery(iLikeSelect)) {
+                assertTrue(rs.next());
+                assertFalse(rs.next());
+            }
+        }
+    }
 }
