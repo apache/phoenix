@@ -90,4 +90,19 @@ public class UpdateStatisticsToolTest {
         assertEquals("hdfs://base-dir/tmp", tool.getRestoreDir().toString());
     }
 
+    @Test
+    public void testJobPriorityInput() {
+        UpdateStatisticsTool tool = new UpdateStatisticsTool();
+        tool.parseArgs(new String[] {"-t", "table1"});
+        assertEquals("NORMAL", tool.getJobPriority());
+
+        tool.parseArgs(new String[] {"-t", "table1", "-p", "0"});
+        assertEquals("VERY_HIGH", tool.getJobPriority());
+
+        tool.parseArgs(new String[] {"-t", "table1", "-p", "-1"});
+        assertEquals("NORMAL", tool.getJobPriority());
+
+        tool.parseArgs(new String[] {"-t", "table1", "-p", "DSAFDAS"});
+        assertEquals("NORMAL", tool.getJobPriority());
+    }
 }
