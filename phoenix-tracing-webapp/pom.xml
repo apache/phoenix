@@ -27,7 +27,7 @@
     <parent>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix</artifactId>
-      <version>4.14.1-cdh5.14.2</version>
+      <version>4.14.2-cdh5.14.4</version>
     </parent>
 
     <artifactId>phoenix-tracing-webapp</artifactId>
