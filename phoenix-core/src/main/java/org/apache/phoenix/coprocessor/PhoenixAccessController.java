@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
@@ -71,7 +72,7 @@ import com.google.protobuf.RpcCallback;
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     private PhoenixMetaDataControllerEnvironment env;
-    private volatile ArrayList<BaseMasterAndRegionObserver> accessControllers;
+    AtomicReference<ArrayList<BaseMasterAndRegionObserver>> accessControllers = new AtomicReference<>();
     private boolean accessCheckEnabled;
     private UserProvider userProvider;
     public static final Log LOG = LogFactory.getLog(PhoenixAccessController.class);
@@ -79,22 +80,19 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             LogFactory.getLog("SecurityLogger."+PhoenixAccessController.class.getName());
 
     private List<BaseMasterAndRegionObserver> getAccessControllers() throws IOException {
-        if (accessControllers == null) {
-            synchronized (this) {
-                if (accessControllers == null) {
-                    accessControllers = new ArrayList<BaseMasterAndRegionObserver>();
-                    RegionCoprocessorHost cpHost = this.env.getCoprocessorHost();
-                    List<BaseMasterAndRegionObserver> coprocessors = cpHost
-                            .findCoprocessors(BaseMasterAndRegionObserver.class);
-                    for (BaseMasterAndRegionObserver cp : coprocessors) {
-                        if (cp instanceof AccessControlService.Interface) {
-                            accessControllers.add(cp);
-                        }
-                    }
+        ArrayList<BaseMasterAndRegionObserver> oldAccessControllers = accessControllers.get();
+        if (oldAccessControllers == null) {
+            oldAccessControllers = new ArrayList<>();
+            RegionCoprocessorHost cpHost = this.env.getCoprocessorHost();
+            List<BaseMasterAndRegionObserver> coprocessors = cpHost.findCoprocessors(BaseMasterAndRegionObserver.class);
+            for (BaseMasterAndRegionObserver cp : coprocessors) {
+                if (cp instanceof AccessControlService.Interface) {
+                    oldAccessControllers.add(cp);
                 }
             }
+            accessControllers.set(oldAccessControllers);
         }
-        return accessControllers;
+        return accessControllers.get();
     }
 
     @Override
