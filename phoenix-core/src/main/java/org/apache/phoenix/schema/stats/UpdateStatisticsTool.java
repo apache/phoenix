@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.antlr.runtime.CharStream;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -33,9 +32,9 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
-import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobPriority;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
@@ -62,7 +61,6 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import java.sql.Connection;
-import java.util.List;
 
 import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED;
@@ -80,6 +78,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             "HBase Snapshot Name");
     private static final Option RESTORE_DIR_OPTION = new Option("d", "restore-dir", true,
             "Restore Directory for HBase snapshot");
+    private static final Option JOB_PRIORITY_OPTION = new Option("p", "job-priority", true,
+            "Define job priority from 0(highest) to 6");
     private static final Option RUN_FOREGROUND_OPTION =
             new Option("runfg", "run-foreground", false,
                     "If specified, runs UpdateStatisticsTool in Foreground. Default - Runs the build in background");
@@ -92,6 +92,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     private String tableName;
     private String snapshotName;
     private Path restoreDir;
+    private JobPriority jobPriority;
     private boolean manageSnapshot;
     private boolean isForeground;
 
@@ -166,10 +167,32 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         if (restoreDirOptionValue == null) {
             restoreDirOptionValue = getConf().get(FS_DEFAULT_NAME_KEY) + "/tmp";
         }
-        
+
+        jobPriority = getJobPriority(cmdLine);
         restoreDir = new Path(restoreDirOptionValue);
         manageSnapshot = cmdLine.hasOption(MANAGE_SNAPSHOT_OPTION.getOpt());
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
+    }
+
+    public String getJobPriority() {
+        return this.jobPriority.toString();
+    }
+
+    private JobPriority getJobPriority(CommandLine cmdLine) {
+        String jobPriorityOption = cmdLine.getOptionValue(JOB_PRIORITY_OPTION.getOpt());
+        if (jobPriorityOption == null) {
+            return JobPriority.NORMAL;
+        }
+
+        switch (jobPriorityOption) {
+            case "0" : return JobPriority.VERY_HIGH;
+            case "1" : return JobPriority.HIGH;
+            case "2" : return JobPriority.NORMAL;
+            case "3" : return JobPriority.LOW;
+            case "4" : return JobPriority.VERY_LOW;
+            default:
+                return JobPriority.NORMAL;
+        }
     }
 
     private void configureJob() throws Exception {
@@ -189,6 +212,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         job.setMapOutputValueClass(NullWritable.class);
         job.setOutputFormatClass(NullOutputFormat.class);
         job.setNumReduceTasks(0);
+        job.setPriority(this.jobPriority);
+
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
                 CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
@@ -267,6 +292,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         options.addOption(SNAPSHOT_NAME_OPTION);
         options.addOption(HELP_OPTION);
         options.addOption(RESTORE_DIR_OPTION);
+        options.addOption(JOB_PRIORITY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(MANAGE_SNAPSHOT_OPTION);
         return options;
