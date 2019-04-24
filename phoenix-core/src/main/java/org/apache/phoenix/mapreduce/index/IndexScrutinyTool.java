@@ -428,7 +428,9 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             if (outputInvalidRows && OutputFormat.TABLE.equals(outputFormat)) {
                 // create the output table if it doesn't exist
-                try (Connection outputConn = ConnectionUtil.getOutputConnection(configuration)) {
+                Configuration outputConfiguration = HBaseConfiguration.create(configuration);
+                outputConfiguration.unset(PhoenixRuntime.TENANT_ID_ATTRIB);
+                try (Connection outputConn = ConnectionUtil.getOutputConnection(outputConfiguration)) {
                     outputConn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
                     outputConn.createStatement()
                             .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);

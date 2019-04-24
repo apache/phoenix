@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.mapreduce.index.IndexScrutinyTableOutput.OUTPUT_TABLE_NAME;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.BAD_COVERED_COL_VAL_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.BATCHES_PROCESSED_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
@@ -172,6 +173,14 @@ public class IndexScrutinyToolIT {
         protected long getCounterValue(Counters counters, Enum<PhoenixScrutinyJobCounters> counter) {
             return counters.findCounter(counter).getValue();
         }
+
+        protected int countRows(Connection conn, String tableFullName) throws SQLException {
+            ResultSet count = conn.createStatement().executeQuery("select count(*) from " + tableFullName);
+            count.next();
+            int numRows = count.getInt(1);
+            return numRows;
+        }
+
     }
 
     @RunWith(Parameterized.class) public static class IndexScrutinyToolNonTenantIT extends SharedIndexToolIT {
@@ -247,8 +256,8 @@ public class IndexScrutinyToolIT {
             upsertRow(dataTableUpsertStmt, 2, "name-2", 95123);
             conn.commit();
 
-            int numDataRows = countRows(dataTableFullName);
-            int numIndexRows = countRows(indexTableFullName);
+            int numDataRows = countRows(conn, dataTableFullName);
+            int numIndexRows = countRows(conn, indexTableFullName);
 
             // scrutiny should report everything as ok
             List<Job> completedJobs = runScrutiny(schemaName, dataTableName, indexTableName);
@@ -259,8 +268,8 @@ public class IndexScrutinyToolIT {
             assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
 
             // make sure row counts weren't modified by scrutiny
-            assertEquals(numDataRows, countRows(dataTableFullName));
-            assertEquals(numIndexRows, countRows(indexTableFullName));
+            assertEquals(numDataRows, countRows(conn, dataTableFullName));
+            assertEquals(numIndexRows, countRows(conn, indexTableFullName));
         }
 
         /**
@@ -405,7 +414,7 @@ public class IndexScrutinyToolIT {
                 deleteRow(indexTableFullName, "WHERE \":ID\"=" + idToDelete);
             }
             conn.commit();
-            int numRows = countRows(indexTableFullName);
+            int numRows = countRows(conn, indexTableFullName);
             int numDeleted = numTestRows - numRows;
 
             // run scrutiny with batch size of 10
@@ -683,13 +692,6 @@ public class IndexScrutinyToolIT {
             indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         }
 
-        private int countRows(String tableFullName) throws SQLException {
-            ResultSet count = conn.createStatement().executeQuery("select count(*) from " + tableFullName);
-            count.next();
-            int numRows = count.getInt(1);
-            return numRows;
-        }
-
         private void upsertIndexRow(String name, int id, int zip) throws SQLException {
             indexTableUpsertStmt.setString(1, name);
             indexTableUpsertStmt.setInt(2, id); // id
@@ -898,9 +900,17 @@ public class IndexScrutinyToolIT {
         * Add 3 rows to Tenant view.
         * Empty index table and observe they are not equal.
         * Use data table as source and output to file.
-        * Output to table doesn't work for tenantid connection because it can't create the scrutiny table as tenant.
         **/
         @Test public void testWithEmptyIndexTableOutputToFile() throws Exception{
+            testWithOutput(OutputFormat.FILE);
+        }
+
+        @Test public void testWithEmptyIndexTableOutputToTable() throws Exception{
+            testWithOutput(OutputFormat.TABLE);
+            assertEquals(3, countRows(connGlobal, OUTPUT_TABLE_NAME));
+        }
+
+        private void testWithOutput(OutputFormat outputFormat) throws Exception {
             connTenant.createStatement()
                     .execute(String.format(upsertQueryStr, tenantViewName, tenantId, 1, "x"));
             connTenant.createStatement()
@@ -919,7 +929,7 @@ public class IndexScrutinyToolIT {
 
             String[]
                     argValues =
-                    getArgValues("", tenantViewName, indexNameTenant, 10L, SourceTable.DATA_TABLE_SOURCE, true, OutputFormat.FILE, null,
+                    getArgValues("", tenantViewName, indexNameTenant, 10L, SourceTable.DATA_TABLE_SOURCE, true, outputFormat, null,
                             tenantId, EnvironmentEdgeManager.currentTimeMillis());
             List<Job> completedJobs = runScrutiny(argValues);
 
