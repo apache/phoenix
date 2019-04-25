@@ -18,6 +18,7 @@
 package org.apache.phoenix.query;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.ReadOnlyProps;
 
 /**
  * Interface for configurable GuidePostsCache interface construction
@@ -27,7 +28,18 @@ import org.apache.hadoop.conf.Configuration;
 public interface GuidePostsCacheFactory {
 
     /**
-     *
+     * Interface for a PhoenixStatsLoader
+     * @param clientConnectionQueryServices current client connectionQueryServices note not
+     *                                      necessary to use this connection
+     * @param readOnlyProps properties from HBase configuration
+     * @param config a Configuration for the current Phoenix/Hbase
+     * @return PhoenixStatsLoader interface
+     */
+    PhoenixStatsLoader getPhoenixStatsLoader(ConnectionQueryServices clientConnectionQueryServices, ReadOnlyProps readOnlyProps, Configuration config);
+
+    /**
+     * @param phoenixStatsLoader The passed in stats loader will come from getPhoenixStatsLoader
+     * @param config a Configuration for the current Phoenix/Hbase
      * @return GuidePostsCache interface
      */
     GuidePostsCache getGuidePostsCache(PhoenixStatsLoader phoenixStatsLoader, Configuration config);

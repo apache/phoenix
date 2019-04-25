@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.PhoenixNonRetryableRuntimeException;
 import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -38,6 +39,7 @@ import org.mockito.Mockito;
 public class GuidePostsCacheProviderTest {
 
     static GuidePostsCache testCache = null;
+    static PhoenixStatsLoader phoenixStatsLoader = null;
 
     public static class TestGuidePostsCacheFactory implements  GuidePostsCacheFactory {
 
@@ -45,6 +47,12 @@ public class GuidePostsCacheProviderTest {
 
         public TestGuidePostsCacheFactory() {
             count++;
+        }
+
+        @Override public PhoenixStatsLoader getPhoenixStatsLoader(
+                ConnectionQueryServices clientConnectionQueryServices, ReadOnlyProps readOnlyProps,
+                Configuration config) {
+            return phoenixStatsLoader;
         }
 
         @Override

@@ -155,7 +155,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         this.props = new ReadOnlyProps(this.config.iterator());
 
         this.guidePostsCache = GUIDE_POSTS_CACHE_PROVIDER.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
-                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), this, config);
+                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), null, config);
     }
 
     private PMetaData newEmptyMetaData() {
