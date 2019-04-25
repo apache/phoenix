@@ -29,10 +29,4 @@ public interface GlobalMetric extends Metric {
      * @return Number of samples collected since the last {@link #reset()} call.
      */
     public long getNumberOfSamples();
-    
-    /**
-     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
-     */
-    @Deprecated
-    public long getTotalSum();
 }
