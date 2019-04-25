@@ -31,11 +31,6 @@ public class NoOpGlobalMetricImpl implements GlobalMetric {
     }
 
     @Override
-    public long getTotalSum() {
-        return NO_VALUE;
-    }
-
-    @Override
     public MetricType getMetricType() {
         return null;
     }
