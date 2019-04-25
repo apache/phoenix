@@ -36,11 +36,6 @@ public class GlobalMetricImpl implements GlobalMetric {
     }
 
     @Override
-    public long getTotalSum() {
-        return metric.getValue();
-    }
-
-    @Override
     public void change(long delta) {
         metric.change(delta);
         numberOfSamples.incrementAndGet();
