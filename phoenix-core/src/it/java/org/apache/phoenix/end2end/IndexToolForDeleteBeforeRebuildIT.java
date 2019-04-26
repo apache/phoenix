@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
-
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -70,7 +69,6 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private static final String
             INDEX_LOCAL_DDL = "CREATE LOCAL INDEX %s ON %s (ZIP) INCLUDE (NAME)";
     private static final String UPSERT_SQL = "UPSERT INTO %s VALUES(?,?,?,?)";
-
 
     @BeforeClass
     public static void setup() throws Exception {
