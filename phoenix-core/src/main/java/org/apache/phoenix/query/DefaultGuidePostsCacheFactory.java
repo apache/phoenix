@@ -29,7 +29,7 @@ public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
         Preconditions.checkNotNull(config);
 
         final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
-        if (queryServices == null || isStatsEnabled) {
+        if (queryServices == null || !isStatsEnabled) {
             LOGGER.info("Using EmptyStatsLoader from DefaultGuidePostsCacheFactory");
             return new EmptyStatsLoader();
         }
