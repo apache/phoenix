@@ -89,6 +89,8 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -98,6 +100,7 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EquiDepthStreamHistogram;
 import org.apache.phoenix.util.EquiDepthStreamHistogram.Bucket;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -124,6 +127,7 @@ public class IndexTool extends Configured implements Tool {
     private boolean useDirectApi;
     private boolean useSnapshot;
     private boolean isLocalIndexBuild;
+    private boolean shouldDeleteBeforeRebuild;
     private PTable pIndexTable;
     private PTable pDataTable;
     private String tenantId;
@@ -174,6 +178,11 @@ public class IndexTool extends Configured implements Tool {
         "If specified, uses Snapshots for async index building (optional)");
     private static final Option TENANT_ID_OPTION = new Option("tenant", "tenant-id", true,
         "If specified, uses Tenant connection for tenant view index building (optional)");
+
+    private static final Option DELETE_ALL_AND_REBUILD_OPTION = new Option("deleteall", "delete-all-and-rebuild", false,
+            "Applicable only to global indexes on tables, not to local or view indexes. "
+            + "If specified, truncates the index table and rebuilds (optional)");
+
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -188,6 +197,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
         options.addOption(TENANT_ID_OPTION);
+        options.addOption(DELETE_ALL_AND_REBUILD_OPTION);
         options.addOption(HELP_OPTION);
         AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
@@ -231,6 +241,11 @@ public class IndexTool extends Configured implements Tool {
 		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())) {
 			throw new IllegalStateException("Index name should not be passed with " + PARTIAL_REBUILD_OPTION.getLongOpt());
 		}
+
+		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt())) {
+            throw new IllegalStateException(DELETE_ALL_AND_REBUILD_OPTION.getLongOpt() + " is not compatible with "
+                    + PARTIAL_REBUILD_OPTION.getLongOpt());
+        }
         		
         if (!(cmdLine.hasOption(DIRECT_API_OPTION.getOpt())) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())
                 && cmdLine.hasOption(RUN_FOREGROUND_OPTION
@@ -608,6 +623,7 @@ public class IndexTool extends Configured implements Tool {
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
             useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
+            shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
 
             byte[][] splitKeysBeforeJob = null;
             isLocalIndexBuild = false;
@@ -636,6 +652,11 @@ public class IndexTool extends Configured implements Tool {
                     isLocalIndexBuild = true;
                     splitKeysBeforeJob = regionLocator.getStartKeys();
                 }
+
+                if (shouldDeleteBeforeRebuild) {
+                   deleteBeforeRebuild(connection);
+                }
+
                 // presplit the index table
                 boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
                 boolean isSalted = pIndexTable.getBucketNum() != null; // no need to split salted tables
@@ -739,6 +760,26 @@ public class IndexTool extends Configured implements Tool {
                 if (rethrowException) {
                     throw new RuntimeException("Failed to close resource");
                 }
+            }
+        }
+    }
+
+    private void deleteBeforeRebuild(Connection conn) throws SQLException, IOException {
+        if (MetaDataUtil.isViewIndex(pIndexTable.getPhysicalName().getString())) {
+            throw new IllegalArgumentException(String.format(
+                    "%s is a view index. delete-all-and-rebuild is not supported for view indexes",
+                    indexTable));
+        }
+
+        if (isLocalIndexBuild) {
+            throw new IllegalArgumentException(String.format(
+                    "%s is a local index.  delete-all-and-rebuild is not supported for local indexes", indexTable));
+        } else {
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (Admin admin = queryServices.getAdmin()){
+                TableName tableName = TableName.valueOf(qIndexTable);
+                admin.disableTable(tableName);
+                admin.truncateTable(tableName, true);
             }
         }
     }
