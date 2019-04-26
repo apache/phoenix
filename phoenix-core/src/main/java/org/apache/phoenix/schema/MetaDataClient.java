@@ -4302,6 +4302,7 @@ public class MetaDataClient {
             boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
 
             PIndexState newIndexState = statement.getIndexState();
+            // TODO: Change this for PHOENIX-4703
             if (isAsync && newIndexState != PIndexState.REBUILD) { throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.ASYNC_NOT_ALLOWED)
                             .setMessage(" ASYNC building of index is allowed only with REBUILD index state")
