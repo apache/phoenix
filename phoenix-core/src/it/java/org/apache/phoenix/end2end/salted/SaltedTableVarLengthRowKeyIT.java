@@ -19,16 +19,20 @@
 package org.apache.phoenix.end2end.salted;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Arrays;
 import java.util.Properties;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -85,6 +89,84 @@ public class SaltedTableVarLengthRowKeyIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testSaltedVarbinaryUpperBoundQuery() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName +
+                " ( k VARBINARY PRIMARY KEY, a INTEGER ) SALT_BUCKETS = 3";
+        String dml = "UPSERT INTO " + tableName + " values (?, ?)";
+        String sql2 = "SELECT * FROM " + tableName + " WHERE k = ?";
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setInt(2, 1);
+
+            stmt.setBytes(1, new byte[] { 5 });
+            stmt.executeUpdate();
+            stmt.setBytes(1, new byte[] { 5, 0 });
+            stmt.executeUpdate();
+            stmt.setBytes(1, new byte[] { 5, 1 });
+            stmt.executeUpdate();
+            stmt.close();
+            conn.commit();
+
+            stmt = conn.prepareStatement(sql2);
+            stmt.setBytes(1, new byte[] { 5 });
+            ResultSet rs = stmt.executeQuery();
+
+            assertTrue(rs.next());
+            assertArrayEquals(new byte[] {5},rs.getBytes(1));
+            assertEquals(1,rs.getInt(2));
+            assertFalse(rs.next());
+            stmt.close();
+        }
+    }
+
+    @Test
+    public void testSaltedArrayTypeUpperBoundQuery() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName +
+                " ( k TINYINT ARRAY[10] PRIMARY KEY, a INTEGER ) SALT_BUCKETS = 3";
+        String dml = "UPSERT INTO " + tableName + " values (?, ?)";
+        String sql2 = "SELECT * FROM " + tableName + " WHERE k = ?";
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setInt(2, 1);
+
+            Byte[] byteArray1 = ArrayUtils.toObject(new byte[] {5});
+            Byte[] byteArray2 = ArrayUtils.toObject(new byte[] {5, -128});
+            Byte[] byteArray3 = ArrayUtils.toObject(new byte[] {5, -127});
+
+
+            Array array1 = conn.createArrayOf("TINYINT", byteArray1);
+            Array array2 = conn.createArrayOf("TINYINT", byteArray2);
+            Array array3 = conn.createArrayOf("TINYINT", byteArray3);
+
+            stmt.setArray(1,array1);
+            stmt.executeUpdate();
+            stmt.setArray(1,array2);
+            stmt.executeUpdate();
+            stmt.setArray(1,array3);
+            stmt.executeUpdate();
+            stmt.close();
+            conn.commit();
+
+            stmt = conn.prepareStatement(sql2);
+            stmt.setArray(1, array1);
+            ResultSet rs = stmt.executeQuery();
+
+            assertTrue(rs.next());
+            byte[] resultByteArray = (byte[])(rs.getArray(1).getArray());
+            assertArrayEquals(new byte[]{5},resultByteArray);
+            assertEquals(1,rs.getInt(2));
+            assertFalse(rs.next());
+            stmt.close();
         }
     }
 }
