@@ -183,7 +183,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testSingleVariableFullPkSalted() throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        pconn.createStatement().execute("CREATE TABLE t (k varchar primary key, v varchar) SALT_BUCKETS=20");
+        pconn.createStatement().execute("CREATE TABLE t (k varchar(10) primary key, v varchar) SALT_BUCKETS=20");
         String query = "select * from t where k='a'";
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
@@ -194,7 +194,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PVarchar.INSTANCE.toBytes("a", key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, 1, 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.nextKey(ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY));
+        //lexicographically this is the next PK
+        byte[] expectedEndKey = ByteUtil.concat(key,new byte[]{0});
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
