@@ -42,6 +42,28 @@
 
   <build>
     <plugins>
+      <plugin>
+        <artifactId>exec-maven-plugin</artifactId>
+        <groupId>org.codehaus.mojo</groupId>
+        <executions>
+          <execution>
+            <id>Symlink to deprecated client jar name</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>phoenix-client-${project.version}.jar</argument>
+                <argument>phoenix-${project.version}-client.jar</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <!-- No jars created for this module -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
