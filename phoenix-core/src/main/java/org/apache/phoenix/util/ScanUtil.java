@@ -448,7 +448,9 @@ public class ScanUtil {
                 key[offset++] = sepByte;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
                 // as we don't want to increment the null byte in this case
-                lastInclusiveUpperSingleKey &= i < schema.getMaxFields()-1;
+                // To test if this is the last pk column we need to consider the span of this slot
+                // and the field index to see if this slot considers the last column
+                lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
             }
             if (exclusiveUpper) {
                 // Cannot include anything else on the key, as otherwise
