@@ -36,6 +36,9 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
@@ -94,6 +97,33 @@ public class ScanRangesIntersectTest {
         @Override
         public PDataType getDataType() {
             return PChar.INSTANCE;
+        }
+
+        @Override
+        public Integer getMaxLength() {
+            return 1;
+        }
+
+        @Override
+        public Integer getScale() {
+            return null;
+        }
+
+        @Override
+        public SortOrder getSortOrder() {
+            return SortOrder.getDefault();
+        }
+    };
+
+    private static PDatum SIMPLE_TINYINT = new PDatum() {
+        @Override
+        public boolean isNullable() {
+            return false;
+        }
+
+        @Override
+        public PDataType getDataType() {
+            return PUnsignedTinyint.INSTANCE;
         }
 
         @Override
@@ -485,6 +515,96 @@ public class ScanRangesIntersectTest {
         assertEquals(singleKeyToScanRange("BD"),rowKeyRanges.get(3).toString());
     }
 
+    @Test
+    public void getRowKeyRangesMultipleFieldsSingleSlot() {
+        int rowKeySchemaFields = 3;
+        RowKeySchema schema = buildSimpleRowKeySchema(rowKeySchemaFields);
+
+        int[] slotSpan = new int[1];
+        slotSpan[0] = 2;
+
+        KeyRange keyRange1 = KeyRange.getKeyRange(stringToByteArray("ABC"));
+        KeyRange keyRange2 = KeyRange.getKeyRange(stringToByteArray("DEF"));
+        List<List<KeyRange>> ranges = new ArrayList<>();
+        ranges.add(Lists.newArrayList(keyRange1,keyRange2));
+
+        ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
+
+        List<KeyRange> rowKeyRanges = scanRanges.getRowKeyRanges();
+        assertEquals(2, rowKeyRanges.size());
+        assertEquals(singleKeyToScanRange("ABC"),rowKeyRanges.get(0).toString());
+        assertEquals(singleKeyToScanRange("DEF"),rowKeyRanges.get(1).toString());
+    }
+
+    @Test
+    public void getRowKeyRangesMultipleFieldsFrontLoadedSlot() {
+        int rowKeySchemaFields = 3;
+        RowKeySchema schema = buildSimpleRowKeySchema(rowKeySchemaFields);
+
+        int[] slotSpan = new int[2];
+        slotSpan[0] = 1;
+
+        KeyRange keyRange1 = KeyRange.getKeyRange(stringToByteArray("AB"));
+        List<List<KeyRange>> ranges = new ArrayList<>();
+        ranges.add(Lists.newArrayList(keyRange1));
+
+        KeyRange keyRange3 = KeyRange.getKeyRange(stringToByteArray("C"));
+        ranges.add(Lists.newArrayList(keyRange3));
+
+        ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
+
+        List<KeyRange> rowKeyRanges = scanRanges.getRowKeyRanges();
+        assertEquals(1, rowKeyRanges.size());
+        assertEquals("[ABC - ABD)",rowKeyRanges.get(0).toString());
+    }
+
+    @Test
+    public void getRowKeyRangesMultipleFieldsBackLoadedSlot() {
+        int rowKeySchemaFields = 3;
+        RowKeySchema schema = buildSimpleRowKeySchema(rowKeySchemaFields);
+
+        int[] slotSpan = new int[2];
+        slotSpan[1] = 1;
+
+        KeyRange keyRange1 = KeyRange.getKeyRange(stringToByteArray("A"));
+        List<List<KeyRange>> ranges = new ArrayList<>();
+        ranges.add(Lists.newArrayList(keyRange1));
+
+        KeyRange keyRange3 = KeyRange.getKeyRange(stringToByteArray("BC"));
+        ranges.add(Lists.newArrayList(keyRange3));
+
+        ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
+
+        List<KeyRange> rowKeyRanges = scanRanges.getRowKeyRanges();
+        assertEquals(1, rowKeyRanges.size());
+        assertEquals("[ABC - ABD)",rowKeyRanges.get(0).toString());
+    }
+
+    @Test
+    public void getRowKeyRangesUpperBoundOverflows() {
+        int rowKeySchemaFields = 2;
+        RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(rowKeySchemaFields);
+        for(int i = 0; i < rowKeySchemaFields; i++) {
+            builder.addField(SIMPLE_TINYINT, SIMPLE_TINYINT.isNullable(), SIMPLE_TINYINT.getSortOrder());
+        }
+        RowKeySchema schema = builder.build();
+
+        int[] slotSpan = new int[2];
+
+        KeyRange keyRange1 = KeyRange.getKeyRange(new byte[]{-1});
+        List<List<KeyRange>> ranges = new ArrayList<>();
+        ranges.add(Lists.newArrayList(keyRange1));
+
+        KeyRange keyRange3 = KeyRange.getKeyRange(new byte[]{-1});
+        ranges.add(Lists.newArrayList(keyRange3));
+
+        ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
+
+        List<KeyRange> rowKeyRanges = scanRanges.getRowKeyRanges();
+        assertEquals(1, rowKeyRanges.size());
+        assertEquals("[\\xFF\\xFF - *)",rowKeyRanges.get(0).toString());
+    }
+
     private RowKeySchema buildSimpleRowKeySchema(int fields){
         RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(fields);
         for(int i = 0; i < fields; i++) {
@@ -494,6 +614,9 @@ public class ScanRangesIntersectTest {
     }
 
     private String singleKeyToScanRange(String key){
+        //Appending 0 byte is next key for variable length asc fields
+        //This includes point gets for more than 1 key as ScanRanges treats the combined pk
+        // as a varbinary
         return String.format("[%s - %s\\x00)",key,key);
     }
 }

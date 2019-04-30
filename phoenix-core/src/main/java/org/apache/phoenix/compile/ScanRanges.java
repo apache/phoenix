@@ -719,13 +719,23 @@ public class ScanRanges {
 
             int[] slotSpans = this.getSlotSpans();
 
-            // If the ranges here do not qualify all the keys then those keys are unbound
-            if (newRanges.size() < schema.getMaxFields()) {
+            int fieldSpan = 0;
+            for(int i = 0; i < slotSpans.length; i++){
+                //Account for a slot covering multiple fields
+                fieldSpan = fieldSpan + slotSpans[i] + 1;
+            }
+
+            // If the spans here do not qualify all the keys then those keys are unbound
+            int maxFields = schema.getMaxFields();
+            if (fieldSpan < maxFields) {
                 int originalSize = newRanges.size();
-                for (int i = 0; i < schema.getMaxFields() - originalSize; i++) {
+                for (int i = 0; i < maxFields - originalSize; i++) {
                     newRanges.add(Lists.newArrayList(KeyRange.EVERYTHING_RANGE));
                 }
-                slotSpans = new int[schema.getMaxFields()];
+                //extend slots
+                int slotsToAdd = (maxFields - fieldSpan);
+                int newSlotLength = slotSpans.length + slotsToAdd;
+                slotSpans = new int[newSlotLength];
                 System.arraycopy(this.getSlotSpans(), 0, slotSpans, 0, this.getSlotSpans().length);
             }
 
