@@ -137,7 +137,15 @@ public class EncodedQualifiersColumnProjectionFilter extends FilterBase implemen
 
     @Override
     public String toString() {
-        return "";
+        StringBuilder sb = new StringBuilder(100);
+        sb.append(String.format("EmptyCFName: %s, ", Bytes.toStringBinary(this.emptyCFName)));
+        sb.append(String.format("EncodingScheme: %s, ", this.encodingScheme));
+        sb.append(String.format("TrackedColumns: %s, ", this.trackedColumns));
+        sb.append("ConditionOnlyCfs: ");
+        for (byte[] conditionOnlyCf : this.conditionOnlyCfs) {
+            sb.append(String.format("%s, ", Bytes.toStringBinary(conditionOnlyCf)));
+        }
+        return sb.toString();
     }
     
     @Override
