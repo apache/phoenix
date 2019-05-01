@@ -35,20 +35,23 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     protected static String TENANT1 = "tenant1";
@@ -148,15 +151,12 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                     PTable.TaskStatus.CREATED.toString(), data, null, startTs, null, true);
             task.run();
 
-            Thread.sleep(15000);
-
             Table systemHTable= queryServices.getTable(Bytes.toBytes("SYSTEM."+PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE));
             count = getUtility().countRows(systemHTable);
             assertEquals(1, count);
 
             // Check task status and other column values.
-            DropTableWithViewsIT.assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(), PTable.TaskType.INDEX_REBUILD,
-                    null);
+            waitForTaskState(conn, PTable.TaskType.INDEX_REBUILD, PTable.TaskStatus.COMPLETED);
 
             // See that index is rebuilt and confirm index has rows
             Table htable= queryServices.getTable(Bytes.toBytes(viewIndexTableName));
@@ -172,5 +172,28 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                 viewConn.close();
             }
         }
+    }
+
+    public static void waitForTaskState(Connection conn, PTable.TaskType taskType, PTable.TaskStatus expectedTaskStatus) throws InterruptedException,
+            SQLException {
+        int maxTries = 100, nTries = 0;
+        do {
+            Thread.sleep(2000);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
+                    " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                    taskType.getSerializedValue());
+
+            String taskStatus = null;
+
+            if (rs.next()) {
+                taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
+                boolean matchesExpected = (expectedTaskStatus.toString().equals(taskStatus));
+                if (matchesExpected) {
+                    return;
+                }
+            }
+        } while (++nTries < maxTries);
+        fail("Ran out of time waiting for task state to become " + expectedTaskStatus);
     }
 }
