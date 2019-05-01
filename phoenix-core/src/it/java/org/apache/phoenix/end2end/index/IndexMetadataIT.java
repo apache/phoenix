@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX;
@@ -37,7 +39,10 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.DropTableWithViewsIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -49,7 +54,6 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -120,7 +124,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).getIndexMaintainers(ptr, pconn);
         assertTrue(ptr.getLength() == 0);
     }
-    
+
     @Test
     public void testIndexCreateDrop() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -579,17 +583,18 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         stmt.execute(ddl);
         String indexName = "R_ASYNCIND_" + generateUniqueName();
-        
+
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ";
         stmt.execute(ddl);
         ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (v2) ";
         stmt.execute(ddl);
         ddl = "CREATE INDEX " + indexName + "3 ON " + testTable  + " (v3)";
         stmt.execute(ddl);
+
         conn.createStatement().execute("ALTER INDEX "+indexName+"1 ON " + testTable +" DISABLE ");
         conn.createStatement().execute("ALTER INDEX "+indexName+"2 ON " + testTable +" REBUILD ");
         conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" REBUILD ASYNC");
-        
+
         ResultSet rs = conn.createStatement().executeQuery(
             "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
             "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
@@ -610,7 +615,88 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
                 "order by table_name" );
         assertFalse(rs.next());
     }
-    
+
+    @Test
+    public void testAsyncRebuildAll() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String testTable = generateUniqueName();
+
+            String ddl = "create table " + testTable + " (k varchar primary key, v4 varchar)";
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+
+            PreparedStatement upsertStmt = conn.prepareStatement("UPSERT INTO " + testTable + " VALUES(?, ?)");
+            upsertStmt.setString(1, "key1");
+            upsertStmt.setString(2, "val1");
+            upsertStmt.execute();
+
+            String indexName = "R_ASYNCIND_" + generateUniqueName();
+            ddl = "CREATE INDEX " + indexName + " ON " + testTable + " (k, v4)";
+            stmt.execute(ddl);
+
+            // Check that index value is same as table
+            String val = getIndexValue(conn, indexName, 2);
+            assertEquals("val1", val);
+
+            // Update index value, check that index value is still not updated
+            conn.createStatement()
+                    .execute("ALTER INDEX " + indexName + " ON " + testTable + " DISABLE");
+            upsertStmt = conn.prepareStatement("UPSERT INTO " + testTable + " VALUES(?, ?)");
+            upsertStmt.setString(1, "key1");
+            upsertStmt.setString(2, "val2");
+            upsertStmt.execute();
+            conn.commit();
+
+            val = getIndexValue(conn, indexName, 2);
+            assertEquals("val1", val);
+
+            // Add extra row to Index
+            upsertStmt = conn.prepareStatement("UPSERT INTO " + indexName + " VALUES(?, ?)");
+            upsertStmt.setString(1, "key3");
+            upsertStmt.setString(2, "val3");
+            upsertStmt.execute();
+
+            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            conn.commit();
+
+            conn.createStatement().execute(
+                    "ALTER INDEX " + indexName + " ON " + testTable + " REBUILD ALL ASYNC");
+
+            String
+                    queryTaskTable =
+                    "SELECT * FROM " +  PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+            ResultSet rs = conn.createStatement().executeQuery(queryTaskTable);
+            assertTrue(rs.next());
+            assertEquals(testTable, rs.getString(TABLE_NAME));
+            assertFalse(rs.next());
+
+            TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
+
+            // Check task status and other column values.
+            DropTableWithViewsIT.assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(),
+                    PTable.TaskType.INDEX_REBUILD, null);
+
+            // Check that the value is updated to correct one
+            val = getIndexValue(conn, indexName, 2);
+            assertEquals("val2", val);
+
+            Table indexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName));
+            int count = getUtility().countRows(indexTable);
+            assertEquals(1, count);
+        }
+    }
+
+    private String getIndexValue(Connection conn, String indexName, int column)
+            throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + indexName);
+        assertTrue(rs.next());
+        String val = rs.getString(column);
+        assertFalse(rs.next());
+        return val;
+    }
+
     @Test
     public void testImmutableTableOnlyHasPrimaryKeyIndex() throws Exception {
         helpTestTableOnlyHasPrimaryKeyIndex(false, false);
