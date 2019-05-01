@@ -373,12 +373,12 @@ public class ParseNodeFactory {
         return new DropIndexStatement(indexName, tableName, ifExists);
     }
 
-    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async, ListMultimap<String,Pair<String,Object>> props) {
-        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async, props);
+    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async, ListMultimap<String,Pair<String,Object>> props) {
+        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
     }
 
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
-        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false);
+        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false, false);
     }
 
     public TraceStatement trace(boolean isTraceOn, double samplingRate) {

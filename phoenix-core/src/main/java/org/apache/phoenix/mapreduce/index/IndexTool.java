@@ -892,7 +892,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     public static Map.Entry<Integer, Job> run(Configuration conf, String schemaName, String dataTable, String indexTable,
-            boolean directApi, boolean useSnapshot, String tenantId, boolean disableBefore, boolean runForeground) throws Exception {
+            boolean directApi, boolean useSnapshot, String tenantId, boolean disableBefore, boolean shouldDeleteBeforeRebuild, boolean runForeground) throws Exception {
         final List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -917,6 +917,10 @@ public class IndexTool extends Configured implements Tool {
         if (tenantId != null) {
             args.add("-tenant");
             args.add(tenantId);
+        }
+
+        if (shouldDeleteBeforeRebuild) {
+            args.add("-deleteall");
         }
 
         args.add("-op");
