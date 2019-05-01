@@ -26,8 +26,11 @@ import java.util.Map;
  *
  */
 public class IndexRebuildTask extends BaseTask  {
-    public static final String IndexName = "IndexName";
-    public static final String JobID = "JobID";
+    public static final String INDEX_NAME = "IndexName";
+    public static final String JOB_ID = "JobID";
+    public static final String DISABLE_BEFORE = "DisableBefore";
+    public static final String REBUILD_ALL = "RebuildAll";
+
     public static final Log LOG = LogFactory.getLog(IndexRebuildTask.class);
 
     @Override
@@ -56,10 +59,18 @@ public class IndexRebuildTask extends BaseTask  {
             }
 
             boolean shouldDisable = false;
-            if (jsonObject.has("DisableBefore")) {
-                String disableBefore = jsonObject.get("DisableBefore").toString();
+            if (jsonObject.has(DISABLE_BEFORE)) {
+                String disableBefore = jsonObject.get(DISABLE_BEFORE).toString();
                 if (!Strings.isNullOrEmpty(disableBefore)) {
                     shouldDisable = Boolean.valueOf(disableBefore);
+                }
+            }
+
+            boolean rebuildAll = false;
+            if (jsonObject.has(REBUILD_ALL)) {
+                String rebuildAllStr = jsonObject.get(REBUILD_ALL).toString();
+                if (!Strings.isNullOrEmpty(rebuildAllStr)) {
+                    rebuildAll = Boolean.valueOf(rebuildAllStr);
                 }
             }
 
@@ -67,7 +78,7 @@ public class IndexRebuildTask extends BaseTask  {
             boolean runForeground = false;
             Map.Entry<Integer, Job> indexToolRes = IndexTool
                     .run(conf, taskRecord.getSchemaName(), taskRecord.getTableName(), indexName, true,
-                            false, taskRecord.getTenantId(), shouldDisable, runForeground);
+                            false, taskRecord.getTenantId(), shouldDisable, rebuildAll, runForeground);
             int status = indexToolRes.getKey();
             if (status != 0) {
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, "Index tool returned : " + status);
@@ -75,7 +86,7 @@ public class IndexRebuildTask extends BaseTask  {
 
             Job job = indexToolRes.getValue();
 
-            jsonObject.addProperty(JobID, job.getJobID().toString());
+            jsonObject.addProperty(JOB_ID, job.getJobID().toString());
             Task.addTask(conn.unwrap(PhoenixConnection.class ), taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
                     taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(), jsonObject.toString(), taskRecord.getPriority(),
                     taskRecord.getTimeStamp(), null, true);
@@ -104,8 +115,8 @@ public class IndexRebuildTask extends BaseTask  {
     private String getIndexName(JsonObject jsonObject) {
         String indexName = null;
         // Get index name from data column.
-        if (jsonObject.has(IndexName)) {
-            indexName = jsonObject.get(IndexName).toString().replaceAll("\"", "");
+        if (jsonObject.has(INDEX_NAME)) {
+            indexName = jsonObject.get(INDEX_NAME).toString().replaceAll("\"", "");
         }
         return indexName;
     }
@@ -117,8 +128,8 @@ public class IndexRebuildTask extends BaseTask  {
         JsonParser jsonParser = new JsonParser();
         JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
         String jobId = null;
-        if (jsonObject.has(JobID)) {
-            jobId = jsonObject.get(JobID).toString().replaceAll("\"", "");
+        if (jsonObject.has(JOB_ID)) {
+            jobId = jsonObject.get(JOB_ID).toString().replaceAll("\"", "");
         }
         return jobId;
     }

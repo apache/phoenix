@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -74,6 +75,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.RetryCounter;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
@@ -934,7 +936,30 @@ public class TestUtil {
     		this.success = success;
     	}
     }
-    
+
+    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+        int maxTries = 60, nTries = 0;
+        do {
+            String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
+            String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
+            Thread.sleep(1000); // sleep 1 sec
+            String query = "SELECT " + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " +
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
+                    + ") = (" + "'" + schema + "','" + index + "') "
+                    + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            PIndexState actualIndexState = null;
+            if (rs.next()) {
+                actualIndexState = PIndexState.fromSerializedValue(rs.getString(1));
+                boolean matchesExpected = (actualIndexState == expectedIndexState);
+                if (matchesExpected) {
+                    return;
+                }
+            }
+        } while (++nTries < maxTries);
+        fail("Ran out of time waiting for index state to become " + expectedIndexState);
+    }
+
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
         int maxTries = 60, nTries = 0;
         do {
