@@ -271,6 +271,22 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         conn.createStatement().execute(ddl);
     }
 
+    // See PHOENIX-5101
+    @Test
+    public void testMetricsLargeQuery() throws Exception {
+        String tableName = "MY_TABLE";
+        String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        long numRows = 18750;
+        insertRowsInTable(tableName, numRows);
+        String query = "SELECT * FROM " + tableName;
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(query);
+        while (rs.next()) {}
+        rs.close();
+    }
+
     @Test
     public void testReadMetricsForSelect() throws Exception {
         String tableName = generateUniqueName();
