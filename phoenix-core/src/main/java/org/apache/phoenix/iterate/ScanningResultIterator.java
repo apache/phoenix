@@ -72,8 +72,9 @@ public class ScanningResultIterator implements ResultIterator {
 
     @Override
     public void close() throws SQLException {
-        getScanMetrics();
+        // close the scanner so that metrics are available
         scanner.close();
+        updateMetrics();
     }
 
     private void changeMetric(CombinableMetric metric, Long value) {
@@ -88,7 +89,7 @@ public class ScanningResultIterator implements ResultIterator {
         }
     }
 
-    private void getScanMetrics() {
+    private void updateMetrics() {
 
         if (scanMetricsEnabled && !scanMetricsUpdated) {
             ScanMetrics scanMetrics = scanner.getScanMetrics();
