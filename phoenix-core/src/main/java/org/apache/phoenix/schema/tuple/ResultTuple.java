@@ -20,7 +20,6 @@ package org.apache.phoenix.schema.tuple;
 import java.util.Collections;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -89,7 +88,7 @@ public class ResultTuple extends BaseTuple {
     }
 
     @Override
-    public KeyValue getValue(int index) {
+    public Cell getValue(int index) {
         return  PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[index]);
     }
 

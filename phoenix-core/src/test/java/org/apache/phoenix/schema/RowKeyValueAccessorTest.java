@@ -67,12 +67,12 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         stmt.execute();
             Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         List<Cell> dataKeyValues = iterator.next().getSecond();
-        KeyValue keyValue = PhoenixKeyValueUtil.maybeCopyCell(dataKeyValues.get(0));
+        Cell keyValue = PhoenixKeyValueUtil.maybeCopyCell(dataKeyValues.get(0));
         
         List<PColumn> pkColumns = table.getPKColumns();
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(pkColumns, 3);
         int offset = accessor.getOffset(keyValue.getRowArray(), keyValue.getRowOffset());
-        int length = accessor.getLength(keyValue.getRowArray(), offset, keyValue.getOffset()+keyValue.getLength());
+        int length = accessor.getLength(keyValue.getRowArray(), offset, offset + keyValue.getRowLength());
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(keyValue.getRowArray(), offset, length);
         
         PDataType dataType = pkColumns.get(index).getDataType();

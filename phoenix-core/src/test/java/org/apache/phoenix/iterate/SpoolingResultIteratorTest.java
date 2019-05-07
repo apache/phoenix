@@ -22,7 +22,9 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 
 import java.util.Arrays;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell.Type;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.memory.DelegatingMemoryManager;
@@ -45,14 +47,22 @@ public class SpoolingResultIteratorTest {
 
     private void testSpooling(int threshold, long maxSizeSpool) throws Throwable {
         Tuple[] results = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
+                new SingleKeyValueTuple(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                    .setRow(A).setFamily(SINGLE_COLUMN_FAMILY).setQualifier(SINGLE_COLUMN)
+                    .setType(Type.Put).setValue(Bytes.toBytes(1)).build()),
+                new SingleKeyValueTuple(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                    .setRow(B).setFamily(SINGLE_COLUMN_FAMILY).setQualifier(SINGLE_COLUMN)
+                    .setType(Type.Put).setValue(Bytes.toBytes(1)).build()),
             };
         PeekingResultIterator iterator = new MaterializedResultIterator(Arrays.asList(results));
 
         Tuple[] expectedResults = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),
+                new SingleKeyValueTuple(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                    .setRow(A).setFamily(SINGLE_COLUMN_FAMILY).setQualifier(SINGLE_COLUMN)
+                    .setType(Type.Put).setValue(Bytes.toBytes(1)).build()),
+                new SingleKeyValueTuple(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                    .setRow(B).setFamily(SINGLE_COLUMN_FAMILY).setQualifier(SINGLE_COLUMN)
+                    .setType(Type.Put).setValue(Bytes.toBytes(1)).build()),
             };
 
         MemoryManager memoryManager = new DelegatingMemoryManager(new GlobalMemoryManager(threshold));

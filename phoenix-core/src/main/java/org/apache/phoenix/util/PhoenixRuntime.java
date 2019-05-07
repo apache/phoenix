@@ -401,8 +401,8 @@ public class PhoenixRuntime {
                 List<Cell> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
                 for (Mutation mutation : pair.getSecond()) {
                     for (List<Cell> keyValueList : mutation.getFamilyCellMap().values()) {
-                        for (Cell keyValue : keyValueList) {
-                            keyValues.add(PhoenixKeyValueUtil.maybeCopyCell(keyValue));
+                        for (Cell c : keyValueList) {
+                            keyValues.add(PhoenixKeyValueUtil.newKeyValue(c));
                         }
                     }
                 }

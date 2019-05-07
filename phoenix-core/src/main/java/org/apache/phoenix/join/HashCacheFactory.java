@@ -34,6 +34,7 @@ import java.util.Set;
 
 import net.jcip.annotations.Immutable;
 
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -47,7 +48,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ResultUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
@@ -120,10 +121,8 @@ public class HashCacheFactory implements ServerCacheFactory {
                 offset += Bytes.SIZEOF_INT;
                 // Build Map with evaluated hash key as key and row as value
                 for (int i = 0; i < nRows; i++) {
-                    int resultSize = (int)Bytes.readVLong(hashCacheByteArray, offset);
-                    offset += WritableUtils.decodeVIntSize(hashCacheByteArray[offset]);
-                    ImmutableBytesWritable value = new ImmutableBytesWritable(hashCacheByteArray,offset,resultSize);
-                    Tuple result = new ResultTuple(ResultUtil.toResult(value));
+                    Result r = PhoenixKeyValueUtil.deserializeResult(dataInput);
+                    Tuple result = new ResultTuple(r);
                     ImmutableBytesPtr key = TupleUtil.getConcatenatedValue(result, onExpressions);
                     List<Tuple> tuples = hashCacheMap.get(key);
                     if (tuples == null) {
@@ -131,7 +130,6 @@ public class HashCacheFactory implements ServerCacheFactory {
                         hashCacheMap.put(key, tuples);
                     }
                     tuples.add(result);
-                    offset += resultSize;
                 }
                 this.hashCache = Collections.unmodifiableMap(hashCacheMap);
             } catch (IOException e) { // Not possible with ByteArrayInputStream

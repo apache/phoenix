@@ -399,7 +399,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                 Mutation m = null;
                 switch (op) {
                 case RETURN_SEQUENCE:
-                    KeyValue currentValueKV = PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[0]);
+                    Cell currentValueKV = PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[0]);
                     long expectedValue = PLong.INSTANCE.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
                     long value = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(),
                       currentValueKV.getValueOffset(), SortOrder.getDefault());

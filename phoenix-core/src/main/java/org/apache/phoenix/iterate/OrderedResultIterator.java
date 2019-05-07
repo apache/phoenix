@@ -22,19 +22,15 @@ import static com.google.common.base.Preconditions.checkPositionIndex;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Queue;
 
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
-import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -76,18 +72,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
         }
 
         static long sizeOf(ResultEntry e) {
-          return sizeof(e.sortKeys) + sizeof(toKeyValues(e));
-        }
-
-        private static long sizeof(List<KeyValue> kvs) {
-          long size = Bytes.SIZEOF_INT; // totalLen
-
-          for (KeyValue kv : kvs) {
-              size += kv.getLength();
-              size += Bytes.SIZEOF_INT; // kv.getLength
-          }
-
-          return size;
+          return sizeof(e.sortKeys) + PhoenixKeyValueUtil.getSerializedResultSize(e.result);
         }
 
         private static long sizeof(ImmutableBytesWritable[] sortKeys) {
@@ -101,16 +86,6 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 }
             }
             return size;
-        }
-
-        private static List<KeyValue> toKeyValues(ResultEntry entry) {
-          Tuple result = entry.getResult();
-          int size = result.size();
-          List<KeyValue> kvs = new ArrayList<KeyValue>(size);
-          for (int i = 0; i < size; i++) {
-              kvs.add(PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i)));
-          }
-          return kvs;
         }
     }
     

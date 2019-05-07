@@ -243,9 +243,9 @@ public class LocalTableState implements TableState {
      * 
      * @param values
      */
-    public void rollback(Collection<KeyValue> values) {
-        for (KeyValue kv : values) {
-            this.memstore.rollback(kv);
+    public void rollback(Collection<Cell> values) {
+        for (Cell c : values) {
+            this.memstore.rollback(c);
         }
     }
 

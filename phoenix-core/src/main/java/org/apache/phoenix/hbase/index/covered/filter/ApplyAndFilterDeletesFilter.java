@@ -104,7 +104,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
   @Override
   public ReturnCode filterKeyValue(Cell next) {
-    KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
+    Cell nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
     switch (KeyValue.Type.codeToType(next.getTypeByte())) {
     /*
      * DeleteFamily will always sort first because those KVs (we assume) don't have qualifiers (or
@@ -211,9 +211,9 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
   public static class DeleteTracker {
 
-    public KeyValue deleteFamily;
-    public KeyValue deleteColumn;
-    public KeyValue pointDelete;
+    public Cell deleteFamily;
+    public Cell deleteColumn;
+    public Cell pointDelete;
 
     public void reset() {
       this.deleteFamily = null;
@@ -231,7 +231,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
      * @param next
      * @return <tt>true</tt> if this {@link KeyValue} matches a delete.
      */
-    public boolean matchesFamily(KeyValue next) {
+    public boolean matchesFamily(Cell next) {
       if (deleteFamily == null) {
         return false;
       }
@@ -253,7 +253,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
      * @param next
      * @return
      */
-    public boolean matchesColumn(KeyValue next) {
+    public boolean matchesColumn(Cell next) {
       if (deleteColumn == null) {
         return false;
       }
@@ -272,7 +272,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
      * @param next
      * @return
      */
-    public boolean matchesPoint(KeyValue next) {
+    public boolean matchesPoint(Cell next) {
       // point deletes only apply to the exact KV that they reference, so we only need to ensure
       // that the timestamp matches exactly. Because we sort by timestamp first, either the next
       // keyvalue has the exact timestamp or is an older (smaller) timestamp, and we can allow that

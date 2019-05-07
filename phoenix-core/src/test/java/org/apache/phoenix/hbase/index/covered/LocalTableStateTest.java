@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -241,9 +243,12 @@ public class LocalTableStateTest {
     LocalHBaseState state = new LocalTable(env);
     LocalTableState table = new LocalTableState(state, m);
     // add the kvs from the mutation
-    KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(m.get(fam, qual).get(0));
-    kv.setSequenceId(0);
-    table.addPendingUpdates(kv);
+    Cell c = PhoenixKeyValueUtil.maybeCopyCell(m.get(fam, qual).get(0));
+    if (!(c instanceof ExtendedCell)) {
+      throw new RuntimeException("Cannot handle Cell of type: " + c.getClass());
+    }
+    ((ExtendedCell)c).setSequenceId(0);
+    table.addPendingUpdates(c);
 
     // setup the lookup
     ColumnReference col = new ColumnReference(fam, qual);
@@ -251,10 +256,10 @@ public class LocalTableStateTest {
     // check that the value is there
     Pair<CoveredDeleteScanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
-    assertEquals("Didn't get the pending mutation's value first", kv, s.next());
+    assertEquals("Didn't get the pending mutation's value first", c, s.next());
 
     // rollback that value
-    table.rollback(Arrays.asList(kv));
+    table.rollback(Arrays.asList(c));
     p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     s = p.getFirst();
     assertEquals("Didn't correctly rollback the row - still found it!", null, s.next());

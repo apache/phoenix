@@ -21,41 +21,18 @@ package org.apache.phoenix.hbase.index.wal;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
  * Codec to encode/decode {@link KeyValue}s and {@link IndexedKeyValue}s within a {@link WALEdit}
  */
 public class KeyValueCodec {
-
-  /**
-   * KeyValue length marker specifying that its actually an {@link IndexedKeyValue} rather than a
-   * regular {@link KeyValue}.
-   */
-  public static final int INDEX_TYPE_LENGTH_MARKER = -1;
-
-  /**
-   * Read a {@link List} of {@link KeyValue} from the input stream - may contain regular
-   * {@link KeyValue}s or {@link IndexedKeyValue}s.
-   * @param in to read from
-   * @return the next {@link KeyValue}s
-   * @throws IOException if the next {@link KeyValue} cannot be read
-   */
-  public static List<KeyValue> readKeyValues(DataInput in) throws IOException {
-    int size = in.readInt();
-    if (size == 0) {
-      return Collections.<KeyValue>emptyList();
-    }
-    List<KeyValue> kvs = new ArrayList<KeyValue>(size);
-    for (int i = 0; i < size; i++) {
-      kvs.add(readKeyValue(in));
-    }
-    return kvs;
-  }
+  public static final byte NORMAL_CELL_MARKER = 0;
+  public static final byte INDEXED_KEYVALUE_MARKER = 1;
+  public static final byte INDEXED_CELL_MARKER = 2;
 
   /**
    * Read a single {@link KeyValue} from the input stream - may either be a regular {@link KeyValue}
@@ -64,16 +41,20 @@ public class KeyValueCodec {
    * @return the next {@link KeyValue}, if one is available
    * @throws IOException if the next {@link KeyValue} cannot be read
    */
-  public static KeyValue readKeyValue(DataInput in) throws IOException {
-    int length = in.readInt();
-    // its a special IndexedKeyValue
-    if (length == INDEX_TYPE_LENGTH_MARKER) {
-      IndexedKeyValue kv = new IndexedKeyValue();
-      kv.readFields(in);
-      return kv;
-    } else {
-      return KeyValue.create(length, in);
-    }
+  public static Cell readKeyValue(DataInput in) throws IOException {
+      byte marker = in.readByte();
+      if (marker == NORMAL_CELL_MARKER) {
+          return PhoenixKeyValueUtil.deserializeCell(in);
+      } else if (marker == INDEXED_CELL_MARKER) {
+          IndexedCell ic = new IndexedCell();
+          ic.readFields(in);
+          return ic;
+      } else if (marker == INDEXED_KEYVALUE_MARKER) {
+          IndexedKeyValue ikv = new IndexedKeyValue();
+          ikv.readFields(in);
+          return ikv;
+      }
+      throw new IllegalArgumentException("Don't know how to deserialize cell after reading marker: " + (int)marker);
   }
 
   /**
@@ -83,12 +64,16 @@ public class KeyValueCodec {
    * @param kv {@link KeyValue} to which to write
    * @throws IOException if there is an error writing
    */
-  public static void write(DataOutput out, KeyValue kv) throws IOException {
-    if (kv instanceof IndexedKeyValue) {
-      out.writeInt(INDEX_TYPE_LENGTH_MARKER);
-      ((IndexedKeyValue) kv).writeData(out);
-    } else {
-        KeyValue.write(kv, out);
-    }
+  public static void write(DataOutput out, Cell c) throws IOException {
+      if (c instanceof IndexedCell) {
+          out.write(INDEXED_CELL_MARKER);
+          ((IndexedCell)c).writeData(out);
+      } else if (c instanceof IndexedKeyValue) {
+          out.write(INDEXED_KEYVALUE_MARKER);
+          ((IndexedKeyValue)c).writeData(out);
+      } else {
+          out.write(NORMAL_CELL_MARKER);
+          PhoenixKeyValueUtil.serializeCell(out, c);
+      }
   }
 }

@@ -22,8 +22,6 @@ import java.util.Comparator;
 import java.util.LinkedList;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -67,8 +65,7 @@ public class PhoenixQueues {
 
             @Override
             public long sizeOf(Tuple e) {
-                KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
-                return Bytes.SIZEOF_INT * 2 + kv.getLength();
+                return PhoenixKeyValueUtil.getSerializedResultSize(e);
             }
 
         };

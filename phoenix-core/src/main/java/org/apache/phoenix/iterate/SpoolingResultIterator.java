@@ -23,6 +23,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FIL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_SIZE;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -33,9 +34,9 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.commons.io.output.DeferredFileOutputStream;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.memory.MemoryManager;
@@ -47,8 +48,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ResultUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
 
@@ -210,30 +210,29 @@ public class SpoolingResultIterator implements PeekingResultIterator {
      */
     private static class InMemoryResultIterator implements PeekingResultIterator {
         private final MemoryChunk memoryChunk;
-        private final byte[] bytes;
+        private final DataInputStream input;
         private Tuple next;
-        private int offset;
 
         private InMemoryResultIterator(byte[] bytes, MemoryChunk memoryChunk) throws SQLException {
-            this.bytes = bytes;
+            this.input = new DataInputStream(new ByteArrayInputStream(bytes));
             this.memoryChunk = memoryChunk;
             advance();
         }
 
         private Tuple advance() throws SQLException {
-            if (offset >= bytes.length) {
-                return next = null;
+            try {
+              Result result = PhoenixKeyValueUtil.deserializeResult(input);
+              return next = new ResultTuple(result);
+            } catch (EOFException e) {
+              // Read off the end of the buffer, no more results
+              return next = null;
+            } catch (IOException e) {
+              throw ServerUtil.parseServerException(e);
             }
-            int resultSize = ByteUtil.vintFromBytes(bytes, offset);
-            offset += WritableUtils.getVIntSize(resultSize);
-            ImmutableBytesWritable value = new ImmutableBytesWritable(bytes,offset,resultSize);
-            offset += resultSize;
-            Tuple result = new ResultTuple(ResultUtil.toResult(value));
-            return next = result;
         }
 
         @Override
-        public Tuple peek() throws SQLException {
+        public Tuple peek() {
             return next;
         }
 
@@ -294,26 +293,12 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             if (isClosed) {
                 return next;
             }
-            int length;
             try {
-                length = WritableUtils.readVInt(spoolFrom);
+                Result result = PhoenixKeyValueUtil.deserializeResult(spoolFrom);
+                next = new ResultTuple(result);
             } catch (EOFException e) {
                 reachedEnd();
-                return next;
             }
-            int totalBytesRead = 0;
-            int offset = 0;
-            byte[] buffer = new byte[length];
-            while(totalBytesRead < length) {
-                int bytesRead = spoolFrom.read(buffer, offset, length);
-                if (bytesRead == -1) {
-                    reachedEnd();
-                    return next;
-                }
-                offset += bytesRead;
-                totalBytesRead += bytesRead;
-            }
-            next = new ResultTuple(ResultUtil.toResult(new ImmutableBytesWritable(buffer,0,length)));
             return next;
         }
 

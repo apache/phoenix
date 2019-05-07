@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.codec.BaseDecoder;
 import org.apache.hadoop.hbase.codec.BaseEncoder;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.hbase.index.wal.IndexedCell;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -144,7 +145,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
     }
 
     @Override
-    protected KeyValue parseCell() throws IOException{
+    protected Cell parseCell() throws IOException{
       return KeyValueCodec.readKeyValue(this.dataInput);
     }
   }
@@ -243,19 +244,23 @@ public class IndexedWALEditCodec extends WALCellCodec {
       //make sure we are open
       checkFlushed();
 
-      //write the special marker so we can figure out which kind of kv is it
+      // N.b. Divergence from standard path in KeyValueCodec. Serialization being handled in
+      //   multiple places!!
+      // write the special marker so we can figure out which kind of kv is it
       int marker = IndexedWALEditCodec.REGULAR_KEY_VALUE_MARKER;
       if (cell instanceof IndexedKeyValue) {
-        marker = KeyValueCodec.INDEX_TYPE_LENGTH_MARKER;
+          marker = KeyValueCodec.INDEXED_KEYVALUE_MARKER;
+      } else if (cell instanceof IndexedCell) {
+          marker = KeyValueCodec.INDEXED_CELL_MARKER;
       }
       out.write(marker);
 
-      //then serialize based on the marker
+      // then serialize based on the marker
       if (marker == IndexedWALEditCodec.REGULAR_KEY_VALUE_MARKER) {
-        this.compressedKvEncoder.write(cell);
-      }
-      else{
-        KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
+          this.compressedKvEncoder.write(cell);
+      } else {
+          // This is writing a second "type" byte for the Cell we're serializing (yuck).
+          KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
       }
     }
   }
@@ -284,7 +289,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
       }
 
       @Override
-      protected KeyValue parseCell() throws IOException{
+      protected Cell parseCell() throws IOException{
         return KeyValueCodec.readKeyValue(this.dataInput);
       }
   }

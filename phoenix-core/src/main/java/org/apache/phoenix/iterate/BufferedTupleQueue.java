@@ -25,14 +25,12 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ResultUtil;
 
 import com.google.common.collect.Lists;
 
@@ -107,26 +105,18 @@ public class BufferedTupleQueue extends BufferedQueue<Tuple> {
 
         @Override
         protected long sizeOf(Tuple e) {
-            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
-            return Bytes.SIZEOF_INT * 2 + kv.getLength();
+            return Bytes.SIZEOF_INT * 2 + PhoenixKeyValueUtil.getSerializedSize(e.getValue(0));
         }
 
         @Override
         protected void writeToStream(DataOutputStream out, Tuple e) throws IOException {
-            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(e.getValue(0));
-            out.writeInt(kv.getLength() + Bytes.SIZEOF_INT);
-            out.writeInt(kv.getLength());
-            out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
+            PhoenixKeyValueUtil.serializeCell(out, e.getValue(0));
         }
 
         @Override
         protected Tuple readFromStream(DataInputStream in) throws IOException {
-            int length = in.readInt();
-            if (length < 0) return null;
-
-            byte[] b = new byte[length];
-            in.readFully(b);
-            Result result = ResultUtil.toResult(new ImmutableBytesWritable(b));
+            Cell c = PhoenixKeyValueUtil.deserializeCell(in);
+            Result result = Result.create(new Cell[] {c});
             return new ResultTuple(result);
         }
 

@@ -17,52 +17,50 @@
 
 package org.apache.hadoop.hbase.regionserver.wal;
 
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.wal.WALEdit;
-import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
-import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
-import org.junit.Assert;
-import org.junit.Ignore;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 
-@Ignore
-public class IndexedKeyValueTest {
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.wal.WALEdit;
+import org.apache.phoenix.hbase.index.wal.IndexedCell;
+import org.apache.phoenix.hbase.index.wal.KeyValueCodec;
+import org.junit.Assert;
+import org.junit.Test;
+
+public class IndexedCellTest {
 
     @Test
     public void testIndexedKeyValuePopulatesKVFields() throws Exception {
         byte[] row = Bytes.toBytes("foo");
         byte[] tableNameBytes = Bytes.toBytes("MyTableName");
         Mutation mutation = new Put(row);
-        IndexedKeyValue indexedKeyValue = new IndexedKeyValue(tableNameBytes, mutation);
-        testIndexedKeyValueHelper(indexedKeyValue, row, tableNameBytes, mutation);
+        IndexedCell indexedCell = new IndexedCell(tableNameBytes, mutation);
+        testIndexedKeyValueHelper(indexedCell, row, tableNameBytes, mutation);
 
         //now serialize the IndexedKeyValue and make sure the deserialized copy also
         //has all the right fields
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(baos);
-        KeyValueCodec.write(out, indexedKeyValue);
+        KeyValueCodec.write(out, indexedCell);
 
-        IndexedKeyValue deSerializedKV = (IndexedKeyValue)
+        IndexedCell deSerializedCell = (IndexedCell)
             KeyValueCodec.readKeyValue(new DataInputStream(
                 new ByteArrayInputStream(baos.toByteArray())));
-        testIndexedKeyValueHelper(deSerializedKV, row, tableNameBytes, mutation);
+        testIndexedKeyValueHelper(deSerializedCell, row, tableNameBytes, mutation);
 
     }
 
-    private void testIndexedKeyValueHelper(IndexedKeyValue indexedKeyValue, byte[] row, byte[] tableNameBytes, Mutation mutation) {
-        Assert.assertArrayEquals(row, indexedKeyValue.getRowArray());
-        Assert.assertEquals(0, indexedKeyValue.getRowOffset());
-        Assert.assertEquals(row.length, indexedKeyValue.getRowLength());
-        Assert.assertArrayEquals(tableNameBytes, indexedKeyValue.getIndexTable());
-        Assert.assertEquals(mutation.toString(), indexedKeyValue.getMutation().toString());
-        Assert.assertArrayEquals(WALEdit.METAFAMILY, indexedKeyValue.getFamilyArray());
+    private void testIndexedKeyValueHelper(IndexedCell indexedCell, byte[] row, byte[] tableNameBytes, Mutation mutation) {
+        Assert.assertArrayEquals(row, indexedCell.getRowArray());
+        Assert.assertEquals(0, indexedCell.getRowOffset());
+        Assert.assertEquals(row.length, indexedCell.getRowLength());
+        Assert.assertArrayEquals(tableNameBytes, indexedCell.getIndexTable());
+        Assert.assertEquals(mutation.toString(), indexedCell.getMutation().toString());
+        Assert.assertArrayEquals(WALEdit.METAFAMILY, indexedCell.getFamilyArray());
     }
 
 }

@@ -26,10 +26,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
@@ -138,19 +136,7 @@ public class TupleUtil {
     }
     
     public static int write(Tuple result, DataOutput out) throws IOException {
-        int size = 0;
-        for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i));
-            size += kv.getLength();
-            size += Bytes.SIZEOF_INT; // kv.getLength
-          }
-
-        WritableUtils.writeVInt(out, size);
-        for(int i = 0; i < result.size(); i++) {
-            KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i));
-            out.writeInt(kv.getLength());
-            out.write(kv.getBuffer(), kv.getOffset(), kv.getLength());
-          }
-        return size;
+        PhoenixKeyValueUtil.serializeResult(out, result);
+        return PhoenixKeyValueUtil.getSerializedResultSize(result);
     }
 }

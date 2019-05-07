@@ -22,13 +22,9 @@ import java.util.Map.Entry;
 import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellBuilder;
-import org.apache.hadoop.hbase.CellBuilderFactory;
-import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -121,7 +117,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
 
     @Override
     public boolean seekToPreviousRow(Cell key) throws IOException {
-        KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(key);
+        Cell kv = PhoenixKeyValueUtil.maybeCopyCell(key);
         if (reader.isTop()) {
             Optional<Cell> firstKey = reader.getFirstKey();
             // This will be null when the file is empty in which we can not seekBefore to

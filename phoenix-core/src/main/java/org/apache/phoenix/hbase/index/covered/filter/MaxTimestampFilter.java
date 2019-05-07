@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.covered.filter;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.filter.FilterBase;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 /**
@@ -40,15 +39,7 @@ public class MaxTimestampFilter extends FilterBase {
   public Cell getNextCellHint(Cell currentKV) {
     // this might be a little excessive right now - better safe than sorry though, so we don't mess
     // with other filters too much.
-    KeyValue kv = null;
-    try {
-        kv = PhoenixKeyValueUtil.maybeCopyCell(currentKV).clone();
-    } catch (CloneNotSupportedException e) {
-        // the exception should not happen at all
-        throw new IllegalArgumentException(e);
-    }
-    kv.setTimestamp(ts);
-    return kv;
+    return PhoenixKeyValueUtil.copyCellWithTimestamp(currentKV, ts);
   }
 
   @Override

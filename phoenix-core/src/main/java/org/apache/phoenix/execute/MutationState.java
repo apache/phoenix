@@ -28,6 +28,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUE
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -1146,13 +1147,17 @@ public class MutationState implements SQLCloseable {
                                 // so when we retry we need to set REPLAY_WRITES
                                 // for first batch in list only.
                                 for (Mutation m : mutationBatchList.get(0)) {
-                                    if (!PhoenixIndexMetaData.isIndexRebuild(
-                                            m.getAttributesMap())){
-                                        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                                                BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
-                                        );
+                                    try {
+                                        Mutation copy = PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
+                                        if (!PhoenixIndexMetaData.isIndexRebuild(
+                                                m.getAttributesMap())){
+                                            copy.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                                    BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
+                                            );
+                                        }
+                                    } catch (IOException ioe) {
+                                        throw new RuntimeException("Could not update timestamp on mutation", ioe);
                                     }
-                                    PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
                                 }
                                 shouldRetry = true;
                                 shouldRetryIndexedMutation = true;

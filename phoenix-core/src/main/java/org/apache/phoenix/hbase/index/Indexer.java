@@ -71,6 +71,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.hbase.index.wal.IndexedCell;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
@@ -525,7 +526,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
               if (durability != Durability.SKIP_WAL) {
                   // we have all the WAL durability, so we just update the WAL entry and move on
                   for (Pair<Mutation, byte[]> entry : indexUpdates) {
-                    edit.add(new IndexedKeyValue(entry.getSecond(), entry.getFirst()));
+                    edit.add(new IndexedCell(entry.getSecond(), entry.getFirst()));
                   }              
               }
           }
@@ -618,21 +619,6 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   }
 
   /**
-   * Search the {@link WALEdit} for the first {@link IndexedKeyValue} present
-   * @param edit {@link WALEdit}
-   * @return the first {@link IndexedKeyValue} in the {@link WALEdit} or <tt>null</tt> if not
-   *         present
-   */
-  private IndexedKeyValue getFirstIndexedKeyValue(WALEdit edit) {
-    for (Cell kv : edit.getCells()) {
-      if (kv instanceof IndexedKeyValue) {
-        return (IndexedKeyValue) kv;
-      }
-    }
-    return null;
-  }
-
-  /**
    * Extract the index updates from the WAL Edit
    * @param edit to search for index updates
    * @return the mutations to apply to the index tables
@@ -645,6 +631,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;
         indexUpdates.add(new Pair<Mutation, byte[]>(ikv.getMutation(), ikv.getIndexTable()));
+      } else if (kv instanceof IndexedCell) {
+        IndexedCell ic = (IndexedCell) kv;
+        indexUpdates.add(new Pair<Mutation, byte[]>(ic.getMutation(), ic.getIndexTable()));
       }
     }
 

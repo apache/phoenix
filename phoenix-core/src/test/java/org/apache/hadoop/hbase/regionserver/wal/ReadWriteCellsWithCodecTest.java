@@ -40,7 +40,7 @@ import org.apache.hadoop.hbase.io.util.LRUDictionary;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
-import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
+import org.apache.phoenix.hbase.index.wal.IndexedCell;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,7 +49,7 @@ import org.junit.Test;
  * Simple test to read/write simple files via our custom {@link WALCellCodec} to ensure properly
  * encoding/decoding without going through a cluster.
  */
-public class ReadWriteKeyValuesWithCodecTest {
+public class ReadWriteCellsWithCodecTest {
 
   private static final HBaseTestingUtility UTIL = new HBaseTestingUtility();
   private static final byte[] ROW = Bytes.toBytes("row");
@@ -111,7 +111,7 @@ public class ReadWriteKeyValuesWithCodecTest {
     
     WALEdit justIndexUpdates = new WALEdit();
     byte[] table = Bytes.toBytes("targetTable");
-    IndexedKeyValue ikv = new IndexedKeyValue(table, p);
+    IndexedCell ikv = new IndexedCell(table, p);
     justIndexUpdates.add(ikv);
     edits.add(justIndexUpdates);
 
@@ -131,9 +131,7 @@ public class ReadWriteKeyValuesWithCodecTest {
   private void addMutation(WALEdit edit, Mutation m, byte[] family) {
     List<Cell> kvs = m.getFamilyCellMap().get(FAMILY);
     for (Cell kv : kvs) {
-      Cell copy = PhoenixKeyValueUtil.maybeCopyCell(kv);
-      edit.add(copy);
-      System.out.println(copy.getTimestamp());
+      edit.add(PhoenixKeyValueUtil.maybeCopyCell(kv));
     }
   }
 

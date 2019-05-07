@@ -25,15 +25,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ResultUtil;
 
 import com.google.common.collect.MinMaxPriorityQueue;
 
@@ -87,16 +85,10 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
 
         @Override
         protected void writeToStream(DataOutputStream os, ResultEntry e) throws IOException {
-            int totalLen = 0;
-            List<KeyValue> keyValues = toKeyValues(e);
-            for (KeyValue kv : keyValues) {
-                totalLen += (kv.getLength() + Bytes.SIZEOF_INT);
-            }
-            os.writeInt(totalLen);
-            for (KeyValue kv : keyValues) {
-                os.writeInt(kv.getLength());
-                os.write(kv.getBuffer(), kv.getOffset(), kv
-                        .getLength());
+            List<Cell> cells = toKeyValues(e);
+            os.writeInt(cells.size());
+            for (Cell c : cells) {
+                PhoenixKeyValueUtil.serializeCell(os, c);
             }
             ImmutableBytesWritable[] sortKeys = e.sortKeys;
             os.writeInt(sortKeys.length);
@@ -113,13 +105,16 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
 
         @Override
         protected ResultEntry readFromStream(DataInputStream is) throws IOException {
-            int length = is.readInt();
-            if (length < 0)
+            int numCells = is.readInt();
+            if (numCells < 0) {
                 return null;
+            }
 
-            byte[] rb = new byte[length];
-            is.readFully(rb);
-            Result result = ResultUtil.toResult(new ImmutableBytesWritable(rb));
+            List<Cell> cells = new ArrayList<>();
+            for (int i = 0; i < numCells; i++) {
+                cells.add(PhoenixKeyValueUtil.deserializeCell(is));
+            }
+            Result result = Result.create(cells);
             ResultTuple rt = new ResultTuple(result);
             int sortKeySize = is.readInt();
             ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[sortKeySize];
@@ -137,15 +132,14 @@ public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
             return new ResultEntry(sortKeys, rt);
         }
 
-        private List<KeyValue> toKeyValues(ResultEntry entry) {
+        private List<Cell> toKeyValues(ResultEntry entry) {
             Tuple result = entry.getResult();
             int size = result.size();
-            List<KeyValue> kvs = new ArrayList<KeyValue>(size);
+            List<Cell> kvs = new ArrayList<>(size);
             for (int i = 0; i < size; i++) {
                 kvs.add(PhoenixKeyValueUtil.maybeCopyCell(result.getValue(i)));
             }
             return kvs;
         }
-
     }
 }
