@@ -10,18 +10,12 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.util.Map;
-import java.util.Properties;
-
+import com.google.common.base.Throwables;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -34,26 +28,35 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.Properties;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newConcurrentMap();
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3000));
-        //When we run all tests together we are using global cluster(driver)
-        //so to make drop work we need to re register driver with DROP_METADATA_ATTRIB property
-        destroyDriver();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-        //Registering real Phoenix driver to have multiple ConnectionQueryServices created across connections
-        //so that metadata changes doesn't get propagated across connections
+        Configuration conf = HBaseConfiguration.create();
+        HBaseTestingUtility hbaseTestUtil = new HBaseTestingUtility(conf);
+        setUpConfigForMiniCluster(conf);
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        conf.set(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3000));
+        hbaseTestUtil.startMiniCluster();
+        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+        String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     }
 
@@ -64,8 +67,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
@@ -85,9 +88,11 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
                             .executeQuery("select * from "+tableName);
             assertTrue(rs.next());
             assertTrue(rs.next());
+            assertFalse(rs.next());
             rs = conn2.createStatement().executeQuery("select * from "+tableName);
             assertTrue(rs.next());
             assertTrue(rs.next());
+            assertFalse(rs.next());
             //Drop table from conn1
             conn1.createStatement().execute(dropTableQuery);
             try {
@@ -96,11 +101,21 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
             } catch (TableNotFoundException e) {
                 //Expected
             }
+            rs = conn2.createStatement().executeQuery("select * from "+tableName);
             try {
-                rs = conn2.createStatement().executeQuery("select * from "+tableName);
-                fail("Should throw TableNotFoundException after dropping table");
-            } catch (TableNotFoundException e) {
-                //Expected
+                rs.next();
+                fail("Should throw org.apache.hadoop.hbase.TableNotFoundException since the latest metadata " +
+                        "wasn't fetched");
+            } catch (PhoenixIOException ex) {
+                boolean foundHBaseTableNotFound = false;
+                for(Throwable throwable : Throwables.getCausalChain(ex)) {
+                    if(org.apache.hadoop.hbase.TableNotFoundException.class.equals(throwable.getClass())) {
+                        foundHBaseTableNotFound = true;
+                        break;
+                    }
+                }
+                assertTrue("Should throw org.apache.hadoop.hbase.TableNotFoundException since the latest" +
+                        " metadata wasn't fetched", foundHBaseTableNotFound);
             }
         } finally {
             conn1.close();
@@ -115,8 +130,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
@@ -150,8 +165,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
     public void testUpdateCacheFrequencyWithAddColumn() throws Exception {
         // Create connections 1 and 2
         Properties longRunningProps = new Properties(); // Must update config before starting server
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        Connection conn2 = DriverManager.getConnection(getUrl(), longRunningProps);
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        Connection conn2 = DriverManager.getConnection(url, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
         String tableName = generateUniqueName();
@@ -197,8 +212,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
@@ -248,8 +263,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
@@ -295,8 +310,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
-        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn1 = DriverManager.getConnection(url, longRunningProps);
+        String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
         conn1.setAutoCommit(true);
         conn2.setAutoCommit(true);
