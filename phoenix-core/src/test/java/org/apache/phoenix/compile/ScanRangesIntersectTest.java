@@ -295,7 +295,6 @@ public class ScanRangesIntersectTest {
     public void getRowKeyRangesTestNotFullyQualifiedRowKeyLookUp() {
         int rowKeySchemaFields = 2;
         RowKeySchema schema = buildSimpleRowKeySchema(rowKeySchemaFields);
-        int[] slotSpan = new int[rowKeySchemaFields];
 
         String keyString1 = "A";
         String keyString2 = "B";
@@ -305,6 +304,8 @@ public class ScanRangesIntersectTest {
 
         List<List<KeyRange>> ranges = new ArrayList<>();
         ranges.add(Lists.newArrayList(rangeKeyRange1, rangeKeyRange2));
+
+        int[] slotSpan = new int[ranges.size()];
 
         ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
 
@@ -401,7 +402,6 @@ public class ScanRangesIntersectTest {
     public void getRowKeyRangesAdjacentSubRanges() {
         int rowKeySchemaFields = 2;
         RowKeySchema schema = buildSimpleRowKeySchema(rowKeySchemaFields);
-        int[] slotSpan = new int[rowKeySchemaFields];
 
         List<KeyRange> keyRanges = new ArrayList<>();
         keyRanges.add(KeyRange.getKeyRange(stringToByteArray("A"), true,
@@ -415,6 +415,8 @@ public class ScanRangesIntersectTest {
 
         List<List<KeyRange>> ranges = new ArrayList<>();
         ranges.add(keyRanges);
+
+        int[] slotSpan = new int[ranges.size()];
 
         ScanRanges scanRanges = ScanRanges.create(schema, ranges, slotSpan, null, true, -1);
 
