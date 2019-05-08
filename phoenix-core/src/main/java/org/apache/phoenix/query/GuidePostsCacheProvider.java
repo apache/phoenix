@@ -48,6 +48,7 @@ public class GuidePostsCacheProvider {
                         guidePostsCacheFactory = factory;
                         LOGGER.info(String.format("Sucessfully loaded class for GuidePostsCacheFactor of type: %s",
                                 classString));
+                        break;
                     }
                 }
                 if (guidePostsCacheFactory == null) {

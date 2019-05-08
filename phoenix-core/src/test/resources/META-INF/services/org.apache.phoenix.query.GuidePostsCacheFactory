@@ -14,5 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 org.apache.phoenix.query.DefaultGuidePostsCacheFactory
+org.apache.phoenix.query.ITGuidePostsCacheFactory
 # Test Implementations
 org.apache.phoenix.query.GuidePostsCacheProviderTest$TestGuidePostsCacheFactory
