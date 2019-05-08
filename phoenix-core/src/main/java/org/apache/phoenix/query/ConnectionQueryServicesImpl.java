@@ -289,7 +289,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final int TTL_FOR_MUTEX = 15 * 60; // 15min
-    private static final GuidePostsCacheProvider
+    private final GuidePostsCacheProvider
             GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     protected final Configuration config;
     protected final ConnectionInfo connectionInfo;
