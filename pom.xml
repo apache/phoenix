@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.15.0-HBase-1.4-SNAPSHOT</version>
+  <version>4.15.0-HBase-1.5-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -58,7 +58,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.4.0</hbase.version>
+    <hbase.version>1.5.0-SNAPSHOT</hbase.version>
     <hadoop-two.version>2.7.5</hadoop-two.version>
 
     <!-- Dependency versions -->

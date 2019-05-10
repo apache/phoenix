@@ -164,6 +164,20 @@ public class PhoenixRpcScheduler extends RpcScheduler {
     public int getActiveScanRpcHandlerCount() {
         return delegate.getActiveScanRpcHandlerCount();
     }
-    
-    
+
+    @Override
+    public int getActiveGeneralRpcHandlerCount() {
+        return delegate.getActiveGeneralRpcHandlerCount();
+    }
+
+    @Override
+    public int getActivePriorityRpcHandlerCount() {
+        return delegate.getActivePriorityRpcHandlerCount();
+    }
+
+    @Override
+    public int getActiveReplicationRpcHandlerCount() {
+        return delegate.getActiveReplicationRpcHandlerCount();
+    }
+
 }
