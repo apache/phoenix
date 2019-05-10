@@ -939,6 +939,8 @@ public class MutationState implements SQLCloseable {
                 TableInfo tableInfo = pair.getKey();
                 byte[] htableName = tableInfo.getHTableName().getBytes();
                 List<Mutation> mutationList = pair.getValue();
+                List<List<Mutation>> mutationBatchList =
+                        getMutationBatchList(batchSize, batchSizeBytes, mutationList);
 
                 // create a span per target table
                 // TODO maybe we can be smarter about the table name to string here?
@@ -987,9 +989,9 @@ public class MutationState implements SQLCloseable {
 
                         startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
-                        List<List<Mutation>> mutationBatchList = getMutationBatchList(batchSize, batchSizeBytes,
-                                mutationList);
-                        for (final List<Mutation> mutationBatch : mutationBatchList) {
+                        Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
+                        while (itrListMutation.hasNext()) {
+                            final List<Mutation> mutationBatch = itrListMutation.next();
                             if (shouldRetryIndexedMutation) {
                                 // if there was an index write failure, retry the mutation in a loop
                                 final Table finalHTable = hTable;
@@ -1037,9 +1039,18 @@ public class MutationState implements SQLCloseable {
                                         return ioe;
                                     }
                                 }, iwe, connection, connection.getQueryServices().getProps());
+                                shouldRetryIndexedMutation = false;
                             } else {
                                 hTable.batch(mutationBatch, null);
                             }
+                            // remove each batch from the list once it gets applied
+                            // so when failures happens for any batch we only start
+                            // from that batch only instead of doing duplicate reply of already
+                            // applied batches from entire list, also we can set
+                            // REPLAY_ONLY_INDEX_WRITES for first batch
+                            // only in case of 1121 SQLException
+                            itrListMutation.remove();
+
                             batchCount++;
                             if (logger.isDebugEnabled())
                                 logger.debug("Sent batch of " + mutationBatch.size() + " for "
@@ -1089,7 +1100,8 @@ public class MutationState implements SQLCloseable {
                                 if (iwe != null && !shouldRetryIndexedMutation) {
                                     // For an index write failure, the data table write succeeded,
                                     // so when we retry we need to set REPLAY_WRITES
-                                    for (Mutation m : mutationList) {
+                                    // for first batch in list only.
+                                    for (Mutation m : mutationBatchList.get(0)) {
                                         if (!PhoenixIndexMetaData.isIndexRebuild(
                                             m.getAttributesMap())){
                                             m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
