@@ -21,12 +21,20 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
+import java.math.BigInteger;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Iterator;
 import java.util.Properties;
+import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
@@ -37,14 +45,25 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.Repeat;
+import org.apache.phoenix.util.RunUntilFailure;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
+@RunWith(RunUntilFailure.class)
 public class MutationStateIT extends ParallelStatsDisabledIT {
 
     private static final String DDL =
             " (ORGANIZATION_ID CHAR(15) NOT NULL, SCORE DOUBLE, "
             + "ENTITY_ID CHAR(15) NOT NULL, TAGS VARCHAR, CONSTRAINT PAGE_SNAPSHOT_PK "
             + "PRIMARY KEY (ORGANIZATION_ID, ENTITY_ID DESC)) MULTI_TENANT=TRUE";
+
+    private static final Random RAND = new Random(5);
 
     private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
         PreparedStatement stmt =
@@ -55,6 +74,231 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
             stmt.setString(2, "BBBB" + i);
             stmt.setInt(3, 1);
             stmt.execute();
+        }
+    }
+
+
+    public static String randString(int length) {
+        return new BigInteger(164, RAND).toString().substring(0, length);
+    }
+
+    private static void mutateRandomly(final String upsertStmt, final String fullTableName,
+            final int nThreads, final int nRows, final int nIndexValues, final int batchSize,
+            final CountDownLatch doneSignal) {
+        Runnable[] runnables = new Runnable[nThreads];
+        for (int i = 0; i < nThreads; i++) {
+            runnables[i] = new Runnable() {
+
+                @Override
+                public void run() {
+                    try {
+                        Connection conn = DriverManager.getConnection(getUrl());
+                        for (int i = 0; i < nRows; i++) {
+                            PreparedStatement statement = conn.prepareStatement(upsertStmt);
+                            int index = 0;
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(1));
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(15));
+                            statement.setTimestamp(++index,
+                                new Timestamp(System.currentTimeMillis()));
+                            statement.setTimestamp(++index,
+                                new Timestamp(System.currentTimeMillis()));
+                            statement.setString(++index, randString(1));
+                            statement.setString(++index, randString(1));
+                            statement.setBoolean(++index, false);
+                            statement.setString(++index, randString(1));
+                            statement.setString(++index, randString(1));
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(15));
+                            statement.setString(++index, randString(15));
+                            statement.setInt(++index, RAND.nextInt());
+                            statement.execute();
+                            if ((i % batchSize) == 0) {
+                                conn.commit();
+                            }
+                        }
+                        conn.commit();
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+        }
+        for (int i = 0; i < nThreads; i++) {
+            Thread t = new Thread(runnables[i]);
+            t.start();
+        }
+    }
+
+    @Test
+    @Repeat(5)
+    public void testOnlyIndexTableWriteFromClientSide()
+            throws SQLException, InterruptedException, IOException {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String indexName1 = generateUniqueName();
+        String indexName2 = generateUniqueName();
+        String indexName3 = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullIndexName1 = SchemaUtil.getTableName(schemaName, indexName1);
+        String CREATE_DATA_TABLE =
+                "CREATE TABLE IF NOT EXISTS " + fullTableName + " ( \n"
+                        + "    USER1_ID CHAR(15) NOT NULL,\n"
+                        + "    ELEMENT1_ID CHAR(15) NOT NULL,\n"
+                        + "    ELEMENT_ID CHAR(15) NOT NULL,\n"
+                        + "    ELEMENT_TYPE VARCHAR(1) NOT NULL,\n"
+                        + "    TYPE_ID CHAR(15) NOT NULL,\n"
+                        + "    USER_ID CHAR(15) NOT NULL,\n"
+                        + "    ELEMENT4_TIME TIMESTAMP,\n"
+                        + "    ELEMENT_UPDATE TIMESTAMP,\n"
+                        + "    ELEMENT_SCORE DOUBLE,\n"
+                        + "    ELEMENT2_TYPE VARCHAR(1),\n"
+                        + "    ELEMENT1_TYPE VARCHAR(1),\n"
+                        + "    ELEMENT1_IS_SYS_GEN BOOLEAN,\n"
+                        + "    ELEMENT1_STATUS VARCHAR(1),\n"
+                        + "    ELEMENT1_VISIBILITY VARCHAR(1),\n"
+                        + "    ELEMENT3_ID CHAR(15),\n"
+                        + "    ELEMENT4_BY CHAR(15),\n"
+                        + "    BEST_ELEMENT_ID CHAR(15),\n"
+                        + "    ELEMENT_COUNT INTEGER,\n"
+                        + "    CONSTRAINT PK PRIMARY KEY\n"
+                        + "    (\n" + "     USER1_ID,\n"
+                        + "     ELEMENT1_ID,\n"
+                        + "     ELEMENT_ID,\n"
+                        + "     ELEMENT_TYPE,\n"
+                        + "     TYPE_ID,\n"
+                        + "     USER_ID\n" + " )\n"
+                        + " ) VERSIONS=1,MULTI_TENANT=TRUE,TTL=31536000\n";
+
+        String CREATE_INDEX_1 =
+                "CREATE INDEX IF NOT EXISTS " + indexName1 + " \n"
+                        + "     ON " + fullTableName + " (\n"
+                    + "     TYPE_ID,\n"
+                    + "     ELEMENT_ID,\n"
+                    + "     ELEMENT_TYPE,\n"
+                    + "     USER_ID,\n"
+                    + "     ELEMENT4_TIME DESC,\n"
+                    + "     ELEMENT1_ID DESC\n"
+                    + "     ) INCLUDE (\n"
+                    + "     ELEMENT2_TYPE,\n"
+                    + "     ELEMENT1_TYPE,\n"
+                    + "     ELEMENT1_IS_SYS_GEN,\n"
+                    + "     ELEMENT1_STATUS,\n"
+                    + "     ELEMENT1_VISIBILITY,\n"
+                    + "     ELEMENT3_ID,\n"
+                    + "     ELEMENT4_BY,\n"
+                    + "     BEST_ELEMENT_ID,\n"
+                    + "     ELEMENT_COUNT\n"
+                    + "     )\n";
+
+        String CREATE_INDEX_2 =
+                " CREATE INDEX IF NOT EXISTS " + indexName2  + "\n"
+                        + "     ON " + fullTableName + " (\n"
+                    + "     TYPE_ID,\n"
+                    + "     ELEMENT_ID,\n"
+                    + "     ELEMENT_TYPE,\n"
+                    + "     USER_ID,\n"
+                    + "     ELEMENT_UPDATE DESC,\n"
+                    + "     ELEMENT1_ID DESC\n"
+                    + "     ) INCLUDE (\n"
+                    + "     ELEMENT2_TYPE,\n"
+                    + "     ELEMENT1_TYPE,\n"
+                    + "     ELEMENT1_IS_SYS_GEN,\n"
+                    + "     ELEMENT1_STATUS,\n"
+                    + "     ELEMENT1_VISIBILITY,\n"
+                    + "     ELEMENT3_ID,\n"
+                    + "     ELEMENT4_BY,\n"
+                    + "     BEST_ELEMENT_ID,\n"
+                    + "     ELEMENT_COUNT\n"
+                    + "     )\n";
+
+        String CREATE_INDEX_3 =
+                "CREATE INDEX IF NOT EXISTS " + indexName3  + "\n"
+                        + "     ON " + fullTableName + " (\n"
+                    + "     TYPE_ID,\n"
+                    + "     ELEMENT_ID,\n"
+                    + "     ELEMENT_TYPE,\n"
+                    + "     USER_ID,\n"
+                    + "     ELEMENT_SCORE DESC,\n"
+                    + "     ELEMENT1_ID DESC\n"
+                    + "     ) INCLUDE (\n"
+                    + "     ELEMENT2_TYPE,\n"
+                    + "     ELEMENT1_TYPE,\n"
+                    + "     ELEMENT1_IS_SYS_GEN,\n"
+                    + "     ELEMENT1_STATUS,\n"
+                    + "     ELEMENT1_VISIBILITY,\n"
+                    + "     ELEMENT3_ID,\n"
+                    + "     ELEMENT4_BY,\n"
+                    + "     BEST_ELEMENT_ID,\n"
+                    + "     ELEMENT_COUNT\n"
+                    + "     )\n";
+
+        String UPSERT_INTO_DATA_TABLE =
+                "UPSERT INTO " + fullTableName + "\n"
+                        + "(\n" + "    USER1_ID,\n"
+                        + "    ELEMENT1_ID,\n"
+                        + "    ELEMENT_ID,\n"
+                        + "    ELEMENT_TYPE,\n"
+                        + "    TYPE_ID,\n"
+                        + "    USER_ID,\n"
+                        + "    ELEMENT4_TIME,\n"
+                        + "    ELEMENT_UPDATE,\n"
+                        + "    ELEMENT2_TYPE,\n"
+                        + "    ELEMENT1_TYPE,\n"
+                        + "    ELEMENT1_IS_SYS_GEN,\n"
+                        + "    ELEMENT1_STATUS,\n"
+                        + "    ELEMENT1_VISIBILITY,\n"
+                        + "    ELEMENT3_ID,\n"
+                        + "    ELEMENT4_BY,\n"
+                        + "    BEST_ELEMENT_ID,\n"
+                        + "    ELEMENT_COUNT\n" + ")"
+                      + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+
+        int nThreads = 1;
+        int nRows = 5000;
+        int nIndexValues = 4000;
+        int batchSize = 200;
+        final CountDownLatch doneSignal = new CountDownLatch(nThreads);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try {
+                conn.createStatement().execute(CREATE_DATA_TABLE);
+                conn.createStatement().execute(CREATE_INDEX_1);
+                conn.createStatement().execute(CREATE_INDEX_2);
+                conn.createStatement().execute(CREATE_INDEX_3);
+                conn.commit();
+                mutateRandomly(UPSERT_INTO_DATA_TABLE, fullTableName, nThreads, nRows, nIndexValues,
+                    batchSize, doneSignal);
+                Thread.sleep(200);
+                unassignRegionAsync(fullIndexName1);
+                assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+            } finally {
+
+            }
+            long dataTableRows = TestUtil.getRowCount(conn, fullTableName);
+            ResultSet rs =
+                    conn.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), null,
+                        new String[] { PTableType.INDEX.toString() });
+            while (rs.next()) {
+                String indexState = rs.getString("INDEX_STATE");
+                String indexName = rs.getString(3);
+                long rowCountIndex =
+                        TestUtil.getRowCount(conn, SchemaUtil.getTableName(schemaName, indexName));
+                if (indexState.equals(PIndexState.ACTIVE.name())) {
+                    assertTrue(dataTableRows == rowCountIndex);
+                } else {
+                    assertTrue(dataTableRows > rowCountIndex);
+                }
+            }
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (IOException e) {
+            throw e;
         }
     }
 
