@@ -26,6 +26,7 @@ import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.util.Iterator;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -35,6 +36,11 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -447,5 +453,44 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         stmt.execute();
         assertTrue("Mutation state size should decrease", prevEstimatedSize+4 > state.getEstimatedSize());
     }
-    
+
+    @Test
+    public void testSplitMutationsIntoSameGroupForSingleRow() throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        Properties props = new Properties();
+        props.put("phoenix.mutate.batchSize", "2");
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+            conn.setAutoCommit(false);
+            conn.createStatement().executeUpdate(
+                    "CREATE TABLE "  + tableName + " ("
+                            + "A VARCHAR NOT NULL PRIMARY KEY,"
+                            + "B VARCHAR,"
+                            + "C VARCHAR,"
+                            + "D VARCHAR) COLUMN_ENCODED_BYTES = 0");
+            conn.createStatement().executeUpdate("CREATE INDEX " + indexName + " on "  + tableName + " (C) INCLUDE(D)");
+
+            conn.createStatement().executeUpdate("UPSERT INTO "  + tableName + "(A,B,C,D) VALUES ('A2','B2','C2','D2')");
+            conn.createStatement().executeUpdate("UPSERT INTO "  + tableName + "(A,B,C,D) VALUES ('A3','B3', 'C3', null)");
+            conn.commit();
+
+            Table htable = conn.getQueryServices().getTable(Bytes.toBytes(tableName));
+            Scan scan = new Scan();
+            scan.setRaw(true);
+            Iterator<Result> scannerIter = htable.getScanner(scan).iterator();
+            while (scannerIter.hasNext()) {
+                long ts = -1;
+                Result r = scannerIter.next();
+                for (Cell cell : r.listCells()) {
+                    if (ts == -1) {
+                        ts = cell.getTimestamp();
+                    } else {
+                        assertEquals("(" + cell.toString() + ") has different ts", ts, cell.getTimestamp());
+                    }
+                }
+            }
+            htable.close();
+        }
+    }
+
 }
