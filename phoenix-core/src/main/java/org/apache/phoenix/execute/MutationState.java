@@ -102,6 +102,7 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -1137,34 +1138,56 @@ public class MutationState implements SQLCloseable {
     }
 
     /**
-     * Split the list of mutations into multiple lists that don't exceed row and byte thresholds
+     *
+     * Split the list of mutations into multiple lists. since a single row update can contain multiple mutations,
+     * we only check if the current batch has exceeded the row or size limit for different rows,
+     * so that mutations for a single row don't end up in different batches.
      * 
      * @param allMutationList
      *            List of HBase mutations
      * @return List of lists of mutations
      */
-    public static List<List<Mutation>> getMutationBatchList(long batchSize, long batchSizeBytes,
-            List<Mutation> allMutationList) {
+    public static List<List<Mutation>> getMutationBatchList(long batchSize, long batchSizeBytes, List<Mutation> allMutationList) {
+        Preconditions.checkArgument(batchSize> 1,
+                "Mutation types are put or delete, for one row all mutations must be in one batch.");
+        Preconditions.checkArgument(batchSizeBytes > 0, "Batch size must be larger than 0");
         List<List<Mutation>> mutationBatchList = Lists.newArrayList();
         List<Mutation> currentList = Lists.newArrayList();
+        List<Mutation> sameRowList = Lists.newArrayList();
         long currentBatchSizeBytes = 0L;
-        for (Mutation mutation : allMutationList) {
-            long mutationSizeBytes = KeyValueUtil.calculateMutationDiskSize(mutation);
-            if (currentList.size() == batchSize || currentBatchSizeBytes + mutationSizeBytes > batchSizeBytes) {
+        for (int i = 0; i < allMutationList.size(); ) {
+            long sameRowBatchSize = 1L;
+            Mutation mutation = allMutationList.get(i);
+            long sameRowMutationSizeBytes = KeyValueUtil.calculateMutationDiskSize(mutation);
+            sameRowList.add(mutation);
+            while (i + 1 < allMutationList.size() &&
+                    Bytes.compareTo(allMutationList.get(i + 1).getRow(), mutation.getRow()) == 0) {
+                Mutation sameRowMutation = allMutationList.get(i + 1);
+                sameRowList.add(sameRowMutation);
+                sameRowMutationSizeBytes += KeyValueUtil.calculateMutationDiskSize(sameRowMutation);
+                sameRowBatchSize++;
+                i++;
+            }
+
+            if (currentList.size() + sameRowBatchSize > batchSize ||
+                    currentBatchSizeBytes + sameRowMutationSizeBytes > batchSizeBytes) {
                 if (currentList.size() > 0) {
                     mutationBatchList.add(currentList);
                     currentList = Lists.newArrayList();
                     currentBatchSizeBytes = 0L;
                 }
             }
-            currentList.add(mutation);
-            currentBatchSizeBytes += mutationSizeBytes;
+
+            currentList.addAll(sameRowList);
+            currentBatchSizeBytes += sameRowMutationSizeBytes;
+            sameRowList.clear();
+            i++;
         }
+
         if (currentList.size() > 0) {
             mutationBatchList.add(currentList);
         }
         return mutationBatchList;
-
     }
 
     public byte[] encodeTransaction() throws SQLException {
