@@ -1,0 +1,18 @@
+
+#Omid TSO connection
+connectionType: !!org.apache.omid.tso.client.OmidClientConfiguration$ConnType DIRECT
+connectionString: "localhost:54758"
+
+# When Omid is working in High Availability mode, two or more replicas of the TSO server are running in primary/backup
+# mode. When a TSO server replica is elected as master, it publishes its address through ZK. In order to configure
+# the Omid client to access the TSO server in HA mode:
+#     1) set 'connectionType' to !!org.apache.omid.tso.client.OmidClientConfiguration$ConnType HA
+#     2) set 'connectionString' to the ZK cluster connection string where the server is publishing its address
+zkConnectionTimeoutInSecs: 10
+# In HA mode, make sure that the next settings match same settings on the TSO server side
+zkNamespace: "omid"
+zkCurrentTsoPath: "/current-tso"
+
+# Configure whether the TM performs the post-commit actions for a tx (update shadow cells and clean commit table entry)
+# before returning to the control to the client (SYNC) or in parallel (ASYNC)
+postCommitMode: !!org.apache.omid.tso.client.OmidClientConfiguration$PostCommitMode ASYNC
