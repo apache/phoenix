@@ -200,6 +200,18 @@
     <artifactId>omid-hbase-client-hbase2.x</artifactId>
     <version>${omid.version}</version>
     <exclusions>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+      </exclusion>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-framework</artifactId>
+      </exclusion>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+      </exclusion>
 
       <exclusion>
         <groupId>org.apache.omid</groupId>
@@ -213,8 +225,6 @@
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-shims-hbase1.x</artifactId>
       </exclusion>
-
-
 
       <exclusion>
         <groupId>org.testng</groupId>
@@ -339,6 +349,18 @@
     <version>${omid.version}</version>
     <type>test-jar</type>
     <exclusions>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+      </exclusion>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+      </exclusion>
+      <exclusion>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-framework</artifactId>
+      </exclusion>
       <exclusion>
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-common-hbase1.x</artifactId>
@@ -642,6 +664,13 @@
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
       </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-framework</artifactId>
+      <version>${curator.version}</version>
+    </dependency>
+
+
   </dependencies>
 
   <reporting>

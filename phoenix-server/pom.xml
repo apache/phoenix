@@ -200,6 +200,14 @@
                         <shadedPattern>${shaded.package}.org.apache.omid</shadedPattern>
                     </relocation>
                     <relocation>
+                        <pattern>org.apache.commons-collections4</pattern>
+                        <shadedPattern>${shaded.package}.org.apache.commons-collections4</shadedPattern>
+                    </relocation>
+                    <relocation>
+                        <pattern>org.jboss.netty:netty</pattern>
+                        <shadedPattern>${shaded.package}.org.jboss.netty:netty</shadedPattern>
+                    </relocation>
+                    <relocation>
                       <pattern>org.apache.twill</pattern>
                       <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
                     </relocation>
