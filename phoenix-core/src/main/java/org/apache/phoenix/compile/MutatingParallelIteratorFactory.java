@@ -58,8 +58,9 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
         
         MutationState state = mutate(parentContext, iterator, clonedConnection);
         
-        long totalRowCount = state.getUpdateCount();
-        if (clonedConnection.getAutoCommit()) {
+        final long totalRowCount = state.getUpdateCount();
+        final boolean autoFlush = connection.getAutoCommit() || plan.getTableRef().getTable().isTransactional();
+        if (autoFlush) {
             clonedConnection.getMutationState().join(state);
             state = clonedConnection.getMutationState();
         }
