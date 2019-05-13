@@ -186,7 +186,9 @@ public class UpsertCompiler {
                 services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
-        boolean isAutoCommit = connection.getAutoCommit();
+        // we automatically flush the mutations when either auto commit is enabled, or
+        // the target table is transactional (in that case changes are not visible until we commit)
+        final boolean autoFlush = connection.getAutoCommit() || tableRef.getTable().isTransactional();
         int sizeOffset = 0;
         int numSplColumns =
                 (tableRef.getTable().isMultiTenant() ? 1 : 0)
@@ -245,7 +247,7 @@ public class UpsertCompiler {
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, null, numSplColumns);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
-                if (isAutoCommit && rowCount % batchSize == 0) {
+                if (autoFlush && rowCount % batchSize == 0) {
                     MutationState state = new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     connection.getMutationState().send();
@@ -253,7 +255,7 @@ public class UpsertCompiler {
                 }
             }
 
-            if (isAutoCommit) {
+            if (autoFlush) {
                 // If auto commit is true, this last batch will be committed upon return
                 sizeOffset = rowCount / batchSize * batchSize;
             }
