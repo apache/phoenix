@@ -38,6 +38,9 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -58,6 +61,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -93,7 +97,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                  {"TEPHRA"},{"OMID"}}),0);
     }
-    
+
     @Test
     public void testFailureToRollbackAfterDelete() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -133,6 +137,47 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         }
     }
     
+    @Test
+    public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Connection otherConn = DriverManager.getConnection(getUrl());
+             Admin admin = driver
+                        .getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+                        .getAdmin();) {
+            conn.setAutoCommit(true);
+            otherConn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE SEQUENCE " + tableName + "_seq CACHE 1000");
+            conn.createStatement().execute("CREATE TABLE " + tableName
+                    + " (pk INTEGER PRIMARY KEY, val INTEGER) UPDATE_CACHE_FREQUENCY=3600000, TRANSACTIONAL=true,"
+                    + "TRANSACTION_PROVIDER='" + txProvider + "'");
+
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES (NEXT VALUE FOR "
+                    + tableName + "_seq,1)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName
+                    + " SELECT NEXT VALUE FOR " + tableName + "_seq, val FROM " + tableName);
+            PreparedStatement query = otherConn
+                    .prepareStatement("SELECT COUNT(*) FROM " + tableName);
+            for (int i = 0; i < 12; i++) {
+                try {
+                    admin.split(TableName.valueOf(tableName));
+                } catch (IOException ignore) {
+                    // we don't care if the split sometime cannot be executed
+                }
+                int upsertCount = stmt.executeUpdate();
+                assertEquals((int) Math.pow(2, i), upsertCount);
+                ResultSet rs = query.executeQuery();
+                assertTrue(rs.next());
+                assertEquals((int) Math.pow(2, i + 1), rs.getLong(1));
+                rs.close();
+            }
+        }
+    }
+
     @Test
     public void testWithMixOfTxProviders() throws Exception {
         // No sense in running the test with every providers, so just run it with the default one
@@ -546,4 +591,105 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    private class ParallelQuery implements Runnable {
+        PreparedStatement query;
+        CountDownLatch started = new CountDownLatch(1);
+        AtomicBoolean done = new AtomicBoolean(false);
+        ConcurrentHashMap<Long, Long> failCounts = new ConcurrentHashMap<>();
+
+        public ParallelQuery(PreparedStatement query) {
+            this.query = query;
+        }
+
+        @Override
+        public void run() {
+            try {
+                started.countDown();
+                while(!done.get()) {
+                    ResultSet rs = query.executeQuery();
+                    assertTrue(rs.next());
+                    long count = rs.getLong(1);
+                    rs.close();
+                    if (count != 0 && count != (int)Math.pow(2, 12)) {
+                        failCounts.put(count, count);
+                    }
+                }
+            } catch (SQLException x) {
+                throw new RuntimeException(x);
+            }
+        }
+    }
+
+    @Test
+    public void testParallelConnectionOnlySeesCommittedData() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, Integer.toString(512));
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
+        props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Connection otherConn = DriverManager.getConnection(getUrl());
+             Admin admin = driver
+                        .getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
+                        .getAdmin();) {
+            conn.setAutoCommit(false);
+            otherConn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE SEQUENCE " + tableName + "_seq CACHE 1000");
+            conn.createStatement().execute("CREATE TABLE " + tableName
+                    + " (pk INTEGER PRIMARY KEY, val INTEGER) UPDATE_CACHE_FREQUENCY=3600000, TRANSACTIONAL=true,TRANSACTION_PROVIDER='"
+                    + txProvider + "'");
+
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName
+                    + " SELECT NEXT VALUE FOR " + tableName + "_seq, val FROM " + tableName);
+            PreparedStatement seed = conn.prepareStatement("UPSERT INTO " + tableName
+                    + " VALUES (NEXT VALUE FOR " + tableName + "_seq,1)");
+
+            PreparedStatement query = conn.prepareStatement("SELECT COUNT(*) FROM " + tableName);
+            PreparedStatement otherQuery = otherConn
+                    .prepareStatement("SELECT COUNT(*) FROM " + tableName);
+
+            // seed
+            seed.executeUpdate();
+            for (int i = 0; i < 12; i++) {
+                try {
+                    admin.split(TableName.valueOf(tableName));
+                } catch (IOException ignore) {
+                    // we don't care if the split sometime cannot be executed
+                }
+                int upsertCount = stmt.executeUpdate();
+                assertEquals((int) Math.pow(2, i), upsertCount);
+
+                // read-own-writes, this forces uncommitted data to the server
+                ResultSet rs = query.executeQuery();
+                assertTrue(rs.next());
+                assertEquals((int) Math.pow(2, i + 1), rs.getLong(1));
+                rs.close();
+
+                rs = otherQuery.executeQuery();
+                assertTrue(rs.next());
+                assertEquals(0, rs.getLong(1));
+                rs.close();
+            }
+
+            ParallelQuery q = new ParallelQuery(otherQuery);
+            Thread t = new Thread(q);
+            t.start();
+            q.started.await();
+
+            conn.commit();
+
+            q.done.set(true);
+            t.join();
+
+            assertTrue(
+                    "Expected 0 or 4096 but got these intermediary counts " + q.failCounts.keySet(),
+                    q.failCounts.isEmpty());
+            ResultSet rs = otherQuery.executeQuery();
+            assertTrue(rs.next());
+            assertEquals((int) Math.pow(2, 12), rs.getLong(1));
+            rs.close();
+        }
+    }
+
 }
