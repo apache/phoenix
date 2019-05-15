@@ -103,6 +103,7 @@ public class QueryCompiler {
     private final boolean projectTuples;
     private final boolean noChildParentJoinOptimization;
     private final boolean usePersistentCache;
+    private final boolean persistentCacheOnAllServers;
     private final boolean optimizeSubquery;
     private final Map<TableRef, QueryPlan> dataPlans;
     private final boolean costBased;
@@ -122,6 +123,8 @@ public class QueryCompiler {
         this.projectTuples = projectTuples;
         this.noChildParentJoinOptimization = select.getHint().hasHint(Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION) || select.getHint().hasHint(Hint.USE_PERSISTENT_CACHE);
         this.usePersistentCache = select.getHint().hasHint(Hint.USE_PERSISTENT_CACHE);
+        this.persistentCacheOnAllServers = select.getHint().hasHint(Hint.PERSISTENT_CACHE_ON_ALL_SERVERS);
+
         ConnectionQueryServices services = statement.getConnection().getQueryServices();
         this.costBased = services.getProps().getBoolean(QueryServices.COST_BASED_OPTIMIZER_ENABLED, QueryServicesOptions.DEFAULT_COST_BASED_OPTIMIZER_ENABLED);
         scan.setLoadColumnFamiliesOnDemand(true);
@@ -341,7 +344,7 @@ public class QueryCompiler {
                     if (i < count - 1) {
                         fieldPositions[i + 1] = fieldPositions[i] + (tables[i] == null ? 0 : (tables[i].getColumns().size() - tables[i].getPKColumns().size()));
                     }
-                    hashPlans[i] = new HashSubPlan(i, subPlans[i], optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), usePersistentCache, keyRangeLhsExpression, keyRangeRhsExpression);
+                    hashPlans[i] = new HashSubPlan(i, subPlans[i], optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), usePersistentCache, persistentCacheOnAllServers, keyRangeLhsExpression, keyRangeRhsExpression);
                 }
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector,
                         wildcardIncludesDynamicCols);
@@ -423,9 +426,10 @@ public class QueryCompiler {
                         new JoinType[]{type == JoinType.Right ? JoinType.Left : type}, new boolean[]{true},
                         new PTable[]{lhsTable}, new int[]{fieldPosition}, postJoinFilterExpression, QueryUtil.getOffsetLimit(limit, offset));
                 boolean usePersistentCache = joinTable.getStatement().getHint().hasHint(Hint.USE_PERSISTENT_CACHE);
+                boolean persistentCacheToAllServers = joinTable.getStatement().getHint().hasHint(Hint.PERSISTENT_CACHE_ON_ALL_SERVERS);
                 Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
                 getKeyExpressionCombinations(keyRangeExpressions, context, joinTable.getStatement(), rhsTableRef, type, joinExpressions, hashExpressions);
-                return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[]{new HashSubPlan(0, lhsPlan, hashExpressions, false, usePersistentCache, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
+                return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[]{new HashSubPlan(0, lhsPlan, hashExpressions, false, usePersistentCache, persistentCacheToAllServers, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
             }
             case SORT_MERGE: {
                 JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();

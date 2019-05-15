@@ -87,6 +87,11 @@ public class HintNode {
         */
        USE_PERSISTENT_CACHE,
        /**
+        * Whether a persistent subquery cache should be distributed to all the regionservers,
+        * regardless of the join condition. Requires {@link #USE_PERSISTENT_CACHE}.
+        */
+       PERSISTENT_CACHE_ON_ALL_SERVERS,
+       /**
         * Avoid using star-join optimization. Used for broadcast join (hash join) only.
         */
        NO_STAR_JOIN,

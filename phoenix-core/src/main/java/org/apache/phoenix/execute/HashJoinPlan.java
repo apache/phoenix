@@ -503,6 +503,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         private final List<Expression> hashExpressions;
         private final boolean singleValueOnly;
         private final boolean usePersistentCache;
+        private final boolean persistentCacheOnAllServers;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
         private final MessageDigest digest;
@@ -511,6 +512,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 List<Expression> hashExpressions,
                 boolean singleValueOnly,
                 boolean usePersistentCache,
+                boolean persistentCacheOnAllServers,
                 Expression keyRangeLhsExpression, 
                 Expression keyRangeRhsExpression) {
             this.index = index;
@@ -518,6 +520,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             this.hashExpressions = hashExpressions;
             this.singleValueOnly = singleValueOnly;
             this.usePersistentCache = usePersistentCache;
+            this.persistentCacheOnAllServers = persistentCacheOnAllServers;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
             try {
@@ -557,7 +560,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     if (cache == null) {
                         LOG.debug("Making RPC to add cache " + Hex.encodeHexString(cacheId));
                         cache = parent.hashClient.addHashCache(ranges, cacheId, iterator,
-                                plan.getEstimatedSize(), hashExpressions, singleValueOnly, usePersistentCache,
+                                plan.getEstimatedSize(), hashExpressions, singleValueOnly,
+                                usePersistentCache, persistentCacheOnAllServers,
                                 parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
                         long endTime = System.currentTimeMillis();

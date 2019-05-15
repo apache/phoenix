@@ -248,18 +248,19 @@ public class ServerCacheClient {
             boolean storeCacheOnClient) throws SQLException {
         final byte[] cacheId = ServerCacheClient.generateId();
         return addServerCache(keyRanges, cacheId, cachePtr, txState, cacheFactory,
-                cacheUsingTable, false, storeCacheOnClient);
+                cacheUsingTable, false, false, storeCacheOnClient);
     }
 
     public ServerCache addServerCache(
             ScanRanges keyRanges, final byte[] cacheId, final ImmutableBytesWritable cachePtr,
             final byte[] txState, final ServerCacheFactory cacheFactory,
             final PTable cacheUsingTable, final boolean usePersistentCache,
-            boolean storeCacheOnClient) throws SQLException {
+            boolean persistentCacheOnAllServers, boolean storeCacheOnClient) throws SQLException {
         ConnectionQueryServices services = connection.getQueryServices();
         List<Closeable> closeables = new ArrayList<Closeable>();
         ServerCache hashCacheSpec = null;
         SQLException firstException = null;
+        boolean distributeCacheToAllServers = usePersistentCache && persistentCacheOnAllServers;
         /**
          * Execute EndPoint in parallel on each server to send compressed hash cache 
          */
@@ -279,7 +280,7 @@ public class ServerCacheClient {
                 byte[] regionStartKey = entry.getRegion().getStartKey();
                 byte[] regionEndKey = entry.getRegion().getEndKey();
                 if (!servers.contains(entry) &&
-                        (usePersistentCache ||
+                        (distributeCacheToAllServers ||
                                 keyRanges.intersectRegion(regionStartKey, regionEndKey,
                                         cacheUsingTable.getIndexType() == IndexType.LOCAL))) {
                     // Call RPC once per server
