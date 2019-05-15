@@ -783,4 +783,9 @@ public class SortMergeJoinPlan implements QueryPlan {
     public List<OrderBy> getOutputOrderBys() {
         return this.actualOutputOrderBys;
     }
+
+    @Override
+    public boolean isApplicable() {
+        return true;
+    }
 }

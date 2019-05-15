@@ -26,6 +26,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -45,6 +46,7 @@ import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -86,7 +88,7 @@ public class WhereCompiler {
     }
 
     public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
-        return compile(context, statement, null, null);
+        return compile(context, statement, null, null, Optional.<byte[]>absent());
     }
 
     public static Expression compile(StatementContext context, ParseNode whereNode) throws SQLException {
@@ -104,8 +106,8 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
-        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), subqueryNodes);
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes, Optional<byte[]> minOffset) throws SQLException {
+        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), subqueryNodes, minOffset);
     }
 
     /**
@@ -118,7 +120,7 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */    
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, Set<SubqueryParseNode> subqueryNodes, Optional<byte[]> minOffset) throws SQLException {
         ParseNode where = statement.getWhere();
         if (subqueryNodes != null) { // if the subqueryNodes passed in is null, we assume there will be no sub-queries in the WHERE clause.
             SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
@@ -154,14 +156,18 @@ public class WhereCompiler {
         }
         
         if (context.getCurrentTable().getTable().getType() != PTableType.PROJECTED && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
-            expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
+            Set<HintNode.Hint> hints = null;
+            if(statement.getHint() != null){
+                hints = statement.getHint().getHints();
+            }
+            expression = WhereOptimizer.pushKeyExpressionsToScan(context, hints, expression, extractedNodes, minOffset);
         }
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
 
         return expression;
     }
     
-    private static class WhereExpressionCompiler extends ExpressionCompiler {
+    public static class WhereExpressionCompiler extends ExpressionCompiler {
         private boolean disambiguateWithFamily;
 
         WhereExpressionCompiler(StatementContext context) {

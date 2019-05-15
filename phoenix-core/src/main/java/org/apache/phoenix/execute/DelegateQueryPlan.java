@@ -167,4 +167,7 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public List<OrderBy> getOutputOrderBys() {
         return delegate.getOutputOrderBys();
     }
+
+    @Override
+    public boolean isApplicable() { return delegate.isApplicable(); }
 }

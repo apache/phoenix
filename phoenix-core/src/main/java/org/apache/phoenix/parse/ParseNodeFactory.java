@@ -590,7 +590,7 @@ public class ParseNodeFactory {
         return new CastParseNode(expression, dataType, maxLength, scale, arr);
     }
 
-    public ParseNode rowValueConstructor(List<ParseNode> l) {
+    public RowValueConstructorParseNode rowValueConstructor(List<ParseNode> l) {
         return new RowValueConstructorParseNode(l);
     }
 
@@ -909,12 +909,16 @@ public class ParseNodeFactory {
         return new LimitNode(l);
     }
 
-    public OffsetNode offset(BindParseNode b) {
+    public OffsetNode offset(BindParseNode b) throws SQLException {
         return new OffsetNode(b);
     }
 
-    public OffsetNode offset(LiteralParseNode l) {
+    public OffsetNode offset(LiteralParseNode l) throws SQLException {
         return new OffsetNode(l);
+    }
+
+    public OffsetNode offset(ComparisonParseNode r) throws SQLException {
+        return new OffsetNode(r);
     }
 
     public DropSchemaStatement dropSchema(String schemaName, boolean ifExists, boolean cascade) {
