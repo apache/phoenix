@@ -1420,8 +1420,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            super(table, tableType, columnDefs, ifNotExists, props);
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String, Pair<String,Object>> props, boolean ifCascade, List<String> indexes) {
+            super(table, tableType, columnDefs, ifNotExists, props, ifCascade, indexes);
         }
 
         @SuppressWarnings("unchecked")
@@ -1562,8 +1562,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
         
         @Override
-        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean ifCascade) {
+            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props, ifCascade);
         }
         
         @Override

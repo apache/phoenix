@@ -284,6 +284,7 @@ public class ParseNodeFactory {
             Integer maxLength, Integer scale, boolean isPK,
         	SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
         return new ColumnDef(columnDefName, sqlTypeName,
+        return new ColumnDef(columnDefName, sqlTypeName,
                 isArray, arrSize, isNull,
                 maxLength, scale, isPK,
                 sortOrder, expressionStr, isRowTimestamp);
@@ -357,8 +358,8 @@ public class ParseNodeFactory {
         return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE, numToAllocateNode);
     }
 
-    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean ifCascade, List<String> indexes) {
+        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props, ifCascade, indexes);
     }
 
     public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
