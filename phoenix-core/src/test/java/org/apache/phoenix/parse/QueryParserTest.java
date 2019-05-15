@@ -847,4 +847,40 @@ public class QueryParserTest {
         parseQuery("create table \"a.b\".\"c.d\" (id varchar not null primary key)");
         parseQuery("create table \"a.b.c.d\" (id varchar not null primary key)");
     }
+
+    @Test
+    public void testIntegerInOffsetSelect() throws Exception {
+        String sql = "SELECT * FROM T OFFSET 1";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testRVCInOffsetSelect() throws Exception {
+        String sql = "SELECT * FROM T OFFSET (A,B,C)=('a','b','c')";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testBindInOffsetSelect() throws Exception {
+        String sql = "SELECT * FROM T OFFSET ?";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testLongQuery() throws Exception {
+        String sql = "SELECT * FROM T WHERE a IN (1) OFFSET 1";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testLimitOffsetQuery() throws Exception {
+        String sql = "SELECT * FROM T LIMIT 10 OFFSET 1";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testLimitRVCOffsetQuery() throws Exception {
+        String sql = "SELECT * FROM T LIMIT 10 OFFSET (A,B,C)=('a','b','c')";
+        parseQuery(sql);
+    }
 }

@@ -151,7 +151,6 @@ public enum SQLExceptionCode {
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed."),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !=."),
-
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
      */
@@ -440,6 +439,10 @@ public enum SQLExceptionCode {
     UPGRADE_NOT_REQUIRED(2012, "INT14", ""),
     GET_TABLE_ERROR(2013, "INT15", "MetadataEndpointImpl doGetTable called for table not present " +
             "on region"),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_COERCIBLE(2014, "INT16", "Row Value Constructor Offset Not Coercible to a Primary or Indexed RowKey."),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR(2015, "INT17", "Row Value Constructor Offset had an Unexpected Error."),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_ALLOWED_IN_QUERY(2016, "INT18", "Row Value Constructor Offset Not Allowed In Query."),
+
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {

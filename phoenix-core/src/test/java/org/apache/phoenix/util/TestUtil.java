@@ -937,6 +937,22 @@ public class TestUtil {
     }
     }
 
+    public static void printResultSet(ResultSet rs) throws SQLException {
+        while(rs.next()){
+            StringBuilder builder = new StringBuilder();
+            int columnCount = rs.getMetaData().getColumnCount();
+            for(int i = 0; i < columnCount; i++) {
+                Object value = rs.getObject(i+1);
+                String output = value == null ? "null" : value.toString();
+                builder.append(output);
+                if(i + 1 < columnCount){
+                    builder.append(",");
+                }
+            }
+            System.out.println(builder.toString());
+        }
+    }
+
     public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {
         waitForIndexState(conn, fullIndexName, indexState, 0L);
     }

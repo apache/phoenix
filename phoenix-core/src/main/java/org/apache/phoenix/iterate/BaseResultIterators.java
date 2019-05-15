@@ -57,6 +57,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -80,6 +82,7 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -1564,6 +1567,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
+        if(this.plan instanceof ScanPlan) {
+            ScanPlan scanPlan = (ScanPlan) this.plan;
+            if(scanPlan.getRowOffset().isPresent()) {
+                buf.append("With RVC Offset " + "0x" + Hex.encodeHexString(scanPlan.getRowOffset().get()) + " ");
+            }
+        }
+
         explain(buf.toString(),planSteps);
     }
 

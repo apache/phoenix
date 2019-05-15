@@ -285,4 +285,9 @@ public class ListJarsQueryPlan implements QueryPlan {
     public List<OrderBy> getOutputOrderBys() {
         return Collections.<OrderBy> emptyList();
     }
+
+    @Override
+    public boolean isApplicable() {
+        return true;
+    }
 }

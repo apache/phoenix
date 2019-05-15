@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -200,12 +201,12 @@ public class QueryOptimizer {
     private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
-        if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan) {
+        if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
 
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
-        if (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX)) {
+        if (dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
         
@@ -227,7 +228,7 @@ public class QueryOptimizer {
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
-            if (stopAtBestPlan) {
+            if (stopAtBestPlan && hintedPlan.isApplicable()) {
                 return Collections.singletonList(hintedPlan);
             }
             plans.add(0, hintedPlan);
@@ -243,8 +244,21 @@ public class QueryOptimizer {
                 plans.add(plan);
             }
         }
-        
-        return hintedPlan == null ? orderPlansBestToWorst(select, plans, stopAtBestPlan) : plans;
+
+        //Only pull out applicable plans, late filtering since dataplan is used to construct the plans
+        List<QueryPlan> applicablePlans = Lists.newArrayListWithExpectedSize(plans.size());
+        for(QueryPlan plan : plans) {
+            if(plan.isApplicable()) {
+                applicablePlans.add(plan);
+            }
+        }
+        if(applicablePlans.isEmpty()) {
+            //Currently this is the only case for non-applicable plans
+            throw new RowValueConstructorOffsetNotCoercibleException("No table or index could be coerced to the PK as the offset. Or an uncovered index was attempted");
+        }
+
+        //OrderPlans
+        return hintedPlan == null ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan) : applicablePlans;
     }
     
     private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select, List<PTable> indexes, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
@@ -395,6 +409,10 @@ public class QueryOptimizer {
                         return plan;
                     }
                 }
+            }
+            catch (RowValueConstructorOffsetNotCoercibleException e) {
+                // Could not coerce the user provided RVC Offset so we do not have a plan to add.
+                return null;
             }
         }
         return null;
