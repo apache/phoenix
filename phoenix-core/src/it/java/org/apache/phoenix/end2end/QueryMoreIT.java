@@ -401,10 +401,9 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
                     "FROM " + fullTableName + "\n" + 
-                    "WHERE organization_id = 'org1'\n" + 
-                    "AND (score, entity_id) < (2, '04')\n" + 
-                    "ORDER BY score DESC, entity_id DESC\n" + 
-                    "LIMIT 3");
+                    "ORDER BY ORGANIZATION_ID, score DESC, entity_id DESC\n" +
+                    "LIMIT 3\n" +
+                    "OFFSET  (ORGANIZATION_ID, SCORE, ENTITY_ID)=('org1', 2, '04')");
             assertTrue(rs.next());
             assertEquals("03", rs.getString(1));
             assertEquals(2.0, rs.getDouble(2), 0.001);
@@ -415,11 +414,11 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
-                    "FROM " + fullTableName + "\n" + 
-                    "WHERE organization_id = 'org1'\n" + 
-                    "AND (organization_id, score, entity_id) < ('org1', 2, '04')\n" + 
-                    "ORDER BY score DESC, entity_id DESC\n" + 
-                    "LIMIT 3");
+                    "FROM " + fullTableName + "\n" +
+                    "WHERE ORGANIZATION_ID='org1'\n" +
+                    "ORDER BY organization_id, score DESC, entity_id DESC\n" +
+                    "LIMIT 3\n" +
+                    "OFFSET (ORGANIZATION_ID, SCORE, ENTITY_ID)=('org1', 2, '04')");
             assertTrue(rs.next());
             assertEquals("03", rs.getString(1));
             assertEquals(2.0, rs.getDouble(2), 0.001);
@@ -536,12 +535,9 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             final ResultSet
                     rs =
                     stmt.executeQuery("SELECT score, entity_id \n" + "FROM " + fullTableName + "\n"
-                            + "WHERE organization_id = 'org1'\n"
-                            + "AND (score, entity_id) < ('b', '4')\n"
-                            + "ORDER BY score DESC, entity_id\n" + "LIMIT 3");
-            assertTrue(rs.next());
-            assertEquals("b", rs.getString(1));
-            assertEquals("3", rs.getString(2));
+                            + "ORDER BY organization_id, score DESC, entity_id\n"
+                            + "LIMIT 3\n"
+                            + "OFFSET (ORGANIZATION_ID,SCORE,ENTITY_ID)=('org1','b','4')\n");
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals("2", rs.getString(2));
