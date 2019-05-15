@@ -19,7 +19,7 @@ package org.apache.phoenix.query;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.phoenix.query.GuidePostsCache.PhoenixStatsCacheRemovalListener;
+import org.apache.phoenix.query.GuidePostsCacheImpl.PhoenixStatsCacheRemovalListener;
 import org.junit.Test;
 
 import com.google.common.cache.RemovalCause;
