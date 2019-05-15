@@ -25,6 +25,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+/**
+ * This tests that the configured client statistics cache is used during execution.  These tests
+ * use a class ITGuidePostsCacheFactory which is for testing only that keeps track of the number
+ * of cache instances generated.
+ */
 public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 
     static String table;
@@ -81,6 +86,10 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
         return conn;
     }
 
+    /**
+     * Test that if we don't specify the cacheFactory we won't increase the count of test.
+     * @throws Exception
+     */
     @Test
     public void testWithDefaults() throws Exception {
         int initialCount = ITGuidePostsCacheFactory.getCount();
@@ -90,6 +99,10 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
         assertEquals(initialCount, ITGuidePostsCacheFactory.getCount());
     }
 
+    /**
+     * Tests that with a single ConnectionInfo we will not create more than one.
+     * @throws Exception
+     */
     @Test
     public void testWithSingle() throws Exception {
         int initialCount = ITGuidePostsCacheFactory.getCount();
@@ -105,6 +118,10 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
         assertEquals(initialCount + 1, ITGuidePostsCacheFactory.getCount());
     }
 
+    /**
+     * Tests with 2 ConnectionInfo's
+     * @throws Exception
+     */
     @Test
     public void testWithMultiple() throws Exception {
         int initialCount = ITGuidePostsCacheFactory.getCount();
@@ -119,6 +136,10 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
         assertEquals(initialCount + 2, ITGuidePostsCacheFactory.getCount());
     }
 
+    /**
+     * Tests that non-existent cacheFactory fails with exception
+     * @throws Exception
+     */
     @Test(expected = Exception.class)
     public void testBadCache() throws Exception {
         try (Connection conn =
