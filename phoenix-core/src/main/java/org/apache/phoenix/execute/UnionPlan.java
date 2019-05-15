@@ -312,4 +312,9 @@ public class UnionPlan implements QueryPlan {
         }
         return Collections.<OrderBy> emptyList();
     }
+
+    @Override
+    public boolean isApplicable() {
+        return true;
+    }
 }

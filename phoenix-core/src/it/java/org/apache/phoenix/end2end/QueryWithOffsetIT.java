@@ -49,7 +49,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
 public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
-    
+
     private static final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n",
             "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
     private final boolean isSalted;
@@ -215,7 +215,7 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
         ResultSetMetaData md = rs.getMetaData();
         assertEquals(5, md.getColumnCount());
     }
-    
+
     private void initTableValues(Connection conn) throws SQLException {
         for (int i = 0; i < 26; i++) {
             conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + STRINGS[i] + "'," + i + ","
@@ -229,5 +229,7 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
                 + "\"=" + Long.toString(500);
         conn.createStatement().execute(query);
     }
+
+
 
 }
