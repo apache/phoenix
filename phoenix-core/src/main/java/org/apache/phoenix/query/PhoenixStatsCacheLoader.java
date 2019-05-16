@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * {@link CacheLoader} implementation for the Phoenix Table Stats cache.
+ * {@link CacheLoader} asynchronous implementation for the Phoenix Table Stats cache.
  */
 public class PhoenixStatsCacheLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
     private static final Logger logger = LoggerFactory.getLogger(PhoenixStatsCacheLoader.class);
