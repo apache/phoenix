@@ -121,7 +121,7 @@ public class PhoenixStatsCacheLoaderTest {
                     }
                 })
                 // Log removals at TRACE for debugging
-                .removalListener(new GuidePostsCache.PhoenixStatsCacheRemovalListener())
+                .removalListener(new GuidePostsCacheImpl.PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries are missing
                 .build(new PhoenixStatsCacheLoader(new TestStatsLoaderImpl(
                         firstTimeRefreshedSignal, secondTimeRefreshedSignal), config));
