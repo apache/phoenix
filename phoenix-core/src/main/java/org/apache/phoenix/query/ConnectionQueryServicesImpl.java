@@ -286,7 +286,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
-    private static final int TTL_FOR_MUTEX = 15 * 60; // 15min 
+    private static final int TTL_FOR_MUTEX = 15 * 60; // 15min
+    private final GuidePostsCacheProvider
+            GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     protected final Configuration config;
     protected final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
@@ -295,7 +297,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final String userName;
     private final User user;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final GuidePostsCache tableStatsCache;
+    private final GuidePostsCacheWrapper tableStatsCache;
 
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -418,8 +420,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             list.add(queue);
         }
         connectionQueues = ImmutableList.copyOf(list);
+
         // A little bit of a smell to leak `this` here, but should not be a problem
-        this.tableStatsCache = new GuidePostsCache(this, config);
+        this.tableStatsCache = GUIDE_POSTS_CACHE_PROVIDER.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
+                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), this, config);
+
         this.isAutoUpgradeEnabled = config.getBoolean(AUTO_UPGRADE_ENABLED, QueryServicesOptions.DEFAULT_AUTO_UPGRADE_ENABLED);
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
@@ -1787,10 +1792,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return result;
     }
 
-    private void invalidateTableStats(final List<byte[]> tableNamesToDelete) {
+    private void invalidateTableStats(final List<byte[]> tableNamesToDelete) throws SQLException {
         if (tableNamesToDelete != null) {
             for (byte[] tableName : tableNamesToDelete) {
-                tableStatsCache.invalidateAll(tableName);
+                TableName tn = TableName.valueOf(tableName);
+                HTableDescriptor htableDesc = this.getTableDescriptor(tableName);
+                tableStatsCache.invalidateAll(htableDesc);
             }
         }
     }
