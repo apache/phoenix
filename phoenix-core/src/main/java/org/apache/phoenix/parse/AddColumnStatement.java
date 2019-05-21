@@ -29,12 +29,16 @@ public class AddColumnStatement extends AlterTableStatement {
     private final List<ColumnDef> columnDefs;
     private final boolean ifNotExists;
     private final ListMultimap<String,Pair<String,Object>> props;
-    
-    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
+    private final boolean cascade;
+    private final List<NamedNode> indexes;
+
+    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
         super(table, tableType);
         this.columnDefs = columnDefs;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of()  : props;
         this.ifNotExists = ifNotExists;
+        this.cascade = cascade;
+        this.indexes = indexes;
     }
 
     public List<ColumnDef> getColumnDefs() {
@@ -48,4 +52,8 @@ public class AddColumnStatement extends AlterTableStatement {
     public ListMultimap<String,Pair<String,Object>> getProps() {
         return props;
     }
+
+    public boolean isCascade() { return cascade; }
+
+    public List<NamedNode> getIndexes() { return indexes; }
 }

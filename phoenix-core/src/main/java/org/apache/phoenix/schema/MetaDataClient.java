@@ -195,6 +195,7 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.PFunction;
@@ -1138,7 +1139,7 @@ public class MetaDataClient {
                 }
                 // if there are new columns to add
                 return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
-                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
+                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType(),false, null);
             }
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
@@ -3524,14 +3525,20 @@ public class MetaDataClient {
 
     public MutationState addColumn(AddColumnStatement statement) throws SQLException {
         PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
-        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType());
+        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType(), statement.isCascade(), statement.getIndexes());
     }
 
     public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
             ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
-            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType)
+            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType, boolean cascade, List<NamedNode> indexes)
                     throws SQLException {
         connection.rollback();
+        if (cascade) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.UNIMPLEMENTED_CASCADE_FEATURE)
+                    .build()
+                    .buildException();
+        }
         boolean wasAutoCommit = connection.getAutoCommit();
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ?
             origColumnDefs.size() : 0);

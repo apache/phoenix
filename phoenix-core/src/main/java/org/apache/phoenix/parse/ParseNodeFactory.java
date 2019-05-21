@@ -357,8 +357,8 @@ public class ParseNodeFactory {
         return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE, numToAllocateNode);
     }
 
-    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode>indexes) {
+        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
     }
 
     public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {
