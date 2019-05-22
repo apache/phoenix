@@ -53,7 +53,10 @@ public class IndexedKeyValue extends KeyValue {
     public IndexedKeyValue() {}
 
     public IndexedKeyValue(byte[] bs, Mutation mutation) {
-        super(mutation.getRow(), 0, mutation.getRow().length);
+        this.bytes = mutation.getRow();
+        this.offset = 0;
+        this.length = mutation.getRow().length;
+
         this.indexTableName = new ImmutableBytesPtr(bs);
         this.mutation = mutation;
         this.hashCode = calcHashCode(indexTableName, mutation);
