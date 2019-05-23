@@ -28,12 +28,14 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -2423,6 +2425,26 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
                 rs = statement.executeQuery("EXPLAIN " + query);
                 assertPlansEqual(i == 0 ? plans[1] : plans[1].replaceFirst("O\\.item_id", "item_id"), QueryUtil.getExplainPlan(rs));
             }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testJoinPopulatesParameterMetadata() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String table1 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String table2 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        try {
+            String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\" FROM "+
+                    table1+" JOIN "+table2+" ON "+
+                    table1+".\"customer_id\" = "+
+                    table2+".\"customer_id\" WHERE "+
+                    table2+".loc_id = ?";
+            PreparedStatement ps = conn.prepareStatement(query);
+            ParameterMetaData pmd = ps.getParameterMetaData();
+            assertEquals(1, pmd.getParameterCount());
+            assertEquals(Types.VARCHAR, pmd.getParameterType(1));
         } finally {
             conn.close();
         }

@@ -96,27 +96,31 @@ public class StatementContext {
      *  Constructor that lets you override whether or not to collect request level metrics.
      */
     public StatementContext(PhoenixStatement statement, boolean collectRequestLevelMetrics) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement), collectRequestLevelMetrics);
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new BindManager(statement.getParameters()), new Scan(), new SequenceManager(statement), collectRequestLevelMetrics);
     }
 
     public StatementContext(PhoenixStatement statement, Scan scan) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, scan, new SequenceManager(statement));
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new BindManager(statement.getParameters()), scan, new SequenceManager(statement));
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver) {
-        this (statement, resolver, new Scan(), new SequenceManager(statement));
+        this(statement, resolver, new BindManager(statement.getParameters()), new Scan(), new SequenceManager(statement));
     }
 
     public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
-        this(statement, resolver, scan, seqManager, statement.getConnection().isRequestLevelMetricsEnabled());
+        this(statement, resolver, new BindManager(statement.getParameters()), scan, seqManager);
     }
-    
-    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager, boolean isRequestMetricsEnabled) {
+
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, BindManager binds, Scan scan, SequenceManager seqManager) {
+        this(statement, resolver, binds, scan, seqManager, statement.getConnection().isRequestLevelMetricsEnabled());
+    }
+
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, BindManager binds, Scan scan, SequenceManager seqManager, boolean isRequestMetricsEnabled) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
         this.sequences = seqManager;
-        this.binds = new BindManager(statement.getParameters());
+        this.binds = binds;
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
         PhoenixConnection connection = statement.getConnection();
