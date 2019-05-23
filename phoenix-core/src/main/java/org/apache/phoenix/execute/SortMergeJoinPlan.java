@@ -212,7 +212,7 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public ParameterMetaData getParameterMetaData() {
-        return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+        return context.getBindManager().getParameterMetaData();
     }
 
     @Override

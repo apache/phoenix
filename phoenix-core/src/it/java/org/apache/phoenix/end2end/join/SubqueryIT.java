@@ -25,9 +25,11 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
@@ -820,6 +822,26 @@ public class SubqueryIT extends BaseJoinIT {
             assertEquals(rs.getString(1), "INVALID-1");
 
             assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSubqueryJoinPopulatesParameterMetadata() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String table1 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String table2 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        try {
+            String query = "SELECT \"order_id\" FROM "+
+                    table1+" JOIN ("+
+                    "SELECT "+table2+".\"customer_id\" FROM "+table2+
+                    " WHERE "+table2+".loc_id = ?) AS customers "+
+                    "ON customers.\"customer_id\" = "+table1+".\"customer_id\"";
+            PreparedStatement ps = conn.prepareStatement(query);
+            ParameterMetaData pmd = ps.getParameterMetaData();
+            assertEquals(1, pmd.getParameterCount());
+            assertEquals(Types.VARCHAR, pmd.getParameterType(1));
         } finally {
             conn.close();
         }
