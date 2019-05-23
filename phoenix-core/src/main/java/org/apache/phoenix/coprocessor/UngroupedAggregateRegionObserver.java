@@ -1181,7 +1181,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long rowCount = 0; // in case of async, we report 0 as number of rows updated
         StatisticsCollectionRunTracker statsRunTracker =
                 StatisticsCollectionRunTracker.getInstance(config);
-        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
+        final boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
         if (runUpdateStats) {
             if (!async) {
                 rowCount = callable.call();
@@ -1210,8 +1210,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
             @Override
             public void close() throws IOException {
-                // No-op because we want to manage closing of the inner scanner ourselves.
-                // This happens inside StatsCollectionCallable.
+                // If we ran/scheduled StatsCollectionCallable the delegate
+                // scanner is closed there. Otherwise close it here.
+                if (!runUpdateStats) {
+                    super.close();
+                }
             }
 
             @Override
@@ -1448,6 +1451,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                             + fullTableName);
                                 Scan scan = new Scan();
                                 scan.setMaxVersions();
+
+                                // close the passed scanner since we are returning a brand-new one
+                                try {
+                                    if (s != null) {
+                                        s.close();
+                                    }
+                                } catch (IOException ignore) {}
+
                                 return new StoreScanner(store, store.getScanInfo(), scan, scanners,
                                     ScanType.COMPACT_RETAIN_DELETES, store.getSmallestReadPoint(),
                                     HConstants.OLDEST_TIMESTAMP);
