@@ -36,6 +36,10 @@
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
+    <repository>
+      <id>apache.snapshots</id>
+      <url>https://repository.apache.org/snapshots/</url>
+    </repository>
   </repositories>
 
   <parent>
