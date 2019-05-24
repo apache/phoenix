@@ -11,7 +11,7 @@
   <licenses>
     <license>
       <name>The Apache Software License, Version 2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
       <distribution>repo</distribution>
       <comments/>
     </license>
@@ -19,7 +19,7 @@
 
   <organization>
     <name>Apache Software Foundation</name>
-    <url>http://www.apache.org</url>
+    <url>https://www.apache.org</url>
   </organization>
 
   <modules>
@@ -45,7 +45,7 @@
   </parent>
 
   <scm>
-    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
+    <connection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
     <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</developerConnection>
   </scm>
@@ -409,7 +409,7 @@
         <configuration>
           <quiet>true</quiet>
           <links>
-            <link>http://hbase.apache.org/apidocs/</link>
+            <link>https://hbase.apache.org/apidocs/</link>
           </links>
         </configuration>
         <executions>
