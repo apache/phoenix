@@ -10,20 +10,6 @@
   <name>Phoenix Core</name>
   <description>Core Phoenix codebase</description>
 
-  <licenses>
-      <license>
-          <name>The Apache Software License, Version 2.0</name>
-          <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-          <distribution>repo</distribution>
-          <comments />
-      </license>
-  </licenses>
-
-  <organization>
-      <name>Apache Software Foundation</name>
-      <url>http://www.apache.org</url>
-  </organization>
-
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
     <argparse4j.version>0.8.1</argparse4j.version>
