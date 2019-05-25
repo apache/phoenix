@@ -324,24 +324,6 @@ public class QueryOptimizer {
                 
                 QueryPlan plan = compiler.compile();
 
-                boolean optimizedSort =
-                        plan.getOrderBy().getOrderByExpressions().isEmpty()
-                                && !dataPlan.getOrderBy().getOrderByExpressions().isEmpty()
-                                || plan.getGroupBy().isOrderPreserving()
-                                        && !dataPlan.getGroupBy().isOrderPreserving();
-
-                // If query doesn't have where clause, or the planner didn't add any (bound) scan ranges, and some of
-                // columns to project/filter are missing in the index then we need to get missing columns from main table
-                // for each row in local index. It's like full scan of both local index and data table which is inefficient.
-                // Then we don't use the index. If all the columns to project are present in the index 
-                // then we can use the index even the query doesn't have where clause.
-                // We'll use the index anyway if it allowed us to avoid a sort operation.
-                if (index.getIndexType() == IndexType.LOCAL
-                        && (indexSelect.getWhere() == null
-                                || plan.getContext().getScanRanges().getBoundRanges().size() == 1)
-                        && !plan.getContext().getDataColumns().isEmpty() && !optimizedSort) {
-                    return null;
-                }
                 indexTableRef = plan.getTableRef();
                 indexTable = indexTableRef.getTable();
                 indexState = indexTable.getIndexState();
