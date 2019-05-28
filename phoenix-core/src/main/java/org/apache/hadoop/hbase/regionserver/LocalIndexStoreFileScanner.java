@@ -125,7 +125,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
             if (getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), fk, 0, fk.length) <= 0) {
                 return super.seekToPreviousRow(key);
             }
-            KeyValue replacedKey = getKeyPresentInHFiles(kv.getBuffer());
+            KeyValue replacedKey = getKeyPresentInHFiles(kv);
             boolean seekToPreviousRow = super.seekToPreviousRow(replacedKey);
             while(super.peek()!=null && !isSatisfiedMidKeyCondition(super.peek())) {
                 seekToPreviousRow = super.seekToPreviousRow(super.peek());
@@ -194,22 +194,21 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
      * @param key
      *
      */
-    private KeyValue getKeyPresentInHFiles(byte[] key) {
-        KeyValue keyValue = new KeyValue(key);
+    private KeyValue getKeyPresentInHFiles(Cell keyValue) {
         int rowLength = keyValue.getRowLength();
         int rowOffset = keyValue.getRowOffset();
 
         short length = (short) (rowLength - reader.getSplitRow().length + reader.getOffset());
         byte[] replacedKey =
-                new byte[length + key.length - (rowOffset + rowLength) + ROW_LENGTH_SIZE];
+                new byte[length + keyValue.getRowArray().length - (rowOffset + rowLength) + ROW_LENGTH_SIZE];
         System.arraycopy(Bytes.toBytes(length), 0, replacedKey, 0, ROW_LENGTH_SIZE);
         System.arraycopy(reader.getRegionStartKeyInHFile(), 0, replacedKey, ROW_LENGTH_SIZE, reader.getOffset());
         System.arraycopy(keyValue.getRowArray(), keyValue.getRowOffset() + reader.getSplitRow().length,
             replacedKey, reader.getOffset() + ROW_LENGTH_SIZE, rowLength
                     - reader.getSplitRow().length);
-        System.arraycopy(key, rowOffset + rowLength, replacedKey,
-            reader.getOffset() + keyValue.getRowLength() - reader.getSplitRow().length
-                    + ROW_LENGTH_SIZE, key.length - (rowOffset + rowLength));
+        System.arraycopy(keyValue.getRowArray(), rowOffset + rowLength, replacedKey,
+            reader.getOffset() + rowLength - reader.getSplitRow().length
+                    + ROW_LENGTH_SIZE, keyValue.getRowArray().length - (rowOffset + rowLength));
         return new KeyValue.KeyOnlyKeyValue(replacedKey);
     }
     
@@ -230,7 +229,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                 }
                 return seekOrReseekToProperKey(isSeek, keyToSeek);
             }
-            keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
+            keyToSeek = getKeyPresentInHFiles(kv);
             return seekOrReseekToProperKey(isSeek, keyToSeek);
         } else {
             if (getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) >= 0) {
@@ -238,7 +237,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                 return false;
             }
             if(!isSeek && reader.getRegionInfo().getStartKey().length == 0 && reader.getSplitRow().length > reader.getRegionStartKeyInHFile().length) {
-                keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
+                keyToSeek = getKeyPresentInHFiles(kv);
             }
         }
         return seekOrReseekToProperKey(isSeek, keyToSeek);
