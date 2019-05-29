@@ -16,16 +16,6 @@
   </properties>
 
   <build>
-    <resources>
-      <resource>
-        <directory>src/main/resources</directory>
-        <targetPath>META-INF/services</targetPath>
-        <includes>
-          <include>java.sql.Driver</include>
-        </includes>
-      </resource>
-    </resources>
-
     <plugins>
       <!-- Add the ant-generated sources to the source path -->
      <plugin>
@@ -173,7 +163,7 @@
         <configuration>
           <excludes>
             <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
-            <exclude>src/main/resources/java.sql.Driver</exclude>
+            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
           </excludes>
         </configuration>
       </plugin>
