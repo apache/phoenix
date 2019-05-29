@@ -737,6 +737,20 @@ public abstract class BaseTest {
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
     }
 
+    private static AtomicInteger IDX_NAME_SUFFIX = new AtomicInteger(0);
+    private static final int MAX_IDX_SUFFIX_VALUE = 1000000;
+
+    private static final AtomicInteger IDX_COUNTER = new AtomicInteger(0);
+
+    public static String generateUniqueIndexName() {
+        int nextName = IDX_NAME_SUFFIX.incrementAndGet();
+        if (nextName >= MAX_IDX_SUFFIX_VALUE) {
+            throw new IllegalStateException("Used up all unique sequence names");
+        }
+        IDX_COUNTER.incrementAndGet();
+        return "I" + Integer.toString(MAX_IDX_SUFFIX_VALUE + nextName).substring(1);
+    }
+
     public static void tearDownMiniClusterIfBeyondThreshold() throws Exception {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();

@@ -164,7 +164,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                     env.getRegion().getTableDesc().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
-                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, false);
                                 return Boolean.TRUE;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way

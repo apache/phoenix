@@ -155,7 +155,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                     env.getRegion().getTableDesc().getNameAsString())) {
                             try {
                                 throwFailureIfDone();
-                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, false);
                                 return null;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
