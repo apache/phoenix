@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -84,7 +85,13 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
-            splitDuringScan(conn1, tableName, indexName, strings, admin, isReverse);
+            try {
+                splitDuringScan(conn1, tableName, indexName, strings, admin, isReverse);
+                // a local index scan has to fail with a concurrent split
+                assertFalse(localIndex);
+            } catch (StaleRegionBoundaryCacheException x) {
+                assertTrue(localIndex);
+            }
        } finally {
            if(conn1 != null) conn1.close();
            if(admin != null) admin.close();
