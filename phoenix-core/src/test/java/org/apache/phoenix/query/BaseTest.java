@@ -19,6 +19,7 @@ package org.apache.phoenix.query;
 
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -444,7 +445,7 @@ public abstract class BaseTest {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
             return initMiniCluster(conf, overrideProps);
-       } else {
+        } else {
             return initClusterDistributedMode(conf, overrideProps);
         }
     }
@@ -629,6 +630,11 @@ public abstract class BaseTest {
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);
+        if(isDistributedClusterModeEnabled(config)) {
+            HashMap<String, String> distPropMap = new HashMap<>(1);
+            distPropMap.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+            props = new ReadOnlyProps(props, distPropMap.entrySet().iterator());
+        }
         if (driverClassName == null) {
             newDriver = new PhoenixTestDriver(props);
         } else {
@@ -767,14 +773,21 @@ public abstract class BaseTest {
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
     }
 
-    public static void tearDownMiniClusterIfBeyondThreshold() throws Exception {
+    public static void freeResourcesIfBeyondThreshold() throws Exception {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
-            logger.info(
-                "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
-                        + TEARDOWN_THRESHOLD);
-            tearDownMiniClusterAsync(numTables);
+            if(isDistributedClusterModeEnabled(config)) {
+                logger.info(
+                        "Deleting old tables on distributed cluster because number of tables is likely greater than "
+                                + TEARDOWN_THRESHOLD);
+                deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
+            } else {
+                logger.info(
+                    "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
+                            + TEARDOWN_THRESHOLD);
+                tearDownMiniClusterAsync(numTables);
+            }
         }
     }
 

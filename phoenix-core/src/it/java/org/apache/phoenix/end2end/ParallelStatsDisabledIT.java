@@ -52,8 +52,8 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     }
 
     @AfterClass
-    public static void tearDownMiniCluster() throws Exception {
-        BaseTest.tearDownMiniClusterIfBeyondThreshold();
+    public static void freeResources() throws Exception {
+        BaseTest.freeResourcesIfBeyondThreshold();
     }
 
     protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
