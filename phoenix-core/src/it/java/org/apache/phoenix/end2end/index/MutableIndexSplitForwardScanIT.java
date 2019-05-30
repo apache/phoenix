@@ -19,8 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import org.junit.Test;
 
-//TODO: re-enable once PHOENIX-4273 is fixed
-public abstract class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
+public class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
 
     public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {
         super(localIndex, multiTenant);
