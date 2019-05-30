@@ -117,6 +117,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
@@ -1148,6 +1149,39 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
             final Region region, final Scan scan, Configuration config) throws IOException {
+        if (stats instanceof  NoOpStatisticsCollector) {
+            logger.info("UPDATE STATISTICS didn't run because stats is not enabled");
+
+            return new BaseRegionScanner(innerScanner) {
+                @Override
+                public HRegionInfo getRegionInfo() {
+                    return region.getRegionInfo();
+                }
+
+                @Override
+                public boolean isFilterDone() {
+                    return true;
+                }
+
+                @Override
+                public void close() throws IOException {
+                    super.close();
+                }
+
+                @Override
+                public boolean next(List<Cell> results) throws IOException {
+                    byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(0));
+                    results.add(KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                            SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length));
+                    return false;
+                }
+
+                @Override
+                public long getMaxResultSize() {
+                    return scan.getMaxResultSize();
+                }
+            };
+        }
         StatsCollectionCallable callable =
                 new StatsCollectionCallable(stats, region, innerScanner, config, scan);
         byte[] asyncBytes = scan.getAttribute(BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB);
