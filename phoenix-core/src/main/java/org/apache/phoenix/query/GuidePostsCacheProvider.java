@@ -33,7 +33,7 @@ public class GuidePostsCacheProvider {
         if (guidePostsCacheFactory == null) {
             try {
 
-                Class clazz = ClassLoader.getSystemClassLoader().loadClass(classString);
+                Class clazz = Class.forName(classString);
                 if (!GuidePostsCacheFactory.class.isAssignableFrom(clazz)) {
                     String msg = String.format(
                             "Could not load/instantiate class %s is not an instance of GuidePostsCacheFactory",
