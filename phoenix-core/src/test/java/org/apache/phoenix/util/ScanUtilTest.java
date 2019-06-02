@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertArrayEquals;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -347,6 +348,122 @@ public class ScanUtilTest {
             byte[] actualKey = new byte[offset];
             System.arraycopy(key, 0, actualKey, 0, offset);
             assertArrayEquals(new byte[] { 0, 5, 0 }, actualKey);
+        }
+
+        @Test
+        public void testLastPkColumnIsVariableLengthAndDescBug5307() throws Exception{
+            RowKeySchemaBuilder rowKeySchemaBuilder = new RowKeySchemaBuilder(2);
+
+            rowKeySchemaBuilder.addField(new PDatum() {
+                @Override
+                public boolean isNullable() {
+                    return false;
+                }
+
+                @Override
+                public PDataType getDataType() {
+                    return PVarchar.INSTANCE;
+                }
+
+                @Override
+                public Integer getMaxLength() {
+                    return null;
+                }
+
+                @Override
+                public Integer getScale() {
+                    return null;
+                }
+
+                @Override
+                public SortOrder getSortOrder() {
+                    return SortOrder.getDefault();
+                }
+            }, false, SortOrder.getDefault());
+
+            rowKeySchemaBuilder.addField(new PDatum() {
+                @Override
+                public boolean isNullable() {
+                    return false;
+                }
+
+                @Override
+                public PDataType getDataType() {
+                    return PVarchar.INSTANCE;
+                }
+
+                @Override
+                public Integer getMaxLength() {
+                    return null;
+                }
+
+                @Override
+                public Integer getScale() {
+                    return null;
+                }
+
+                @Override
+                public SortOrder getSortOrder() {
+                    return SortOrder.DESC;
+                }
+            }, false, SortOrder.DESC);
+
+            rowKeySchemaBuilder.rowKeyOrderOptimizable(true);
+            RowKeySchema rowKeySchema = rowKeySchemaBuilder.build();
+            //it is [[obj1, obj2, obj3], [\xCD\xCD\xCD\xCD, \xCE\xCE\xCE\xCE, \xCE\xCE\xCE\xCE]]
+            List<List<KeyRange>> rowKeySlotRangesList = Arrays.asList(
+                    Arrays.asList(
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("obj1", SortOrder.ASC)),
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("obj2", SortOrder.ASC)),
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("obj3", SortOrder.ASC))),
+                    Arrays.asList(
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC)),
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC)),
+                            KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC))));
+
+            int[] rowKeySlotSpans = new int[]{0,0};
+            byte[] rowKey = new byte[1024];
+            int[] rowKeySlotRangesIndexes = new int[]{0,0};
+            int rowKeyLength = ScanUtil.setKey(
+                    rowKeySchema,
+                    rowKeySlotRangesList,
+                    rowKeySlotSpans,
+                    rowKeySlotRangesIndexes,
+                    Bound.LOWER,
+                    rowKey,
+                    0,
+                    0,
+                    2);
+            byte[] startKey = Arrays.copyOf(rowKey, rowKeyLength);
+
+            rowKeySlotRangesIndexes = new int[]{2,2};
+            rowKey = new byte[1024];
+            rowKeyLength = ScanUtil.setKey(
+                    rowKeySchema,
+                    rowKeySlotRangesList,
+                    rowKeySlotSpans,
+                    rowKeySlotRangesIndexes,
+                    Bound.UPPER,
+                    rowKey,
+                    0,
+                    0,
+                    2);
+            byte[] endKey = Arrays.copyOf(rowKey, rowKeyLength);
+
+            byte[] expectedStartKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj1", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            byte[] expectedEndKey =  ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj3", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            ByteUtil.nextKey(expectedEndKey, expectedEndKey.length);
+
+            assertArrayEquals(expectedStartKey, startKey);
+            assertArrayEquals(expectedEndKey, endKey);
         }
     }
 }
