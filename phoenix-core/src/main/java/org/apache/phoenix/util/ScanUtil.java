@@ -447,10 +447,15 @@ public class ScanUtil {
                                          && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
                 key[offset++] = sepByte;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
-                // as we don't want to increment the null byte in this case
+                // as we don't want to increment the QueryConstants.SEPARATOR_BYTE byte in this case.
                 // To test if this is the last pk column we need to consider the span of this slot
-                // and the field index to see if this slot considers the last column
-                lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
+                // and the field index to see if this slot considers the last column.
+                // But if last field of rowKey is variable length and also DESC, the trailing 0xFF
+                // is not removed when stored in HBASE, so for such case, we should not set
+                // lastInclusiveUpperSingleKey back to false.
+                if(sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
+                    lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
+                }
             }
             if (exclusiveUpper) {
                 // Cannot include anything else on the key, as otherwise
