@@ -35,6 +35,7 @@ import javax.management.StandardMBean;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -91,9 +92,9 @@ public class MonitorManager implements Workload {
         this.shouldStop.set(true);
     }
 
-    @Override public Runnable execute() {
-        return new Runnable() {
-            @Override public void run() {
+    @Override public Callable<Void> execute() {
+        return new Callable<Void>() {
+            @Override public Void call() throws Exception {
                 try {
                     while (!shouldStop()) {
                         isRunning.set(true);
@@ -131,6 +132,7 @@ public class MonitorManager implements Workload {
                             } catch (Exception e) {
                                 Thread.currentThread().interrupt();
                                 e.printStackTrace();
+                                throw e;
                             }
                         }
                     }
@@ -144,6 +146,7 @@ public class MonitorManager implements Workload {
                         throw new FileLoaderRuntimeException("Could not close monitor results.", e);
                     }
                 }
+                return null;
             }
         };
     }
