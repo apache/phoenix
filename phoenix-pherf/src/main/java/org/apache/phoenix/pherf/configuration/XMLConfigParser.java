@@ -96,7 +96,8 @@ public class XMLConfigParser {
                     scenarios.add(scenario);
                 }
             } catch (JAXBException e) {
-                e.printStackTrace();
+                logger.error("Unable to parse scenario file "+path, e);
+                throw e;
             }
         }
         return scenarios;

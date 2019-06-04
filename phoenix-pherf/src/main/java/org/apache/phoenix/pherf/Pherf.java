@@ -24,6 +24,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import com.google.common.annotations.VisibleForTesting;
+import jline.internal.TestAccessible;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -115,6 +117,9 @@ public class Pherf {
     private final boolean thinDriver;
     private final String queryServerUrl;
 
+    @VisibleForTesting
+    WorkloadExecutor workloadExecutor;
+
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new PosixParser();
         CommandLine command = null;
@@ -201,7 +206,7 @@ public class Pherf {
     public void run() throws Exception {
         MonitorManager monitorManager = null;
         List<Workload> workloads = new ArrayList<>();
-        WorkloadExecutor workloadExecutor = new WorkloadExecutor(properties, workloads, !isFunctional);
+        workloadExecutor = new WorkloadExecutor(properties, workloads, !isFunctional);
         try {
             if (listFiles) {
                 ResourceList list = new ResourceList(PherfConstants.RESOURCE_DATAMODEL);

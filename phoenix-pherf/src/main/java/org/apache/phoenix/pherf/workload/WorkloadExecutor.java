@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.pherf.workload;
 
+import com.google.common.annotations.VisibleForTesting;
+import jline.internal.TestAccessible;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +36,8 @@ public class WorkloadExecutor {
     private final boolean isPerformance;
 
     // Jobs can be accessed by multiple threads
-    private final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
+    @VisibleForTesting
+    public final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
 
     private final ExecutorService pool;
 
