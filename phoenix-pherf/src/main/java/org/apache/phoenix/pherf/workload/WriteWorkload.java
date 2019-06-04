@@ -151,9 +151,9 @@ public class WriteWorkload implements Workload {
         pool.shutdownNow();
     }
 
-    public Runnable execute() throws Exception {
-        return new Runnable() {
-            @Override public void run() {
+    public Callable<Void> execute() throws Exception {
+        return new Callable<Void>() {
+            @Override public Void call() throws Exception {
                 try {
                     DataLoadTimeSummary dataLoadTimeSummary = new DataLoadTimeSummary();
                     DataLoadThreadTime dataLoadThreadTime = new DataLoadThreadTime();
@@ -169,8 +169,10 @@ public class WriteWorkload implements Workload {
                     resultUtil.write(dataLoadThreadTime);
 
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    logger.error("WriteWorkLoad failed", e);
+                    throw e;
                 }
+                return null;
             }
         };
     }
@@ -292,21 +294,17 @@ public class WriteWorkload implements Workload {
                                     rowsCreated += result;
                                 }
                             }
-                            try {
-                                connection.commit();
-                                duration = System.currentTimeMillis() - last;
-                                logger.info("Writer (" + Thread.currentThread().getName()
-                                        + ") committed Batch. Total " + getBatchSize()
-                                        + " rows for this thread (" + this.hashCode() + ") in ("
-                                        + duration + ") Ms");
+                            connection.commit();
+                            duration = System.currentTimeMillis() - last;
+                            logger.info("Writer (" + Thread.currentThread().getName()
+                                    + ") committed Batch. Total " + getBatchSize()
+                                    + " rows for this thread (" + this.hashCode() + ") in ("
+                                    + duration + ") Ms");
 
-                                if (i % PherfConstants.LOG_PER_NROWS == 0 && i != 0) {
-                                    dataLoadThreadTime.add(tableName,
-                                        Thread.currentThread().getName(), i,
-                                        System.currentTimeMillis() - logStartTime);
-                                }
-                            } catch (SQLException e) {
-                                logger.warn("SQLException in commit operation", e);
+                            if (i % PherfConstants.LOG_PER_NROWS == 0 && i != 0) {
+                                dataLoadThreadTime.add(tableName,
+                                    Thread.currentThread().getName(), i,
+                                    System.currentTimeMillis() - logStartTime);
                             }
 
                             logStartTime = System.currentTimeMillis();
@@ -317,6 +315,7 @@ public class WriteWorkload implements Workload {
                         }
                     }
                 } catch (SQLException e) {
+                    logger.error("Scenario " + scenario.getName() + " failed with exception ", e);
                     throw e;
                 } finally {
                     // Need to keep the statement open to send the remaining batch of updates
@@ -396,9 +395,23 @@ public class WriteWorkload implements Workload {
                 break;
             case UNSIGNED_LONG:
                 if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.LONGVARCHAR);
+                    statement.setNull(count, Types.OTHER);
                 } else {
                     statement.setLong(count, Long.parseLong(dataValue.getValue()));
+                }
+                break;
+            case BIGINT:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.BIGINT);
+                } else {
+                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
+                }
+                break;
+            case TINYINT:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.TINYINT);
+                } else {
+                    statement.setLong(count, Integer.parseInt(dataValue.getValue()));
                 }
                 break;
             case DATE:
