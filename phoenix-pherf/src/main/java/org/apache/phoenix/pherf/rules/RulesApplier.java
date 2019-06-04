@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
@@ -228,24 +229,30 @@ public class RulesApplier {
                     data = new DataValue(column.getType(), String.valueOf(dbl));
                 }
                 break;
+            case TINYINT:
             case INTEGER:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     int minInt = (int) column.getMinValue();
                     int maxInt = (int) column.getMaxValue();
-                    Preconditions.checkArgument((minInt > 0) && (maxInt > 0), "min and max values need to be set in configuration for integers " + column.getName());
-                    int intVal = RandomUtils.nextInt(minInt, maxInt);
+                    if (column.getType() == DataTypeMapping.TINYINT) {
+                        Preconditions.checkArgument((minInt >= -128) && (minInt <= 128), "min value need to be set in configuration for tinyints " + column.getName());
+                        Preconditions.checkArgument((maxInt >= -128) && (maxInt <= 128), "max value need to be set in configuration for tinyints " + column.getName());
+                    }
+                    int intVal = ThreadLocalRandom.current().nextInt(minInt, maxInt + 1);
                     data = new DataValue(column.getType(), String.valueOf(intVal));
                 }
                 break;
+            case BIGINT:
             case UNSIGNED_LONG:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     long minLong = column.getMinValue();
                     long maxLong = column.getMaxValue();
-                    Preconditions.checkArgument((minLong > 0) && (maxLong > 0), "min and max values need to be set in configuration for unsigned_longs " + column.getName());
+                    if (column.getType() == DataTypeMapping.UNSIGNED_LONG)
+                        Preconditions.checkArgument((minLong > 0) && (maxLong > 0), "min and max values need to be set in configuration for unsigned_longs " + column.getName());
                     long longVal = RandomUtils.nextLong(minLong, maxLong);
                     data = new DataValue(column.getType(), String.valueOf(longVal));
                 }
