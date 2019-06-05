@@ -475,12 +475,16 @@ public enum SQLExceptionCode {
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
-    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901,"43M12",
+    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901, "43M12",
             "Cannot use a connection with SCN set to upsert data for " +
                     "table with ROW_TIMESTAMP column."),
-    CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES(903,"43M14",
+    CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES(903, "43M14",
             "Cannot use a connection with SCN set to " +
-                    "upsert data for a mutable table with indexes.");
+                    "upsert data for a mutable table with indexes."),
+
+    NOT_SUPPORTED_CASCADE_FEATURE_PK(904, "43M15",
+            "CASCADE feature is not supported to add PK column");
+
 
 
     private final int errorCode;

@@ -66,6 +66,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -1443,6 +1444,21 @@ public class PTableImpl implements PTable {
     @Override
     public List<PTable> getIndexes() {
         return indexes;
+    }
+
+    @Override
+    public List<PTable> getIndexes(List<NamedNode> indexes) {
+        List<PTable> indexesPTable = Lists.newArrayListWithExpectedSize(indexes.size());
+        List<String> indexesParam = Lists.newArrayListWithExpectedSize(indexes.size());
+        for (NamedNode index : indexes) {
+            indexesParam.add(index.getName());
+        }
+        for (PTable index : this.indexes) {
+            if(indexesParam.contains(index.getTableName().getString())) {
+                indexesPTable.add(index);
+            }
+        }
+        return indexesPTable;
     }
 
     @Override

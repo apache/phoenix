@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
 
@@ -141,6 +142,9 @@ public class DelegateTable implements PTable {
     public List<PTable> getIndexes() {
         return delegate.getIndexes();
     }
+
+    @Override
+    public List<PTable> getIndexes(List<NamedNode> indexes) { return delegate.getIndexes(indexes); }
 
     @Override
     public PIndexState getIndexState() {
