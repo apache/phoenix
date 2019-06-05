@@ -74,7 +74,7 @@ import com.google.common.collect.Lists;
  */
 public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
+    protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
 
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
@@ -191,18 +191,18 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
             PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
-            LOG.info("Configuring HBase connection to {}", info);
+            LOGGER.info("Configuring HBase connection to {}", info);
             for (Map.Entry<String,String> entry : info.asProps()) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Setting {} = {}", entry.getKey(), entry.getValue());
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Setting {} = {}", entry.getKey(), entry.getValue());
                 }
                 conf.set(entry.getKey(), entry.getValue());
             }
         }
 
         final Connection conn = QueryUtil.getConnection(conf);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
                     qualifiedTableName);
         }
         List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
@@ -303,7 +303,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         // give subclasses their hook
         setupJob(job);
 
-        LOG.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
+        LOGGER.info("Running MapReduce import job from {} to {}", inputPaths, outputPath);
         boolean success = job.waitForCompletion(true);
 
         if (success) {
@@ -311,7 +311,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                 try {
                     table = new HTable(job.getConfiguration(), qualifiedTableName);
                     if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob, table.getRegionLocator().getStartKeys())) {
-                        LOG.error("The table "
+                        LOGGER.error("The table "
                                 + qualifiedTableName
                                 + " has local indexes and there is split key mismatch before and"
                                 + " after running bulkload job. Please rerun the job otherwise"
@@ -322,11 +322,11 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                     if (table != null) table.close();
                 }
             }
-            LOG.info("Loading HFiles from {}", outputPath);
+            LOGGER.info("Loading HFiles from {}", outputPath);
             completebulkload(conf,outputPath,tablesToBeLoaded);
-            LOG.info("Removing output directory {}", outputPath);
+            LOGGER.info("Removing output directory {}", outputPath);
             if(!outputPath.getFileSystem(conf).delete(outputPath, true)) {
-                LOG.error("Failed to delete the output directory {}", outputPath);
+                LOGGER.error("Failed to delete the output directory {}", outputPath);
             }
             return 0;
         } else {
@@ -345,9 +345,9 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             String tableName = table.getPhysicalName();
             Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputPath, tableName);
             try(HTable htable = new HTable(conf,tableName)) {
-                LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
+                LOGGER.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
                 loader.doBulkLoad(tableOutputPath, htable);
-                LOG.info("Incremental load complete for table=" + tableName);
+                LOGGER.info("Incremental load complete for table=" + tableName);
             }
         }
     }

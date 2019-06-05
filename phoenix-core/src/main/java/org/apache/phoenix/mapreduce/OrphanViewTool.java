@@ -80,7 +80,7 @@ import org.slf4j.LoggerFactory;
  */
 public class OrphanViewTool extends Configured implements Tool {
     private static final String SYSTEM_CHILD_LINK_NAME = SYSTEM_CATALOG_NAME;
-    private static final Logger LOG = LoggerFactory.getLogger(OrphanViewTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewTool.class);
     // Query all the views that are not "MAPPED" views
     private static final String viewQuery = "SELECT " +
             TENANT_ID + ", " +
@@ -418,7 +418,7 @@ public class OrphanViewTool extends Configured implements Tool {
                         new DropTableStatement(pTableName, PTableType.VIEW, false, true));
             }
             catch (TableNotFoundException e) {
-                LOG.info("Ignoring view " + pTableName + " as it has already been dropped");
+                LOGGER.info("Ignoring view " + pTableName + " as it has already been dropped");
             }
         } finally {
             if (newConn) {
@@ -807,7 +807,7 @@ public class OrphanViewTool extends Configured implements Tool {
                 connection.close();
             }
         } catch (SQLException sqlE) {
-            LOG.error("Failed to close connection: ", sqlE);
+            LOGGER.error("Failed to close connection: ", sqlE);
             throw new RuntimeException("Failed to close connection with exception: ", sqlE);
         }
     }
@@ -881,7 +881,7 @@ public class OrphanViewTool extends Configured implements Tool {
             }
             return 0;
         } catch (Exception ex) {
-            LOG.error("Orphan View Tool : An exception occurred " + ExceptionUtils.getMessage(ex) + " at:\n" +
+            LOGGER.error("Orphan View Tool : An exception occurred " + ExceptionUtils.getMessage(ex) + " at:\n" +
                     ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {

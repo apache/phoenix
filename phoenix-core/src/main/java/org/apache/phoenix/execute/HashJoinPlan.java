@@ -33,8 +33,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -82,13 +80,15 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.SQLCloseables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class HashJoinPlan extends DelegateQueryPlan {
-    private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(HashJoinPlan.class);
 
     private final SelectStatement statement;
     private final HashJoinInfo joinInfo;
@@ -503,7 +503,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
                     if (!isSet && (endTime
                             - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                        LOG.warn(addCustomAnnotations(
+                        LOGGER.warn(addCustomAnnotations(
                             "Hash plan [" + index
                                     + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.",
                             parent.delegate.getContext().getConnection()));

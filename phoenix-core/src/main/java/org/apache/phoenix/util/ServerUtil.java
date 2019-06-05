@@ -31,8 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -64,10 +62,12 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressWarnings("deprecation")
 public class ServerUtil {
-    private static final Log LOG = LogFactory.getLog(ServerUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerUtil.class);
     private static final int COPROCESSOR_SCAN_WORKS = VersionUtil.encodeVersion("0.98.6");
     
     private static final String FORMAT = "ERROR %d (%s): %s";
@@ -348,7 +348,7 @@ public class ServerUtil {
                     try {
                         connection.close();
                     } catch (IOException e) {
-                        LOG.warn("Unable to close coprocessor connection", e);
+                        LOGGER.warn("Unable to close coprocessor connection", e);
                     }
                 }
                 connections.clear();

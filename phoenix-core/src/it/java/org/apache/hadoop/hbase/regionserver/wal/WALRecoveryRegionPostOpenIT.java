@@ -37,8 +37,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -70,6 +68,8 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -80,7 +80,7 @@ import com.google.common.collect.Multimap;
 @Category(NeedsOwnMiniClusterTest.class)
 public class WALRecoveryRegionPostOpenIT extends BaseTest {
 
-    private static final Log LOG = LogFactory.getLog(WALRecoveryRegionPostOpenIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(WALRecoveryRegionPostOpenIT.class);
 
     private static final String DATA_TABLE_NAME="DATA_POST_OPEN";
 
@@ -145,10 +145,10 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
         @Override
         public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException
         {
-            LOG.info("Found index update failure!");
+            LOGGER.info("Found index update failure!");
             handleFailureCalledCount++;
             tableReferenceToMutation=attempted;
-            LOG.info("failed index update on WAL recovery - allowing index table can be write.");
+            LOGGER.info("failed index update on WAL recovery - allowing index table can be write.");
             failIndexTableWrite=false;
             super.handleFailure(attempted, cause);
 
@@ -263,7 +263,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {
-                LOG.info("Got data table result:" + result);
+                LOGGER.info("Got data table result:" + result);
                 count++;
             }
             assertEquals("Got an unexpected found of data rows", 1, count);

@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  */
 public class Sandbox {
 
-    private static final Logger LOG = LoggerFactory.getLogger(Sandbox.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Sandbox.class);
 
     public static void main(String[] args) throws Exception {
         System.out.println("Starting Phoenix sandbox");
@@ -50,7 +50,7 @@ public class Sandbox {
                         testUtil.shutdownMiniCluster();
                     }
                 } catch (Exception e) {
-                    LOG.error("Exception caught when shutting down mini cluster", e);
+                    LOGGER.error("Exception caught when shutting down mini cluster", e);
                 }
             }
         });

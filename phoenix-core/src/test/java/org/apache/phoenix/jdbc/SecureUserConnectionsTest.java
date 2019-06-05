@@ -31,8 +31,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hbase.security.User;
@@ -47,6 +45,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Tests ConnectionQueryServices caching when Kerberos authentication is enabled. It's not
@@ -55,7 +55,7 @@ import org.junit.Test;
  * collide and when they do not.
  */
 public class SecureUserConnectionsTest {
-    private static final Log LOG = LogFactory.getLog(SecureUserConnectionsTest.class); 
+    private static final Logger LOGGER = LoggerFactory.getLogger(SecureUserConnectionsTest.class);
     private static final int KDC_START_ATTEMPTS = 10;
 
     private static final File TEMP_DIR = new File(getClassTempDir());
@@ -84,7 +84,7 @@ public class SecureUserConnectionsTest {
                 KDC.start();
                 started = true;
             } catch (Exception e) {
-                LOG.warn("PHOENIX-3287: Failed to start KDC, retrying..", e);
+                LOGGER.warn("PHOENIX-3287: Failed to start KDC, retrying..", e);
             }
         }
         assertTrue("The embedded KDC failed to start successfully after " + KDC_START_ATTEMPTS

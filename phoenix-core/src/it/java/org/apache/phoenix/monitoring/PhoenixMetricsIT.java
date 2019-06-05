@@ -59,8 +59,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -71,6 +69,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -85,7 +85,7 @@ import com.google.common.collect.Sets;
  */
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixMetricsIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);
 
     @Test
     public void testResetGlobalPhoenixMetrics() {

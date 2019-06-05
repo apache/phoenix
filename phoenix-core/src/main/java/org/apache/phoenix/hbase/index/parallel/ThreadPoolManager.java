@@ -27,18 +27,18 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Threads;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Manage access to thread pools
  */
 public class ThreadPoolManager {
 
-  private static final Log LOG = LogFactory.getLog(ThreadPoolManager.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(ThreadPoolManager.class);
 
   /**
    * Get an executor for the given name, based on the passed {@link Configuration}. If a thread pool
@@ -62,7 +62,7 @@ public class ThreadPoolManager {
     ThreadPoolExecutor pool = (ThreadPoolExecutor) poolCache.get(builder.getName());
     if (pool == null || pool.isTerminating() || pool.isShutdown()) {
       pool = getDefaultExecutor(builder);
-      LOG.info("Creating new pool for " + builder.getName());
+      LOGGER.info("Creating new pool for " + builder.getName());
       poolCache.put(builder.getName(), pool);
     }
     ((ShutdownOnUnusedThreadPoolExecutor) pool).addReference();
@@ -120,14 +120,14 @@ public class ThreadPoolManager {
     @Override
     protected void finalize() {
       // override references counter if we go out of scope - ensures the pool gets cleaned up
-      LOG.info("Shutting down pool '" + poolName + "' because no more references");
+      LOGGER.info("Shutting down pool '" + poolName + "' because no more references");
       super.finalize();
     }
 
     @Override
     public void shutdown() {
       if (references.decrementAndGet() <= 0) {
-        LOG.debug("Shutting down pool " + this.poolName);
+        LOGGER.debug("Shutting down pool " + this.poolName);
         super.shutdown();
       }
     }
@@ -135,7 +135,7 @@ public class ThreadPoolManager {
     @Override
     public List<Runnable> shutdownNow() {
       if (references.decrementAndGet() <= 0) {
-        LOG.debug("Shutting down pool " + this.poolName + " NOW!");
+        LOGGER.debug("Shutting down pool " + this.poolName + " NOW!");
         return super.shutdownNow();
       }
       return Collections.emptyList();
