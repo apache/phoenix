@@ -25,8 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -80,7 +78,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     private final RegionCoprocessorEnvironment env;
     private long guidePostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-    private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     private ImmutableBytesWritable currentRow;
     private final long clientTimeStamp;
     private final String tableName;
@@ -186,7 +184,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     try {
                         htable.close();
                     } catch (IOException e) {
-                        LOG.warn("Failed to close " + htable.getName(), e);
+                        LOGGER.warn("Failed to close " + htable.getName(), e);
                     }
                 }
             }

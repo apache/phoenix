@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  */
 public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, KeyValue> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportMapper.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexImportMapper.class);
     
     private final PhoenixIndexDBWritable indxWritable = new PhoenixIndexDBWritable();
     
@@ -118,7 +118,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             }
             connection.rollback();
        } catch (SQLException e) {
-           LOG.error("Error {}  while read/write of a record ",e.getMessage());
+           LOGGER.error("Error {}  while read/write of a record ",e.getMessage());
            context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
            throw new RuntimeException(e);
         } 
@@ -135,7 +135,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             try {
                 connection.close();
             } catch (SQLException e) {
-                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+                LOGGER.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
         }
     }

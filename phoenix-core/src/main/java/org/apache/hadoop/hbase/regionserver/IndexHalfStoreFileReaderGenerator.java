@@ -23,8 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
@@ -62,13 +60,15 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.RepairUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     
     private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
-    public static final Log LOG = LogFactory.getLog(IndexHalfStoreFileReaderGenerator.class);
+    public static final Logger LOGGER = LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
 
     @Override
     public Reader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
@@ -196,10 +196,10 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         if (!store.hasReferences()) {
             InternalScanner repairScanner = null;
             if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
-                LOG.info("we have found inconsistent data for local index for region:"
+                LOGGER.info("we have found inconsistent data for local index for region:"
                         + c.getEnvironment().getRegion().getRegionInfo());
                 if (c.getEnvironment().getConfiguration().getBoolean(LOCAL_INDEX_AUTOMATIC_REPAIR, true)) {
-                    LOG.info("Starting automatic repair of local Index for region:"
+                    LOGGER.info("Starting automatic repair of local Index for region:"
                             + c.getEnvironment().getRegion().getRegionInfo());
                     repairScanner = getRepairScanner(c.getEnvironment(), store);
                 }

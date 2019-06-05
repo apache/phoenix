@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 public class PhoenixIndexImportDirectMapper extends
         Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, IntWritable> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportDirectMapper.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexImportDirectMapper.class);
 
     private final PhoenixIndexDBWritable indxWritable = new PhoenixIndexDBWritable();
 
@@ -98,7 +98,7 @@ public class PhoenixIndexImportDirectMapper extends
             //Get batch size in terms of bytes
             batchSizeBytes = ((PhoenixConnection) connection).getMutateBatchSizeBytes();
 
-            LOG.info("Mutation Batch Size = " + batchSize);
+            LOGGER.info("Mutation Batch Size = " + batchSize);
 
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);
@@ -136,7 +136,7 @@ public class PhoenixIndexImportDirectMapper extends
             // Make sure progress is reported to Application Master.
             context.progress();
         } catch (SQLException e) {
-            LOG.error(" Error {}  while read/write of a record ", e.getMessage());
+            LOGGER.error(" Error {}  while read/write of a record ", e.getMessage());
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         }
@@ -173,7 +173,7 @@ public class PhoenixIndexImportDirectMapper extends
                 new IntWritable(0));
             super.cleanup(context);
         } catch (SQLException e) {
-            LOG.error(" Error {}  while read/write of a record ", e.getMessage());
+            LOGGER.error(" Error {}  while read/write of a record ", e.getMessage());
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         } finally {
@@ -186,7 +186,7 @@ public class PhoenixIndexImportDirectMapper extends
             try {
                 this.connection.close();
             } catch (SQLException e) {
-                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+                LOGGER.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
         }
         if (this.writer != null) {

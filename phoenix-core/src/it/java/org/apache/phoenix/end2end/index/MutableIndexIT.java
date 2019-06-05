@@ -696,13 +696,13 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                 Threads.sleep(10000);
             }
           } catch (Exception ex) {
-            Log.info(ex);
+              Log.info(ex);
           }
           long waitStartTime = System.currentTimeMillis();
           // wait until merge happened
           while (System.currentTimeMillis() - waitStartTime < 10000) {
             List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-            Log.info("Waiting:" + regions.size());
+              Log.info("Waiting:" + regions.size());
             if (regions.size() < numRegions) {
               break;
             }

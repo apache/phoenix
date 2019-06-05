@@ -42,7 +42,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class CSVCommonsLoader {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CSVCommonsLoader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CSVCommonsLoader.class);
 
     public static final String DEFAULT_ARRAY_ELEMENT_SEPARATOR = ":";
 
@@ -277,10 +277,10 @@ public class CSVCommonsLoader {
             totalUpserts = upsertCount;
             if (upsertCount % upsertBatchSize == 0) {
                 if (upsertCount % 1000 == 0) {
-                    LOG.info("Processed upsert #{}", upsertCount);
+                    LOGGER.info("Processed upsert #{}", upsertCount);
                 }
                 try {
-                    LOG.info("Committing after {} records", upsertCount);
+                    LOGGER.info("Committing after {} records", upsertCount);
                     conn.commit();
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -290,7 +290,7 @@ public class CSVCommonsLoader {
 
         @Override
         public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
-            LOG.error("Error upserting record " + csvRecord, throwable.getMessage());
+            LOGGER.error("Error upserting record " + csvRecord, throwable.getMessage());
             if (strict) {
                 Throwables.propagate(throwable);
             }

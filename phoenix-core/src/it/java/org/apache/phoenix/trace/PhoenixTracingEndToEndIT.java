@@ -31,8 +31,6 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.*;
 import org.apache.htrace.impl.ProbabilitySampler;
@@ -42,6 +40,8 @@ import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 
@@ -51,7 +51,7 @@ import com.google.common.collect.ImmutableMap;
 
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTracingEndToEndIT.class);
     private static final int MAX_RETRIES = 10;
     private String enabledForLoggingTable;
     private String enableForLoggingIndex;
@@ -69,7 +69,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testWriteSpans() throws Exception {
 
-        LOG.info("testWriteSpans TableName: " + tracingTableName);
+        LOGGER.info("testWriteSpans TableName: " + tracingTableName);
         // watch our sink so we know when commits happen
         latch = new CountDownLatch(1);
 
@@ -133,7 +133,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testClientServerIndexingTracing() throws Exception {
 
-        LOG.info("testClientServerIndexingTracing TableName: " + tracingTableName);
+        LOGGER.info("testClientServerIndexingTracing TableName: " + tracingTableName);
         // one call for client side, one call for server side
         latch = new CountDownLatch(2);
         testTraceWriter.start();
@@ -144,7 +144,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // trace the requests we send
         Connection traceable = getTracingConnection();
-        LOG.debug("Doing dummy the writes to the tracked table");
+        LOGGER.debug("Doing dummy the writes to the tracked table");
         String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = traceable.prepareStatement(insert);
         stmt.setString(1, "key1");
@@ -159,7 +159,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         traceable.commit();
 
         // wait for the latch to countdown, as the metrics system is time-based
-        LOG.debug("Waiting for latch to complete!");
+        LOGGER.debug("Waiting for latch to complete!");
         latch.await(200, TimeUnit.SECONDS);// should be way more than GC pauses
 
         // read the traces back out
@@ -212,7 +212,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testScanTracing() throws Exception {
 
-        LOG.info("testScanTracing TableName: " + tracingTableName);
+        LOGGER.info("testScanTracing TableName: " + tracingTableName);
 
         // separate connections to minimize amount of traces that are generated
         Connection traceable = getTracingConnection();
@@ -226,7 +226,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         createTestTable(conn, false);
 
         // update the table, but don't trace these, to simplify the traces we read
-        LOG.debug("Doing dummy the writes to the tracked table");
+        LOGGER.debug("Doing dummy the writes to the tracked table");
         String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
@@ -265,7 +265,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testScanTracingOnServer() throws Exception {
 
-        LOG.info("testScanTracingOnServer TableName: " + tracingTableName);
+        LOGGER.info("testScanTracingOnServer TableName: " + tracingTableName);
 
         // separate connections to minimize amount of traces that are generated
         Connection traceable = getTracingConnection();
@@ -279,7 +279,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         createTestTable(conn, false);
 
         // update the table, but don't trace these, to simplify the traces we read
-        LOG.debug("Doing dummy the writes to the tracked table");
+        LOGGER.debug("Doing dummy the writes to the tracked table");
         String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
@@ -317,7 +317,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testCustomAnnotationTracing() throws Exception {
 
-        LOG.info("testCustomAnnotationTracing TableName: " + tracingTableName);
+        LOGGER.info("testCustomAnnotationTracing TableName: " + tracingTableName);
 
     	final String customAnnotationKey = "myannot";
     	final String customAnnotationValue = "a1";
@@ -334,7 +334,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         createTestTable(conn, false);
 
         // update the table, but don't trace these, to simplify the traces we read
-        LOG.debug("Doing dummy the writes to the tracked table");
+        LOGGER.debug("Doing dummy the writes to the tracked table");
         String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
@@ -420,7 +420,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testSingleSpan() throws Exception {
 
-        LOG.info("testSingleSpan TableName: " + tracingTableName);
+        LOGGER.info("testSingleSpan TableName: " + tracingTableName);
 
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -446,7 +446,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     @Test
     public void testMultipleSpans() throws Exception {
 
-        LOG.info("testMultipleSpans TableName: " + tracingTableName);
+        LOGGER.info("testMultipleSpans TableName: " + tracingTableName);
 
         Connection conn = getConnectionWithoutTracing();
         latch = new CountDownLatch(4);
@@ -510,7 +510,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         Iterator<SpanInfo> spanIter = trace.spans.iterator();
         for (Span span : spans) {
             SpanInfo spanInfo = spanIter.next();
-            LOG.info("Checking span:\n" + spanInfo);
+            LOGGER.info("Checking span:\n" + spanInfo);
 
             long parentId = span.getParentId();
             if(parentId == Span.ROOT_SPAN_ID) {
@@ -551,7 +551,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         outer: while (retries < MAX_RETRIES) {
             Collection<TraceHolder> traces = reader.readAll(100);
             for (TraceHolder trace : traces) {
-                LOG.info("Got trace: " + trace);
+                LOGGER.info("Got trace: " + trace);
                 found = checker.foundTrace(trace);
                 if (found) {
                     break outer;
@@ -563,7 +563,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
                     }
                 }
             }
-            LOG.info("======  Waiting for tracing updates to be propagated ========");
+            LOGGER.info("======  Waiting for tracing updates to be propagated ========");
             Thread.sleep(1000);
             retries++;
         }

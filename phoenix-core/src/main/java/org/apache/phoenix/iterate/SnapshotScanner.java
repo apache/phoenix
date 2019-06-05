@@ -18,9 +18,6 @@
 
 package org.apache.phoenix.iterate;
 
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,6 +30,8 @@ import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +41,7 @@ import java.util.concurrent.ExecutorService;
 
 public class SnapshotScanner extends AbstractClientScanner {
 
-  private static final Log LOG = LogFactory.getLog(SnapshotScanner.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(SnapshotScanner.class);
 
   private RegionScanner scanner = null;
   private HRegion region;
@@ -89,7 +88,7 @@ public class SnapshotScanner extends AbstractClientScanner {
         this.scanner.close();
         this.scanner = null;
       } catch (IOException e) {
-        LOG.warn("Exception while closing scanner", e);
+        LOGGER.warn("Exception while closing scanner", e);
       }
     }
     if (this.region != null) {
@@ -98,7 +97,7 @@ public class SnapshotScanner extends AbstractClientScanner {
         this.region.close(true);
         this.region = null;
       } catch (IOException e) {
-        LOG.warn("Exception while closing scanner", e);
+        LOGGER.warn("Exception while closing scanner", e);
       }
     }
   }
