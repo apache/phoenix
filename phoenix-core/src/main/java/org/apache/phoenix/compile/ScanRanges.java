@@ -110,8 +110,9 @@ public class ScanRanges {
         }
         List<List<KeyRange>> sortedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
         for (int i = 0; i < ranges.size(); i++) {
+            Field f = schema.getField(i);
             List<KeyRange> sorted = Lists.newArrayList(ranges.get(i));
-            Collections.sort(sorted, KeyRange.COMPARATOR);
+            Collections.sort(sorted, f.getSortOrder() == SortOrder.ASC ? KeyRange.COMPARATOR : KeyRange.DESC_COMPARATOR);
             sortedRanges.add(ImmutableList.copyOf(sorted));
         }
         
@@ -608,9 +609,8 @@ public class ScanRanges {
                 if (ranges != null && ranges.size() > rowTimestampColPos) {
                     List<KeyRange> rowTimestampColRange = ranges.get(rowTimestampColPos);
                     List<KeyRange> sortedRange = new ArrayList<>(rowTimestampColRange);
-                    Collections.sort(sortedRange, KeyRange.COMPARATOR);
-                    //ranges.set(rowTimestampColPos, sortedRange); //TODO: do I really need to do this?
                     Field f = schema.getField(rowTimestampColPos);
+                    Collections.sort(sortedRange, f.getSortOrder() == SortOrder.ASC ? KeyRange.COMPARATOR : KeyRange.DESC_COMPARATOR);
                     SortOrder order = f.getSortOrder();
                     KeyRange lowestRange = sortedRange.get(0);
                     KeyRange highestRange = sortedRange.get(rowTimestampColRange.size() - 1);

@@ -29,13 +29,20 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -582,6 +589,70 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("create index " + idxName + " on " + viewName + " (ID1)");
             ResultSet rs = conn.createStatement().executeQuery("select /*+ INDEX(" + viewName + " " + idxName + ") */ * from " + viewName + " where ID1 = 1 ");
             assertTrue(rs.next());
+        }
+    }
+
+    @Test
+    public void testOrWithMixedOrderPKs() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (COL1 VARCHAR, COL2 VARCHAR CONSTRAINT PK PRIMARY KEY (COL1 DESC, COL2)) ");
+
+            // this is the order the rows will be stored on disk
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('8', 'a')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('6', 'a')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('23', 'b')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('23', 'bb')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('2', 'a')");
+            stmt.execute("UPSERT INTO " + tableName + " (COL1, COL2) VALUES ('17', 'a')");
+
+
+            // test values in the skip scan filter which are prefixes of another value, eg 1,12 and 2,23
+            String sql = "select COL1, COL2 from " + tableName + " where COL1='1' OR COL1='2' OR COL1='3' OR COL1='4' " +
+                    "OR COL1='5' OR COL1='6' OR COL1='8' OR COL1='17' OR COL1='12' OR COL1='23'";
+
+            ResultSet rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertEquals("Expected a single scan ", 1, plan.getScans().size());
+            assertEquals("Expected a single scan ", 1, plan.getScans().get(0).size());
+            Scan scan = plan.getScans().get(0).get(0);
+            FilterList filterList = (FilterList)scan.getFilter();
+            boolean skipScanFilterFound = false;
+            for (Filter f : filterList.getFilters()) {
+                if (f instanceof SkipScanFilter) {
+                    skipScanFilterFound = true;
+                    SkipScanFilter skipScanFilter = (SkipScanFilter) f;
+                    assertEquals("Expected a single slot ", skipScanFilter.getSlots().size(), 1);
+                    assertEquals("Number of key ranges should match number of or filters ",
+                            skipScanFilter.getSlots().get(0).size(), 10);
+                }
+            }
+            assertTrue("Should use skip scan filter", skipScanFilterFound);
+
+            assertEquals("8", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("6", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("23", rs.getString(1));
+            assertEquals("b", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("23", rs.getString(1));
+            assertEquals("bb", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("2", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("17", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertFalse(rs.next());
         }
     }
 }
