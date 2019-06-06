@@ -34,6 +34,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -236,12 +237,15 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     int outputSize = output.size();
                     byte[] outputBytes = output.getBuffer();
                     // Don't remove trailing separator byte unless it's the one for ASC
-                    // as otherwise we need it to ensure sort order is correct
+                    // as otherwise we need it to ensure sort order is correct.
+                    // Additionally for b/w compat with clients older than 4.14.1 -
+                    // If SortOorder.ASC then always strip trailing separator byte (as before)
+                    // else only strip for >= 4.14 client (when STRIP_TRAILING_SEPARATOR_BYTE bit is set)
                     for (int k = expressionCount -1 ; 
                             k >=0 &&  getChildren().get(k).getDataType() != null 
                                   && !getChildren().get(k).getDataType().isFixedWidth()
                                   && outputBytes[outputSize-1] == SchemaUtil.getSeparatorByte(true, false, getChildren().get(k))
-                                  && isStripTrailingSepByte() ; k--) {
+                                  &&  (getChildren().get(k).getSortOrder() == SortOrder.ASC ? true : isStripTrailingSepByte()) ; k--) {
                         outputSize--;
                     }
                     ptr.set(outputBytes, 0, outputSize);
