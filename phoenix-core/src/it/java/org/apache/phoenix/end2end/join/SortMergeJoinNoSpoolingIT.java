@@ -23,16 +23,19 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class SortMergeJoinNoSpoolingIT extends SortMergeJoinNoIndexIT {
 
     public SortMergeJoinNoSpoolingIT(String[] indexDDL, String[] plans) {
