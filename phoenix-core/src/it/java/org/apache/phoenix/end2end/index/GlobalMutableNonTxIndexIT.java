@@ -20,19 +20,23 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.junit.runners.Parameterized.Parameters;
 
 public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
+    public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded, boolean skipPostIndexUpdates) {
         super(localIndex, mutable, transactional, columnEncoded);
+        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(skipPostIndexUpdates);
     }
 
-    @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3},skipPostIndexUpdates={4}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
-                { false, true, false, false }, { false, true, false, true }
-           });
+                {false, true, false, false, false},
+                {false, true, false, false, true},
+                {false, true, false, true, false},
+                {false, true, false, true, true}
+        });
     }
-
 }

@@ -15,30 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.end2end.index;
 
-package org.apache.phoenix.end2end;
+import java.util.Map;
 
-import org.apache.phoenix.query.BaseTest;
+import com.google.common.collect.Maps;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
-/**
- * Base class for tests whose methods run in parallel with statistics disabled.
- * You must create unique names using {@link #generateUniqueName()} for each
- * table and sequence used to prevent collisions.
- */
-@Category(ParallelStatsDisabledTest.class)
-public abstract class ParallelStatsDisabledIT extends BaseTest {
+public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutableNonTxIndexIT {
+
+    public GlobalMutableNonTxIndexWithLazyPostBatchWriteIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded, boolean skipPostIndexUpdates) {
+        super(localIndex, mutable, transactional, columnEncoded, skipPostIndexUpdates);
+    }
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
-    }
-
-    @AfterClass
-    public static void tearDownMiniCluster() throws Exception {
-        BaseTest.tearDownMiniClusterIfBeyondThreshold();
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(IndexRegionObserver.INDEX_LAZY_POST_BATCH_WRITE, "true");
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 }

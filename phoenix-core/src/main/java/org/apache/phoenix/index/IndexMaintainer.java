@@ -313,6 +313,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return maintainers;
     }
 
+    public static IndexMaintainer getIndexMaintainer(List<IndexMaintainer> maintainers, byte[] indexTableName) {
+        Iterator<IndexMaintainer> maintainerIterator = maintainers.iterator();
+        while (maintainerIterator.hasNext()) {
+            IndexMaintainer maintainer = maintainerIterator.next();
+            if (Bytes.compareTo(indexTableName, maintainer.getIndexTableName()) == 0) {
+                return maintainer;
+            }
+        }
+        return null;
+    }
+    
     private byte[] viewIndexId;
     private boolean isMultiTenant;
     // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column

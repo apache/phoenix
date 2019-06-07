@@ -144,6 +144,10 @@ public class EncodedQualifiersColumnProjectionFilter extends FilterBase implemen
     public ReturnCode filterKeyValue(Cell ignored) throws IOException {
       return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
+
+    public void addTrackedColumn(int qualifier) {
+        trackedColumns.set(qualifier);
+    }
     
     interface ColumnTracker {
         

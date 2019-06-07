@@ -339,6 +339,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
+    public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 10*60*1000; /* 10 min */
+    public static final int DEFAULT_GLOBAL_INDEX_REPAIR_COUNT = DEFAULT_MUTATE_BATCH_SIZE;
+    public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
+
     public static final boolean DEFAULT_PROPERTY_POLICY_PROVIDER_ENABLED = true;
 
     @SuppressWarnings("serial")

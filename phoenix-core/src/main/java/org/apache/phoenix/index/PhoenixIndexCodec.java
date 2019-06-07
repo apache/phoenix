@@ -125,7 +125,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public boolean isEnabled(Mutation m) throws IOException {
+    public boolean isEnabled(Mutation m) {
         return hasIndexMaintainers(m.getAttributesMap());
     }
 }
