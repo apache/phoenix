@@ -87,13 +87,13 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
      * @throws IOException
      */
     @Override
-    public boolean isEnabled(Mutation m) throws IOException {
+    public boolean isEnabled(Mutation m) {
         // ask the codec to see if we should even attempt indexing
         return this.codec.isEnabled(m);
     }
 
     @Override
-    public boolean isAtomicOp(Mutation m) throws IOException {
+    public boolean isAtomicOp(Mutation m) {
         return false;
     }
 

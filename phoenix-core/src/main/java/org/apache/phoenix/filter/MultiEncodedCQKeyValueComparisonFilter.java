@@ -375,7 +375,11 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
         this.minQualifier = minMaxQualifiers.getFirst();
         this.maxQualifier = minMaxQualifiers.getSecond();
     }
-    
+
+    public void setMinQualifier(int minQualifier) {
+        this.minQualifier = minQualifier;
+    }
+
     public static MultiEncodedCQKeyValueComparisonFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
         try {
             return (MultiEncodedCQKeyValueComparisonFilter)Writables.getWritable(pbBytes, new MultiEncodedCQKeyValueComparisonFilter());

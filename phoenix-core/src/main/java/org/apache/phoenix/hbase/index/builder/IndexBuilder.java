@@ -132,7 +132,7 @@ public interface IndexBuilder extends Stoppable {
    *         basis, as each codec is instantiated per-region.
  * @throws IOException 
    */
-  public boolean isEnabled(Mutation m) throws IOException;
+  public boolean isEnabled(Mutation m);
   
   /**
    * True if mutation has an ON DUPLICATE KEY clause
@@ -140,7 +140,7 @@ public interface IndexBuilder extends Stoppable {
    * @return true if mutation has ON DUPLICATE KEY expression and false otherwise.
    * @throws IOException
    */
-  public boolean isAtomicOp(Mutation m) throws IOException;
+  public boolean isAtomicOp(Mutation m);
 
   /**
    * Calculate the mutations based on the ON DUPLICATE KEY clause

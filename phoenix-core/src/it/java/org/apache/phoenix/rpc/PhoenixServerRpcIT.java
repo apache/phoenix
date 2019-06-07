@@ -99,7 +99,8 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             ensureTablesOnDifferentRegionServers(dataTableFullName, indexTableFullName);
             TestPhoenixIndexRpcSchedulerFactory.reset();
             upsertRow(conn, dataTableFullName);
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor())
+            // An index row is updated twice, once before the data table row, and once after it. Thus, the factory is invoked twice
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(), Mockito.times(2))
                     .dispatch(Mockito.any(CallRunner.class));
             TestPhoenixIndexRpcSchedulerFactory.reset();
             // run select query that should use the index
