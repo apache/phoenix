@@ -76,7 +76,7 @@ public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
     @Parameters(
             name = "mutable={0},localIndex={1},async={2},view={3}")
     public static Collection<Object[]> data() {
-        List<Object[]> list = Lists.newArrayListWithExpectedSize(8);
+        List<Object[]> list = Lists.newArrayListWithExpectedSize(16);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans) {
             for (boolean localIndex : Booleans) {

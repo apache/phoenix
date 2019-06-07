@@ -78,7 +78,7 @@ public interface IndexCodec {
      *         codec is instantiated per-region.
      * @throws IOException
      */
-    public boolean isEnabled(Mutation m) throws IOException;
+    public boolean isEnabled(Mutation m);
 
     public void initialize(Configuration conf, byte[] startKey, byte[] endKey, byte[] tableName);
 }

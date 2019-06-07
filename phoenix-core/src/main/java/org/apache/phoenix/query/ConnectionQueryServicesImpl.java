@@ -173,11 +173,13 @@ import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixTransactionalIndexer;
@@ -844,6 +846,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
+            boolean nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
+            boolean isTransactional =
+                    Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) || nonTxToTx;
+
+            boolean globalIndexerEnabled = config.getBoolean(
+                    QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
+                    QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
+
+            if (tableType == PTableType.INDEX && !isTransactional) {
+                if (globalIndexerEnabled && !descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                    descriptor.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                }
+            }
+
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
@@ -857,9 +873,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
             // For ALTER TABLE
-            boolean nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
-            boolean isTransactional =
-                    Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) || nonTxToTx;
+
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
@@ -875,15 +889,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (descriptor.hasCoprocessor(Indexer.class.getName())) {
                         descriptor.removeCoprocessor(Indexer.class.getName());
                     }
+                    if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                        descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
+                    }
                 } else {
                     // If exception on alter table to transition back to non transactional
                     if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                     }
-                    if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
-                        Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                        opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                        Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                    if (globalIndexerEnabled) {
+                        if (!descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                            IndexRegionObserver.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                        }
+
+                    } else {
+                        if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                            Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                        }
                     }
                 }
             }
