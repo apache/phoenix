@@ -50,9 +50,10 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProps();
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(3);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         TableName systemTable = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,

@@ -82,6 +82,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
     private KeyValueBuilder kvBuilder;
+    protected boolean disableIndexOnFailure = false;
 
     // for testing
     public TrackingParallelWriterIndexCommitter(String hbaseVersion) {
@@ -92,8 +93,9 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name) {
+    public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) {
         this.env = env;
+        this.disableIndexOnFailure = disableIndexOnFailure;
         Configuration conf = env.getConfiguration();
         setup(IndexWriterUtils.getDefaultDelegateHTableFactory(env),
                 ThreadPoolManager.getExecutor(
@@ -181,7 +183,13 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                     " to table: " + tableReference);
                         }
                         // if the client can retry index writes, then we don't need to retry here
-                        HTableFactory factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
+                        HTableFactory factory;
+                        if (disableIndexOnFailure) {
+                            factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
+                        }
+                        else {
+                            factory = retryingFactory;
+                        }
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);
@@ -235,7 +243,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         if (failures.size() > 0) {
             // make the list unmodifiable to avoid any more synchronization concerns
             throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
-                    PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
+                    disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
         }
         return;
     }

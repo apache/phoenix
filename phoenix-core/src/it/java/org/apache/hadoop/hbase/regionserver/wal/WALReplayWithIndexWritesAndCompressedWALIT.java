@@ -62,6 +62,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,6 +82,7 @@ import org.slf4j.LoggerFactory;
  * This test should only have a single test - otherwise we will start/stop the minicluster multiple
  * times, which is probably not what you want to do (mostly because its so much effort).
  */
+@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 

@@ -96,8 +96,9 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, "50000000");
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, Long.toString(REBUILD_PERIOD)); // batch at 50 seconds
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
                 (RegionCoprocessorEnvironment) getUtility()

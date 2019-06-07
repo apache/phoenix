@@ -17,21 +17,23 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
-import com.google.common.collect.Multimap;
-import org.apache.phoenix.hbase.index.exception.IndexWriteException;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.phoenix.hbase.index.table.HTableFactory;
 
 /**
- * Write the index updates to the index tables
+ * Like the {@link ParallelWriterIndexCommitter}, but does not block
+ *
+ *
  */
-public interface IndexCommitter extends Stoppable {
+public class LazyParallelWriterIndexCommitter extends AbstractParallelWriterIndexCommitter {
 
-  void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure);
+    // for testing
+    public LazyParallelWriterIndexCommitter(String hbaseVersion) {
+        super(hbaseVersion);
+    }
 
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
-      throws IndexWriteException;
+    public LazyParallelWriterIndexCommitter() {
+        super();
+    }
 }

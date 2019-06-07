@@ -1067,6 +1067,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
         byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        byte[] scanLimitBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_LIMIT);
+        int scanLimit = (scanLimitBytes != null) ? Bytes.toInt(scanLimitBytes) : 0;
         boolean hasMore;
         int rowCount = 0;
         try {
@@ -1121,6 +1123,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             mutations.clear();
                         }
                         rowCount++;
+                        if (rowCount == scanLimit)
+                            break;
                     }
                     
                 } while (hasMore);
