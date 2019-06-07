@@ -71,9 +71,7 @@ import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
-import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -187,11 +185,13 @@ import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixTransactionalIndexer;
@@ -227,7 +227,6 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
-import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
@@ -812,7 +811,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         .getName());
             } else {
                 // In case this a local index created on a view of a multi-tenant table, the
-                // DATA_TABLE_NAME points to the name of the view instead of the physical base table
+                // PHYSICAL_DATA_TABLE_NAME points to the name of the view instead of the physical base table
                 baseTableDesc = existingDesc;
             }
             dataTableColDescForIndexTablePropSyncing = baseTableDesc.getFamily(defaultFamilyBytes);
@@ -897,6 +896,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
+            TransactionFactory.Provider provider = getTransactionProvider(tableProps);
+            boolean isTransactional = (provider != null);
+
+            boolean globalIndexerEnabled = config.getBoolean(
+                    QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
+                    QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
+
+            if (tableType == PTableType.INDEX && !isTransactional) {
+                if (globalIndexerEnabled && !descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                    descriptor.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                }
+            }
+
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
@@ -909,8 +921,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
-            TransactionFactory.Provider provider = getTransactionProvider(tableProps);
-            boolean isTransactional = (provider != null);
+
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
@@ -926,15 +937,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (descriptor.hasCoprocessor(Indexer.class.getName())) {
                         descriptor.removeCoprocessor(Indexer.class.getName());
                     }
+                    if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                        descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
+                    }
                 } else {
                     // If exception on alter table to transition back to non transactional
                     if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                     }
-                    if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
-                        Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                        opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                        Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                    if (globalIndexerEnabled) {
+                        if (!descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                            IndexRegionObserver.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                        }
+
+                    } else {
+                        if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                            Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                        }
                     }
                 }
             }

@@ -346,6 +346,13 @@ public interface QueryServices extends SQLCloseable {
     public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
     // The initial delay before the first task from table SYSTEM.TASK is handled
     public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
+    // The minimum age of an unverified global index row to be eligible for deletion
+    public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.global.index.row.age.threshold.to.delete.ms";
+    // The maximum number of global index rows to be rebuild at a time
+    public static final String GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB = "phoenix.global.index.row.repair.count.ms";
+    // Enable the IndexRegionObserver Coprocessor
+    public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
