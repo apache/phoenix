@@ -28,7 +28,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
-    @Test
+    //@Test disabled until PHOENIX-5327 is fixed
     public void testPherfMain() throws Exception {
         String[] args = { "-q", "-l",
                 "--schemaFile", ".*create_prod_test_unsalted.sql",
