@@ -33,14 +33,20 @@ import org.apache.hadoop.hbase.security.access.TablePermission;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.ListMultimap;
 
 public class PermissionsCacheIT extends BasePermissionsIT {
 
-    public PermissionsCacheIT(boolean isNamespaceMapped) throws Exception {
-        super(isNamespaceMapped);
+    public PermissionsCacheIT() throws Exception {
+        super(true);
+    }
+
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        BasePermissionsIT.initCluster(true);
     }
 
     @Test
@@ -48,7 +54,6 @@ public class PermissionsCacheIT extends BasePermissionsIT {
         if (!isNamespaceMapped) {
             return;
         }
-        initCluster(isNamespaceMapped);
         final String schema = generateUniqueName();
         final String tableName = generateUniqueName();
         final String phoenixTableName = SchemaUtil.getTableName(schema, tableName);
@@ -91,7 +96,11 @@ public class PermissionsCacheIT extends BasePermissionsIT {
             for (TablePermission tablePerm : tablePermissions) {
                 assertTrue("Table create permission don't exist", tablePerm.implies(Action.CREATE));
             }
-        } finally {
+        } catch (Exception e) {
+            System.out.println("Exception occurred: " + e);
+            throw e;
+        }
+        finally {
             revokeAll();
         }
     }
