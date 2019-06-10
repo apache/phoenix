@@ -197,6 +197,7 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.PFunction;
@@ -561,7 +562,7 @@ public class MetaDataClient {
 
     /**
      * Update the cache with the latest as of the connection scn.
-     * @param functioNames
+     * @param functionNames
      * @return the timestamp from the server, negative if the function was added to the cache and positive otherwise
      * @throws SQLException
      */
@@ -1142,7 +1143,7 @@ public class MetaDataClient {
                 }
                 // if there are new columns to add
                 return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
-                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
+                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
@@ -3528,14 +3529,24 @@ public class MetaDataClient {
 
     public MutationState addColumn(AddColumnStatement statement) throws SQLException {
         PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
-        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType());
+        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType(), statement.isCascade(), statement.getIndexes());
     }
 
     public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
             ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
-            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType)
+            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType, boolean cascade, List<NamedNode> indexes)
                     throws SQLException {
         connection.rollback();
+        List<PTable> indexesPTable = Lists.newArrayListWithExpectedSize(indexes != null ?
+                indexes.size() : table.getIndexes().size());
+        // if cascade keyword is passed and indexes are provided either implicitly or explicitly
+        if (cascade && (indexes == null || indexes.size()>0)) {
+            if (indexes == null) {
+                indexesPTable = table.getIndexes(table.getType().equals(PTableType.VIEW));
+            } else {
+                indexesPTable = table.getIndexes(indexes);
+            }
+        }
         boolean wasAutoCommit = connection.getAutoCommit();
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ?
             origColumnDefs.size() : 0);
@@ -3662,10 +3673,10 @@ public class MetaDataClient {
                             if (!colDef.validateDefault(context, null)) {
                                 colDef = new ColumnDef(colDef, null); // Remove DEFAULT as it's not necessary
                             }
+                            String familyName = null;
                             Integer encodedCQ = null;
                             if (!colDef.isPK()) {
                                 String colDefFamily = colDef.getColumnDefName().getFamilyName();
-                                String familyName = null;
                                 ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
                                 String defaultColumnFamily = tableForCQCounters.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(tableForCQCounters.getDefaultFamilyName().getString()) ? 
                                         tableForCQCounters.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
@@ -3693,6 +3704,26 @@ public class MetaDataClient {
                                 .setTableName(tableName).build().buildException();
                             }
                             PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
+                            HashMap<PTable, PColumn> indexColumn = null;
+                            if (cascade) {
+                                if (colDef.isPK()) {
+                                    //only supported for non pk column
+                                    throw new SQLExceptionInfo.Builder(
+                                            SQLExceptionCode.NOT_SUPPORTED_CASCADE_FEATURE_PK)
+                                            .build()
+                                            .buildException();
+                                }
+                                indexColumn = new HashMap(indexesPTable.size());
+                                PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
+                                ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(familyName, colDef.getColumnDefName().getColumnName()));
+                                ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), false, colDef.getSortOrder(), colDef.getExpression(), colDef.isRowTimestamp());
+                                for (PTable index : indexesPTable) {
+                                    int iPos = index.getColumns().size();
+                                    PColumn iColumn = newColumn(iPos, indexColDef, null, "", false, null, willBeImmutableRows);
+                                    indexColumn.put(index, iColumn);
+                                }
+                            }
+
                             columns.add(column);
                             String pkName = null;
                             Short keySeq = null;
@@ -3707,6 +3738,13 @@ public class MetaDataClient {
                             }
                             colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
                             addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
+                            // add new columns for given indexes one by one
+                            if (cascade) {
+                                for (PTable index: indexesPTable) {
+                                    logger.info("Adding column to "+index.getTableName().toString());
+                                    addColumnMutation(schemaName, index.getTableName().getString(), indexColumn.get(index), colUpsert, null, "", keySeq, index.getBucketNum() != null);
+                                }
+                            }
                         }
                         
                         // Add any new PK columns to end of index PK
@@ -3771,7 +3809,17 @@ public class MetaDataClient {
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
-                
+
+                if (cascade) {
+                    for (PTable index : indexesPTable) {
+                        incrementTableSeqNum(index, index.getType(), columnDefs.size(),
+                                Boolean.FALSE,
+                                metaPropertiesEvaluated.getUpdateCacheFrequency());
+                    }
+                    tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
+                    connection.rollback();
+                }
+
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
                     incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
 

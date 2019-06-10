@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
@@ -56,7 +57,6 @@ public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
-
     public enum ViewType {
         MAPPED((byte)1),
         READ_ONLY((byte)2),
@@ -707,6 +707,20 @@ public interface PTable extends PMetaDataEntity {
      * @return the list of indexes.
      */
     List<PTable> getIndexes();
+
+    /**
+     * Return the list of PTables for the indexes passed in as parameter
+     * @param indexes list of names of indexes
+     * @return the list of PTable indexes corresponding to input
+     */
+    List<PTable> getIndexes(List<NamedNode> indexes);
+
+    /**
+     * Return the list of index PTables for a view or otherwise
+     * @param viewOnly if PTable is a view
+     * @return the list of view indexes if viewOnly is true, otherwise all indexes
+     */
+    List<PTable> getIndexes(boolean viewOnly);
 
     /**
      * For a table of index type, return the state of the table.
