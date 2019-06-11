@@ -77,7 +77,8 @@ import com.google.common.collect.Lists;
 public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWritable, Text, TableRowkeyPair,
         ImmutableBytesWritable> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(FormatToBytesWritableMapper.class);
+    protected static final Logger LOGGER =
+            LoggerFactory.getLogger(FormatToBytesWritableMapper.class);
 
     protected static final String COUNTER_GROUP_NAME = "Phoenix MapReduce Import";
 
@@ -396,7 +397,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
 
         @Override
         public void errorOnRecord(T record, Throwable throwable) {
-            LOG.error("Error on record " + record, throwable);
+            LOGGER.error("Error on record " + record, throwable);
             context.getCounter(COUNTER_GROUP_NAME, "Errors on records").increment(1L);
             if (!ignoreRecordErrors) {
                 Throwables.propagate(throwable);

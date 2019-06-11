@@ -313,7 +313,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         ResultIterator resultIterator = plan.iterator();
                         if (logger.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
-                            logger.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
+                            logger.debug(LogUtil.addCustomAnnotations(
+                                    "Explain plan: " + explainPlan, connection));
                         }
                         StatementContext context = plan.getContext();
                         context.setQueryLogger(queryLogger);

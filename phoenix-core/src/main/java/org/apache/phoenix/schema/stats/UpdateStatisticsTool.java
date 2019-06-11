@@ -70,7 +70,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IS_NAMESPACE
  */
 public class UpdateStatisticsTool extends Configured implements Tool {
 
-    private static final Logger LOG = LoggerFactory.getLogger(UpdateStatisticsTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UpdateStatisticsTool.class);
 
     private static final Option TABLE_NAME_OPTION = new Option("t", "table", true,
             "Phoenix Table Name");
@@ -125,7 +125,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             String physicalTableName =  SchemaUtil.getPhysicalTableName(tableName.getBytes(),
                     namespaceMapping).getNameAsString();
             admin.snapshot(snapshotName, physicalTableName);
-            LOG.info("Successfully created snapshot " + snapshotName + " for " + physicalTableName);
+            LOGGER.info("Successfully created snapshot " + snapshotName + " for " + physicalTableName);
         }
     }
 
@@ -141,7 +141,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         try (final Connection conn = ConnectionUtil.getInputConnection(getConf())) {
             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             admin.deleteSnapshot(snapshotName);
-            LOG.info("Successfully deleted snapshot " + snapshotName);
+            LOGGER.info("Successfully deleted snapshot " + snapshotName);
         }
     }
 
@@ -219,23 +219,23 @@ public class UpdateStatisticsTool extends Configured implements Tool {
                 CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
                 ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
                 Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
-        LOG.info("UpdateStatisticsTool running for: " + tableName
+        LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }
 
     private int runJob() {
         try {
             if (isForeground) {
-                LOG.info("Running UpdateStatisticsTool in Foreground. " +
+                LOGGER.info("Running UpdateStatisticsTool in Foreground. " +
                         "Runs full table scans. This may take a long time!");
                 return (job.waitForCompletion(true)) ? 0 : 1;
             } else {
-                LOG.info("Running UpdateStatisticsTool in Background - Submit async and exit");
+                LOGGER.info("Running UpdateStatisticsTool in Background - Submit async and exit");
                 job.submit();
                 return 0;
             }
         } catch (Exception e) {
-            LOG.error("Caught exception " + e + " trying to update statistics.");
+            LOGGER.error("Caught exception " + e + " trying to update statistics.");
             return 1;
         }
     }

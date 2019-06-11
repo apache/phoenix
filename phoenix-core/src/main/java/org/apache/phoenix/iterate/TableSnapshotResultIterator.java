@@ -18,8 +18,6 @@
 
 package org.apache.phoenix.iterate;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -34,6 +32,8 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -52,7 +52,7 @@ import java.util.UUID;
  */
 public class TableSnapshotResultIterator implements ResultIterator {
 
-  private static final Log LOG = LogFactory.getLog(TableSnapshotResultIterator.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotResultIterator.class);
 
   private final Scan scan;
   private ResultIterator scanIterator;
@@ -101,7 +101,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     }
 
     Collections.sort(this.regions);
-    LOG.info("Initialization complete with " + regions.size() + " valid regions");
+    LOGGER.info("Initialization complete with " + regions.size() + " valid regions");
   }
 
   /**

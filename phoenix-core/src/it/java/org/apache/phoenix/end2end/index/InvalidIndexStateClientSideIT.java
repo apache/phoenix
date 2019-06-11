@@ -51,11 +51,12 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-import com.sun.org.apache.commons.logging.Log;
-import com.sun.org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
-    private static final Log LOG = LogFactory.getLog(InvalidIndexStateClientSideIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(InvalidIndexStateClientSideIT.class);
 
     @Test
     public void testCachedConnections() throws Throwable {
@@ -121,7 +122,7 @@ public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
                     }
                 };
         int version = VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, 13, PHOENIX_PATCH_NUMBER);
-        LOG.info("Client version: " + version);
+        LOGGER.info("Client version: " + version);
         HTableInterface ht =
                 queryServices.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {

@@ -52,7 +52,7 @@ import com.google.common.base.Function;
 /** {@link UpsertExecutor} over {@link Map} objects, as parsed from JSON. */
 public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
 
-    protected static final Logger LOG = LoggerFactory.getLogger(JsonUpsertExecutor.class);
+    protected static final Logger LOGGER = LoggerFactory.getLogger(JsonUpsertExecutor.class);
 
     /** Testing constructor. Do not use in prod. */
     @VisibleForTesting
@@ -106,10 +106,11 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
             preparedStatement.execute();
             upsertListener.upsertDone(++upsertCount);
         } catch (Exception e) {
-            if (LOG.isDebugEnabled()) {
+            if (LOGGER.isDebugEnabled()) {
                 // Even though this is an error we only log it with debug logging because we're notifying the
                 // listener, and it can do its own logging if needed
-                LOG.debug("Error on record " + record + ", fieldIndex " + fieldIndex + ", colName " + colName, e);
+                LOGGER.debug("Error on record " + record + ", fieldIndex " + fieldIndex +
+                        ", colName " + colName, e);
             }
             upsertListener.errorOnRecord(record, new Exception("fieldIndex: " + fieldIndex + ", colName " + colName, e));
         }

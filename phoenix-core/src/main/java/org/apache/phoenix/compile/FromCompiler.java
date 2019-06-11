@@ -647,7 +647,11 @@ public class FromCompiler {
             }
             TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
             if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns(), connection));
+                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale table "
+                        + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber()
+                        + " at timestamp " + tableRef.getTable().getTimeStamp() + " with "
+                        + tableRef.getTable().getColumns().size() + " columns: "
+                        + tableRef.getTable().getColumns(), connection));
             }
             return tableRef;
         }

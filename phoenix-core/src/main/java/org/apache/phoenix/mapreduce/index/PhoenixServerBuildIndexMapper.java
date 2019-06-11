@@ -52,7 +52,8 @@ import org.slf4j.LoggerFactory;
 public class PhoenixServerBuildIndexMapper extends
         Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, IntWritable> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixServerBuildIndexMapper.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixServerBuildIndexMapper.class);
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {

@@ -18,8 +18,6 @@
 
 package org.apache.phoenix.iterate;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -51,6 +49,8 @@ import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsWriter;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,7 +64,7 @@ import java.util.concurrent.ExecutorService;
  */
 public class SnapshotScanner extends AbstractClientScanner {
 
-  private static final Log LOG = LogFactory.getLog(SnapshotScanner.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(SnapshotScanner.class);
   private final Scan scan;
   private RegionScanner scanner;
   private HRegion region;
@@ -74,7 +74,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   public SnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
       HTableDescriptor htd, HRegionInfo hri,  Scan scan) throws Throwable{
 
-    LOG.info("Creating SnapshotScanner for region: " + hri);
+    LOGGER.info("Creating SnapshotScanner for region: " + hri);
 
     scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
     values = new ArrayList<>();
@@ -128,7 +128,7 @@ public class SnapshotScanner extends AbstractClientScanner {
         this.scanner.close();
         this.scanner = null;
       } catch (IOException e) {
-        LOG.warn("Exception while closing scanner", e);
+        LOGGER.warn("Exception while closing scanner", e);
       }
     }
     if (this.region != null) {
@@ -137,7 +137,7 @@ public class SnapshotScanner extends AbstractClientScanner {
         this.region.close(true);
         this.region = null;
       } catch (IOException e) {
-        LOG.warn("Exception while closing scanner", e);
+        LOGGER.warn("Exception while closing scanner", e);
       }
     }
   }

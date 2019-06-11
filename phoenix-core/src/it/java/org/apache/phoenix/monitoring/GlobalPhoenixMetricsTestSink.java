@@ -18,8 +18,6 @@
 package org.apache.phoenix.monitoring;
 
 import org.apache.commons.configuration.SubsetConfiguration;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
