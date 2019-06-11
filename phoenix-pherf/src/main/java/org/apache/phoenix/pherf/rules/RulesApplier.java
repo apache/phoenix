@@ -39,7 +39,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
-    private static final Logger logger = LoggerFactory.getLogger(RulesApplier.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
     private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
@@ -116,7 +116,7 @@ public class RulesApplier {
         List<Scenario> scenarios = parser.getScenarios();
         DataValue value = null;
         if (scenarios.contains(scenario)) {
-            logger.debug("We found a correct Scenario");
+            LOGGER.debug("We found a correct Scenario");
             
             Map<DataTypeMapping, List> overrideRuleMap = this.getCachedScenarioOverrides(scenario);
             
@@ -124,7 +124,7 @@ public class RulesApplier {
 	            List<Column> overrideRuleList = this.getCachedScenarioOverrides(scenario).get(phxMetaColumn.getType());
 	            
 				if (overrideRuleList != null && overrideRuleList.contains(phxMetaColumn)) {
-					logger.debug("We found a correct override column rule");
+					LOGGER.debug("We found a correct override column rule");
 					Column columnRule = getColumnForRuleOverride(overrideRuleList, phxMetaColumn);
 					if (columnRule != null) {
 						return getDataValue(columnRule);
@@ -139,12 +139,12 @@ public class RulesApplier {
             // Make sure Column from Phoenix Metadata matches a rule column
             if (ruleList.contains(phxMetaColumn)) {
                 // Generate some random data based on this rule
-                logger.debug("We found a correct column rule");
+                LOGGER.debug("We found a correct column rule");
                 Column columnRule = getColumnForRule(ruleList, phxMetaColumn);
 
                 value = getDataValue(columnRule);
             } else {
-                logger.warn("Attempted to apply rule to data, but could not find a rule to match type:"
+                LOGGER.warn("Attempted to apply rule to data, but could not find a rule to match type:"
                                 + phxMetaColumn.getType()
                 );
             }
@@ -177,7 +177,7 @@ public class RulesApplier {
         }
 
         if ((prefix.length() >= length) && (length > 0)) {
-            logger.warn("You are attempting to generate data with a prefix (" + prefix + ") "
+            LOGGER.warn("You are attempting to generate data with a prefix (" + prefix + ") "
                     + "That is longer than expected overall field length (" + length + "). "
                     + "This will certainly lead to unexpected data values.");
         }
@@ -352,7 +352,7 @@ public class RulesApplier {
             // While it's possible to get here if you have a bunch of really small distributions,
             // It's just really unlikely. This is just a safety just so we actually pick a value.
             if(count++ == OH_SHIT_LIMIT){
-                logger.info("We generated a value from hitting our OH_SHIT_LIMIT: " + OH_SHIT_LIMIT);
+                LOGGER.info("We generated a value from hitting our OH_SHIT_LIMIT: " + OH_SHIT_LIMIT);
                 generatedDataValue = valueRule;
             }
 

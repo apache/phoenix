@@ -482,7 +482,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 								long disabledTimeStampVal = index.getIndexDisableTimestamp();
 								if (disabledTimeStampVal != 0) {
                                     if (signOfDisableTimeStamp != 0 && signOfDisableTimeStamp != Long.signum(disabledTimeStampVal)) {
-                                        LOG.warn("Found unexpected mix of signs with INDEX_DISABLE_TIMESTAMP for " + dataPTable.getName().getString() + " with " + indexesToPartiallyRebuild); 
+                                        LOG.warn("Found unexpected mix of signs with INDEX_DISABLE_TIMESTAMP for " + dataPTable.getName().getString() + " with " + indexesToPartiallyRebuild);
                                     }
 								    signOfDisableTimeStamp = Long.signum(disabledTimeStampVal);
 	                                disabledTimeStampVal = Math.abs(disabledTimeStampVal);
@@ -499,13 +499,13 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 							}
 							// No indexes are disabled, so skip this table
 							if (earliestDisableTimestamp == Long.MAX_VALUE) {
-		                        LOG.debug("No indexes are disabled so continuing");
+                                LOG.debug("No indexes are disabled so continuing");
 								continue;
 							}
 							long scanBeginTime = Math.max(0, earliestDisableTimestamp - backwardOverlapDurationMs);
                             long scanEndTime = Math.min(latestUpperBoundTimestamp,
                                     getTimestampForBatch(scanBeginTime,batchExecutedPerTableMap.get(dataPTable.getName())));
-							LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
+                            LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
 									+ " from timestamp=" + scanBeginTime + " until " + scanEndTime);
 							
 							TableRef tableRef = new TableRef(null, dataPTable, HConstants.LATEST_TIMESTAMP, false);
@@ -546,7 +546,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 								        IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L,
 								            latestUpperBoundTimestamp);
 								        batchExecutedPerTableMap.remove(dataPTable.getName());
-								        LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
+                                        LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
 								    } else {
 								        // Increment timestamp so that client sees updated disable timestamp
 								        IndexUtil.updateIndexState(conn, indexTableFullName, indexPTable.getIndexState(),
@@ -556,34 +556,34 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 								            noOfBatches = 0l;
 								        }
 								        batchExecutedPerTableMap.put(dataPTable.getName(), ++noOfBatches);
-								        LOG.info(
+                                        LOG.info(
 								            "During Round-robin build: Successfully updated index disabled timestamp  for "
 								                + indexTableFullName + " to " + scanEndTime);
 								    }
 								} catch (SQLException e) {
-								    LOG.error("Unable to rebuild " + dataPTable + " index " + indexTableFullName, e);
+                                    LOG.error("Unable to rebuild " + dataPTable + " index " + indexTableFullName, e);
 								}
 							}
 						} catch (Exception e) {
-							LOG.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild, e);
+                            LOG.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild, e);
 						}
 					}
 				}
 			} catch (Throwable t) {
-				LOG.warn("ScheduledBuildIndexTask failed!", t);
+                LOG.warn("ScheduledBuildIndexTask failed!", t);
 			} finally {
 				if (scanner != null) {
 					try {
 						scanner.close();
 					} catch (IOException ignored) {
-						LOG.debug("ScheduledBuildIndexTask can't close scanner.", ignored);
+                        LOG.debug("ScheduledBuildIndexTask can't close scanner.", ignored);
 					}
 				}
 				if (conn != null) {
 					try {
 						conn.close();
 					} catch (SQLException ignored) {
-						LOG.debug("ScheduledBuildIndexTask can't close connection", ignored);
+                        LOG.debug("ScheduledBuildIndexTask can't close connection", ignored);
 					}
 				}
 			}

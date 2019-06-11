@@ -44,7 +44,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
 public class PhoenixUtil {
-    private static final Logger logger = LoggerFactory.getLogger(PhoenixUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixUtil.class);
     private static String zookeeper;
     private static int rowCountOverride = 0;
     private boolean testEnabled;
@@ -106,7 +106,7 @@ public class PhoenixUtil {
             Properties props = new Properties();
             if (null != tenantId) {
                 props.setProperty("TenantId", tenantId);
-                logger.debug("\nSetting tenantId to " + tenantId);
+                LOGGER.debug("\nSetting tenantId to " + tenantId);
             }
             String url = "jdbc:phoenix:thin:url=" + queryServerUrl + ";serialization=PROTOBUF";
             return DriverManager.getConnection(url, props);
@@ -118,7 +118,7 @@ public class PhoenixUtil {
             Properties props = new Properties();
             if (null != tenantId) {
                 props.setProperty("TenantId", tenantId);
-                logger.debug("\nSetting tenantId to " + tenantId);
+                LOGGER.debug("\nSetting tenantId to " + tenantId);
             }
             
             if (phoenixProperty != null) {
@@ -223,12 +223,12 @@ public class PhoenixUtil {
                         + "."
                         + resultSet.getString(TABLE_NAME);
                 if (tableName.matches(regexMatch)) {
-                    logger.info("\nDropping " + tableName);
+                    LOGGER.info("\nDropping " + tableName);
                     try {
                         executeStatementThrowException("DROP TABLE "
                                 + tableName + " CASCADE", conn);
                     } catch (org.apache.phoenix.schema.TableNotFoundException tnf) {
-                        logger.error("Table might be already be deleted via cascade. Schema: "
+                        LOGGER.error("Table might be already be deleted via cascade. Schema: "
                                 + tnf.getSchemaName()
                                 + " Table: "
                                 + tnf.getTableName());
@@ -288,7 +288,7 @@ public class PhoenixUtil {
             if (null != query.getDdl()) {
                 Connection conn = null;
                 try {
-                    logger.info("\nExecuting DDL:" + query.getDdl() + " on tenantId:" + query
+                    LOGGER.info("\nExecuting DDL:" + query.getDdl() + " on tenantId:" + query
                             .getTenantId());
                     executeStatement(query.getDdl(),
                             conn = getConnection(query.getTenantId()));
@@ -312,7 +312,7 @@ public class PhoenixUtil {
             Connection conn = null;
             try {
             	for (Ddl ddl : ddls) {
-	                logger.info("\nExecuting DDL:" + ddl + " on tenantId:" +tenantId);
+	                LOGGER.info("\nExecuting DDL:" + ddl + " on tenantId:" +tenantId);
 	                long startTime = System.currentTimeMillis();
 	                executeStatement(ddl.toString(), conn = getConnection(tenantId));
 	                if (ddl.getStatement().toUpperCase().contains(ASYNC_KEYWORD)) {
@@ -362,10 +362,10 @@ public class PhoenixUtil {
      */
     boolean isYarnJobInProgress(String tableName) {
 		try {
-			logger.info("Fetching YARN apps...");
+            LOGGER.info("Fetching YARN apps...");
 			Set<String> response = new PhoenixMRJobSubmitter().getSubmittedYarnApps();
 			for (String str : response) {
-				logger.info("Runnng YARN app: " + str);
+                LOGGER.info("Runnng YARN app: " + str);
 				if (str.toUpperCase().contains(tableName.toUpperCase())) {
 					return true;
 				}
@@ -382,7 +382,7 @@ public class PhoenixUtil {
     }
 
     public static void setZookeeper(String zookeeper) {
-        logger.info("Setting zookeeper: " + zookeeper);
+        LOGGER.info("Setting zookeeper: " + zookeeper);
         useThickDriver(zookeeper);
     }
 
@@ -406,7 +406,7 @@ public class PhoenixUtil {
      * @throws Exception
      */
     public void updatePhoenixStats(String tableName, Scenario scenario) throws Exception {
-        logger.info("Updating stats for " + tableName);
+        LOGGER.info("Updating stats for " + tableName);
         executeStatement("UPDATE STATISTICS " + tableName, scenario);
     }
 

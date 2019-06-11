@@ -18,8 +18,30 @@ package org.apache.phoenix.end2end;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Arrays;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -46,34 +68,14 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.MethodSorters;
-
-import java.io.IOException;
-import java.lang.reflect.UndeclaredThrowableException;
-import java.security.PrivilegedExceptionAction;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class BasePermissionsIT extends BaseTest {
 
-    private static final Log LOG = LogFactory.getLog(BasePermissionsIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BasePermissionsIT.class);
 
     static String SUPER_USER = System.getProperty("user.name");
 
@@ -279,7 +281,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String grantStmtSQL = "GRANT '" + actions + "' ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " TO "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        LOG.info("Grant Permissions SQL: " + grantStmtSQL);
+                        LOGGER.info("Grant Permissions SQL: " + grantStmtSQL);
                         assertFalse(stmt.execute(grantStmtSQL));
                     }
                 }
@@ -294,7 +296,7 @@ public abstract class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     String grantStmtSQL = "GRANT '" + actions + "' TO " + " '" + user.getShortName() + "'";
-                    LOG.info("Grant Permissions SQL: " + grantStmtSQL);
+                    LOGGER.info("Grant Permissions SQL: " + grantStmtSQL);
                     assertFalse(stmt.execute(grantStmtSQL));
                 }
                 return null;
@@ -316,7 +318,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                     for(String tableOrSchema : tableOrSchemaList) {
                         String revokeStmtSQL = "REVOKE ON " + (isSchema ? " SCHEMA " : " TABLE ") + tableOrSchema + " FROM "
                                 + ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                        LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
+                        LOGGER.info("Revoke Permissions SQL: " + revokeStmtSQL);
                         assertFalse(stmt.execute(revokeStmtSQL));
                     }
                 }
@@ -332,7 +334,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     String revokeStmtSQL = "REVOKE FROM " +
                             ((ug instanceof String) ? (" GROUP " + "'" + ug + "'") : ("'" + ((User)ug).getShortName() + "'"));
-                    LOG.info("Revoke Permissions SQL: " + revokeStmtSQL);
+                    LOGGER.info("Revoke Permissions SQL: " + revokeStmtSQL);
                     assertFalse(stmt.execute(revokeStmtSQL));
                 }
                 return null;

@@ -115,7 +115,7 @@ import com.google.common.collect.Sets;
  * Tracks the uncommitted state
  */
 public class MutationState implements SQLCloseable {
-    private static final Logger logger = LoggerFactory.getLogger(MutationState.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MutationState.class);
     private static final int[] EMPTY_STATEMENT_INDEX_ARRAY = new int[0];
     private static final int MAX_COMMIT_RETRIES = 3;
 
@@ -1052,8 +1052,8 @@ public class MutationState implements SQLCloseable {
                             itrListMutation.remove();
 
                             batchCount++;
-                            if (logger.isDebugEnabled())
-                                logger.debug("Sent batch of " + mutationBatch.size() + " for "
+                            if (LOGGER.isDebugEnabled())
+                                LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
                                         + Bytes.toString(htableName));
                         }
                         child.stop();
@@ -1086,7 +1086,7 @@ public class MutationState implements SQLCloseable {
                                 // If it fails again, we don't retry.
                                 String msg = "Swallowing exception and retrying after clearing meta cache on connection. "
                                         + inferredE;
-                                logger.warn(LogUtil.addCustomAnnotations(msg, connection));
+                                LOGGER.warn(LogUtil.addCustomAnnotations(msg, connection));
                                 connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
 
                                 // add a new child span as this one failed
@@ -1265,8 +1265,8 @@ public class MutationState implements SQLCloseable {
                             finishSuccessful = true;
                         }
                     } catch (SQLException e) {
-                        if (logger.isInfoEnabled())
-                            logger.info(e.getClass().getName() + " at timestamp " + getInitialWritePointer()
+                        if (LOGGER.isInfoEnabled())
+                            LOGGER.info(e.getClass().getName() + " at timestamp " + getInitialWritePointer()
                                     + " with retry count of " + retryCount);
                         retryCommit = (e.getErrorCode() == SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION
                                 .getErrorCode() && retryCount < MAX_COMMIT_RETRIES);
@@ -1280,9 +1280,9 @@ public class MutationState implements SQLCloseable {
                         if (!finishSuccessful) {
                             try {
                                 phoenixTransactionContext.abort();
-                                if (logger.isInfoEnabled()) logger.info("Abort successful");
+                                if (LOGGER.isInfoEnabled()) LOGGER.info("Abort successful");
                             } catch (SQLException e) {
-                                if (logger.isInfoEnabled()) logger.info("Abort failed with " + e);
+                                if (LOGGER.isInfoEnabled()) LOGGER.info("Abort failed with " + e);
                                 if (sqlE == null) {
                                     sqlE = e;
                                 } else {
@@ -1336,7 +1336,7 @@ public class MutationState implements SQLCloseable {
      * @throws SQLException
      */
     private boolean shouldResubmitTransaction(Set<TableRef> txTableRefs) throws SQLException {
-        if (logger.isInfoEnabled()) logger.info("Checking for index updates as of " + getInitialWritePointer());
+        if (LOGGER.isInfoEnabled()) LOGGER.info("Checking for index updates as of " + getInitialWritePointer());
         MetaDataClient client = new MetaDataClient(connection);
         PMetaData cache = connection.getMetaDataCache();
         boolean addedAnyIndexes = false;
@@ -1363,13 +1363,13 @@ public class MutationState implements SQLCloseable {
                 // that an index was dropped and recreated with the same name but different
                 // indexed/covered columns.
                 addedAnyIndexes = (!oldIndexes.equals(updatedDataTable.getIndexes()));
-                if (logger.isInfoEnabled())
-                    logger.info((addedAnyIndexes ? "Updates " : "No updates ") + "as of " + timestamp + " to "
+                if (LOGGER.isInfoEnabled())
+                    LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "as of " + timestamp + " to "
                             + updatedDataTable.getName().getString() + " with indexes " + updatedDataTable.getIndexes());
             }
         }
-        if (logger.isInfoEnabled())
-            logger.info((addedAnyIndexes ? "Updates " : "No updates ") + "to indexes as of " + getInitialWritePointer()
+        if (LOGGER.isInfoEnabled())
+            LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "to indexes as of " + getInitialWritePointer()
                     + " over " + (allImmutableTables ? " all immutable tables" : " some mutable tables"));
         // If all tables are immutable, we know the conflict we got was due to our DDL/DML fence.
         // If any indexes were added, then the conflict might be due to DDL/DML fence.

@@ -143,7 +143,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
-	public static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
+	public static final Logger LOGGER = LoggerFactory.getLogger(BaseResultIterators.class);
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
     private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
     private final List<List<Scan>> scans;
@@ -1226,8 +1226,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      */
     @Override
     public List<PeekingResultIterator> getIterators() throws SQLException {
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
                     ScanUtil.getCustomAnnotations(scan)));
         }
         boolean isReverse = ScanUtil.isReversed(scan);
@@ -1313,7 +1313,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
                             if(e2 instanceof HashJoinCacheNotFoundException){
-                                logger.debug(
+                                LOGGER.debug(
                                         "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                                 if(retryCount<=0){
                                     throw e2;
@@ -1454,7 +1454,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 } catch (ExecutionException e) {
-                    logger.info("Failed to execute task during cancel", e);
+                    LOGGER.info("Failed to execute task during cancel", e);
                     continue;
                 }
             }

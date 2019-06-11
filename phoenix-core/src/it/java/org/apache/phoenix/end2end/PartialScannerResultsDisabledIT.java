@@ -78,7 +78,8 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     private String schemaName;
     private String dataTableFullName;
     private static String indexTableFullName;
-    private static final Logger logger = LoggerFactory.getLogger(PartialScannerResultsDisabledIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PartialScannerResultsDisabledIT.class);
     private static Random random = new Random(1);
     // background writer threads
     private static Random sourceOfRandomness = new Random(0);
@@ -99,7 +100,7 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
             // TODO: it's likely that less data could be written if whatever
             // config parameters decide this are lowered.
             writeSingleBatch(conn, 100, 20, dataTableFullName);
-            logger.info("Running scrutiny");
+            LOGGER.info("Running scrutiny");
             // Scutunize index to see if partial results are silently returned
             // In that case we'll get a false positive on the scrutiny run.
             long rowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
