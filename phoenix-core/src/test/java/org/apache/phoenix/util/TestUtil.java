@@ -62,6 +62,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -858,9 +859,13 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
-    public static int getRawRowCount(HTableInterface table) throws IOException {
+    public static int getRawRowCount(Table table) throws IOException {
+        return getRowCount(table, true);
+    }
+
+    public static int getRowCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
-        s.setRaw(true);;
+        s.setRaw(isRaw);;
         s.setMaxVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
@@ -918,7 +923,31 @@ public class TestUtil {
     		this.success = success;
     	}
     }
-    
+
+    public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
+        int maxTries = 60, nTries = 0;
+        PIndexState actualIndexState = null;
+        do {
+            String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
+            String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
+            Thread.sleep(1000); // sleep 1 sec
+            String query = "SELECT " + PhoenixDatabaseMetaData.INDEX_STATE + " FROM " +
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE (" + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME
+                    + ") = (" + "'" + schema + "','" + index + "') "
+                    + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            if (rs.next()) {
+                actualIndexState = PIndexState.fromSerializedValue(rs.getString(1));
+                boolean matchesExpected = (actualIndexState == expectedIndexState);
+                if (matchesExpected) {
+                    return;
+                }
+            }
+        } while (++nTries < maxTries);
+        fail("Ran out of time waiting for index state to become " + expectedIndexState + " last seen actual state is " +
+                (actualIndexState == null ? "Unknown" : actualIndexState.toString()));
+    }
+
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
         int maxTries = 60, nTries = 0;
         do {

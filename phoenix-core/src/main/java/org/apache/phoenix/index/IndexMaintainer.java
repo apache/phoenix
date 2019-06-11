@@ -972,6 +972,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
+
         ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
         if (immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
             // map from index column family to list of pair of index column and data column (for covered columns)
