@@ -63,6 +63,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -136,14 +137,14 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
                         }
                     }
                     else {
-                        // Due to PHOENIX-5375 and PHOENIX-5376, the useSnapshot and bulk load option are ignored for global indexes
-                        list.add(new Boolean[]{transactional, mutable, false, true, false, false});
+                            // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
+                            list.add(new Boolean[]{transactional, mutable, localIndex, true, false, false});
                     }
                 }
             }
         }
         // Add the usetenantId
-        list.add(new Boolean[] { false, false, false, true, false, true});
+        list.add(new Boolean[] { null, false, false, true, false, true});
         return list;
     }
 
