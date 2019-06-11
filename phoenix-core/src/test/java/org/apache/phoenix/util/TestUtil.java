@@ -51,7 +51,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
@@ -72,7 +71,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.RetryCounter;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
@@ -875,9 +873,13 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
-    public static int getRawRowCount(HTableInterface table) throws IOException {
+    public static int getRawRowCount(Table table) throws IOException {
+        return getRowCount(table, true);
+    }
+
+    public static int getRowCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
-        s.setRaw(true);;
+        s.setRaw(isRaw);;
         s.setMaxVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
@@ -938,6 +940,7 @@ public class TestUtil {
 
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
         int maxTries = 60, nTries = 0;
+        PIndexState actualIndexState = null;
         do {
             String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
             String index = SchemaUtil.getTableNameFromFullName(fullIndexName);
@@ -947,7 +950,6 @@ public class TestUtil {
                     + ") = (" + "'" + schema + "','" + index + "') "
                     + "AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL AND " + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL";
             ResultSet rs = conn.createStatement().executeQuery(query);
-            PIndexState actualIndexState = null;
             if (rs.next()) {
                 actualIndexState = PIndexState.fromSerializedValue(rs.getString(1));
                 boolean matchesExpected = (actualIndexState == expectedIndexState);
@@ -956,7 +958,8 @@ public class TestUtil {
                 }
             }
         } while (++nTries < maxTries);
-        fail("Ran out of time waiting for index state to become " + expectedIndexState);
+        fail("Ran out of time waiting for index state to become " + expectedIndexState + " last seen actual state is " +
+                (actualIndexState == null ? "Unknown" : actualIndexState.toString()));
     }
 
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws InterruptedException, SQLException {
