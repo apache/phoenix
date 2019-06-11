@@ -913,7 +913,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (tableType == PTableType.INDEX && !isTransactional) {
                 if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     builder.removeCoprocessor(GlobalIndexChecker.class.getName());
-                } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName()) &&
+                        !isLocalIndexTable(newDesc.getColumnFamilyNames())) {
                     builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
                 }
             }

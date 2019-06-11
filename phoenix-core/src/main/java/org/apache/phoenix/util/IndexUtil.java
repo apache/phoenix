@@ -40,7 +40,10 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -95,6 +98,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -105,6 +109,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
@@ -137,7 +142,12 @@ import com.google.common.collect.Lists;
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
     public static final byte[] INDEX_COLUMN_NAME_SEP_BYTES = Bytes.toBytes(INDEX_COLUMN_NAME_SEP);
-    
+
+    private static Cache<String, Boolean> indexNameGlobalIndexCheckerEnabledMap = CacheBuilder.newBuilder()
+            .expireAfterWrite(QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN,
+                    TimeUnit.MINUTES)
+            .build();
+
     private IndexUtil() {
     }
 
@@ -294,11 +304,37 @@ public class IndexUtil {
                             .getLength()) == 0);
     }
 
+
+    public static boolean isGlobalIndexCheckerEnabled(PhoenixConnection connection, PName index)
+            throws SQLException {
+        String indexName = index.getString();
+        Boolean entry = indexNameGlobalIndexCheckerEnabledMap.getIfPresent(indexName);
+        if (entry != null){
+            return entry;
+        }
+
+        boolean result = false;
+        try {
+            TableDescriptor desc = connection.getQueryServices().getTableDescriptor(index.getBytes());
+
+            if (desc != null) {
+                if (desc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                    result = true;
+                }
+            }
+            indexNameGlobalIndexCheckerEnabledMap.put(indexName, result);
+        } catch (TableNotFoundException ex) {
+            // We can swallow this because some indexes don't have separate tables like local indexes
+        }
+
+        return result;
+    }
+
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
             final MultiRowMutationState multiRowMutationState, List<Mutation> dataMutations, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
             throws SQLException {
         try {
-        	final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+            final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
             List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
             for (final Mutation dataMutation : dataMutations) {
@@ -312,12 +348,12 @@ public class IndexUtil {
                  */
                 if (dataMutation instanceof Put) {
                     ValueGetter valueGetter = new ValueGetter() {
-                    	
-                    	@Override
+
+                        @Override
                         public byte[] getRowKey() {
-                    		return dataMutation.getRow();
-                    	}
-        
+                            return dataMutation.getRow();
+                        }
+
                         @Override
                         public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
                             // Always return null for our empty key value, as this will cause the index
@@ -334,15 +370,15 @@ public class IndexUtil {
                             }
                             for (Cell kv : kvs) {
                                 if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), family, 0, family.length) == 0 &&
-                                    Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), qualifier, 0, qualifier.length) == 0) {
-                                  ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-                                  kvBuilder.getValueAsPtr(kv, ptr);
-                                  return ptr;
+                                        Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), qualifier, 0, qualifier.length) == 0) {
+                                    ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                                    kvBuilder.getValueAsPtr(kv, ptr);
+                                    return ptr;
                                 }
                             }
                             return null;
                         }
-                        
+
                     };
                     byte[] regionStartKey = null;
                     byte[] regionEndkey = null;
@@ -906,7 +942,7 @@ public class IndexUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
-        if (table.isTransactional() || table.isImmutableRows() || table.getType() != PTableType.INDEX) {
+        if (table.isTransactional() || table.getType() != PTableType.INDEX) {
             return;
         }
         PTable indexTable = table;

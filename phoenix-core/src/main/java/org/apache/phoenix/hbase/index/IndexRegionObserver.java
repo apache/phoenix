@@ -382,7 +382,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private long getMaxTimestamp(Mutation m) {
+  public static long getMaxTimestamp(Mutation m) {
       long maxTs = 0;
       long ts = 0;
       Iterator iterator = m.getFamilyCellMap().entrySet().iterator();

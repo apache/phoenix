@@ -141,7 +141,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                             }
                         }
                         else {
-                            // Due to PHOENIX-5376, the bulk load option is ignored for global indexes
+                            // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
                             list.add(new Object[]{transactionProvider, mutable, localIndex,
                                     true, false, false});
                         }
@@ -151,8 +151,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
         // Add the usetenantId
         list.add(new Object[] { null, false, false, true, false, true});
-        // do one run over snapshots
-        list.add(new Object[] { null, false, false, true, true, false});
         return TestUtil.filterTxParamData(list,0);
     }
 
