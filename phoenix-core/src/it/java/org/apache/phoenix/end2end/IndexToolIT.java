@@ -133,17 +133,17 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                     TransactionFactory.Provider.valueOf(transactionProvider))
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
                         for (boolean directApi : Booleans) {
-                            for (boolean useSnapshot : Booleans) {
-                                list.add(new Object[] { transactionProvider, mutable, localIndex,
-                                        directApi, useSnapshot, false});
-                            }
+                            list.add(new Object[] { transactionProvider, mutable, localIndex,
+                                    directApi, false, false});
                         }
                     }
                 }
             }
         }
         // Add the usetenantId
-        list.add(new Object[] { "", false, false, true, false, true});
+        list.add(new Object[] { null, false, false, true, false, true});
+        // do one run over snapshots
+        list.add(new Object[] { null, false, false, true, true, false});
         return TestUtil.filterTxParamData(list,0);
     }
 
