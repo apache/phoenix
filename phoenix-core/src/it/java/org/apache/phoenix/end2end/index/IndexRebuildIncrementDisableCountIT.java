@@ -29,8 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -52,11 +50,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 
 public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Log LOG = LogFactory.getLog(IndexRebuildIncrementDisableCountIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildIncrementDisableCountIT.class);
     private static long pendingDisableCount = 0;
     private static String ORG_PREFIX = "ORG";
     private static Result pendingDisableCountResult = null;
@@ -124,7 +124,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
             return Bytes.toLong(pendingDisableCountResult.getValue(TABLE_FAMILY_BYTES,
                 PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
         } catch (Exception e) {
-            LOG.error("Exception in getPendingDisableCount: " + e);
+            LOGGER.error("Exception in getPendingDisableCount: " + e);
             return 0;
         }
     }
@@ -148,7 +148,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
                         Thread.sleep(100);
                     }
                 } catch (Exception e) {
-                    LOG.error("Error in checkPendingDisableCount : " + e);
+                    LOGGER.error("Error in checkPendingDisableCount : " + e);
                 }
             }
         };
@@ -175,7 +175,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
             }
             conn.commit();
         } catch (Exception e) {
-            LOG.error("Client side exception:" + e);
+            LOGGER.error("Client side exception:" + e);
         }
     }
 

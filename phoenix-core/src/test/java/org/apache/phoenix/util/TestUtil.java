@@ -53,8 +53,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
@@ -129,6 +127,8 @@ import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
@@ -136,7 +136,7 @@ import com.google.common.collect.Lists;
 
 
 public class TestUtil {
-    private static final Log LOG = LogFactory.getLog(TestUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TestUtil.class);
     
     private static final Long ZERO = new Long(0);
     public static final String DEFAULT_SCHEMA_NAME = "S";
@@ -831,11 +831,11 @@ public class TestUtil {
                 try (HTableInterface htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
                     ResultScanner scanner = htableForRawScan.getScanner(scan);
                     List<Result> results = Lists.newArrayList(scanner);
-                    LOG.info("Results: " + results);
+                    LOGGER.info("Results: " + results);
                     compactionDone = results.isEmpty();
                     scanner.close();
                 }
-                LOG.info("Compaction done: " + compactionDone);
+                LOGGER.info("Compaction done: " + compactionDone);
                 
                 // need to run compaction after the next txn snapshot has been written so that compaction can remove deleted rows
                 if (!compactionDone && table.isTransactional()) {

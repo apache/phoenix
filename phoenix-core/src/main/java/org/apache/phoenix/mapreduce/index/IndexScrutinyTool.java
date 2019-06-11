@@ -71,7 +71,7 @@ import com.google.common.collect.Lists;
  */
 public class IndexScrutinyTool extends Configured implements Tool {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IndexScrutinyTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexScrutinyTool.class);
 
     private static final Option SCHEMA_NAME_OPTION =
             new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -271,7 +271,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
             final String selectQuery =
                     QueryUtil.constructSelectStatement(qSourceTable, sourceColumnNames, null,
                         Hint.NO_INDEX, true);
-            LOG.info("Query used on source table to feed the mapper: " + selectQuery);
+            LOGGER.info("Query used on source table to feed the mapper: " + selectQuery);
 
             PhoenixConfigurationUtil.setScrutinyOutputFormat(configuration, outputFormat);
             // if outputting to table, setup the upsert to the output table
@@ -280,7 +280,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                         IndexScrutinyTableOutput.constructOutputTableUpsert(sourceDynamicCols,
                             targetDynamicCols, connection);
                 PhoenixConfigurationUtil.setUpsertStatement(configuration, upsertStmt);
-                LOG.info("Upsert statement used for output table: " + upsertStmt);
+                LOGGER.info("Upsert statement used for output table: " + upsertStmt);
             }
 
             final String jobName =
@@ -375,7 +375,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
             if (useTenantId) {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                LOG.info(String.format("IndexScrutinyTool uses a tenantId %s", tenantId));
+                LOGGER.info(String.format("IndexScrutinyTool uses a tenantId %s", tenantId));
             }
             connection = ConnectionUtil.getInputConnection(configuration);
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
@@ -431,7 +431,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 }
             }
 
-            LOG.info(String.format(
+            LOGGER.info(String.format(
                 "Running scrutiny [schemaName=%s, dataTable=%s, indexTable=%s, useSnapshot=%s, timestamp=%s, batchSize=%s, outputBasePath=%s, outputFormat=%s, outputMaxRows=%s]",
                 schemaName, dataTable, indexTable, useSnapshot, ts, batchSize, basePath,
                 outputFormat, outputMaxRows));
@@ -451,13 +451,13 @@ public class IndexScrutinyTool extends Configured implements Tool {
             }
 
             if (!isForeground) {
-                LOG.info("Running Index Scrutiny in Background - Submit async and exit");
+                LOGGER.info("Running Index Scrutiny in Background - Submit async and exit");
                 for (Job job : jobs) {
                     job.submit();
                 }
                 return 0;
             }
-            LOG.info(
+            LOGGER.info(
                 "Running Index Scrutiny in Foreground. Waits for the build to complete. This may take a long time!.");
             boolean result = true;
             for (Job job : jobs) {
@@ -466,7 +466,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             // write the results to the output metadata table
             if (outputInvalidRows && OutputFormat.TABLE.equals(outputFormat)) {
-                LOG.info("Writing results of jobs to output table "
+                LOGGER.info("Writing results of jobs to output table "
                         + IndexScrutinyTableOutput.OUTPUT_METADATA_TABLE_NAME);
                 IndexScrutinyTableOutput.writeJobResults(connection, args, jobs);
             }
@@ -474,11 +474,11 @@ public class IndexScrutinyTool extends Configured implements Tool {
             if (result) {
                 return 0;
             } else {
-                LOG.error("IndexScrutinyTool job failed! Check logs for errors..");
+                LOGGER.error("IndexScrutinyTool job failed! Check logs for errors..");
                 return -1;
             }
         } catch (Exception ex) {
-            LOG.error("An exception occurred while performing the indexing job: "
+            LOGGER.error("An exception occurred while performing the indexing job: "
                     + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
@@ -487,7 +487,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                     connection.close();
                 }
             } catch (SQLException sqle) {
-                LOG.error("Failed to close connection ", sqle.getMessage());
+                LOGGER.error("Failed to close connection ", sqle.getMessage());
                 throw new RuntimeException("Failed to close connection");
             }
         }
