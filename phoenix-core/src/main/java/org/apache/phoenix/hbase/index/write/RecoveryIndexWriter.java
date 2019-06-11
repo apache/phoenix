@@ -24,8 +24,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -33,6 +31,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -45,7 +45,7 @@ import com.google.common.collect.Multimap;
  */
 public class RecoveryIndexWriter extends IndexWriter {
 
-    private static final Log LOG = LogFactory.getLog(RecoveryIndexWriter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RecoveryIndexWriter.class);
     private Set<HTableInterfaceReference> nonExistingTablesList = new HashSet<HTableInterfaceReference>();
     private HBaseAdmin admin;
 
@@ -71,7 +71,7 @@ public class RecoveryIndexWriter extends IndexWriter {
         } catch (MultiIndexWriteFailureException e) {
             for (HTableInterfaceReference table : e.getFailedTables()) {
                 if (!admin.tableExists(table.getTableName())) {
-                    LOG.warn("Failure due to non existing table: " + table.getTableName());
+                    LOGGER.warn("Failure due to non existing table: " + table.getTableName());
                     nonExistingTablesList.add(table);
                 } else {
                     throw e;
@@ -101,7 +101,7 @@ public class RecoveryIndexWriter extends IndexWriter {
             ImmutableBytesPtr ptr = new ImmutableBytesPtr(tableName);
             HTableInterfaceReference table = tables.get(ptr);
             if (nonExistingTablesList.contains(table)) {
-                LOG.debug("Edits found for non existing table: " + table.getTableName() + " so skipping it!!");
+                LOGGER.debug("Edits found for non existing table: " + table.getTableName() + " so skipping it!!");
                 continue;
             }
             if (table == null) {
@@ -121,7 +121,7 @@ public class RecoveryIndexWriter extends IndexWriter {
             try {
                 admin.close();
             } catch (IOException e) {
-                LOG.error("Closing the admin failed: ", e);
+                LOGGER.error("Closing the admin failed: ", e);
             }
         }
     }

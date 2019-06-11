@@ -32,8 +32,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -53,6 +51,9 @@ import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -60,7 +61,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 public class TestIndexWriter {
-  private static final Log LOG = LogFactory.getLog(TestIndexWriter.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(TestIndexWriter.class);
   @Rule
   public TableName testName = new TableName();
   private final byte[] row = Bytes.toBytes("row");
@@ -93,8 +94,8 @@ public class TestIndexWriter {
   @SuppressWarnings({ "unchecked", "deprecation" })
   @Test
   public void testSynchronouslyCompletesAllWrites() throws Exception {
-    LOG.info("Starting " + testName.getTableNameString());
-    LOG.info("Current thread is interrupted: " + Thread.interrupted());
+    LOGGER.info("Starting " + testName.getTableNameString());
+    LOGGER.info("Current thread is interrupted: " + Thread.interrupted());
     Abortable abort = new StubAbortable();
     Stoppable stop = Mockito.mock(Stoppable.class);
     RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
@@ -176,13 +177,13 @@ public class TestIndexWriter {
     Mockito.when(table.batch(Mockito.anyList())).thenAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
-        LOG.info("Write started");
+        LOGGER.info("Write started");
         writeStartedLatch.countDown();
         // when we interrupt the thread for shutdown, we should see this throw an interrupt too
         try {
         waitOnAbortedLatch.await();
         } catch (InterruptedException e) {
-          LOG.info("Correctly interrupted while writing!");
+          LOGGER.info("Correctly interrupted while writing!");
           throw e;
         }
         return null;

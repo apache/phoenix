@@ -33,8 +33,6 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
@@ -69,7 +67,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */ 
-    private static final Log LOG = LogFactory.getLog(PhoenixEmbeddedDriver.class);
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(PhoenixEmbeddedDriver.class);
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -416,12 +414,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             try {
                 return KerberosUtil.getDefaultRealm();
             } catch (Exception e) {
-                if (LOG.isDebugEnabled()) {
+                if (LOGGER.isDebugEnabled()) {
                     // Include the stacktrace at DEBUG
-                    LOG.debug(REALM_EQUIVALENCY_WARNING_MSG, e);
+                    LOGGER.debug(REALM_EQUIVALENCY_WARNING_MSG, e);
                 } else {
                     // Limit the content at WARN
-                    LOG.warn(REALM_EQUIVALENCY_WARNING_MSG);
+                    LOGGER.warn(REALM_EQUIVALENCY_WARNING_MSG);
                 }
             }
             return null;
@@ -633,7 +631,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw getMalFormedUrlException(url);
             }
             String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
-            LOG.debug("Getting default jdbc connection url " + quorum + ":" + port + ":" + znodeParent);
+            LOGGER.debug("Getting default jdbc connection url " + quorum + ":" + port + ":" + znodeParent);
             return new ConnectionInfo(quorum, port, znodeParent);
         }
     }

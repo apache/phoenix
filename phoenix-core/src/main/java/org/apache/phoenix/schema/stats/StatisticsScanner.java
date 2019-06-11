@@ -25,8 +25,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -38,12 +36,14 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link DefaultStatisticsCollector}
  */
 public class StatisticsScanner implements InternalScanner {
-    private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsScanner.class);
     private InternalScanner delegate;
     private StatisticsWriter statsWriter;
     private Region region;
@@ -95,7 +95,7 @@ public class StatisticsScanner implements InternalScanner {
         StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
         StatisticsScannerCallable callable = createCallable();
         if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
-            LOG.debug("Not updating table statistics because the server is stopping/stopped");
+            LOGGER.debug("Not updating table statistics because the server is stopping/stopped");
             return;
         }
         if (!async) {
@@ -149,26 +149,26 @@ public class StatisticsScanner implements InternalScanner {
                 // Just verify if this if fine
                 ArrayList<Mutation> mutations = new ArrayList<Mutation>();
 
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().deleteStatsForRegion(region, tracker, family, mutations);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().addStats(tracker, family, mutations);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().commitStats(mutations, tracker);
             } catch (IOException e) {
                 if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
-                    LOG.debug("Ignoring error updating statistics because region is closing/closed");
+                    LOGGER.debug("Ignoring error updating statistics because region is closing/closed");
                 } else {
-                    LOG.error("Failed to update statistics table!", e);
+                    LOGGER.error("Failed to update statistics table!", e);
                     toThrow = e;
                 }
             } finally {
@@ -178,14 +178,14 @@ public class StatisticsScanner implements InternalScanner {
                     getTracker().close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
-                    LOG.error("Error while closing the stats table", e);
+                    LOGGER.error("Error while closing the stats table", e);
                 } finally {
                     // close the delegate scanner
                     try {
                         getDelegate().close();
                     } catch (IOException e) {
                         if (toThrow == null) toThrow = e;
-                        LOG.error("Error while closing the scanner", e);
+                        LOGGER.error("Error while closing the scanner", e);
                     } finally {
                         if (toThrow != null) { throw toThrow; }
                     }

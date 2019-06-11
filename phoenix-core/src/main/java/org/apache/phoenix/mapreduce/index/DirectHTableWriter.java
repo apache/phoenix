@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
  * Writes mutations directly to HBase using HBase front-door APIs.
  */
 public class DirectHTableWriter {
-    private static final Logger LOG = LoggerFactory.getLogger(DirectHTableWriter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DirectHTableWriter.class);
 
     private Configuration conf = null;
 
@@ -60,9 +60,9 @@ public class DirectHTableWriter {
         try {
             this.table = new HTable(this.conf, tableName);
             this.table.setAutoFlush(false, true);
-            LOG.info("Created table instance for " + tableName);
+            LOGGER.info("Created table instance for " + tableName);
         } catch (IOException e) {
-            LOG.error("IOException : ", e);
+            LOGGER.error("IOException : ", e);
             tryClosingResourceSilently(this.table);
             throw new RuntimeException(e);
         }
@@ -103,7 +103,7 @@ public class DirectHTableWriter {
             try {
                 res.close();
             } catch (IOException e) {
-                LOG.error("Closing resource: " + res + " failed with error: ", e);
+                LOGGER.error("Closing resource: " + res + " failed with error: ", e);
             }
         }
     }

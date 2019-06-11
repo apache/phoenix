@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.NavigableMap;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -43,6 +41,9 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -58,7 +59,7 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
  */
 public class ScanRegionObserver extends BaseScannerRegionObserver {
 
-    private static final Log LOG = LogFactory.getLog(ScanRegionObserver.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScanRegionObserver.class);
     public static final byte[] DYN_COLS_METADATA_CELL_QUALIFIER = Bytes.toBytes("D#");
     public static final String DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION =
             "_DynColsMetadataStoredForMutation";
@@ -125,8 +126,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             Put dynColShadowCellsPut = null;
             if (m instanceof Put && Bytes.equals(m.getAttribute(
                     DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION), TRUE_BYTES)) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Adding dynamic column metadata for table: " + tableName + ". Put :" +
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Adding dynamic column metadata for table: " + tableName + ". Put :" +
                             m.toString());
                 }
                 NavigableMap<byte[], List<Cell>> famCellMap = m.getFamilyCellMap();
@@ -174,8 +175,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         ByteArrayOutputStream qual = new ByteArrayOutputStream();
         qual.write(DYN_COLS_METADATA_CELL_QUALIFIER);
         qual.write(dynCol.getColumnQualifierBytes());
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Storing shadow cell for dynamic column metadata for dynamic column : " +
+        if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Storing shadow cell for dynamic column metadata for dynamic column : " +
                     dynCol.getFamilyName().getString() + "." + dynCol.getName().getString());
         }
         return qual.toByteArray();

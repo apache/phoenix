@@ -266,7 +266,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     IndexUtil.incrementCounterForIndex(conn, indexName, -PENDING_DISABLE_INACTIVE_STATE_COUNT);
                     indexesIncremented.add(index);
                 }catch(Exception e) {
-                    LOG.warn("Decrement  of -" + PENDING_DISABLE_INACTIVE_STATE_COUNT +" for index :" + index.getName().getString() + "of table: " + dataPTable.getName().getString(), e);
+                    LOG.warn("Decrement  of -" + PENDING_DISABLE_INACTIVE_STATE_COUNT +" for index :" +
+                            index.getName().getString() + "of table: " + dataPTable.getName().getString(), e);
                 }
             }
             return indexesIncremented;
@@ -474,7 +475,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 								long disabledTimeStampVal = index.getIndexDisableTimestamp();
 								if (disabledTimeStampVal != 0) {
                                     if (signOfDisableTimeStamp != 0 && signOfDisableTimeStamp != Long.signum(disabledTimeStampVal)) {
-                                        LOG.warn("Found unexpected mix of signs with INDEX_DISABLE_TIMESTAMP for " + dataPTable.getName().getString() + " with " + indexesToPartiallyRebuild); 
+                                        LOG.warn("Found unexpected mix of signs with INDEX_DISABLE_TIMESTAMP for " + dataPTable.getName().getString() + " with " + indexesToPartiallyRebuild);
                                     }
 								    signOfDisableTimeStamp = Long.signum(disabledTimeStampVal);
 	                                disabledTimeStampVal = Math.abs(disabledTimeStampVal);

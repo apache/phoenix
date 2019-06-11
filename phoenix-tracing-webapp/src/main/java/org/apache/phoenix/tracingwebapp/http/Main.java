@@ -19,8 +19,6 @@ package org.apache.phoenix.tracingwebapp.http;
 import java.net.URL;
 import java.security.ProtectionDomain;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.util.Tool;
@@ -28,13 +26,14 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.webapp.WebAppContext;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 /**
  * tracing web app runner
  */
 public final class Main extends Configured implements Tool {
 
-    protected static final Log LOG = LogFactory.getLog(Main.class);
+    protected static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
     public static final String PHONIX_DBSERVER_PORT_KEY =
         "phoenix.dbserver.port";
     public static final int DEFAULT_DBSERVER_PORT = 2181;

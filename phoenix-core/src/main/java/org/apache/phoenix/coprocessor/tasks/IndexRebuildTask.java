@@ -3,8 +3,6 @@ package org.apache.phoenix.coprocessor.tasks;
 import com.google.common.base.Strings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.mapreduce.Cluster;
@@ -16,6 +14,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -31,7 +31,7 @@ public class IndexRebuildTask extends BaseTask  {
     public static final String DISABLE_BEFORE = "DisableBefore";
     public static final String REBUILD_ALL = "RebuildAll";
 
-    public static final Log LOG = LogFactory.getLog(IndexRebuildTask.class);
+    public static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildTask.class);
 
     @Override
     public TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord) {
@@ -54,7 +54,7 @@ public class IndexRebuildTask extends BaseTask  {
             if (Strings.isNullOrEmpty(indexName)) {
                 String str = "Index name is not found. Index rebuild cannot continue " +
                         "Data : " + data;
-                LOG.warn(str);
+                LOGGER.warn(str);
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, str);
             }
 
@@ -94,7 +94,7 @@ public class IndexRebuildTask extends BaseTask  {
             return null;
         }
         catch (Throwable t) {
-            LOG.warn("Exception while running index rebuild task. " +
+            LOGGER.warn("Exception while running index rebuild task. " +
                     "It will be retried in the next system task table scan : " +
                     taskRecord.getSchemaName() + "." + taskRecord.getTableName() +
                     " with tenant id " + (taskRecord.getTenantId() == null ? " IS NULL" : taskRecord.getTenantId()) +
@@ -105,7 +105,7 @@ public class IndexRebuildTask extends BaseTask  {
                 try {
                     conn.close();
                 } catch (SQLException e) {
-                    LOG.debug("IndexRebuildTask can't close connection");
+                    LOGGER.debug("IndexRebuildTask can't close connection");
                 }
             }
         }
@@ -148,7 +148,7 @@ public class IndexRebuildTask extends BaseTask  {
 
             if (job != null && job.isComplete()) {
                 if (job.isSuccessful()) {
-                    LOG.warn("IndexRebuildTask checkCurrentResult job is successful " + taskRecord.getTableName());
+                    LOGGER.warn("IndexRebuildTask checkCurrentResult job is successful " + taskRecord.getTableName());
                     return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
                 } else {
                     return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL,
