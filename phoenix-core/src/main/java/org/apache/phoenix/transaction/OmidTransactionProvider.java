@@ -32,6 +32,7 @@ import org.apache.omid.transaction.TTable;
 import org.apache.omid.tso.TSOMockModule;
 import org.apache.omid.tso.TSOServer;
 import org.apache.omid.tso.TSOServerConfig;
+import org.apache.omid.tso.TSOServerConfig.WAIT_STRATEGY;
 import org.apache.omid.tso.client.OmidClientConfiguration;
 import org.apache.omid.tso.client.TSOClient;
 import org.apache.phoenix.coprocessor.OmidGCProcessor;
@@ -127,6 +128,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
         tsoConfig.setPort(port);
         tsoConfig.setConflictMapSize(config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));
         tsoConfig.setTimestampType(config.get(OMID_TSO_TIMESTAMP_TYPE, DEFAULT_OMID_TSO_TIMESTAMP_TYPE));
+        tsoConfig.setWaitStrategy(WAIT_STRATEGY.LOW_CPU.toString());
 
         Injector injector = Guice.createInjector(new TSOMockModule(tsoConfig));
         tso = injector.getInstance(TSOServer.class);
