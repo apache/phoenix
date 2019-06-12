@@ -609,6 +609,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAlterTableWithImmutability() throws Exception {
+        if (localIndex)
+            return;
+
         String query;
         ResultSet rs;
         String tableName = "TBL_" + generateUniqueName();
@@ -636,6 +639,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     @Ignore
     public void testIndexHalfStoreFileReader() throws Exception {
+        if (!localIndex)
+            return;
+
         Connection conn1 = getConnection();
         ConnectionQueryServices connectionQueryServices = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES);
 		Admin admin = connectionQueryServices.getAdmin();
@@ -725,8 +731,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
               "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (TENANT_ID, ENTITY_ID)) MULTI_TENANT=TRUE "
               + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "") );
           // create index
-          conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + fullTableName + " (ENTITY_ID, TYPE)");
-          
+          conn.createStatement().execute("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX IF NOT EXISTS " + indexName + " ON " + fullTableName + " (ENTITY_ID, TYPE)");
           // upsert rows
           String dml = "UPSERT INTO " + fullTableName + " (ENTITY_ID, TYPE) VALUES ( ?, ?)";
           props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
@@ -747,8 +752,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
   // Tests that if major compaction is run on a table with a disabled index,
   // deleted cells are kept
+  // TODO: Move to a different test class?
   @Test
   public void testCompactDisabledIndex() throws Exception {
+      if (localIndex || tableDDLOptions.contains("TRANSACTIONAL=true"))
+          return;
+
       try (Connection conn = getConnection()) {
           String schemaName = generateUniqueName();
           String dataTableName = generateUniqueName() + "_DATA";
@@ -793,8 +802,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
   // some tables (e.g. indexes on views) have UngroupedAgg coproc loaded, but don't have a
   // corresponding row in syscat.  This tests that compaction isn't blocked
+  // TODO: Move to a different test class?
   @Test(timeout=120000)
   public void testCompactNonPhoenixTable() throws Exception {
+      if (localIndex || tableDDLOptions.contains("TRANSACTIONAL=true"))
+          return;
+
       try (Connection conn = getConnection()) {
           // create a vanilla HBase table (non-Phoenix)
           String randomTable = generateUniqueName();
@@ -850,7 +863,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                         + (multiCf ? columnFamily1 : "") + "f float, "
                         + (multiCf ? columnFamily2 : "") + "s varchar)" + tableDDLOptions);
             conn.createStatement().execute(
-                "create index " + indexName + " on " + fullTableName + " ("
+                "create " + (localIndex ? "LOCAL" : "") + " index " + indexName + " on " + fullTableName + " ("
                         + (multiCf ? columnFamily1 : "") + "f) include ("+(multiCf ? columnFamily2 : "") +"s)");
             conn.createStatement().execute(
                 "upsert into " + fullTableName + " values (1, 0.5, 'foo')");
