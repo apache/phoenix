@@ -22,6 +22,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 
+import java.util.Properties;
+
+import static org.junit.Assert.assertEquals;
+
 public class PherfTest {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
@@ -39,5 +43,43 @@ public class PherfTest {
         // Makes sure that System.exit(1) is called.
         exit.expectSystemExitWithStatus(1);
         Pherf.main(args);
+    }
+
+    @Test
+    public void testDefaultLogPerNRowsArgument() throws Exception {
+        String[] args = {"-listFiles"};
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
+    }
+
+    @Test
+    public void testCustomizedLogPerNRowsArgument() throws Exception {
+        Long customizedPerNRows = 15l;
+        String[] args = {"-listFiles", "-log_per_nrows", customizedPerNRows.toString()};
+        assertEquals(customizedPerNRows,
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
+    }
+
+    @Test
+    public void testInvalidLogPerNRowsArgument() throws Exception {
+        Long zero = 0l;
+        Long negativeOne = -1l;
+        String invaildNum = "abc";
+
+        String[] args = {"-listFiles", "-log_per_nrows", zero.toString()};
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
+
+        String[] args2 = {"-listFiles", "-log_per_nrows", negativeOne.toString()};
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(args2).getProperties()));
+
+        String[] args3 = {"-listFiles", "-log_per_nrows", invaildNum};
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(args3).getProperties()));
+    }
+
+    private Long getLogPerNRowsValue(Properties prop) {
+        return Long.valueOf(prop.getProperty(PherfConstants.LOG_PER_NROWS_NAME));
     }
 }

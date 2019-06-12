@@ -75,6 +75,8 @@ public class Pherf {
         options.addOption("rowCountOverride", true,
                 "Row count override to use instead of one specified in scenario.");
         options.addOption("hint", true, "Executes all queries with specified hint. Example SMALL");
+        options.addOption("log_per_nrows", true,
+                "Default value to display log line after every 'N' row load");
         options.addOption("diff", false,
                 "Run pherf in verification mode and diff with exported results");
         options.addOption("export", false,
@@ -140,9 +142,10 @@ public class Pherf {
                         command.getOptionValue("monitorFrequency") :
                         properties.getProperty("pherf.default.monitorFrequency");
         properties.setProperty("pherf.default.monitorFrequency", monitorFrequency);
-
         LOGGER.debug("Using Monitor: " + monitor);
         LOGGER.debug("Monitor Frequency Ms:" + monitorFrequency);
+        properties.setProperty(PherfConstants.LOG_PER_NROWS_NAME, getLogPerNRow(command));
+
         preLoadData = command.hasOption("l");
         executeQuerySets = command.hasOption("q");
         zookeeper = command.getOptionValue("z", "localhost");
@@ -191,6 +194,28 @@ public class Pherf {
             PhoenixUtil.useThinDriver(queryServerUrl);
         }
         ResultUtil.setFileSuffix(label);
+    }
+
+    private String getLogPerNRow(CommandLine command) {
+        try {
+            String logPerNRows = (command.hasOption("log_per_nrows")) ?
+                    command.getOptionValue("log_per_nrows") :
+                        properties.getProperty(
+                                PherfConstants.LOG_PER_NROWS_NAME,
+                                String.valueOf(PherfConstants.LOG_PER_NROWS)
+                        );
+            if (Integer.valueOf(logPerNRows) > 0) {
+                return logPerNRows;
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Invalid Log per N rows value. Phoenix will pick the default value.");
+        }
+
+        return String.valueOf(PherfConstants.LOG_PER_NROWS);
+    }
+
+    public Properties getProperties() {
+        return this.properties;
     }
 
     public static void main(String[] args) {
