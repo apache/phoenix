@@ -125,7 +125,8 @@ public class OrphanViewTool extends Configured implements Tool {
             TABLE_SCHEM + ", " +
             TABLE_NAME +
             " FROM " + SYSTEM_CATALOG_NAME +
-            " WHERE "+ " NOT " + TABLE_TYPE + " = '" + PTableType.VIEW.getSerializedValue() + "'";
+            " WHERE " + TABLE_TYPE + " != '" + PTableType.VIEW.getSerializedValue() + "' AND " +
+            TABLE_TYPE + " != '" + PTableType.INDEX.getSerializedValue() + "'";
     // The path of the directory of the output files
     private String outputPath;
     // The path of the directory of the input files
