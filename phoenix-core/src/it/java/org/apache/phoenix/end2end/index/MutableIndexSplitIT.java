@@ -135,6 +135,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         splitInts[1] = 4;
         List<HRegionInfo> regionsOfUserTable = null;
         for(int i = 0; i <=1; i++) {
+            Threads.sleep(10000);
             if(localIndex) {
                 admin.split(Bytes.toBytes(tableName),
                     ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
@@ -147,14 +148,14 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
                         admin.getConnection(), TableName.valueOf(localIndex?tableName:indexName),
                         false);
 
-            while (regionsOfUserTable.size() < (i+2)) {
+            while (regionsOfUserTable.size() != (i+2)) {
                 Thread.sleep(100);
                 regionsOfUserTable =
                         MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
                             admin.getConnection(),
                             TableName.valueOf(localIndex?tableName:indexName), false);
             }
-            assertTrue(regionsOfUserTable.size() >= (i+2));
+            assertEquals(i+2, regionsOfUserTable.size());
         }
         for (int j = 5; j < 26; j++) {
             assertTrue(rs.next());
