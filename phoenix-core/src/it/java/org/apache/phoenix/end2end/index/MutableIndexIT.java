@@ -71,14 +71,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Doubles;
 
-import jline.internal.Log;
 
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
-    
+    private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexIT.class);
     protected final boolean localIndex;
     private final String tableDDLOptions;
     
@@ -694,20 +695,20 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             if(!merged) {
                       List<HRegionInfo> regions =
                               admin.getTableRegions(indexTable);
-                Log.info("Merging: " + regions.size());
+                LOGGER.info("Merging: " + regions.size());
                 admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
                     regions.get(1).getEncodedNameAsBytes(), false);
                 merged = true;
                 Threads.sleep(10000);
             }
           } catch (Exception ex) {
-              Log.info(ex);
+            LOGGER.info(ex.getMessage());
           }
           long waitStartTime = System.currentTimeMillis();
           // wait until merge happened
           while (System.currentTimeMillis() - waitStartTime < 10000) {
             List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-              Log.info("Waiting:" + regions.size());
+            LOGGER.info("Waiting:" + regions.size());
             if (regions.size() < numRegions) {
               break;
             }
