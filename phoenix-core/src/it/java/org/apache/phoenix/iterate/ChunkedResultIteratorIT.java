@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.junit.Assert;
 import org.junit.Test;
 
-@SuppressWarnings("deprecated") public class ChunkedResultIteratorTest
+@SuppressWarnings("deprecated") public class ChunkedResultIteratorIT
         extends ParallelStatsDisabledIT {
 
     @Test
