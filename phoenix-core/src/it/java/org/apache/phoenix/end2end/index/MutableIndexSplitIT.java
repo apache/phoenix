@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
@@ -135,25 +134,35 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         splitInts[1] = 4;
         List<RegionInfo> regionsOfUserTable = null;
         for(int i = 0; i <=1; i++) {
-            Threads.sleep(10000);
-            if(localIndex) {
-                admin.split(TableName.valueOf(tableName),
-                    ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
-            } else {
-                admin.split(TableName.valueOf(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
+            boolean split = false;
+            for (int j = 0; j < 60 && !split; j++) {
+                try {
+                    if (localIndex) {
+                        admin.split(TableName.valueOf(tableName),
+                                ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
+                    } else {
+                        admin.split(TableName.valueOf(indexName),
+                                ByteUtil.concat(Bytes.toBytes(splitInts[i])));
+                    }
+                    split = true;
+                } catch (IOException x) {
+                    // wait up to a minute for the split to succeed
+                    Thread.sleep(1000);
+                }
             }
-            Thread.sleep(100);
+            assertTrue(split);
+
             regionsOfUserTable =
                     MetaTableAccessor.getTableRegions(admin.getConnection(),
                         TableName.valueOf(localIndex ? tableName : indexName), false);
 
-            while (regionsOfUserTable.size() != (i+2)) {
-                Thread.sleep(100);
+            while (regionsOfUserTable.size() < (i+2)) {
+                Thread.sleep(1000);
                 regionsOfUserTable =
                         MetaTableAccessor.getTableRegions(admin.getConnection(),
                             TableName.valueOf(localIndex ? tableName : indexName), false);
             }
-            assertEquals(i+2, regionsOfUserTable.size());
+            assertTrue(regionsOfUserTable.size() >= (i+2));
         }
         for (int j = 5; j < 26; j++) {
             assertTrue(rs.next());
