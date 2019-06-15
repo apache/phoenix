@@ -166,7 +166,8 @@ public class IndexRebuildTask extends BaseTask  {
 
             if (job != null && job.isComplete()) {
                 if (job.isSuccessful()) {
-                    LOGGER.warn("IndexRebuildTask checkCurrentResult job is successful " + taskRecord.getTableName());
+                    LOGGER.warn("IndexRebuildTask checkCurrentResult job is successful "
+                            + taskRecord.getTableName());
                     return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
                 } else {
                     return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL,

@@ -66,7 +66,8 @@ import com.google.common.collect.Maps;
  */
 public class DefaultStatisticsCollector implements StatisticsCollector {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     
     final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     private final Table htable;
@@ -156,7 +157,8 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                                 QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
                         region.getTableDesc());
-                LOGGER.info("Guide post depth determined from global configuration: " + guidePostDepth);
+                LOGGER.info("Guide post depth determined from global configuration: " +
+                        guidePostDepth);
             }
         }
 

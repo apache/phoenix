@@ -60,7 +60,7 @@ import org.slf4j.LoggerFactory;
 
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
-  private static final Logger logger = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);
 
   private final static String SNAPSHOT_NAME = "FOO";
   private static final String FIELD1 = "FIELD1";
@@ -222,7 +222,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       if (hRegionInfoList.size() >= expectedRegions) {
         break;
       }
-      logger.info("Sleeping for 1000 ms while waiting for " + hbaseTableName.getNameAsString() + " to split");
+      LOGGER.info("Sleeping for 1000 ms while waiting for " + hbaseTableName.getNameAsString() + " to split");
       Thread.sleep(1000);
     }
   }

@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
  * {@link CacheLoader} asynchronous implementation for the Phoenix Table Stats cache.
  */
 public class PhoenixStatsCacheLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
-    private static final Logger logger = LoggerFactory.getLogger(PhoenixStatsCacheLoader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatsCacheLoader.class);
 
     final private PhoenixStatsLoader statsLoader;
     private static volatile ExecutorService executor;
@@ -75,7 +75,7 @@ public class PhoenixStatsCacheLoader extends CacheLoader<GuidePostsKey, GuidePos
                             try {
                                 return statsLoader.loadStats(key, prevGuidepostInfo);
                             } catch (Exception e) {
-                                logger.warn("Unable to load stats from table: " + key.toString(), e);
+                                LOGGER.warn("Unable to load stats from table: " + key.toString(), e);
                                 return prevGuidepostInfo;
                             }
                         }

@@ -635,8 +635,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             "CREATE " + (localIndex ? "LOCAL" : "")+" INDEX " + indexName + " ON " + tableName + "(v1"+(isReverse?" DESC":"")+") include (k3)");
     }
 
-
-
     private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, HBaseAdmin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;

@@ -19,7 +19,6 @@ package org.apache.phoenix.tool;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
-
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -58,7 +57,8 @@ import static org.junit.Assert.assertTrue;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedPhoenixCanaryToolIT extends BaseTest {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ParameterizedPhoenixCanaryToolIT.class);
+	private static final Logger LOGGER =
+			LoggerFactory.getLogger(ParameterizedPhoenixCanaryToolIT.class);
 	private static final String stdOutSink
 			= "org.apache.phoenix.tool.PhoenixCanaryTool$StdOutSink";
 	private static final String fileOutSink

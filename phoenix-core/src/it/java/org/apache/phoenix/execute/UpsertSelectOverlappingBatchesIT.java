@@ -66,7 +66,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger logger = LoggerFactory.getLogger(UpsertSelectOverlappingBatchesIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(UpsertSelectOverlappingBatchesIT.class);
     private Properties props;
     private static volatile String dataTable;
     private String index;
@@ -129,11 +130,11 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
                 }
                 catch (Exception e) {
                     if (ExceptionUtils.indexOfThrowable(e, InterruptedException.class) != -1) {
-                        logger.info("Interrupted, exiting", e);
+                        LOGGER.info("Interrupted, exiting", e);
                         Thread.currentThread().interrupt();
                         return;
                     }
-                    logger.error("Hit exception while writing", e);
+                    LOGGER.error("Hit exception while writing", e);
                 }
             }
         }};
@@ -214,17 +215,17 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
                     try {
                         List<HRegionInfo> regions = admin.getTableRegions(dataTN);
                         if (regions.size() > 1) {
-                            logger.info("Found region was split");
+                            LOGGER.info("Found region was split");
                             return true;
                         }
                         if (regions.size() == 0) {
                             // This happens when region in transition or closed
-                            logger.info("No region returned");
+                            LOGGER.info("No region returned");
                             return false;
                         }
                         ;
                         HRegionInfo hRegion = regions.get(0);
-                        logger.info("Attempting to split region");
+                        LOGGER.info("Attempting to split region");
                         admin.splitRegion(hRegion.getRegionName(), Bytes.toBytes(2));
                         return false;
                     } catch (NotServingRegionException nsre) {
@@ -263,7 +264,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
             final HBaseAdmin admin = utility.getHBaseAdmin();
             final HRegionInfo dataRegion =
                     admin.getTableRegions(TableName.valueOf(dataTable)).get(0);
-            logger.info("Closing data table region");
+            LOGGER.info("Closing data table region");
             admin.closeRegion(dataRs.getServerName(), dataRegion);
             // make sure the region is offline
             utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
@@ -273,11 +274,11 @@ public class UpsertSelectOverlappingBatchesIT extends BaseUniqueNamesOwnClusterI
                             admin.getOnlineRegions(dataRs.getServerName());
                     for (HRegionInfo onlineRegion : onlineRegions) {
                         if (onlineRegion.equals(dataRegion)) {
-                            logger.info("Data region still online");
+                            LOGGER.info("Data region still online");
                             return false;
                         }
                     }
-                    logger.info("Region is no longer online");
+                    LOGGER.info("Region is no longer online");
                     return true;
                 }
             });

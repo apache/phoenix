@@ -194,7 +194,8 @@ public class IndexManagementUtil {
             LOGGER.info("Rethrowing " + e);
             throw e1;
         } catch (Throwable e1) {
-            LOGGER.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
+            LOGGER.info("Rethrowing " + e1 + " as a " +
+                    IndexBuildingFailureException.class.getSimpleName());
             throw new IndexBuildingFailureException("Failed to build index for unexpected reason!", e1);
         }
     }

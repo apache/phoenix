@@ -65,7 +65,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */
-
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -193,7 +192,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      * @since 0.1.1
      */
     public static class ConnectionInfo {
-        private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(ConnectionInfo.class);
+        private static final org.slf4j.Logger LOGGER =
+                LoggerFactory.getLogger(ConnectionInfo.class);
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
         private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
@@ -374,7 +374,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                                 currentUser = UserGroupInformation.getCurrentUser();
                                 if (!currentUser.hasKerberosCredentials() || !isSameName(currentUser.getUserName(), principal)) {
                                     final Configuration config = getConfiguration(props, info, principal, keytab);
-                                    LOGGER.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
+                                    LOGGER.info("Trying to connect to a secure cluster as {} " +
+                                                    "with keytab {}",
+                                            config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
                                             config.get(QueryServices.HBASE_CLIENT_KEYTAB));
                                     UserGroupInformation.setConfiguration(config);
                                     User.login(config, QueryServices.HBASE_CLIENT_KEYTAB, QueryServices.HBASE_CLIENT_PRINCIPAL, null);
@@ -629,7 +631,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw getMalFormedUrlException(url);
             }
             String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
-            LOGGER.debug("Getting default jdbc connection url " + quorum + ":" + port + ":" + znodeParent);
+            LOGGER.debug("Getting default jdbc connection url "
+                    + quorum + ":" + port + ":" + znodeParent);
             return new ConnectionInfo(quorum, port, znodeParent);
         }
     }

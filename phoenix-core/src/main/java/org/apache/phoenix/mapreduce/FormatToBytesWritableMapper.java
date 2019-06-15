@@ -77,7 +77,8 @@ import com.google.common.collect.Lists;
 public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWritable, Text, TableRowkeyPair,
         ImmutableBytesWritable> {
 
-    protected static final Logger LOGGER = LoggerFactory.getLogger(FormatToBytesWritableMapper.class);
+    protected static final Logger LOGGER =
+            LoggerFactory.getLogger(FormatToBytesWritableMapper.class);
 
     protected static final String COUNTER_GROUP_NAME = "Phoenix MapReduce Import";
 

@@ -692,7 +692,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
            }
        }
     
-       LOGGER.info("Configuring " + tablesStartKeys.size() + " reduce partitions to match current region count");
+       LOGGER.info("Configuring " + tablesStartKeys.size() +
+               " reduce partitions to match current region count");
        job.setNumReduceTasks(tablesStartKeys.size());
 
        configurePartitioner(job, tablesStartKeys);

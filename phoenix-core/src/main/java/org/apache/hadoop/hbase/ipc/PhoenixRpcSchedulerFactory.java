@@ -38,7 +38,8 @@ import com.google.common.base.Preconditions;
  */
 public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
 
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
@@ -64,7 +65,8 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
         // validate index and metadata priorities are not the same
         Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
-        LOGGER.info("Using custom Phoenix Index RPC Handling with index rpc priority " + indexPriority + " and metadata rpc priority " + metadataPriority);
+        LOGGER.info("Using custom Phoenix Index RPC Handling with index rpc priority "
+                + indexPriority + " and metadata rpc priority " + metadataPriority);
 
         PhoenixRpcScheduler scheduler =
                 new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority);

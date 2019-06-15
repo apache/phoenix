@@ -91,7 +91,7 @@ import com.google.protobuf.ServiceException;
 
 
 public class MetaDataUtil {
-    private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
   
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
     public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
@@ -782,15 +782,15 @@ public class MetaDataUtil {
                     admin.getRegionInfo(null, request);
                 } catch (ServiceException e) {
                     IOException ie = ProtobufUtil.getRemoteException(e);
-                    logger.debug("Region " + loc.getRegionInfo().getEncodedName() + " isn't online due to:" + ie);
+                    LOGGER.debug("Region " + loc.getRegionInfo().getEncodedName() + " isn't online due to:" + ie);
                     return false;
                 } catch (RemoteException e) {
-                    logger.debug("Cannot get region " + loc.getRegionInfo().getEncodedName() + " info due to error:" + e);
+                    LOGGER.debug("Cannot get region " + loc.getRegionInfo().getEncodedName() + " info due to error:" + e);
                     return false;
                 }
             }
         } catch (IOException ex) {
-            logger.warn("tableRegionsOnline failed due to:" + ex);
+            LOGGER.warn("tableRegionsOnline failed due to:" + ex);
             return false;
         } finally {
             if (hcon != null) {

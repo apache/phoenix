@@ -150,24 +150,28 @@ public class StatisticsScanner implements InternalScanner {
                 ArrayList<Mutation> mutations = new ArrayList<Mutation>();
 
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
+                    LOGGER.debug("Deleting the stats for the region "
+                            + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().deleteStatsForRegion(region, tracker, family, mutations);
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
+                    LOGGER.debug("Adding new stats for the region " +
+                            regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().addStats(tracker, family,
                         mutations, tracker.getGuidePostDepth());
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
+                    LOGGER.debug("Committing new stats for the region " +
+                            regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().commitStats(mutations, tracker);
             } catch (IOException e) {
                 if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
-                    LOGGER.debug("Ignoring error updating statistics because region is closing/closed");
+                    LOGGER.debug(
+                            "Ignoring error updating statistics because region is closing/closed");
                 } else {
                     LOGGER.error("Failed to update statistics table!", e);
                     toThrow = e;

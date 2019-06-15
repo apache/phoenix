@@ -41,7 +41,7 @@ public class QueryLogger {
     private LogLevel logLevel;
     private Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
     private boolean isSynced;
-    private static final Logger LOGGER = LoggerFactory.getLogger(QueryLoggerDisruptor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryLogger.class);
     
     private QueryLogger(PhoenixConnection connection) {
         this.queryId = UUID.randomUUID().toString();

@@ -231,7 +231,8 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                         long expectedValue = value;
                         long actualValue = metric.value().longValue();
                         if (expectedValue != actualValue) {
-                            LOGGER.warn("Metric from Hadoop Sink: " + metric.name() + " didn't match expected.");
+                            LOGGER.warn("Metric from Hadoop Sink: "
+                                    + metric.name() + " didn't match expected.");
                             return false;
                         }
                         expectedMetrics.remove(metric.name());

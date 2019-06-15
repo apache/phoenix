@@ -120,7 +120,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
         if (!this.accessCheckEnabled) {
-            LOGGER.warn("PhoenixAccessController has been loaded with authorization checks disabled.");
+            LOGGER.warn(
+                    "PhoenixAccessController has been loaded with authorization checks disabled.");
         }
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
             this.env = (PhoenixMetaDataControllerEnvironment)env;
@@ -595,7 +596,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
               }
             }
         } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("No permissions found for table=" + table + " or namespace=" + table.getNamespaceAsString());
+            LOGGER.debug("No permissions found for table=" +
+                    table + " or namespace=" + table.getNamespaceAsString());
         }
         return false;
     }

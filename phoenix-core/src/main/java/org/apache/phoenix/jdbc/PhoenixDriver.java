@@ -61,7 +61,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * @since 0.1
  */
 public final class PhoenixDriver extends PhoenixEmbeddedDriver {
-    private static final Logger logger = LoggerFactory.getLogger(PhoenixDriver.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixDriver.class);
     public static final PhoenixDriver INSTANCE;
     private static volatile String driverShutdownMsg;
     static {
@@ -100,11 +100,11 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                             // policy). We don't care about any exceptions, we're going down anyways.
                             future.get(millisBeforeShutdown, TimeUnit.MILLISECONDS);
                         } catch (ExecutionException e) {
-                            logger.warn("Failed to close instance", e);
+                            LOGGER.warn("Failed to close instance", e);
                         } catch (InterruptedException e) {
-                            logger.warn("Interrupted waiting to close instance", e);
+                            LOGGER.warn("Interrupted waiting to close instance", e);
                         } catch (TimeoutException e) {
-                            logger.warn("Timed out waiting to close instance", e);
+                            LOGGER.warn("Timed out waiting to close instance", e);
                         } finally {
                             // We're going down, but try to clean up.
                             svc.shutdownNow();
@@ -116,7 +116,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 // Don't want to register it if we're already in the process of going down.
                 DriverManager.registerDriver(INSTANCE);
             } catch (IllegalStateException e) {
-                logger.warn("Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
+                LOGGER.warn("Failed to register PhoenixDriver shutdown hook as the JVM is already shutting down");
 
                 // Close the instance now because we don't have the shutdown hook
                 closeInstance(INSTANCE);
@@ -132,7 +132,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         try {
             instance.close();
         } catch (SQLException e) {
-            logger.warn("Unable to close PhoenixDriver on shutdown", e);
+            LOGGER.warn("Unable to close PhoenixDriver on shutdown", e);
         } finally {
             driverShutdownMsg = "Phoenix driver closed because server is shutting down";
         }
@@ -156,14 +156,14 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 @Override
                 public void onRemoval(RemovalNotification<ConnectionInfo, ConnectionQueryServices> notification) {
                     String connInfoIdentifier = notification.getKey().toString();
-                    logger.debug("Expiring " + connInfoIdentifier + " because of "
+                    LOGGER.debug("Expiring " + connInfoIdentifier + " because of "
                         + notification.getCause().name());
 
                     try {
                         notification.getValue().close();
                     }
                     catch (SQLException se) {
-                        logger.error("Error while closing expired cache connection " + connInfoIdentifier, se);
+                        LOGGER.error("Error while closing expired cache connection " + connInfoIdentifier, se);
                     }
                 }
             };

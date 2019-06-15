@@ -113,7 +113,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         final PhoenixInputSplit pSplit = (PhoenixInputSplit)split;
         final List<Scan> scans = pSplit.getScans();
         try {
-            LOGGER.info("Generating iterators for " + scans.size() + " scans in keyrange: " + pSplit.getKeyRange());
+            LOGGER.info("Generating iterators for " + scans.size() + " scans in keyrange: "
+                    + pSplit.getKeyRange());
             List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
             StatementContext ctx = queryPlan.getContext();
             ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
@@ -161,7 +162,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
 
             this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(), queryPlan.getContext());
         } catch (SQLException e) {
-            LOGGER.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",
+                    e.getMessage()));
             Throwables.propagate(e);
         }
    }
@@ -182,7 +184,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             value.readFields(resultSet);
             return true;
         } catch (SQLException e) {
-            LOGGER.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] occurred while iterating over the resultset. ",
+                    e.getMessage()));
             throw new RuntimeException(e);
         }
     }

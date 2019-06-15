@@ -176,7 +176,8 @@ public class EquiDepthStreamHistogram {
             smallerBar.incrementCount(countToDistribute);
         }
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace(String.format("Split orig=%s , newLeft=%s , newRight=%s", origBar, newLeft, newRight));
+            LOGGER.trace(String.format("Split orig=%s , newLeft=%s , newRight=%s",
+                    origBar, newLeft, newRight));
         }
         bars.remove(origBar);
         bars.add(newLeft);

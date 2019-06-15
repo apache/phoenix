@@ -133,7 +133,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
 public class UpgradeUtil {
-    private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
     public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
     /**
@@ -257,17 +257,17 @@ public class UpgradeUtil {
                     }
                 }
                 if (sizeBytes >= batchSizeBytes) {
-                    logger.info("Committing bactch of temp rows");
+                    LOGGER.info("Committing bactch of temp rows");
                     target.batch(mutations);
                     mutations.clear();
                     sizeBytes = 0;
                 }
             }
             if (!mutations.isEmpty()) {
-                logger.info("Committing last bactch of temp rows");
+                LOGGER.info("Committing last bactch of temp rows");
                 target.batch(mutations);
             }
-            logger.info("Successfully completed copy");
+            LOGGER.info("Successfully completed copy");
         } catch (SQLException e) {
             throw e;
         } catch (Exception e) {
@@ -279,12 +279,12 @@ public class UpgradeUtil {
                 try {
                     if (source != null) source.close();
                 } catch (IOException e) {
-                    logger.warn("Exception during close of source table",e);
+                    LOGGER.warn("Exception during close of source table",e);
                 } finally {
                     try {
                         if (target != null) target.close();
                     } catch (IOException e) {
-                        logger.warn("Exception during close of target table",e);
+                        LOGGER.warn("Exception during close of target table",e);
                     }
                 }
             }
@@ -299,7 +299,7 @@ public class UpgradeUtil {
             if (nSaltBuckets <= 0) {
                 return;
             }
-            logger.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
+            LOGGER.warn("Pre-splitting SYSTEM.SEQUENCE table " + nSaltBuckets + "-ways. This may take some time - please do not close window.");
             HTableDescriptor desc = admin.getTableDescriptor(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             createSequenceSnapshot(admin, conn);
             snapshotCreated = true;
@@ -309,7 +309,7 @@ public class UpgradeUtil {
             admin.createTable(desc, splitPoints);
             restoreSequenceSnapshot(admin, conn);
             success = true;
-            logger.warn("Completed pre-splitting SYSTEM.SEQUENCE table");
+            LOGGER.warn("Completed pre-splitting SYSTEM.SEQUENCE table");
         } catch (IOException e) {
             throw new SQLException("Unable to pre-split SYSTEM.SEQUENCE table", e);
         } finally {
@@ -318,14 +318,14 @@ public class UpgradeUtil {
                     try {
                         deleteSequenceSnapshot(admin);
                     } catch (SQLException e) {
-                        logger.warn("Exception while deleting SYSTEM.SEQUENCE snapshot during pre-split", e);
+                        LOGGER.warn("Exception while deleting SYSTEM.SEQUENCE snapshot during pre-split", e);
                     }
                 }
             } finally {
                 try {
                     admin.close();
                 } catch (IOException e) {
-                    logger.warn("Exception while closing admin during pre-split", e);
+                    LOGGER.warn("Exception while closing admin during pre-split", e);
                 }
             }
         }
@@ -447,8 +447,8 @@ public class UpgradeUtil {
                     createIndex.append(")");
                 }
                 createIndex.append(" ASYNC");
-                logger.info("Index creation query is : " + createIndex.toString());
-                logger.info("Dropping the index " + indexTableName
+                LOGGER.info("Index creation query is : " + createIndex.toString());
+                LOGGER.info("Dropping the index " + indexTableName
                     + " to clean up the index details from SYSTEM.CATALOG.");
                 PhoenixConnection localConnection = null;
                 if (tenantId != null) {
@@ -459,9 +459,9 @@ public class UpgradeUtil {
                     (localConnection == null ? globalConnection : localConnection).createStatement().execute(
                         "DROP INDEX IF EXISTS " + indexTableName + " ON "
                                 + SchemaUtil.getTableName(schemaName, dataTableName));
-                    logger.info("Recreating the index " + indexTableName);
+                    LOGGER.info("Recreating the index " + indexTableName);
                     (localConnection == null ? globalConnection : localConnection).createStatement().execute(createIndex.toString());
-                    logger.info("Created the index " + indexTableName);
+                    LOGGER.info("Created the index " + indexTableName);
                 } finally {
                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                     if (localConnection != null) {
@@ -650,12 +650,12 @@ public class UpgradeUtil {
     }
     @SuppressWarnings("deprecation")
     public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets, PTable oldTable) throws SQLException {
-        logger.info("Upgrading SYSTEM.SEQUENCE table");
+        LOGGER.info("Upgrading SYSTEM.SEQUENCE table");
 
         byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE);
         Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
-            logger.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
+            LOGGER.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
             KeyValue saltKV = KeyValueUtil.newKeyValue(seqTableKey, 
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
@@ -691,7 +691,7 @@ public class UpgradeUtil {
                         return true;
                     }
                 }
-                logger.info("SYSTEM.SEQUENCE table has already been upgraded");
+                LOGGER.info("SYSTEM.SEQUENCE table has already been upgraded");
                 return false;
             }
             
@@ -709,7 +709,7 @@ public class UpgradeUtil {
                 Table seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
-                    logger.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
+                    LOGGER.info("Adding salt byte to all SYSTEM.SEQUENCE rows");
                     ResultScanner scanner = seqTable.getScanner(scan);
                     try {
                         Result result;
@@ -744,7 +744,7 @@ public class UpgradeUtil {
                                     }
                                 }
                                 if (sizeBytes >= batchSizeBytes) {
-                                    logger.info("Committing bactch of SYSTEM.SEQUENCE rows");
+                                    LOGGER.info("Committing bactch of SYSTEM.SEQUENCE rows");
                                     seqTable.batch(mutations);
                                     mutations.clear();
                                     sizeBytes = 0;
@@ -753,11 +753,11 @@ public class UpgradeUtil {
                             }
                         }
                         if (!mutations.isEmpty()) {
-                            logger.info("Committing last bactch of SYSTEM.SEQUENCE rows");
+                            LOGGER.info("Committing last bactch of SYSTEM.SEQUENCE rows");
                             seqTable.batch(mutations);
                         }
                         preSplitSequenceTable(conn, nSaltBuckets);
-                        logger.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
+                        LOGGER.info("Successfully completed upgrade of SYSTEM.SEQUENCE");
                         success = true;
                         return true;
                     } catch (InterruptedException e) {
@@ -780,10 +780,10 @@ public class UpgradeUtil {
                                         sysTable.put(unsaltPut);
                                         success = true;
                                     } finally {
-                                        if (!success) logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
+                                        if (!success) LOGGER.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
                                     }
                                 } else { // We're screwed b/c we've already committed some salted sequences...
-                                    logger.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
+                                    LOGGER.error("SYSTEM.SEQUENCE TABLE LEFT IN CORRUPT STATE");
                                 }
                             }
                         }
@@ -794,7 +794,7 @@ public class UpgradeUtil {
                     try {
                         seqTable.close();
                     } catch (IOException e) {
-                        logger.warn("Exception during close",e);
+                        LOGGER.warn("Exception during close",e);
                     }
                 }
             }
@@ -805,7 +805,7 @@ public class UpgradeUtil {
             try {
                 sysTable.close();
             } catch (IOException e) {
-                logger.warn("Exception during close",e);
+                LOGGER.warn("Exception during close",e);
             }
         }
         
@@ -857,7 +857,7 @@ public class UpgradeUtil {
         try {
             // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
             metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
-            logger.info("Upgrading metadata to support adding columns to tables with views");
+            LOGGER.info("Upgrading metadata to support adding columns to tables with views");
             String getBaseTableAndViews = "SELECT "
                     + COLUMN_FAMILY + " AS BASE_PHYSICAL_TABLE, "
                     + TENANT_ID + ", "
@@ -1093,7 +1093,7 @@ public class UpgradeUtil {
         try {
             // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
             metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
-            logger.info("Upgrading metadata to add parent to child links for views");
+            LOGGER.info("Upgrading metadata to add parent to child links for views");
             metaConnection.commit();
             //     physical table 
             //         |  
@@ -1166,7 +1166,7 @@ public class UpgradeUtil {
         try {
             // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
             metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
-            logger.info("Upgrading metadata to add parent to child links for views");
+            LOGGER.info("Upgrading metadata to add parent to child links for views");
             metaConnection.commit();
             String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE) " +
                                         "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE " + 
@@ -1189,7 +1189,7 @@ public class UpgradeUtil {
     	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
         try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
         		PhoenixConnection upsertConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP)) {
-            logger.info("Upgrading metadata to add parent links for indexes on views");
+            LOGGER.info("Upgrading metadata to add parent links for indexes on views");
 			String indexQuery = "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG WHERE LINK_TYPE = "
 					+ LinkType.INDEX_TABLE.getSerializedValue();
 			String createViewIndexLink = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY, LINK_TYPE) VALUES (?,?,?,?,?) ";
@@ -1368,7 +1368,7 @@ public class UpgradeUtil {
                         view = PhoenixRuntime.getTable(newConn, viewName);
                     } catch (TableNotFoundException e) {
                         // Ignore
-                        logger.warn("Error getting PTable for view: " + viewName);
+                        LOGGER.warn("Error getting PTable for view: " + viewName);
                         continue;
                     }
                     syncUpdateCacheFreqForIndexesOfTable(view, stmt);
@@ -1406,7 +1406,7 @@ public class UpgradeUtil {
                 table = PhoenixRuntime.getTable(conn, null, fullTableName);
             } catch (TableNotFoundException e) {
                 // Ignore tables not mapped to a Phoenix Table
-                logger.warn("Error getting PTable for HBase table: " + fullTableName);
+                LOGGER.warn("Error getting PTable for HBase table: " + fullTableName);
                 continue;
             }
             if (table.getType() == PTableType.INDEX) {
@@ -1719,7 +1719,7 @@ public class UpgradeUtil {
             if (isTable && !bypassUpgrade) {
                 String msg = "Taking snapshot of physical table " + physicalName + " prior to upgrade...";
                 System.out.println(msg);
-                logger.info(msg);
+                LOGGER.info(msg);
                 admin.disableTable(physicalName);
                 admin.snapshot(snapshotName, physicalName);
                 admin.enableTable(physicalName);
@@ -1734,7 +1734,7 @@ public class UpgradeUtil {
             }
             String msg = "Starting upgrade of " + escapedTableName + tenantInfo + "...";
             System.out.println(msg);
-            logger.info(msg);
+            LOGGER.info(msg);
             ResultSet rs;
             if (!bypassUpgrade) {
                 rs = upgradeConn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ count(*) FROM " + escapedTableName);
@@ -1788,9 +1788,9 @@ public class UpgradeUtil {
             success = true;
             msg = "Completed upgrade of " + escapedTableName + tenantInfo;
             System.out.println(msg);
-            logger.info(msg);
+            LOGGER.info(msg);
         } catch (Exception e) {
-            logger.error("Exception during upgrade of " + physicalName + ":", e);
+            LOGGER.error("Exception during upgrade of " + physicalName + ":", e);
         } finally {
             boolean restored = false;
             try {
@@ -1800,25 +1800,25 @@ public class UpgradeUtil {
                     admin.enableTable(physicalName);
                     String msg = "Restored snapshot of " + physicalName + " due to failure of upgrade";
                     System.out.println(msg);
-                    logger.info(msg);
+                    LOGGER.info(msg);
                 }
                 restored = true;
             } catch (Exception e) {
-                logger.warn("Unable to restoring snapshot " + snapshotName + " after failed upgrade", e);
+                LOGGER.warn("Unable to restoring snapshot " + snapshotName + " after failed upgrade", e);
             } finally {
                 try {
                     if (restoreSnapshot && restored) {
                         admin.deleteSnapshot(snapshotName);
                     }
                 } catch (Exception e) {
-                    logger.warn("Unable to delete snapshot " + snapshotName + " after upgrade:", e);
+                    LOGGER.warn("Unable to delete snapshot " + snapshotName + " after upgrade:", e);
                 } finally {
                     try {
                         if (admin != null) {
                             admin.close();
                         }
                     } catch (IOException e) {
-                        logger.warn("Unable to close admin after upgrade:", e);
+                        LOGGER.warn("Unable to close admin after upgrade:", e);
                     }
                 }
             }
@@ -2030,7 +2030,7 @@ public class UpgradeUtil {
         }
         if (ts != null) {
             // Update flag to represent table is mapped to namespace
-            logger.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..",
+            LOGGER.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..",
                     phoenixTableName));
             Put put = new Put(tableKey, ts);
             put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
@@ -2047,19 +2047,19 @@ public class UpgradeUtil {
             boolean destTableExists=admin.tableExists(destTableName);
             if (!destTableExists) {
                 String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
-                logger.info("Disabling table " + srcTableName + " ..");
+                LOGGER.info("Disabling table " + srcTableName + " ..");
                 admin.disableTable(srcTableName);
-                logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
+                LOGGER.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
                 admin.snapshot(snapshotName, srcTableName);
-                logger.info(
+                LOGGER.info(
                         String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
                 admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
-                logger.info(String.format("deleting old table %s..", srcTableName));
+                LOGGER.info(String.format("deleting old table %s..", srcTableName));
                 admin.deleteTable(srcTableName);
-                logger.info(String.format("deleting snapshot %s..", snapshotName));
+                LOGGER.info(String.format("deleting snapshot %s..", snapshotName));
                 admin.deleteSnapshot(snapshotName);
             } else {
-                logger.info(String.format("Destination Table %s already exists. No migration needed.", destTableName));
+                LOGGER.info(String.format("Destination Table %s already exists. No migration needed.", destTableName));
             }
         }
     }
@@ -2101,15 +2101,15 @@ public class UpgradeUtil {
 
             if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
             if (!schemaName.equals("")) {
-                logger.info(String.format("Creating schema %s..", schemaName));
+                LOGGER.info(String.format("Creating schema %s..", schemaName));
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             }
             String oldPhysicalName = table.getPhysicalName().getString();
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(
                     SchemaUtil.getPhysicalTableName(oldPhysicalName, readOnlyProps).getNameAsString());
-            logger.info(String.format("Upgrading %s %s..", table.getType(), fullTableName));
-            logger.info(String.format("oldPhysicalName %s newPhysicalTablename %s..", oldPhysicalName, newPhysicalTablename));
-            logger.info(String.format("teanantId %s..", conn.getTenantId()));
+            LOGGER.info(String.format("Upgrading %s %s..", table.getType(), fullTableName));
+            LOGGER.info(String.format("oldPhysicalName %s newPhysicalTablename %s..", oldPhysicalName, newPhysicalTablename));
+            LOGGER.info(String.format("teanantId %s..", conn.getTenantId()));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
             try (Table childLinkTable =
@@ -2150,12 +2150,14 @@ public class UpgradeUtil {
                     boolean updateLink = true;
                     if (srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
                         // Skip already migrated
-                        logger.info(String.format("skipping as it seems index '%s' is already upgraded..",
+                        LOGGER.info(String.format(
+                                "skipping as it seems index '%s' is already upgraded..",
                                 index.getName()));
                         continue;
                     }
                     if (MetaDataUtil.isLocalIndex(srcTableName)) {
-                        logger.info(String.format("local index '%s' found with physical hbase table name ''..",
+                        LOGGER.info(String.format(
+                                "local index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
@@ -2164,18 +2166,20 @@ public class UpgradeUtil {
                                 .execute(String.format("ALTER TABLE %s set " + MetaDataUtil.PARENT_TABLE_KEY + "='%s'",
                                         phoenixTableName, table.getPhysicalName()));
                     } else if (MetaDataUtil.isViewIndex(srcTableName)) {
-                        logger.info(String.format("View index '%s' found with physical hbase table name ''..",
+                        LOGGER.info(String.format(
+                                "View index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getViewIndexPhysicalName(newPhysicalTablename.getBytes()));
                     } else {
-                        logger.info(String.format("Global index '%s' found with physical hbase table name ''..",
+                        LOGGER.info(String.format(
+                                "Global index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = SchemaUtil
                                 .getPhysicalTableName(index.getPhysicalName().getString(), readOnlyProps)
                                 .getNameAsString();
                     }
-                    logger.info(String.format("Upgrading index %s..", index.getName()));
+                    LOGGER.info(String.format("Upgrading index %s..", index.getName()));
                     if (!(table.getType() == PTableType.VIEW && !MetaDataUtil.isViewIndex(srcTableName)
                             && IndexType.LOCAL != index.getIndexType())) {
                         mapTableToNamespace(admin, metatable, srcTableName, destTableName, readOnlyProps,
@@ -2183,7 +2187,7 @@ public class UpgradeUtil {
                                 conn.getTenantId());
                     }
                     if (updateLink) {
-                        logger.info(String.format("Updating link information for index '%s' ..", index.getName()));
+                        LOGGER.info(String.format("Updating link information for index '%s' ..", index.getName()));
                         updateLink(conn, srcTableName, destTableName,index.getSchemaName(),index.getTableName());
                         conn.commit();
                     }
@@ -2198,14 +2202,14 @@ public class UpgradeUtil {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
             }
             if (table.getType() == PTableType.VIEW) {
-                logger.info(String.format("Updating link information for view '%s' ..", table.getTableName()));
+                LOGGER.info(String.format("Updating link information for view '%s' ..", table.getTableName()));
                 updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),table.getTableName());
                 conn.commit();
                 
                 // if the view is a first level child, then we need to create the PARENT_TABLE link
                 // that was overwritten by the PHYSICAL_TABLE link 
                 if (table.getParentName().equals(table.getPhysicalName())) {
-                    logger.info(String.format("Creating PARENT link for view '%s' ..", table.getTableName()));
+                    LOGGER.info(String.format("Creating PARENT link for view '%s' ..", table.getTableName()));
                     // Add row linking view to its parent 
                     PreparedStatement linkStatement = conn.prepareStatement(MetaDataClient.CREATE_VIEW_LINK);
                     linkStatement.setString(1, Bytes.toStringBinary(tenantIdBytes));
@@ -2299,7 +2303,7 @@ public class UpgradeUtil {
                     conn.close();
                 conn = DriverManager.getConnection(connUrl, props).unwrap(PhoenixConnection.class);
             }
-            logger.info(String.format("Upgrading view %s for tenantId %s..", viewName,tenantId));
+            LOGGER.info(String.format("Upgrading view %s for tenantId %s..", viewName,tenantId));
             UpgradeUtil.upgradeTable(conn, viewName);
             prevTenantId = tenantId;
         }
@@ -2362,7 +2366,7 @@ public class UpgradeUtil {
                     currentValueArray, new SQLException[1]);
 
                 if (sqlExceptions[0] != null) {
-                    logger.error("Unable to convert view index sequence because of error. " +
+                    LOGGER.error("Unable to convert view index sequence because of error. " +
                         "It will need to be converted manually, " +
                         " or there's a risk that two view indexes of the same base table " +
                         "will have colliding view index ids.", sqlExceptions[0]);
@@ -2398,7 +2402,7 @@ public class UpgradeUtil {
                         false, EnvironmentEdgeManager.currentTimeMillis());
                 }
             } catch(SequenceAlreadyExistsException sae) {
-                logger.info("Tried to create view index sequence "
+                LOGGER.info("Tried to create view index sequence "
                     + SchemaUtil.getTableName(sae.getSchemaName(), sae.getSequenceName()) +
                     " during upgrade but it already existed. This is probably fine.");
             }

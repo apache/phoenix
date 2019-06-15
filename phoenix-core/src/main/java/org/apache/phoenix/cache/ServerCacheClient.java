@@ -284,7 +284,10 @@ public class ServerCacheClient {
                                 cacheUsingTable.getIndexType() == IndexType.LOCAL)) {
                     // Call RPC once per server
                     servers.add(entry);
-                    if (LOGGER.isDebugEnabled()) {LOGGER.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(addCustomAnnotations(
+                                "Adding cache entry to be sent for " + entry, connection));
+                    }
                     final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
                     final HTableInterface htable = services.getTable(cacheUsingTable.getPhysicalName().getBytes());
                     closeables.add(htable);
@@ -311,10 +314,13 @@ public class ServerCacheClient {
                         }
                     }));
                 } else {
-                    if (LOGGER.isDebugEnabled()) {LOGGER.debug(addCustomAnnotations("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry", connection));}
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(addCustomAnnotations(
+                                "NOT adding cache entry to be sent for " + entry +
+                                        " since one already exists for that entry", connection));
+                    }
                 }
             }
-            
             hashCacheSpec = new ServerCache(cacheId,servers,cachePtr, services, storeCacheOnClient);
             // Execute in parallel
             int timeoutMs = services.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
@@ -350,7 +356,10 @@ public class ServerCacheClient {
                 }
             }
         }
-        if (LOGGER.isDebugEnabled()) {LOGGER.debug(addCustomAnnotations("Cache " + cacheId + " successfully added to servers.", connection));}
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(addCustomAnnotations("Cache " + cacheId +
+                    " successfully added to servers.", connection));
+        }
         return hashCacheSpec;
     }
     
@@ -377,7 +386,8 @@ public class ServerCacheClient {
              * to.
              */
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection));
+                LOGGER.debug(addCustomAnnotations("Removing Cache " +
+                        cacheId + " from servers.", connection));
             }
             for (HRegionLocation entry : locations) {
              // Call once per server
@@ -420,13 +430,15 @@ public class ServerCacheClient {
                         remainingOnServers.remove(entry);
                     } catch (Throwable t) {
                         lastThrowable = t;
-                        LOGGER.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, connection),
-                                t);
+                        LOGGER.error(addCustomAnnotations(
+                                "Error trying to remove hash cache for " + entry,
+                                connection), t);
                     }
                 }
             }
             if (!remainingOnServers.isEmpty()) {
-                LOGGER.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, connection),
+                LOGGER.warn(addCustomAnnotations("Unable to remove hash cache for "
+                                + remainingOnServers, connection),
                         lastThrowable);
             }
         } finally {

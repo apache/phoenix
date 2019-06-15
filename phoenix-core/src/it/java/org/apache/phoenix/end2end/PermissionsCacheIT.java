@@ -43,12 +43,12 @@ public class PermissionsCacheIT extends BasePermissionsIT {
     public PermissionsCacheIT() throws Exception {
         super(true);
     }
-    
+
     @BeforeClass
     public static void doSetup() throws Exception {
         BasePermissionsIT.initCluster(true);
     }
-    
+
     @Test
     public void testPermissionsCachedWithAccessChecker() throws Throwable {
         if (!isNamespaceMapped) {

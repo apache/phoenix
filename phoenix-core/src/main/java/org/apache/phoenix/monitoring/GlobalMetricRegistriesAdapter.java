@@ -48,7 +48,8 @@ import org.slf4j.LoggerFactory;
  */
 public class GlobalMetricRegistriesAdapter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalMetricRegistriesAdapter.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(GlobalMetricRegistriesAdapter.class);
     private static GlobalMetricRegistriesAdapter INSTANCE = new GlobalMetricRegistriesAdapter();
 
     private GlobalMetricRegistriesAdapter() {
@@ -74,7 +75,8 @@ public class GlobalMetricRegistriesAdapter {
      * Class to convert HBase Metric Objects to Hadoop Metrics2 Metric Objects
      */
     private static class HBaseMetrics2HadoopMetricsAdapter implements MetricsSource {
-        private static final Logger LOGGER = LoggerFactory.getLogger(HBaseMetrics2HadoopMetricsAdapter.class);
+        private static final Logger LOGGER =
+                LoggerFactory.getLogger(HBaseMetrics2HadoopMetricsAdapter.class);
         private final MetricRegistry registry;
         private final String metricTag;
 
@@ -85,7 +87,8 @@ public class GlobalMetricRegistriesAdapter {
 
         private void registerToDefaultMetricsSystem() {
             MetricRegistryInfo info = registry.getMetricRegistryInfo();
-            LOGGER.info("Registering " + info.getMetricsJmxContext() + " " + info.getMetricsDescription() + " into DefaultMetricsSystem");
+            LOGGER.info("Registering " + info.getMetricsJmxContext() +
+                    " " + info.getMetricsDescription() + " into DefaultMetricsSystem");
             DefaultMetricsSystem.instance().register(info.getMetricsJmxContext(), info.getMetricsDescription(), this);
         }
 

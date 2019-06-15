@@ -42,7 +42,6 @@ public class ParallelWriterIndexCommitter extends AbstractParallelWriterIndexCom
 
     @Override
     public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws SingleIndexWriteFailureException {
-
         super.write(toWrite, allowLocalUpdates, clientVersion);
         // actually submit the tasks to the pool and wait for them to finish/fail
         try {

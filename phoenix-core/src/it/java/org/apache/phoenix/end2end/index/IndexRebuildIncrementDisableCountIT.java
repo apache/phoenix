@@ -56,7 +56,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Maps;
 
 public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildIncrementDisableCountIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(IndexRebuildIncrementDisableCountIT.class);
     private static long pendingDisableCount = 0;
     private static String ORG_PREFIX = "ORG";
     private static Result pendingDisableCountResult = null;
