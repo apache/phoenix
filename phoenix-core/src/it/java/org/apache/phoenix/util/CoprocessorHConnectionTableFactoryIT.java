@@ -37,10 +37,10 @@ import org.slf4j.LoggerFactory;
  * This test is wrt to https://issues.apache.org/jira/browse/PHOENIX-4993.Test checks region
  * close should not close the shared connections
  */
-public class CoprocessorHConnectionTableFactoryTest extends BaseUniqueNamesOwnClusterIT {
+public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClusterIT {
   private static String ORG_PREFIX = "ORG";
   private static final Logger LOGGER =
-          LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryTest.class);
+          LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
 
   @BeforeClass
   public static final void doSetup() throws Exception {
