@@ -39,9 +39,9 @@ import org.slf4j.LoggerFactory;
  * close should not close the shared connections 2. region server close should close the shared
  * connections
  */
-public class CoprocessorHConnectionTableFactoryTest extends BaseUniqueNamesOwnClusterIT {
+public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClusterIT {
   private static String ORG_PREFIX = "ORG";
-  private static final Logger LOGGER = LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryTest.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
 
   @BeforeClass
   public static final void doSetup() throws Exception {
