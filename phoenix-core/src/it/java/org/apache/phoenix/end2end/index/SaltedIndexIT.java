@@ -65,7 +65,7 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         }
     }
     
-    @Test
+    // @Test Disabled. this test flaps -- enable when PHOENIX-5346 is fixed
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
