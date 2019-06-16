@@ -32,7 +32,6 @@ import org.slf4j.LoggerFactory;
 
 class MultithreadedDiffer implements Callable<Void> {
     private static final Logger LOGGER = LoggerFactory.getLogger(MultithreadedDiffer.class);
-
     private Thread t;
     private Query query;
     private ThreadTime threadTime;

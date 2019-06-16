@@ -67,7 +67,8 @@ import com.google.common.collect.Lists;
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
 
     private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
-    public static final Logger LOGGER = LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
+    public static final Logger LOGGER =
+            LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
 
     @Override
     public Reader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,

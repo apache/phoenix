@@ -86,7 +86,8 @@ import org.slf4j.LoggerFactory;
 @Category(NeedsOwnMiniClusterTest.class)
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
-  public static final Logger LOGGER = LoggerFactory.getLogger(WALReplayWithIndexWritesAndCompressedWALIT.class);
+  public static final Logger LOGGER =
+          LoggerFactory.getLogger(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
   public TableName table = new TableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";

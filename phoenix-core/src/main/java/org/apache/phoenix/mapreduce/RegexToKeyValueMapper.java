@@ -110,8 +110,9 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
 			Map<String, Object> data = new HashMap<>();
 			Matcher m = inputPattern.matcher(input);
 			if (m.groupCount() != columnInfoList.size()) {
-				LOGGER.debug(String.format("based on the regex and input, input fileds %s " +
-                        "size doesn't match the table columns %s size", m.groupCount(), columnInfoList.size()));
+				LOGGER.debug(String.format("based on the regex and input, input fileds %s size " +
+                        "doesn't match the table columns %s size", m.groupCount(),
+                        columnInfoList.size()));
 				return data;
 			}
 			

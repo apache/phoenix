@@ -297,7 +297,7 @@ import com.google.protobuf.Service;
  */
 @SuppressWarnings("deprecation")
 public class MetaDataEndpointImpl extends MetaDataProtocol implements CoprocessorService, Coprocessor {
-    private static final Logger logger = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
     // Column to track tables that have been upgraded based on PHOENIX-2067
     public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
@@ -571,7 +571,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         this.allowSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
 
-        logger.info("Starting Tracing-Metrics Systems");
+        LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
@@ -651,7 +651,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             done.run(builder.build());
         } catch (Throwable t) {
-            logger.error("getTable failed", t);
+            LOGGER.error("getTable failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -1025,8 +1025,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // the PTable added to the cache doesn't include parent columns as we always call 
                     // combine columns after looking up the PTable from the cache
                     && !skipAddingIndexes) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Caching table "
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Caching table "
                             + Bytes.toStringBinary(cacheKey.get(), cacheKey.getOffset(),
                                 cacheKey.getLength())
                             + " at seqNum " + newTable.getSequenceNumber()
@@ -2222,7 +2222,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     if (tableType == PTableType.INDEX || allowSystemCatalogRollback) {
                         result = checkTableKeyInRegion(parentTableKey, region);
                         if (result != null) {
-                            logger.error("Unable to lock parentTableKey "+Bytes.toStringBinary(parentTableKey));
+                            LOGGER.error("Unable to lock parentTableKey "+Bytes.toStringBinary(parentTableKey));
                             // if allowSystemCatalogRollback is true and we can't lock the parentTableKey (because
                             // SYSTEM.CATALOG already split) return UNALLOWED_TABLE_MUTATION so that the client
                             // knows the create statement failed
@@ -2423,10 +2423,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     else {
                         String msg = "Found unexpected mutations while creating "+fullTableName;
-                        logger.error(msg);
+                        LOGGER.error(msg);
                         for (Mutation m : remoteMutations) {
-                            logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
-                            logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                            LOGGER.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                            LOGGER.debug("Mutation family cell map : " + m.getFamilyCellMap());
                         }
                         throw new IllegalStateException(msg);
                     }
@@ -2461,7 +2461,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-            logger.error("createTable failed", t);
+            LOGGER.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
         }
@@ -2510,8 +2510,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 byte[] viewTenantId = viewInfo.getTenantId();
                 byte[] viewSchemaName = viewInfo.getSchemaName();
                 byte[] viewName = viewInfo.getTableName();
-                if (logger.isDebugEnabled()) {
-                    logger.debug("dropChildViews :" + Bytes.toString(schemaName) + "." + Bytes.toString(tableName) +
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("dropChildViews :" + Bytes.toString(schemaName) + "." + Bytes.toString(tableName) +
                             " -> " + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName) +
                             "with tenant id :" + Bytes.toString(viewTenantId));
                 }
@@ -2528,7 +2528,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 new DropTableStatement(viewTableName, PTableType.VIEW, true, true, true));
                     }
                     catch (TableNotFoundException e) {
-                        logger.info("Ignoring view "+viewTableName+" as it has already been dropped");
+                        LOGGER.info("Ignoring view "+viewTableName+" as it has already been dropped");
                     }
                 }
             }
@@ -2689,10 +2689,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (!remoteMutations.isEmpty()) {
                     // while dropping a table all the mutations should be local
                     String msg = "Found unexpected mutations while dropping table "+SchemaUtil.getTableName(schemaName, tableName);
-                    logger.error(msg);
+                    LOGGER.error(msg);
                     for (Mutation m : remoteMutations) {
-                        logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
-                        logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                        LOGGER.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                        LOGGER.debug("Mutation family cell map : " + m.getFamilyCellMap());
                     }
                     throw new IllegalStateException(msg);
                 }
@@ -2726,7 +2726,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region, locks);
             }
         } catch (Throwable t) {
-          logger.error("dropTable failed", t);
+            LOGGER.error("dropTable failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -2759,7 +2759,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()))) {
             hTable.batch(remoteMutations);
         } catch (Throwable t) {
-            logger.error("Unable to write mutations to " + Bytes.toString(systemTableName), t);
+            LOGGER.error("Unable to write mutations to " + Bytes.toString(systemTableName), t);
             builder.setReturnCode(mutationCode);
             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
             return builder.build();
@@ -2836,7 +2836,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
                                 Bytes.toString(schemaName), Bytes.toString(tableName), this.accessCheckEnabled);
                         } catch (Throwable t) {
-                            logger.error("Adding a task to drop child views failed!", t);
+                            LOGGER.error("Adding a task to drop child views failed!", t);
                         }
                     }
                 }
@@ -2927,12 +2927,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 invalidateList.add(cacheKey);
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion, false, false, null);
-                if (logger.isDebugEnabled()) {
+                if (LOGGER.isDebugEnabled()) {
                     if (table == null) {
-                        logger.debug("Table " + Bytes.toStringBinary(key)
+                        LOGGER.debug("Table " + Bytes.toStringBinary(key)
                                 + " not found in cache. Will build through scan");
                     } else {
-                        logger.debug("Table " + Bytes.toStringBinary(key)
+                        LOGGER.debug("Table " + Bytes.toStringBinary(key)
                                 + " found in cache with timestamp " + table.getTimeStamp()
                                 + " seqNum " + table.getSequenceNumber());
                     }
@@ -2944,7 +2944,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // found
                     table = buildDeletedTable(key, cacheKey, region, clientTimeStamp);
                     if (table != null) {
-                        logger.info("Found newer table deleted as of " + table.getTimeStamp() + " versus client timestamp of " + clientTimeStamp);
+                        LOGGER.info("Found newer table deleted as of " + table.getTimeStamp() + " versus client timestamp of " + clientTimeStamp);
                         return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                                 EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
@@ -2952,7 +2952,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
                 if (table.getTimeStamp() >= clientTimeStamp) {
-                    logger.info("Found newer table as of " + table.getTimeStamp() + " versus client timestamp of "
+                    LOGGER.info("Found newer table as of " + table.getTimeStamp() + " versus client timestamp of "
                             + clientTimeStamp);
                     return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), table);
@@ -2961,15 +2961,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 long expectedSeqNum = MetaDataUtil.getSequenceNumber(tableMetadata) - 1; // lookup TABLE_SEQ_NUM in
                                                                                          // tableMetaData
 
-                if (logger.isDebugEnabled()) {
-                    logger.debug("For table " + Bytes.toStringBinary(key) + " expecting seqNum "
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("For table " + Bytes.toStringBinary(key) + " expecting seqNum "
                             + expectedSeqNum + " and found seqNum " + table.getSequenceNumber()
                             + " with " + table.getColumns().size() + " columns: "
                             + table.getColumns());
                 }
                 if (expectedSeqNum != table.getSequenceNumber()) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("For table " + Bytes.toStringBinary(key)
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("For table " + Bytes.toStringBinary(key)
                                 + " returning CONCURRENT_TABLE_MUTATION due to unexpected seqNum");
                     }
                     return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
@@ -3028,10 +3028,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     else {
                         String msg = "Found unexpected mutations while adding or dropping column to "+fullTableName;
-                        logger.error(msg);
+                        LOGGER.error(msg);
                         for (Mutation m : remoteMutations) {
-                            logger.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
-                            logger.debug("Mutation family cell map : " + m.getFamilyCellMap());
+                            LOGGER.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
+                            LOGGER.debug("Mutation family cell map : " + m.getFamilyCellMap());
                         }
                         throw new IllegalStateException(msg);
                     }
@@ -3169,7 +3169,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // which will deadlock)
             // we also don't need to include indexes
             if (view == null) {
-                logger.warn("Found invalid tenant view row in SYSTEM.CATALOG with tenantId:"
+                LOGGER.warn("Found invalid tenant view row in SYSTEM.CATALOG with tenantId:"
                         + Bytes.toString(tenantId) + ", schema:" + Bytes.toString(schema)
                         + ", table:" + Bytes.toString(table));
                 continue;
@@ -3477,14 +3477,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             }
                             else if (request.getClientVersion()< MIN_SPLITTABLE_SYSTEM_CATALOG ) {
-                                logger.error(
+                                LOGGER.error(
                                     "Unable to add a column as the client is older than "
                                             + MIN_SPLITTABLE_SYSTEM_CATALOG);
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             }
                             else if (allowSystemCatalogRollback) {
-                                logger.error("Unable to add a column as the "
+                                LOGGER.error("Unable to add a column as the "
                                         + QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK
                                         + " config is set to true");
                                 return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
@@ -3612,7 +3612,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(MetaDataMutationResult.toProto(result));
             }
         } catch (Throwable e) {
-            logger.error("Add column failed: ", e);
+            LOGGER.error("Add column failed: ", e);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException("Error when adding column: ", e));
         }
@@ -3938,7 +3938,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 done.run(MetaDataMutationResult.toProto(result));
             }
         } catch (Throwable e) {
-            logger.error("Drop column failed: ", e);
+            LOGGER.error("Drop column failed: ", e);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException("Error when dropping column: ", e));
         }
@@ -4048,7 +4048,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Configuration config = env.getConfiguration();
         if (isTablesMappingEnabled
                 && MetaDataProtocol.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
-            logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
+            LOGGER.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(
                             SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
@@ -4065,7 +4065,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES, HConstants.LATEST_TIMESTAMP, null,
                             request.getClientVersion(), false, false, null);
         } catch (Throwable t) {
-            logger.error("loading system catalog table inside getVersion failed", t);
+            LOGGER.error("loading system catalog table inside getVersion failed", t);
             ProtobufUtil.setControllerException(controller,
               ServerUtil.createIOException(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
@@ -4339,7 +4339,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 rowLock.release();
             }
         } catch (Throwable t) {
-          logger.error("updateIndexState failed", t);
+            LOGGER.error("updateIndexState failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -4353,7 +4353,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, Region region) {
         MetaDataMutationResult result = checkKeyInRegion(key, region, MutationCode.TABLE_NOT_IN_REGION);
         if (result!=null) {
-            logger.error("Table rowkey " + Bytes.toStringBinary(key)
+            LOGGER.error("Table rowkey " + Bytes.toStringBinary(key)
             + " is not in the current region " + region.getRegionInfo());
         }
         return result;
@@ -4407,7 +4407,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     GlobalCache.getInstance(this.env).getMetaDataCache();
             metaDataCache.invalidate(cacheKey);
         } catch (Throwable t) {
-            logger.error("clearTableFromCache failed", t);
+            LOGGER.error("clearTableFromCache failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -4504,7 +4504,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             done.run(builder.build());
             return;
         } catch (Throwable t) {
-            logger.error("getFunctions failed", t);
+            LOGGER.error("getFunctions failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(functionNames.toString(), t));
         }
@@ -4578,7 +4578,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-          logger.error("createFunction failed", t);
+            LOGGER.error("createFunction failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(Bytes.toString(functionName), t));
         }
@@ -4630,7 +4630,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-          logger.error("dropFunction failed", t);
+            LOGGER.error("dropFunction failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(Bytes.toString(functionName), t));
         }
@@ -4745,7 +4745,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-            logger.error("Creating the schema" + schemaName + "failed", t);
+            LOGGER.error("Creating the schema" + schemaName + "failed", t);
             ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(schemaName, t));
         }
     }
@@ -4789,7 +4789,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 releaseRowLocks(region,locks);
             }
         } catch (Throwable t) {
-            logger.error("drop schema failed:", t);
+            LOGGER.error("drop schema failed:", t);
             ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(schemaName, t));
         }
     }

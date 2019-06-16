@@ -44,7 +44,6 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**

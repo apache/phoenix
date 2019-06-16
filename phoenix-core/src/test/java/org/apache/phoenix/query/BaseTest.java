@@ -184,7 +184,7 @@ public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
     private static final double ZERO = 1e-9;
     private static final Map<String,String> tableDDLMap;
-    private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
@@ -457,7 +457,7 @@ public abstract class BaseTest {
             try {
                 assertTrue(destroyDriver(driver));
             } catch (Throwable t) {
-                logger.error("Exception caught when destroying phoenix test driver", t);
+                LOGGER.error("Exception caught when destroying phoenix test driver", t);
             } finally {
                 driver = null;
             }
@@ -487,18 +487,18 @@ public abstract class BaseTest {
                         try {
                             u.shutdownMiniMapReduceCluster();
                         } catch (Throwable t) {
-                            logger.error(
+                            LOGGER.error(
                                 "Exception caught when shutting down mini map reduce cluster", t);
                         } finally {
                             try {
                                 u.shutdownMiniCluster();
                             } catch (Throwable t) {
-                                logger.error("Exception caught when shutting down mini cluster", t);
+                                LOGGER.error("Exception caught when shutting down mini cluster", t);
                             } finally {
                                 try {
                                     ConnectionFactory.shutdown();
                                 } finally {
-                                    logger.info(
+                                    LOGGER.info(
                                         "Time in seconds spent in shutting down mini cluster with "
                                                 + numTables + " tables: "
                                                 + (System.currentTimeMillis() - startTime) / 1000);
@@ -677,7 +677,7 @@ public abstract class BaseTest {
                     DriverManager.deregisterDriver(driver);
                 }
             } catch (Exception e) {
-                logger.warn("Unable to close registered driver: " + driver, e);
+                LOGGER.warn("Unable to close registered driver: " + driver, e);
             }
         }
         return false;
@@ -781,12 +781,12 @@ public abstract class BaseTest {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
             if(isDistributedClusterModeEnabled(config)) {
-                logger.info(
+                LOGGER.info(
                         "Deleting old tables on distributed cluster because number of tables is likely greater than "
                                 + TEARDOWN_THRESHOLD);
                 deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
             } else {
-                logger.info(
+                LOGGER.info(
                     "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
                             + TEARDOWN_THRESHOLD);
                 tearDownMiniClusterAsync(numTables);
@@ -965,9 +965,9 @@ public abstract class BaseTest {
                 try {
                     conn.createStatement().executeUpdate(ddl);
                 } catch (NewerTableAlreadyExistsException ex) {
-                    logger.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                    LOGGER.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
                 } catch (TableNotFoundException ex) {
-                    logger.info("Table " + fullTableName + " is already deleted.");
+                    LOGGER.info("Table " + fullTableName + " is already deleted.");
                 }
             }
             rs.close();
@@ -1017,7 +1017,7 @@ public abstract class BaseTest {
                 lastTenantId = tenantId;
             }
 
-            logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
+            LOGGER.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
         rs.close();

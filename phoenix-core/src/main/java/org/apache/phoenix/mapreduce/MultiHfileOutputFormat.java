@@ -97,7 +97,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
 
     public static final String DATABLOCK_ENCODING_OVERRIDE_CONF_KEY =
         "hbase.mapreduce.hfileoutputformat.datablock.encoding";
-    
+
     /* Delimiter property used to separate table name and column family */
     private static final String AT_DELIMITER = "@";
     
@@ -692,7 +692,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
            }
        }
     
-       LOGGER.info("Configuring " + tablesStartKeys.size() + " reduce partitions to match current region count");
+       LOGGER.info("Configuring " + tablesStartKeys.size() +
+               " reduce partitions to match current region count");
        job.setNumReduceTasks(tablesStartKeys.size());
 
        configurePartitioner(job, tablesStartKeys);

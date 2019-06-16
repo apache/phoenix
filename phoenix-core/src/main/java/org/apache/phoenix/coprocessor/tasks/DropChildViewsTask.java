@@ -61,7 +61,8 @@ public class DropChildViewsTask extends BaseTask {
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
             } else if (System.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
                 // skip this task as it has not been expired and its parent table has not been dropped yet
-                LOGGER.info("Skipping a child view drop task. The parent table has not been dropped yet : " +
+                LOGGER.info("Skipping a child view drop task. " +
+                        "The parent table has not been dropped yet : " +
                         taskRecord.getSchemaName() + "." + taskRecord.getTableName() +
                         " with tenant id " + (tenantId == null ? " IS NULL" : tenantId) +
                         " and timestamp " + timestamp.toString());

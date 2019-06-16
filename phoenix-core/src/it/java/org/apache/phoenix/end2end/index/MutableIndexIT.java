@@ -60,11 +60,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.primitives.Doubles;
 
-import jline.internal.Log;
-
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
-    
     protected final boolean localIndex;
     private final String tableDDLOptions;
     

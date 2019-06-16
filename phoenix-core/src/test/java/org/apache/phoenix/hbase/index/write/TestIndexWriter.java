@@ -51,14 +51,14 @@ import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.ScanUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestIndexWriter {
   private static final Logger LOGGER = LoggerFactory.getLogger(TestIndexWriter.class);

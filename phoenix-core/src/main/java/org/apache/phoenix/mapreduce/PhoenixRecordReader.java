@@ -158,7 +158,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
 
             this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(), queryPlan.getContext());
         } catch (SQLException e) {
-            LOGGER.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",
+                    e.getMessage()));
             Throwables.propagate(e);
         }
    }
@@ -179,7 +180,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             value.readFields(resultSet);
             return true;
         } catch (SQLException e) {
-            LOGGER.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] occurred while iterating over the resultset. ",
+                    e.getMessage()));
             throw new RuntimeException(e);
         }
     }

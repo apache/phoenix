@@ -49,7 +49,8 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDU
 public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{

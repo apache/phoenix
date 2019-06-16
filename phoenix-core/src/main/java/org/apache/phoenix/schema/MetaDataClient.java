@@ -263,7 +263,7 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 
 public class MetaDataClient {
-    private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
 
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
     private static final String SET_ASYNC_CREATED_DATE =
@@ -1743,7 +1743,7 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         }
 
-        if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+        if (LOGGER.isInfoEnabled()) LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
         boolean asyncIndexBuildEnabled = connection.getQueryServices().getProps().getBoolean(
                 QueryServices.INDEX_ASYNC_BUILD_ENABLED,
                 QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
@@ -3348,8 +3348,8 @@ public class MetaDataClient {
             break;
         case CONCURRENT_TABLE_MUTATION:
             addTableToCache(result);
-            if (logger.isDebugEnabled()) {
-                logger.debug(LogUtil.addCustomAnnotations("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName), connection));
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(LogUtil.addCustomAnnotations("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName), connection));
             }
             throw new ConcurrentTableMutationException(schemaName, tableName);
         case NEWER_TABLE_FOUND:
@@ -3600,8 +3600,8 @@ public class MetaDataClient {
                 int nNewColumns = numCols;
                 List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize((1 + nNewColumns) * (nIndexes + 1));
                 List<Mutation> columnMetaData = Lists.newArrayListWithExpectedSize(nNewColumns * (nIndexes + 1));
-                if (logger.isDebugEnabled()) {
-                    logger.debug(LogUtil.addCustomAnnotations("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns(), connection));
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug(LogUtil.addCustomAnnotations("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns(), connection));
                 }
 
                 int position = table.getColumns().size();
@@ -3940,8 +3940,8 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(LogUtil.addCustomAnnotations("Caught ConcurrentTableMutationException for table " + SchemaUtil.getTableName(schemaName, tableName) + ". Will try again...", connection));
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(LogUtil.addCustomAnnotations("Caught ConcurrentTableMutationException for table " + SchemaUtil.getTableName(schemaName, tableName) + ". Will try again...", connection));
                     }
                     retried = true;
                 }
@@ -4602,7 +4602,7 @@ public class MetaDataClient {
      */
     public MutationState changePermissions(ChangePermsStatement changePermsStatement) throws SQLException {
 
-        logger.info(changePermsStatement.toString());
+        LOGGER.info(changePermsStatement.toString());
 
         try(HBaseAdmin admin = connection.getQueryServices().getAdmin()) {
             ClusterConnection clusterConnection = (ClusterConnection) admin.getConnection();
@@ -4673,7 +4673,7 @@ public class MetaDataClient {
                 inconsistentTables.add(indexTable);
                 continue;
             }
-            logger.info("Updating permissions for Index Table: " +
+            LOGGER.info("Updating permissions for Index Table: " +
                     indexTable.getName() + " Base Table: " + inputTable.getName());
             tableName = SchemaUtil.getPhysicalTableName(indexTable.getPhysicalName().getBytes(), indexTable.isNamespaceMapped());
             changePermsOnTable(clusterConnection, changePermsStatement, tableName);
@@ -4681,7 +4681,7 @@ public class MetaDataClient {
 
         if(schemaInconsistency) {
             for(PTable table : inconsistentTables) {
-                logger.error("Fail to propagate permissions to Index Table: " + table.getName());
+                LOGGER.error("Fail to propagate permissions to Index Table: " + table.getName());
             }
             throw new TablesNotInSyncException(inputTable.getTableName().getString(),
                     inconsistentTables.get(0).getTableName().getString(), "Namespace properties");
@@ -4692,13 +4692,13 @@ public class MetaDataClient {
         tableName = org.apache.hadoop.hbase.TableName.valueOf(viewIndexTableBytes);
         boolean viewIndexTableExists = admin.tableExists(tableName);
         if(viewIndexTableExists) {
-            logger.info("Updating permissions for View Index Table: " +
+            LOGGER.info("Updating permissions for View Index Table: " +
                     Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
             changePermsOnTable(clusterConnection, changePermsStatement, tableName);
         } else {
             if(inputTable.isMultiTenant()) {
-                logger.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
-                logger.error("Fail to propagate permissions to view Index Table: " + tableName.getNameAsString());
+                LOGGER.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
+                LOGGER.error("Fail to propagate permissions to view Index Table: " + tableName.getNameAsString());
                 throw new TablesNotInSyncException(inputTable.getTableName().getString(),
                         Bytes.toString(viewIndexTableBytes), " View Index table should exist for MultiTenant tables");
             }

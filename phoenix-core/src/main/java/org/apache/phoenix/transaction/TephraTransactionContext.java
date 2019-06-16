@@ -64,7 +64,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 
 public class TephraTransactionContext implements PhoenixTransactionContext {
-    private static final Logger logger = LoggerFactory.getLogger(TephraTransactionContext.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TephraTransactionContext.class);
     private static final TransactionCodec CODEC = new TransactionCodec();
 
     private final List<TransactionAware> txAwares;
@@ -208,8 +208,8 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                     txServiceClient);
             fenceWait.await(10000, TimeUnit.MILLISECONDS);
 
-            if (logger.isInfoEnabled()) {
-                logger.info("Added write fence at ~"
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info("Added write fence at ~"
                         + getCurrentTransaction().getReadPointer());
             }
         } catch (InterruptedException e) {

@@ -54,7 +54,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
-    private static final Logger LOGGER = LoggerFactory.getLogger(InvalidIndexStateClientSideIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(InvalidIndexStateClientSideIT.class);
 
     @Test
     public void testCachedConnections() throws Throwable {

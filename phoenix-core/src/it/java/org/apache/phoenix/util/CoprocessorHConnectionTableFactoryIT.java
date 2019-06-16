@@ -42,7 +42,8 @@ import org.slf4j.LoggerFactory;
  */
 public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClusterIT {
   private static String ORG_PREFIX = "ORG";
-  private static final Logger LOGGER = LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
+  private static final Logger LOGGER =
+          LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
 
   @BeforeClass
   public static final void doSetup() throws Exception {

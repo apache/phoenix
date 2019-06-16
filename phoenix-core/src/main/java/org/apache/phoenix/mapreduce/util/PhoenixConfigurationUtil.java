@@ -379,9 +379,9 @@ public final class PhoenixConfigurationUtil {
             final Configuration configuration) {
     	List<String> selectColumnList = PhoenixConfigurationUtil.getSelectColumnNames(configuration);
         if(!selectColumnList.isEmpty()) {
-            LOGGER.info(String.format("UseSelectColumns=%s, selectColumnList.size()=%s, selectColumnList=%s "
-                    ,!selectColumnList.isEmpty(), selectColumnList.size(), Joiner.on(",").join(selectColumnList)
-                    ));
+            LOGGER.info(String.format("UseSelectColumns=%s, selectColumnList.size()=%s, " +
+                            "selectColumnList=%s ",!selectColumnList.isEmpty(),
+                    selectColumnList.size(), Joiner.on(",").join(selectColumnList)));
         }
         return selectColumnList;
     }
@@ -691,7 +691,7 @@ public final class PhoenixConfigurationUtil {
 					if (tenantId != null) {
 						tenantId = null;
 					} else {
-						BaseResultIterators.logger.warn(
+						BaseResultIterators.LOGGER.warn(
 								"Unable to find parent table \"" + parentTableName + "\" of table \""
 										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",
 								e);

@@ -107,7 +107,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class FromCompiler {
-    private static final Logger logger = LoggerFactory.getLogger(FromCompiler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FromCompiler.class);
 
     public static final ColumnResolver EMPTY_TABLE_RESOLVER = new ColumnResolver() {
 
@@ -646,8 +646,13 @@ public class FromCompiler {
                 timeStamp += tsAddition;
             }
             TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
-            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns(), connection));
+            if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Re-resolved stale table " + fullTableName + " with seqNum "
+                                + tableRef.getTable().getSequenceNumber() + " at timestamp "
+                                + tableRef.getTable().getTimeStamp() + " with "
+                                + tableRef.getTable().getColumns().size() + " columns: "
+                                + tableRef.getTable().getColumns(), connection));
             }
             return tableRef;
         }
@@ -695,8 +700,10 @@ public class FromCompiler {
                 timeStamp += tsAddition;
             }
             
-            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale function " + functionNames.toString() + "at timestamp " + timeStamp, connection));
+            if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Re-resolved stale function " + functionNames.toString() +
+                                "at timestamp " + timeStamp, connection));
             }
             return functionsFound;
         }

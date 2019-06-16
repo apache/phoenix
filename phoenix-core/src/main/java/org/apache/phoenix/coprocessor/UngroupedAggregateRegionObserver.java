@@ -203,7 +203,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private int scansReferenceCount = 0;
     @GuardedBy("lock")
     private boolean isRegionClosingOrSplitting = false;
-    private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
     private Configuration compactionConfig;
@@ -276,7 +276,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           }
       }
       // TODO: should we use the one that is all or none?
-      logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+      LOGGER.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
@@ -302,7 +302,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           return;
       }
 
-        logger.debug("Committing batch of " + mutations.size() + " mutations for " + table);
+        LOGGER.debug("Committing batch of " + mutations.size() + " mutations for " + table);
         try {
             table.batch(mutations);
         } catch (InterruptedException e) {
@@ -426,7 +426,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
         if (isDescRowKeyOrderUpgrade) {
-            logger.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
+            LOGGER.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
             projectedTable = deserializeTable(descRowKeyTableBytes);
             try {
                 writeToTable = PTableImpl.builderWithColumns(projectedTable,
@@ -545,8 +545,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             rowAggregators = aggregators.getAggregators();
             Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
             Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-            if (logger.isDebugEnabled()) {
-                logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
             }
             boolean useIndexProto = true;
             byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
@@ -825,7 +825,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 synchronized (lock) {
                     scansReferenceCount--;
                     if (scansReferenceCount < 0) {
-                        logger.warn(
+                        LOGGER.warn(
                             "Scan reference count went below zero. Something isn't correct. Resetting it back to zero");
                         scansReferenceCount = 0;
                     }
@@ -837,7 +837,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     try {
                         targetHTable.close();
                     } catch (IOException e) {
-                        logger.error("Closing table: " + targetHTable + " failed: ", e);
+                        LOGGER.error("Closing table: " + targetHTable + " failed: ", e);
                     }
                 }
             } finally {
@@ -848,8 +848,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         }
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
 
         final boolean hadAny = hasAny;
@@ -1031,8 +1031,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.
-                        if (logger.isWarnEnabled()) {
-                            logger.warn("Unable to collect stats for " + table, e);
+                        if (LOGGER.isWarnEnabled()) {
+                            LOGGER.warn("Unable to collect stats for " + table, e);
                         }
                     }
                     return internalScanner;
@@ -1128,7 +1128,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         } catch (IOException e) {
-            logger.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
+            LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
             throw e;
         } finally {
             region.closeRegionOperation();
@@ -1188,7 +1188,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         } else {
             rowCount = CONCURRENT_UPDATE_STATS_ROW_COUNT;
-            logger.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
+            LOGGER.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
                     + region.getRegionInfo().getRegionNameAsString());
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
@@ -1285,18 +1285,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
                 return compactionRunning ? COMPACTION_UPDATE_STATS_ROW_COUNT : rowCount;
             } catch (IOException e) {
-                logger.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
+                LOGGER.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
                 throw e;
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
                         statsCollector.updateStatistic(region, scan);
-                        logger.info("UPDATE STATISTICS finished successfully for scanner: "
+                        LOGGER.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));
                     }
                     if (compactionRunning) {
-                        logger.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
+                        LOGGER.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
                                 + region.getRegionInfo().getRegionNameAsString());
                     }
                 } finally {
@@ -1444,7 +1444,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         // FIXME need to handle views and indexes on views as well
                         for (PTable index : indexes) {
                             if (index.getIndexDisableTimestamp() != 0) {
-                                logger.info(
+                                LOGGER.info(
                                     "Modifying major compaction scanner to retain deleted cells for a table with disabled index: "
                                             + fullTableName);
                                 Scan scan = new Scan();
@@ -1464,10 +1464,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                     } catch (Exception e) {
                         if (e instanceof TableNotFoundException) {
-                            logger.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
+                            LOGGER.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
                             // non-Phoenix HBase tables won't be found, do nothing
                         } else {
-                            logger.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
+                            LOGGER.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
                                     + fullTableName,
                                     e);
                         }

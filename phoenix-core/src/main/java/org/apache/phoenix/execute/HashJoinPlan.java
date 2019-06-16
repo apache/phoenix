@@ -553,7 +553,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     } else {
                         cacheId = Bytes.toBytes(RANDOM.nextLong());
                     }
-                    LOGGER.debug("Using cache ID " + Hex.encodeHexString(cacheId) + " for " + queryString);
+                    LOGGER.debug("Using cache ID " + Hex.encodeHexString(cacheId) +
+                            " for " + queryString);
                     if (cache == null) {
                         LOGGER.debug("Making RPC to add cache " + Hex.encodeHexString(cacheId));
                         cache = parent.hashClient.addHashCache(ranges, cacheId, iterator,
@@ -566,7 +567,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
                                 - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
                             LOGGER.warn(addCustomAnnotations(
                                 "Hash plan [" + index
-                                        + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.",
+                                        + "] execution seems too slow. Earlier" +
+                                        " hash cache(s) might have expired on servers.",
                                 parent.delegate.getContext().getConnection()));
                         }
                     }
