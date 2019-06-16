@@ -123,7 +123,7 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         stmt.execute();
         conn.commit();
 
-        query = "SELECT * FROM " + indexTableFullName;
+        query = "SELECT /*+ SERIAL */ * FROM " + indexTableFullName;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("y",rs.getString(1));
