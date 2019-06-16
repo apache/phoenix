@@ -302,9 +302,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                 throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
                             }
                         }
-                        LOGGER.info("Successfully update INDEX_DISABLE_TIMESTAMP for "
-                                        + indexTableName + " due to an exception while " +
-                                        "writing updates. indexState=" + newState,
+                        LOGGER.info("Successfully update INDEX_DISABLE_TIMESTAMP for " +
+                                        indexTableName + " due to an exception while" +
+                                        " writing updates. indexState=" + newState,
                             cause);
                     } catch (Throwable t) {
                         if (t instanceof Exception) {

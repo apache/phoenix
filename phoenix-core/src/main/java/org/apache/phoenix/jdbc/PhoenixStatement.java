@@ -214,7 +214,7 @@ import com.google.common.math.IntMath;
  */
 public class PhoenixStatement implements Statement, SQLCloseable {
 	
-    private static final Logger logger = LoggerFactory.getLogger(PhoenixStatement.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
     
     public enum Operation {
         QUERY("queried", false),
@@ -311,9 +311,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                          // this will create its own trace internally, so we don't wrap this
                          // whole thing in tracing
                         ResultIterator resultIterator = plan.iterator();
-                        if (logger.isDebugEnabled()) {
+                        if (LOGGER.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
-                            logger.debug(LogUtil.addCustomAnnotations(
+                            LOGGER.debug(LogUtil.addCustomAnnotations(
                                     "Explain plan: " + explainPlan, connection));
                         }
                         StatementContext context = plan.getContext();
@@ -339,8 +339,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     //Force update cache and retry if meta not found error occurs
                     catch (MetaDataEntityNotFoundException e) {
                         if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
-                            if(logger.isDebugEnabled())
-                                logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                            if(LOGGER.isDebugEnabled())
+                                LOGGER.debug("Reloading table "
+                                        + e.getTableName()+" data from server");
                             if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                 e.getSchemaName(), e.getTableName(), true).wasUpdated()){
                                 //TODO we can log retry count and error for debugging in LOG table
@@ -425,8 +426,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
                                 if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
-                                    if(logger.isDebugEnabled())
-                                        logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                                    if(LOGGER.isDebugEnabled())
+                                        LOGGER.debug("Reloading table "+ e.getTableName()
+                                                +" data from server");
                                     if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()){
                                         return executeMutation(stmt, false);
@@ -1764,8 +1766,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     public MutationPlan compileMutation(String sql) throws SQLException {
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Execute update: " + sql, connection));
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations("Execute update: " + sql, connection));
         }
         CompilableStatement stmt = parseStatement(sql);
         return compileMutation(stmt, sql);
@@ -1797,8 +1799,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Execute query: " + sql, connection));
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations(
+                    "Execute query: " + sql, connection));
         }
         
         CompilableStatement stmt = parseStatement(sql);

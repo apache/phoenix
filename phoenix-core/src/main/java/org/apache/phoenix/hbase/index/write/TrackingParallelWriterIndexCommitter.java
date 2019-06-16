@@ -172,15 +172,15 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
                                 if (LOGGER.isTraceEnabled()) {
-                                    LOGGER.trace("indexRegion.batchMutate failed and fall back to" +
-                                            " HTable.batch(). Got error=" + ignord);
+                                    LOGGER.trace("indexRegion.batchMutate failed and fall " +
+                                            "back to HTable.batch(). Got error=" + ignord);
                                 }
                             }
                         }
 
                         if (LOGGER.isTraceEnabled()) {
-                            LOGGER.trace("Writing index update:" + mutations +
-                                    " to table: " + tableReference);
+                            LOGGER.trace("Writing index update:" + mutations + " to table: "
+                                    + tableReference);
                         }
                         // if the client can retry index writes, then we don't need to retry here
                         HTableFactory factory;

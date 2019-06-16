@@ -358,13 +358,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         
         if (LOGGER.isDebugEnabled()) {
-        	LOGGER.debug(LogUtil.addCustomAnnotations(
+            LOGGER.debug(LogUtil.addCustomAnnotations(
         	        "Scan ready for iteration: " + scan, connection));
         }
         
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
-        	LOGGER.debug(LogUtil.addCustomAnnotations(
+            LOGGER.debug(LogUtil.addCustomAnnotations(
         	        "Iterator ready: " + iterator, connection));
         }
 

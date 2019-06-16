@@ -413,8 +413,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             boolean hasMore;
             Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(LogUtil.addCustomAnnotations("Spillable groupby enabled: " +
-                        spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Spillable groupby enabled: " + spillableEnabled,
+                        ScanUtil.getCustomAnnotations(scan)));
             }
             Region region = c.getEnvironment().getRegion();
             boolean acquiredLock = false;

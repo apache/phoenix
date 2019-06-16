@@ -720,7 +720,7 @@ public final class PhoenixConfigurationUtil {
 					if (tenantId != null) {
 						tenantId = null;
 					} else {
-						BaseResultIterators.logger.warn(
+						BaseResultIterators.LOGGER.warn(
 								"Unable to find parent table \"" + parentTableName + "\" of table \""
 										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",
 								e);

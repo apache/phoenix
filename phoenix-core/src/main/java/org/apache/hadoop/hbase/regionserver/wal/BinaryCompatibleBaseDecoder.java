@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.codec.Codec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 /**
  * This class is a copy paste version of org.apache.hadoop.hbase.codec.BaseDecoder class. 
  * This class is meant to be used in {@link IndexedWALEditCodec} when runtime version of

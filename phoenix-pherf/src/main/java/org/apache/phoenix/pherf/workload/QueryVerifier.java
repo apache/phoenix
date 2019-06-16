@@ -44,7 +44,7 @@ import difflib.Patch;
 
 public class QueryVerifier {
     private PhoenixUtil pUtil = PhoenixUtil.create();
-    private static final Logger logger = LoggerFactory.getLogger(QueryVerifier.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryVerifier.class);
     private boolean useTemporaryOutput;
     private String directoryLocation;
 
@@ -110,10 +110,10 @@ public class QueryVerifier {
 
         Patch patch = DiffUtils.diff(original, newLines);
         if (patch.getDeltas().isEmpty()) {
-            logger.info("Match: " + query.getId() + " with " + newCSV);
+            LOGGER.info("Match: " + query.getId() + " with " + newCSV);
             return true;
         } else {
-            logger.error("DIFF FAILED: " + query.getId() + " with " + newCSV);
+            LOGGER.error("DIFF FAILED: " + query.getId() + " with " + newCSV);
             return false;
         }
     }

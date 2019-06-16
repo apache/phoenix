@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class RowKeyComparisonFilter extends BooleanExpressionFilter {
-    private static final Logger logger = LoggerFactory.getLogger(RowKeyComparisonFilter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RowKeyComparisonFilter.class);
 
     private boolean evaluate = true;
     private boolean keepRow = false;
@@ -70,8 +70,8 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         if (evaluate) {
             inputTuple.setKey(v.getRowArray(), v.getRowOffset(), v.getRowLength());
             this.keepRow = Boolean.TRUE.equals(evaluate(inputTuple));
-            if (logger.isTraceEnabled()) {
-                logger.trace("RowKeyComparisonFilter: " + (this.keepRow ? "KEEP" : "FILTER")
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace("RowKeyComparisonFilter: " + (this.keepRow ? "KEEP" : "FILTER")
                         + " row " + inputTuple);
             }
             evaluate = false;

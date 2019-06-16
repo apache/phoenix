@@ -34,8 +34,6 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -343,7 +341,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
                     if (onlyTheseTables != null && !onlyTheseTables.contains(dataTableFullName)) {
                         LOGGER.debug("Could not find " + dataTableFullName +
-
                                 " in " + onlyTheseTables);
                         continue;
                     }
@@ -396,10 +393,10 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         try {
                             IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.DISABLE, 0l);
                             LOGGER.error("Unable to rebuild index " + indexTableFullName
-                                    + ". Won't attempt again since index disable timestamp is " +
-                                    "older than current time by " + indexDisableTimestampThreshold
-                                    + " milliseconds. Manual intervention needed to re-build " +
-                                    "the index");
+                                    + ". Won't attempt again since index disable timestamp is" +
+                                    " older than current time by " + indexDisableTimestampThreshold
+                                    + " milliseconds. Manual intervention needed to re-build" +
+                                    " the index");
                         } catch (Throwable ex) {
                             LOGGER.error(
                                 "Unable to mark index " + indexTableFullName + " as disabled.", ex);
@@ -527,18 +524,21 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
 							dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
 							ScanUtil.setClientVersion(dataTableScan, MetaDataProtocol.PHOENIX_VERSION);
-                            LOGGER.info("Starting to partially build indexes:" + indexesToPartiallyRebuild
-                                    + " on data table:" + dataPTable.getName() + " with the earliest disable timestamp:"
+                            LOGGER.info("Starting to partially build indexes:" +
+                                    indexesToPartiallyRebuild + " on data table:" +
+                                    dataPTable.getName() + " with the earliest disable timestamp:"
                                     + earliestDisableTimestamp + " till "
-                                    + (scanEndTime == HConstants.LATEST_TIMESTAMP ? "LATEST_TIMESTAMP" : scanEndTime));
+                                    + (scanEndTime == HConstants.LATEST_TIMESTAMP ?
+                                    "LATEST_TIMESTAMP" : scanEndTime));
 							MutationState mutationState = plan.execute();
 							long rowCount = mutationState.getUpdateCount();
 							decrementIndexesPendingDisableCount(conn, dataPTable, indexesToPartiallyRebuild);
 							if (scanEndTime == latestUpperBoundTimestamp) {
-                                LOGGER.info("Rebuild completed for all inactive/disabled indexes in data table:"
-                                        + dataPTable.getName());
+                                LOGGER.info("Rebuild completed for all inactive/disabled indexes" +
+                                        " in data table:" + dataPTable.getName());
                             }
-                            LOGGER.info(" no. of datatable rows read in rebuilding process is " + rowCount);
+                            LOGGER.info(" no. of datatable rows read in rebuilding process is "
+                                    + rowCount);
 							for (PTable indexPTable : indexesToPartiallyRebuild) {
 								String indexTableFullName = SchemaUtil.getTableName(
 										indexPTable.getSchemaName().getString(),
@@ -548,7 +548,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 								        IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L,
 								            latestUpperBoundTimestamp);
 								        batchExecutedPerTableMap.remove(dataPTable.getName());
-								        LOGGER.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
+								        LOGGER.info("Making Index:" + indexPTable.getTableName() +
+                                                " active after rebuilding");
 								    } else {
 								        // Increment timestamp so that client sees updated disable timestamp
 								        IndexUtil.updateIndexState(conn, indexTableFullName, indexPTable.getIndexState(),
@@ -559,15 +560,18 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 								        }
 								        batchExecutedPerTableMap.put(dataPTable.getName(), ++noOfBatches);
 								        LOGGER.info(
-								            "During Round-robin build: Successfully updated index disabled timestamp  for "
+								            "During Round-robin build: Successfully updated " +
+                                                    "index disabled timestamp  for "
 								                + indexTableFullName + " to " + scanEndTime);
 								    }
 								} catch (SQLException e) {
-								    LOGGER.error("Unable to rebuild " + dataPTable + " index " + indexTableFullName, e);
+								    LOGGER.error("Unable to rebuild " + dataPTable + " index " +
+                                            indexTableFullName, e);
 								}
 							}
 						} catch (Exception e) {
-							LOGGER.error("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild, e);
+							LOGGER.error("Unable to rebuild " + dataPTable + " indexes " +
+                                    indexesToPartiallyRebuild, e);
 						}
 					}
 				}

@@ -43,17 +43,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Mapper that does not do much as regions servers actually build the index from the data table regions directly
  */
 public class PhoenixServerBuildIndexMapper extends
         Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, IntWritable> {
-
-    private static final Logger LOGGER =
-            LoggerFactory.getLogger(PhoenixServerBuildIndexMapper.class);
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {

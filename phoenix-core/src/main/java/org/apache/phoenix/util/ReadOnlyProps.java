@@ -43,7 +43,7 @@ import com.google.common.collect.Maps;
  *
  */
 public class ReadOnlyProps implements Iterable<Entry<String, String>> {
-    private static final Logger logger = LoggerFactory.getLogger(ReadOnlyProps.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReadOnlyProps.class);
     public static final ReadOnlyProps EMPTY_PROPS = new ReadOnlyProps();
     @Nonnull
     private final Map<String, String> props;
@@ -314,7 +314,7 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
             String value = entry.getValue().toString();
             String oldValue = props.get(key);
             if (!Objects.equal(oldValue, value)) {
-                if (logger.isDebugEnabled()) logger.debug("Creating new ReadOnlyProps due to " + key + " with " + oldValue + "!=" + value);
+                if (LOGGER.isDebugEnabled()) LOGGER.debug("Creating new ReadOnlyProps due to " + key + " with " + oldValue + "!=" + value);
                 return new ReadOnlyProps(this, overrides);
             }
         }

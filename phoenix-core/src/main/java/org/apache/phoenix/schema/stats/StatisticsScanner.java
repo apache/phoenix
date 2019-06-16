@@ -150,8 +150,8 @@ public class StatisticsScanner implements InternalScanner {
                 ArrayList<Mutation> mutations = new ArrayList<Mutation>();
 
                 if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Deleting the stats for the region " +
-                            regionInfo.getRegionNameAsString()
+                    LOGGER.debug("Deleting the stats for the region "
+                            + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
                 getStatisticsWriter().deleteStatsForRegion(region, tracker, family, mutations);
