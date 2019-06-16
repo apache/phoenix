@@ -325,7 +325,8 @@ public class Indexer extends BaseRegionObserver {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
               if (LOGGER.isDebugEnabled()) {
-                  LOGGER.debug(getCallTooSlowMessage("preIncrementAfterRowLock", duration, slowPreIncrementThreshold));
+                  LOGGER.debug(getCallTooSlowMessage("preIncrementAfterRowLock",
+                          duration, slowPreIncrementThreshold));
               }
               metricSource.incrementSlowDuplicateKeyCheckCalls();
           }
@@ -350,7 +351,8 @@ public class Indexer extends BaseRegionObserver {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
               if (LOGGER.isDebugEnabled()) {
-                  LOGGER.debug(getCallTooSlowMessage("preBatchMutate", duration, slowIndexPrepareThreshold));
+                  LOGGER.debug(getCallTooSlowMessage("preBatchMutate",
+                          duration, slowIndexPrepareThreshold));
               }
               metricSource.incrementNumSlowIndexPrepareCalls();
           }
@@ -504,7 +506,8 @@ public class Indexer extends BaseRegionObserver {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexPrepareThreshold) {
               if (LOGGER.isDebugEnabled()) {
-                  LOGGER.debug(getCallTooSlowMessage("indexPrepare", duration, slowIndexPrepareThreshold));
+                  LOGGER.debug(getCallTooSlowMessage(
+                          "indexPrepare", duration, slowIndexPrepareThreshold));
               }
               metricSource.incrementNumSlowIndexPrepareCalls();
           }
@@ -576,7 +579,8 @@ public class Indexer extends BaseRegionObserver {
            long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
            if (duration >= slowIndexWriteThreshold) {
                if (LOGGER.isDebugEnabled()) {
-                   LOGGER.debug(getCallTooSlowMessage("postBatchMutateIndispensably", duration, slowIndexWriteThreshold));
+                   LOGGER.debug(getCallTooSlowMessage("postBatchMutateIndispensably",
+                           duration, slowIndexWriteThreshold));
                }
                metricSource.incrementNumSlowIndexWriteCalls();
            }
@@ -616,7 +620,8 @@ public class Indexer extends BaseRegionObserver {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexWriteThreshold) {
               if (LOGGER.isDebugEnabled()) {
-                  LOGGER.debug(getCallTooSlowMessage("indexWrite", duration, slowIndexWriteThreshold));
+                  LOGGER.debug(getCallTooSlowMessage("indexWrite",
+                          duration, slowIndexWriteThreshold));
               }
               metricSource.incrementNumSlowIndexWriteCalls();
           }
@@ -723,7 +728,8 @@ public class Indexer extends BaseRegionObserver {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {
               if (LOGGER.isDebugEnabled()) {
-                  LOGGER.debug(getCallTooSlowMessage("preWALRestore", duration, slowPreWALRestoreThreshold));
+                  LOGGER.debug(getCallTooSlowMessage("preWALRestore",
+                          duration, slowPreWALRestoreThreshold));
               }
               metricSource.incrementNumSlowPreWALRestoreCalls();
           }

@@ -21,6 +21,7 @@ import java.util.concurrent.Callable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 /**
  * Helper class to run a Call with a set of {@link CallWrapper}
  */

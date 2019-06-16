@@ -37,7 +37,8 @@ import com.google.common.base.Preconditions;
  */
 public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
 
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";

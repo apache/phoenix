@@ -76,8 +76,9 @@ public class QueryLoggerDisruptor implements Closeable{
 
         final QueryLogDetailsEventHandler[] handlers = { new QueryLogDetailsEventHandler(configuration) };
         disruptor.handleEventsWith(handlers);
-        LOGGER.info("Starting  QueryLoggerDisruptor for with ringbufferSize=" + disruptor.getRingBuffer().getBufferSize()
-                + ", waitStrategy=" + waitStrategy.getClass().getSimpleName() + ", " + "exceptionHandler="
+        LOGGER.info("Starting  QueryLoggerDisruptor for with ringbufferSize=" +
+                disruptor.getRingBuffer().getBufferSize() + ", waitStrategy=" +
+                waitStrategy.getClass().getSimpleName() + ", " + "exceptionHandler="
                 + errorHandler + "...");
         disruptor.start();
         

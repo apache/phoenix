@@ -46,7 +46,8 @@ import org.slf4j.LoggerFactory;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class FailForUnsupportedHBaseVersionsIT {
-    private static final Logger LOGGER = LoggerFactory.getLogger(FailForUnsupportedHBaseVersionsIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(FailForUnsupportedHBaseVersionsIT.class);
 
     /**
      * We don't support WAL Compression for HBase &lt; 0.94.9, so we shouldn't even allow the server

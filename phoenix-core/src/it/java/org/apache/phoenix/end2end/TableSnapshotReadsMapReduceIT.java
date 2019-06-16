@@ -55,6 +55,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
+
   private final static String SNAPSHOT_NAME = "FOO";
   private static final String FIELD1 = "FIELD1";
   private static final String FIELD2 = "FIELD2";
@@ -210,6 +211,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   }
 
     public void deleteSnapshot(String tableName) throws Exception {
+
         try (Connection conn = DriverManager.getConnection(getUrl());
                 HBaseAdmin admin =
                         conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {

@@ -640,9 +640,9 @@ public class IndexTool extends Configured implements Tool {
                     int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
                     String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
                     double samplingRate = rateOpt == null ? DEFAULT_SPLIT_SAMPLING_RATE : Double.parseDouble(rateOpt);
-                    LOGGER.info(String.format(
-                            "Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s",
-                            indexTable, autosplit, autosplitNumRegions, samplingRate));
+                    LOGGER.info(String.format("Will split index %s , autosplit=%s ," +
+                            " autoSplitNumRegions=%s , samplingRate=%s", indexTable,
+                            autosplit, autosplitNumRegions, samplingRate));
 
                     splitIndexTable(connection.unwrap(PhoenixConnection.class), autosplit, autosplitNumRegions, samplingRate, configuration);
                 }
@@ -664,7 +664,8 @@ public class IndexTool extends Configured implements Tool {
                 job.submit();
                 return 0;
             }
-            LOGGER.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
+            LOGGER.info("Running Index Build in Foreground. Waits for the build to complete." +
+                    " This may take a long time!.");
             boolean result = job.waitForCompletion(true);
             
             if (result) {

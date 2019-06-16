@@ -101,7 +101,8 @@ public class RecoveryIndexWriter extends IndexWriter {
             ImmutableBytesPtr ptr = new ImmutableBytesPtr(tableName);
             HTableInterfaceReference table = tables.get(ptr);
             if (nonExistingTablesList.contains(table)) {
-                LOGGER.debug("Edits found for non existing table: " + table.getTableName() + " so skipping it!!");
+                LOGGER.debug("Edits found for non existing table: " +
+                        table.getTableName() + " so skipping it!!");
                 continue;
             }
             if (table == null) {

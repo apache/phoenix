@@ -50,7 +50,8 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getInde
 public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends PhoenixInputFormat {
     QueryPlan queryPlan = null;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixServerBuildIndexInputFormat.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixServerBuildIndexInputFormat.class);
 
     /**
      * instantiated by framework

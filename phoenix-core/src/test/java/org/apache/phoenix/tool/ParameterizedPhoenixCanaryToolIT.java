@@ -30,6 +30,8 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -47,8 +49,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.tool.PhoenixCanaryTool.propFileName;
 import static org.junit.Assert.assertFalse;
@@ -58,7 +58,8 @@ import static org.junit.Assert.assertTrue;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedPhoenixCanaryToolIT extends BaseTest {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ParameterizedPhoenixCanaryToolIT.class);
+	private static final Logger LOGGER =
+			LoggerFactory.getLogger(ParameterizedPhoenixCanaryToolIT.class);
 	private static final String stdOutSink
 			= "org.apache.phoenix.tool.PhoenixCanaryTool$StdOutSink";
 	private static final String fileOutSink

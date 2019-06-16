@@ -97,7 +97,7 @@ public class TenantCacheImpl implements TenantCache {
         }
         return serverCaches;
     }
-    
+
     @Override
     public Closeable getServerCache(ImmutableBytesPtr cacheId) {
         getServerCaches().cleanUp();

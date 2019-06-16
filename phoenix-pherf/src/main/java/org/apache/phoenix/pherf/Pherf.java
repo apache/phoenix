@@ -49,7 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Pherf {
-    private static final Logger logger = LoggerFactory.getLogger(Pherf.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Pherf.class);
     private static final Options options = new Options();
     private final PhoenixUtil phoenixUtil = PhoenixUtil.create();
 
@@ -142,8 +142,8 @@ public class Pherf {
                         properties.getProperty("pherf.default.monitorFrequency");
         properties.setProperty("pherf.default.monitorFrequency", monitorFrequency);
 
-        logger.debug("Using Monitor: " + monitor);
-        logger.debug("Monitor Frequency Ms:" + monitorFrequency);
+        LOGGER.debug("Using Monitor: " + monitor);
+        LOGGER.debug("Monitor Frequency Ms:" + monitorFrequency);
         preLoadData = command.hasOption("l");
         executeQuerySets = command.hasOption("q");
         zookeeper = command.getOptionValue("z", "localhost");
@@ -184,10 +184,10 @@ public class Pherf {
         }
         PhoenixUtil.setRowCountOverride(rowCountOverride);
         if (!thinDriver) {
-            logger.info("Using thick driver with ZooKeepers '{}'", zookeeper);
+            LOGGER.info("Using thick driver with ZooKeepers '{}'", zookeeper);
             PhoenixUtil.setZookeeper(zookeeper);
         } else {
-            logger.info("Using thin driver with PQS '{}'", queryServerUrl);
+            LOGGER.info("Using thin driver with PQS '{}'", queryServerUrl);
             // Enables the thin-driver and sets the PQS URL
             PhoenixUtil.useThinDriver(queryServerUrl);
         }
@@ -230,7 +230,7 @@ public class Pherf {
             
             // Compare results and exit  
 			if (null != compareResults) {
-				logger.info("\nStarting to compare results and exiting for " + compareResults);
+                LOGGER.info("\nStarting to compare results and exiting for " + compareResults);
 				new GoogleChartGenerator(compareResults, compareType).readAndRender();
 				return;
             }
@@ -239,7 +239,7 @@ public class Pherf {
 
             // Drop tables with PHERF schema and regex comparison
             if (null != dropPherfTablesRegEx) {
-                logger.info(
+                LOGGER.info(
                         "\nDropping existing table with PHERF namename and " + dropPherfTablesRegEx
                                 + " regex expression.");
                 phoenixUtil.deleteTables(dropPherfTablesRegEx);
@@ -253,7 +253,7 @@ public class Pherf {
             }
 
             if (applySchema) {
-                logger.info("\nStarting to apply schema...");
+                LOGGER.info("\nStarting to apply schema...");
                 SchemaReader
                         reader =
                         (schemaFile == null) ?
@@ -264,7 +264,7 @@ public class Pherf {
 
             // Schema and Data Load
             if (preLoadData) {
-                logger.info("\nStarting Data Load...");
+                LOGGER.info("\nStarting Data Load...");
                 Workload workload = new WriteWorkload(parser, generateStatistics);
                 try {
                     workloadExecutor.add(workload);
@@ -277,26 +277,26 @@ public class Pherf {
                     }
                 }
             } else {
-                logger.info(
+                LOGGER.info(
                         "\nSKIPPED: Data Load and schema creation as -l argument not specified");
             }
 
             // Execute multi-threaded query sets
             if (executeQuerySets) {
-                logger.info("\nStarting to apply Execute Queries...");
+                LOGGER.info("\nStarting to apply Execute Queries...");
 
                 workloadExecutor
                         .add(new QueryExecutor(parser, phoenixUtil, workloadExecutor, parser.getDataModels(), queryHint,
                                 isFunctional, writeRuntimeResults));
 
             } else {
-                logger.info(
+                LOGGER.info(
                         "\nSKIPPED: Multithreaded query set execution as -q argument not specified");
             }
 
             // Clean up the monitor explicitly
             if (monitorManager != null) {
-                logger.info("Run completed. Shutting down Monitor.");
+                LOGGER.info("Run completed. Shutting down Monitor.");
                 monitorManager.complete();
             }
 
@@ -305,7 +305,7 @@ public class Pherf {
 
         } finally {
             if (workloadExecutor != null) {
-                logger.info("Run completed. Shutting down thread pool.");
+                LOGGER.info("Run completed. Shutting down thread pool.");
                 workloadExecutor.shutdown();
             }
         }

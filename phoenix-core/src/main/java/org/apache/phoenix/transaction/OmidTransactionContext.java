@@ -53,7 +53,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     @Override
     public void commitDDLFence(PTable dataTable) throws SQLException {
         // TODO Auto-generated method stub
-
     }
 
     @Override

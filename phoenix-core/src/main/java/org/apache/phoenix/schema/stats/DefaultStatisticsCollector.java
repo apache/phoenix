@@ -67,7 +67,6 @@ import com.google.common.collect.Maps;
  * A default implementation of the Statistics tracker that helps to collect stats like min key, max key and guideposts.
  */
 class DefaultStatisticsCollector implements StatisticsCollector {
-    private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     private final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     private StatisticsWriter statsWriter;
     private final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
@@ -222,12 +221,12 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             writeStatistics(region, true, mutations, EnvironmentEdgeManager.currentTimeMillis(), scan);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Committing new stats for the region " + region.getRegionInfo());
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Committing new stats for the region " + region.getRegionInfo());
             }
             commitStats(mutations);
         } catch (IOException e) {
-            logger.error("Unable to commit new stats", e);
+            LOGGER.error("Unable to commit new stats", e);
         }
     }
 
@@ -259,13 +258,13 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             }
             for (ImmutableBytesPtr fam : fams) {
                 if (delete) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Deleting the stats for the region " + region.getRegionInfo());
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("Deleting the stats for the region " + region.getRegionInfo());
                     }
                     statsWriter.deleteStatsForRegion(region, this, fam, mutations);
                 }
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Adding new stats for the region " + region.getRegionInfo());
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Adding new stats for the region " + region.getRegionInfo());
                 }
                 // If we've disabled stats, don't write any, just delete them
                 if (this.guidePostDepth > 0) {
@@ -273,7 +272,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                 }
             }
         } catch (IOException e) {
-            logger.error("Failed to update statistics table!", e);
+            LOGGER.error("Failed to update statistics table!", e);
             throw e;
         }
     }
@@ -348,8 +347,8 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
             InternalScanner s) throws IOException {
         // See if this is for Major compaction
-        if (logger.isDebugEnabled()) {
-            logger.debug("Compaction scanner created for stats");
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Compaction scanner created for stats");
         }
         ImmutableBytesPtr cfKey = new ImmutableBytesPtr(store.getFamily().getName());
         // Potentially perform a cross region server get in order to use the correct guide posts

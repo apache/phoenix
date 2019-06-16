@@ -51,7 +51,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class LikeExpression extends BaseCompoundExpression {
-    private static final Logger logger = LoggerFactory.getLogger(LikeExpression.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(LikeExpression.class);
 
     private static final String ZERO_OR_MORE = "\\E.*\\Q";
     private static final String ANY_ONE = "\\E.\\Q";
@@ -267,15 +267,15 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         AbstractBasePattern pattern = this.pattern;
         if (pattern == null) { // TODO: don't allow? this is going to be slooowwww
             if (!getPatternExpression().evaluate(tuple, ptr)) {
-                if (logger.isTraceEnabled()) {
-                    logger.trace("LIKE is FALSE: pattern is null");
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace("LIKE is FALSE: pattern is null");
                 }
                 return false;
             }
             String value = (String) PVarchar.INSTANCE.toObject(ptr, getPatternExpression().getSortOrder());
             pattern = compilePattern(value);
-            if (logger.isTraceEnabled()) {
-                logger.trace("LIKE pattern is expression: " + pattern.pattern());
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace("LIKE pattern is expression: " + pattern.pattern());
             }
         }
 
@@ -283,21 +283,21 @@ public abstract class LikeExpression extends BaseCompoundExpression {
         SortOrder strSortOrder = strExpression.getSortOrder();
         PVarchar strDataType = PVarchar.INSTANCE;
         if (!strExpression.evaluate(tuple, ptr)) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("LIKE is FALSE: child expression is null");
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace("LIKE is FALSE: child expression is null");
             }
             return false;
         }
 
         String value = null;
-        if (logger.isTraceEnabled()) {
+        if (LOGGER.isTraceEnabled()) {
             value = (String) strDataType.toObject(ptr, strSortOrder);
         }
         strDataType.coerceBytes(ptr, strDataType, strSortOrder, SortOrder.ASC);
         pattern.matches(ptr);
-        if (logger.isTraceEnabled()) {
+        if (LOGGER.isTraceEnabled()) {
             boolean matched = ((Boolean) PBoolean.INSTANCE.toObject(ptr)).booleanValue();
-            logger.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);
+            LOGGER.trace("LIKE(value='" + value + "'pattern='" + pattern.pattern() + "' is " + matched);
         }
         return true;
     }

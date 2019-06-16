@@ -54,7 +54,7 @@ import com.google.common.cache.Weigher;
  * @since 0.1
  */
 public class GlobalCache extends TenantCacheImpl {
-    private static final Logger logger = LoggerFactory.getLogger(GlobalCache.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalCache.class);
     private static volatile GlobalCache INSTANCE; 
     
     private final Configuration config;
@@ -65,16 +65,20 @@ public class GlobalCache extends TenantCacheImpl {
     
     public long clearTenantCache() {
         long unfreedBytes = getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory();
-        if (unfreedBytes != 0 && logger.isDebugEnabled()) {
-            logger.debug("Found " + (getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory()) + " bytes not freed from global cache");
+        if (unfreedBytes != 0 && LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Found " + (getMemoryManager().getMaxMemory() -
+                    getMemoryManager().getAvailableMemory()) +
+                    " bytes not freed from global cache");
         }
         removeAllServerCache();
         for (Map.Entry<ImmutableBytesWritable, TenantCache> entry : perTenantCacheMap.entrySet()) {
             TenantCache cache = entry.getValue();
             long unfreedTenantBytes = cache.getMemoryManager().getMaxMemory() - cache.getMemoryManager().getAvailableMemory();
-            if (unfreedTenantBytes != 0 && logger.isDebugEnabled()) {
+            if (unfreedTenantBytes != 0 && LOGGER.isDebugEnabled()) {
                 ImmutableBytesWritable cacheId = entry.getKey();
-                logger.debug("Found " + unfreedTenantBytes + " bytes not freed for tenant " + Bytes.toStringBinary(cacheId.get(), cacheId.getOffset(), cacheId.getLength()));
+                LOGGER.debug("Found " + unfreedTenantBytes + " bytes not freed for tenant " +
+                        Bytes.toStringBinary(cacheId.get(), cacheId.getOffset(),
+                                cacheId.getLength()));
             }
             unfreedBytes += unfreedTenantBytes;
             cache.removeAllServerCache();
