@@ -38,7 +38,7 @@ import javax.xml.bind.Marshaller;
 import static org.junit.Assert.*;
 
 public class ConfigurationParserTest extends ResultBaseTest {
-    private static final Logger logger = LoggerFactory.getLogger(ConfigurationParserTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConfigurationParserTest.class);
 
     @Test
     public void testReadWriteWorkloadReader() throws Exception {
@@ -65,7 +65,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
     public void testConfigReader() {
         try {
 
-            logger.debug("DataModel: " + writeXML());
+            LOGGER.debug("DataModel: " + writeXML());
             List<Scenario> scenarioList = getScenarios();
             List<Column> dataMappingColumns = getDataModel().getDataMappingColumns();
             assertTrue("Could not load the data columns from xml.",

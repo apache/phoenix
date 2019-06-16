@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  */
 public class FirstLastValueServerAggregator extends BaseAggregator {
 
-    private static final Logger logger = LoggerFactory.getLogger(FirstLastValueServerAggregator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FirstLastValueServerAggregator.class);
     protected List<Expression> children;
     protected BinaryComparator topOrder = new BinaryComparator(ByteUtil.EMPTY_BYTE_ARRAY);
     protected byte[] topValue;
@@ -88,7 +88,7 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
                 try {
                     addFlag = true;
                 } catch (Exception e) {
-                    logger.error(e.getMessage());
+                    LOGGER.error(e.getMessage());
                 }
             } else {
                 if (isAscending) {
@@ -180,7 +180,7 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
         try {
             ptr.set(payload.getPayload());
         } catch (IOException ex) {
-            logger.error(ex.getMessage());
+            LOGGER.error(ex.getMessage());
             return false;
         }
         return true;

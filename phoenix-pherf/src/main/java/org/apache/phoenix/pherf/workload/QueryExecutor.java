@@ -36,7 +36,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class QueryExecutor implements Workload {
-    private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryExecutor.class);
     private List<DataModel> dataModels;
     private String queryHint;
     private final boolean exportCSV;
@@ -113,7 +113,7 @@ public class QueryExecutor implements Workload {
                         }
                     }
                 } catch (Exception e) {
-                    logger.error("Scenario throws exception", e);
+                    LOGGER.error("Scenario throws exception", e);
                     throw e;
                 }
                 return null;
@@ -165,7 +165,7 @@ public class QueryExecutor implements Workload {
                     resultManager.write(dataModelResults, ruleApplier);
                     resultManager.flush();
                 } catch (Exception e) {
-                    logger.error("Scenario throws exception", e);
+                    LOGGER.error("Scenario throws exception", e);
                     throw e;
                 }
                 return null;
@@ -255,7 +255,7 @@ public class QueryExecutor implements Workload {
         queryResult.getThreadTimes().add(threadTime);
         threadTime.setThreadName(name);
         queryResult.setHint(this.queryHint);
-        logger.info("\nExecuting query " + queryResult.getStatement());
+        LOGGER.info("\nExecuting query " + queryResult.getStatement());
         Callable<Void> thread;
         if (workloadExecutor.isPerformance()) {
             thread =

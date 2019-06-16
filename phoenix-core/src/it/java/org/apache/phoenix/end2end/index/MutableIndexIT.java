@@ -713,7 +713,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
-
     private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, HBaseAdmin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;

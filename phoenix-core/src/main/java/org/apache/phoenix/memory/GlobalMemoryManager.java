@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * @since 0.1
  */
 public class GlobalMemoryManager implements MemoryManager {
-    private static final Logger logger = LoggerFactory.getLogger(GlobalMemoryManager.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalMemoryManager.class);
 
     private final Object sync = new Object();
     private final long maxMemoryBytes;
@@ -149,7 +149,7 @@ public class GlobalMemoryManager implements MemoryManager {
         protected void finalize() throws Throwable {
             try {
                 if (size > 0) {
-                    logger.warn("Orphaned chunk of " + size + " bytes found during finalize");
+                    LOGGER.warn("Orphaned chunk of " + size + " bytes found during finalize");
                     //logger.warn("Orphaned chunk of " + size + " bytes found during finalize allocated here:\n" + stack);
                 }
                 freeMemory();

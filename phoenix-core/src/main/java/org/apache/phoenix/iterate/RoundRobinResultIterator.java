@@ -49,7 +49,7 @@ import com.google.common.base.Throwables;
  */
 public class RoundRobinResultIterator implements ResultIterator {
 
-    private static final Logger logger = LoggerFactory.getLogger(RoundRobinResultIterator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RoundRobinResultIterator.class);
 
     private final int threshold;
 
@@ -223,8 +223,8 @@ public class RoundRobinResultIterator implements ResultIterator {
             final ConnectionQueryServices services = context.getConnection().getQueryServices();
             ExecutorService executor = services.getExecutor();
             numParallelFetches++;
-            if (logger.isDebugEnabled()) {
-                logger.debug("Performing parallel fetch for " + openIterators.size() + " iterators. ");
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Performing parallel fetch for " + openIterators.size() + " iterators. ");
             }
             for (final RoundRobinIterator itr : openIterators) {
                 Future<Tuple> future = executor.submit(new Callable<Tuple>() {

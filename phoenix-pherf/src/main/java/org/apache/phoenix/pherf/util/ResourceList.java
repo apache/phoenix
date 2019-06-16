@@ -40,7 +40,7 @@ import java.util.zip.ZipFile;
  * list resources available from the classpath @ *
  */
 public class ResourceList {
-    private static final Logger logger = LoggerFactory.getLogger(ResourceList.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResourceList.class);
     private final String rootResourceDir;
 
     public ResourceList(String rootResourceDir) {
@@ -84,10 +84,10 @@ public class ResourceList {
 
             String rName = rootResourceDir + resource;
 
-            logger.debug("Trying with the root append.");
+            LOGGER.debug("Trying with the root append.");
             url = ResourceList.class.getResource(rName);
             if (url == null) {
-                logger.debug("Failed! Must be using a jar. Trying without the root append.");
+                LOGGER.debug("Failed! Must be using a jar. Trying without the root append.");
                 url = ResourceList.class.getResource(resource);
 
                 if (url == null) {
@@ -99,7 +99,7 @@ public class ResourceList {
             } else {
                 path = Paths.get(url.toURI());
             }
-            logger.debug("Found the correct resource: " + path.toString());
+            LOGGER.debug("Found the correct resource: " + path.toString());
             paths.add(path);
         }
 
@@ -143,11 +143,11 @@ public class ResourceList {
             final ZipEntry ze = (ZipEntry) e.nextElement();
             final String fileName = ze.getName();
             final boolean accept = pattern.matcher(fileName).matches();
-            logger.trace("fileName:" + fileName);
-            logger.trace("File:" + file.toString());
-            logger.trace("Match:" + accept);
+            LOGGER.trace("fileName:" + fileName);
+            LOGGER.trace("File:" + file.toString());
+            LOGGER.trace("Match:" + accept);
             if (accept) {
-                logger.trace("Adding File from Jar: " + fileName);
+                LOGGER.trace("Adding File from Jar: " + fileName);
                 retVal.add("/" + fileName);
             }
         }
@@ -171,7 +171,7 @@ public class ResourceList {
                 final String fileName = file.getName();
                 final boolean accept = pattern.matcher(file.toString()).matches();
                 if (accept) {
-                    logger.debug("Adding File from directory: " + fileName);
+                    LOGGER.debug("Adding File from directory: " + fileName);
                     retval.add("/" + fileName);
                 }
             }

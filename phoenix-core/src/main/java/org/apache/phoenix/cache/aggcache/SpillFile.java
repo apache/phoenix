@@ -42,7 +42,7 @@ import java.util.UUID;
  */
 public class SpillFile implements Closeable {
 
-    private static final Logger logger = LoggerFactory.getLogger(SpillFile.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SpillFile.class);
     // Default size for a single spillFile 2GB
     private static final int SPILL_FILE_SIZE = Integer.MAX_VALUE;
     // Page size for a spill file 4K
@@ -72,14 +72,14 @@ public class SpillFile implements Closeable {
 			Closeables.closeQuietly(rndFile);
 			
 			if (file != null) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Deleting tempFile: " + file.getAbsolutePath());
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Deleting tempFile: " + file.getAbsolutePath());
                 }
                 try {
                     file.delete();
                 } catch (SecurityException e) {
-                    logger.warn("IOException thrown while closing Closeable." + e);
-            	}
+                    LOGGER.warn("IOException thrown while closing Closeable." + e);
+                }
             }
 		}
     }
@@ -108,8 +108,8 @@ public class SpillFile implements Closeable {
         // Create temp file in temp dir or custom dir if provided
         File tempFile = File.createTempFile(UUID.randomUUID().toString(),
           null, spillFilesDirectory);
-        if (logger.isDebugEnabled()) {
-            logger.debug("Creating new SpillFile: " + tempFile.getAbsolutePath());
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("Creating new SpillFile: " + tempFile.getAbsolutePath());
         }
         RandomAccessFile file = new RandomAccessFile(tempFile, "rw");
         file.setLength(SPILL_FILE_SIZE);

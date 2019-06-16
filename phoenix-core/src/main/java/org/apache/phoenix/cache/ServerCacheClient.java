@@ -289,7 +289,7 @@ public class ServerCacheClient {
                     }
                 }
             }
-            
+
             hashCacheSpec = new ServerCache(cacheId,servers,cachePtr, services, storeCacheOnClient);
             // Execute in parallel
             int timeoutMs = services.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
@@ -326,7 +326,8 @@ public class ServerCacheClient {
             }
         }
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(addCustomAnnotations("Cache " + cacheId + " successfully added to servers.", connection));
+            LOGGER.debug(addCustomAnnotations("Cache " + cacheId +
+                    " successfully added to servers.", connection));
         }
         return hashCacheSpec;
     }

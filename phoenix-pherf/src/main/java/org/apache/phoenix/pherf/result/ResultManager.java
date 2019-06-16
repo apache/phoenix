@@ -31,7 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ResultManager {
-    private static final Logger logger = LoggerFactory.getLogger(ResultManager.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ResultManager.class);
 
     private final List<ResultHandler> resultHandlers;
     private final ResultUtil util;
@@ -153,7 +153,7 @@ public class ResultManager {
                 handler.flush();
             } catch (Exception e) {
                 e.printStackTrace();
-                logger.warn("Could not flush handler: "
+                LOGGER.warn("Could not flush handler: "
                         + handler.getResultFileName() + " : " + e.getMessage());
             }
         }
