@@ -66,7 +66,8 @@ import com.google.common.collect.Maps;
  */
 public class DefaultStatisticsCollector implements StatisticsCollector {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     
     final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     private final Table htable;

@@ -282,25 +282,29 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                         MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
                                 systemTable, newState);
                         if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
-                            LOGGER.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
+                            LOGGER.info("Index " + indexTableName +
+                                    " has been dropped. Ignore uncommitted mutations");
                             continue;
                         }
                         if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                             if (leaveIndexActive) {
-                                LOGGER.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
+                                LOGGER.warn("Attempt to update INDEX_DISABLE_TIMESTAMP "
+                                        + " failed with code = "
                                         + result.getMutationCode());
                                 // If we're not disabling the index, then we don't want to throw as throwing
                                 // will lead to the RS being shutdown.
                                 if (blockDataTableWritesOnFailure) { throw new DoNotRetryIOException(
                                         "Attempt to update INDEX_DISABLE_TIMESTAMP failed."); }
                             } else {
-                                LOGGER.warn("Attempt to disable index " + indexTableName + " failed with code = "
-                                        + result.getMutationCode() + ". Will use default failure policy instead.");
+                                LOGGER.warn("Attempt to disable index " + indexTableName +
+                                        " failed with code = " + result.getMutationCode() +
+                                        ". Will use default failure policy instead.");
                                 throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
                             }
                         }
-                        LOGGER.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName
-                            + " due to an exception while writing updates. indexState=" + newState,
+                        LOGGER.info("Successfully update INDEX_DISABLE_TIMESTAMP for " +
+                                        indexTableName + " due to an exception while" +
+                                        " writing updates. indexState=" + newState,
                         cause);
                     } catch (Throwable t) {
                         if (t instanceof Exception) {
@@ -351,7 +355,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                         mutation.getRow().length - offset));
                 String indexTableName = localIndexNames.get(new ImmutableBytesWritable(viewId));
                 if (indexTableName == null) {
-                    LOGGER.error("Unable to find local index on " + ref.getTableName() + " with viewID of " + Bytes.toStringBinary(viewId));
+                    LOGGER.error("Unable to find local index on " + ref.getTableName() +
+                            " with viewID of " + Bytes.toStringBinary(viewId));
                 } else {
                     indexTableNames.add(indexTableName);
                 }

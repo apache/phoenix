@@ -884,7 +884,8 @@ public class OrphanViewTool extends Configured implements Tool {
             }
             return 0;
         } catch (Exception ex) {
-            LOGGER.error("Orphan View Tool : An exception occurred " + ExceptionUtils.getMessage(ex) + " at:\n" +
+            LOGGER.error("Orphan View Tool : An exception occurred "
+                    + ExceptionUtils.getMessage(ex) + " at:\n" +
                     ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {

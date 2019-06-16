@@ -36,26 +36,22 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.TaskType;
-
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Coprocessor for task related operations. This coprocessor would only be registered
@@ -63,7 +59,7 @@ import org.apache.phoenix.util.QueryUtil;
  */
 
 public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
-    public static final Log LOG = LogFactory.getLog(TaskRegionObserver.class);
+    public static final Logger LOGGER = LoggerFactory.getLogger(TaskRegionObserver.class);
 
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
@@ -141,12 +137,6 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
         final RegionCoprocessorEnvironment env = e.getEnvironment();
 
-        // turn off verbose deprecation logging
-        Logger deprecationLogger = Logger.getLogger("org.apache.hadoop.conf.Configuration.deprecation");
-        if (deprecationLogger != null) {
-            deprecationLogger.setLevel(Level.WARN);
-        }
-
         SelfHealingTask task = new SelfHealingTask(e.getEnvironment(), timeMaxInterval);
         executor.scheduleWithFixedDelay(task, initialDelay, timeInterval, TimeUnit.MILLISECONDS);
     }
@@ -175,7 +165,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                     try {
                         TaskType taskType = taskRecord.getTaskType();
                         if (!classMap.containsKey(taskType)) {
-                            LOG.warn("Don't know how to execute task type: " + taskType.name());
+                            LOGGER.warn("Don't know how to execute task type: " + taskType.name());
                             continue;
                         }
 
@@ -228,7 +218,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
 
                     }
                     catch (Throwable t) {
-                        LOG.warn("Exception while running self healingtask. " +
+                        LOGGER.warn("Exception while running self healingtask. " +
                                 "It will be retried in the next system task table scan : " +
                                 " taskType : " + taskRecord.getTaskType().name() +
                                 taskRecord.getSchemaName()  + "." + taskRecord.getTableName() +
@@ -237,13 +227,13 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                     }
                 }
             } catch (Throwable t) {
-                LOG.error("SelfHealingTask failed!", t);
+                LOGGER.error("SelfHealingTask failed!", t);
             } finally {
                 if (connForTask != null) {
                     try {
                         connForTask.close();
                     } catch (SQLException ignored) {
-                        LOG.debug("SelfHealingTask can't close connection", ignored);
+                        LOGGER.debug("SelfHealingTask can't close connection", ignored);
                     }
                 }
             }

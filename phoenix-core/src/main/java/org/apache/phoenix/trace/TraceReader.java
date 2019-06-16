@@ -222,8 +222,8 @@ public class TraceReader {
             }
         }
         if (cols.size() < count) {
-            LOGGER.error(addCustomAnnotations("Missing tags! Expected " + count + ", but only got " + cols.size()
-                    + " tags from rquest " + request));
+            LOGGER.error(addCustomAnnotations("Missing tags! Expected " + count +
+                    ", but only got " + cols.size() + " tags from rquest " + request));
         }
         return cols;
     }

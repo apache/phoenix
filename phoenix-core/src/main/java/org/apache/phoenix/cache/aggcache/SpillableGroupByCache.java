@@ -148,7 +148,8 @@ public class SpillableGroupByCache implements GroupByCache {
         try {
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
         } catch (InsufficientMemoryException ime) {
-            LOGGER.error("Requested Map size exceeds memory limit, please decrease max size via config paramter: "
+            LOGGER.error("Requested Map size exceeds memory limit, " +
+                    "please decrease max size via config paramter: "
                     + GROUPBY_MAX_CACHE_SIZE_ATTRIB);
             throw ime;
         }
@@ -361,8 +362,9 @@ public class SpillableGroupByCache implements GroupByCache {
                 byte[] value = aggregators.toBytes(aggs);
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("Adding new distinct group: "
-                            + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()) + " with aggregators "
-                            + aggs.toString() + " value = " + Bytes.toStringBinary(value));
+                            + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()) +
+                            " with aggregators " + aggs.toString() + " value = " +
+                            Bytes.toStringBinary(value));
                 }
                 results.add(PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));

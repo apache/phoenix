@@ -288,7 +288,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final int TTL_FOR_MUTEX = 15 * 60; // 15min
@@ -450,7 +451,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
-            LOGGER.info("HConnection established. Stacktrace for informational purposes: " + connection + " " +  LogUtil.getCallerStackTrace());
+            LOGGER.info("HConnection established. Stacktrace for informational purposes: "
+                    + connection + " " +  LogUtil.getCallerStackTrace());
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
             .setRootCause(e).build().buildException();
@@ -685,7 +687,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             mutator.mutate(metaData);
                             break;
                         } else if (table.getSequenceNumber() >= tableSeqNum) {
-                            LOGGER.warn("Attempt to cache older version of " + tableName + ": current= " + table.getSequenceNumber() + ", new=" + tableSeqNum);
+                            LOGGER.warn("Attempt to cache older version of " + tableName +
+                                    ": current= " + table.getSequenceNumber() +
+                                    ", new=" + tableSeqNum);
                             break;
                         }
                     } catch (TableNotFoundException e) {
@@ -694,7 +698,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // We waited long enough - just remove the table from the cache
                     // and the next time it's used it'll be pulled over from the server.
                     if (waitTime <= 0) {
-                        LOGGER.warn("Unable to update meta data repo within " + (DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS/1000) + " seconds for " + tableName);
+                        LOGGER.warn("Unable to update meta data repo within " +
+                                (DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS/1000) +
+                                " seconds for " + tableName);
                         // There will never be a parentTableName here, as that would only
                         // be non null for an index an we never add/remove columns from an index.
                         metaData.removeTable(tenantId, tableName, null, HConstants.LATEST_TIMESTAMP);
@@ -2770,7 +2776,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             stmt.executeUpdate();
             metaConnection.commit();
         } catch (NewerTableAlreadyExistsException e) {
-            LOGGER.warn("Table already modified at this timestamp, so assuming column already nullable: " + columnName);
+            LOGGER.warn("Table already modified at this timestamp," +
+                    " so assuming column already nullable: " + columnName);
         } catch (SQLException e) {
             LOGGER.warn("Add column failed due to:" + e);
             sqlE = e;
@@ -2802,7 +2809,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD " + (addIfNotExists ? " IF NOT EXISTS " : "") + columns );
         } catch (NewerTableAlreadyExistsException e) {
-            LOGGER.warn("Table already modified at this timestamp, so assuming add of these columns already done: " + columns);
+            LOGGER.warn("Table already modified at this timestamp," +
+                    " so assuming add of these columns already done: " + columns);
         } catch (SQLException e) {
             LOGGER.warn("Add column failed due to:" + e);
             sqlE = e;
@@ -2953,7 +2961,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     if (inspectIfAnyExceptionInChain(e, Collections
                                             .<Class<? extends Exception>> singletonList(AccessDeniedException.class))) {
                                         // Pass
-                                        LOGGER.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
+                                        LOGGER.warn("Could not check for Phoenix SYSTEM tables," +
+                                                " assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                         success = true;
                                     } else if (inspectIfAnyExceptionInChain(e,
@@ -3062,7 +3071,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Ignore TableExistsException as another client might beat us during upgrade.
                 // Ignore AccessDeniedException, as it may be possible underpriviliged user trying to use the connection
                 // which doesn't required upgrade.
-                LOGGER.debug("Ignoring exception while creating mutex table during connection initialization: "
+                LOGGER.debug("Ignoring exception while creating mutex table" +
+                        " during connection initialization: "
                         + Throwables.getStackTraceAsString(e));
             } else {
                 throw e;
@@ -3244,14 +3254,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 List<String> tablesNeedingUpgrade = UpgradeUtil
                   .getPhysicalTablesWithDescRowKey(conn);
                 if (!tablesNeedingUpgrade.isEmpty()) {
-                    LOGGER.warn("The following tables require upgrade due to a bug causing the row key to be incorrect for descending columns and ascending BINARY columns (PHOENIX-2067 and PHOENIX-2120):\n"
+                    LOGGER.warn("The following tables require upgrade due to a bug " +
+                            "causing the row key to be incorrect for descending columns " +
+                            "and ascending BINARY columns (PHOENIX-2067 and PHOENIX-2120):\n"
                       + Joiner.on(' ').join(tablesNeedingUpgrade)
                       + "\nTo upgrade issue the \"bin/psql.py -u\" command.");
                 }
                 List<String> unsupportedTables = UpgradeUtil
                   .getPhysicalTablesWithDescVarbinaryRowKey(conn);
                 if (!unsupportedTables.isEmpty()) {
-                    LOGGER.warn("The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n"
+                    LOGGER.warn("The following tables use an unsupported " +
+                            "VARBINARY DESC construct and need to be changed:\n"
                       + Joiner.on(' ').join(unsupportedTables));
                 }
             } catch (Exception ex) {

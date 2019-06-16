@@ -313,7 +313,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         ResultIterator resultIterator = plan.iterator();
                         if (LOGGER.isDebugEnabled()) {
                             String explainPlan = QueryUtil.getExplainPlan(resultIterator);
-                            LOGGER.debug(LogUtil.addCustomAnnotations("Explain plan: " + explainPlan, connection));
+                            LOGGER.debug(LogUtil.addCustomAnnotations(
+                                    "Explain plan: " + explainPlan, connection));
                         }
                         StatementContext context = plan.getContext();
                         context.setQueryLogger(queryLogger);
@@ -339,7 +340,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     catch (MetaDataEntityNotFoundException e) {
                         if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
                             if(LOGGER.isDebugEnabled())
-                                LOGGER.debug("Reloading table "+ e.getTableName()+" data from server");
+                                LOGGER.debug("Reloading table "
+                                        + e.getTableName()+" data from server");
                             if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                 e.getSchemaName(), e.getTableName(), true).wasUpdated()){
                                 //TODO we can log retry count and error for debugging in LOG table
@@ -425,7 +427,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             catch (MetaDataEntityNotFoundException e) {
                                 if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
                                     if(LOGGER.isDebugEnabled())
-                                        LOGGER.debug("Reloading table "+ e.getTableName()+" data from server");
+                                        LOGGER.debug("Reloading table "+ e.getTableName()
+                                                +" data from server");
                                     if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()){
                                         return executeMutation(stmt, false);
@@ -1797,7 +1800,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(LogUtil.addCustomAnnotations("Execute query: " + sql, connection));
+            LOGGER.debug(LogUtil.addCustomAnnotations(
+                    "Execute query: " + sql, connection));
         }
         
         CompilableStatement stmt = parseStatement(sql);

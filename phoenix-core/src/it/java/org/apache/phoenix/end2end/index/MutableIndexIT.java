@@ -50,12 +50,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.primitives.Doubles;
 
 @RunWith(Parameterized.class)
 public class MutableIndexIT extends ParallelStatsDisabledIT {
-    
+    private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexIT.class);
     protected final boolean localIndex;
     private final String tableDDLOptions;
     

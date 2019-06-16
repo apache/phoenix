@@ -59,7 +59,8 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWritable, IntWritable> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexPartialBuildMapper.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixIndexPartialBuildMapper.class);
 
     private PhoenixConnection connection;
 

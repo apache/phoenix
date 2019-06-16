@@ -125,7 +125,8 @@ public class CollationKeyFunction extends ScalarFunction {
 		byte[] collationKeyByteArray = collator.getCollationKey(inputString).toByteArray();
 
 		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("CollationKey bytes: " + VarBinaryFormatter.INSTANCE.format(collationKeyByteArray));
+			LOGGER.trace("CollationKey bytes: " +
+					VarBinaryFormatter.INSTANCE.format(collationKeyByteArray));
 		}
 
 		ptr.set(collationKeyByteArray);
@@ -167,7 +168,8 @@ public class CollationKeyFunction extends ScalarFunction {
 		}
 
 		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace(String.format("Collator: [strength: %d, decomposition: %d], Special-Upper-Case: %s",
+			LOGGER.trace(String.format(
+					"Collator: [strength: %d, decomposition: %d], Special-Upper-Case: %s",
 					collator.getStrength(), collator.getDecomposition(),
 					BooleanUtils.isTrue(useSpecialUpperCaseCollator)));
 		}

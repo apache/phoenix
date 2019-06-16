@@ -26,8 +26,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.Marker;
-import org.slf4j.MarkerFactory;
 
 import com.google.common.base.Preconditions;
 
@@ -37,8 +35,8 @@ import com.google.common.base.Preconditions;
  */
 public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
-    private static final Marker fatal = MarkerFactory.getMarker("FATAL");
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixRpcSchedulerFactory.class);
     private static final String VERSION_TOO_OLD_FOR_INDEX_RPC =
             "Running an older version of HBase (less than 0.98.4), Phoenix index RPC handling cannot be enabled.";
 
@@ -50,7 +48,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
             // happens in <=0.98.4 where the scheduler factory is not visible
             delegate = new SimpleRpcSchedulerFactory().create(conf, priorityFunction, abortable);
         } catch (IllegalAccessError e) {
-            LOGGER.error(fatal, VERSION_TOO_OLD_FOR_INDEX_RPC);
+            LOGGER.error(VERSION_TOO_OLD_FOR_INDEX_RPC);
             throw e;
         }
 

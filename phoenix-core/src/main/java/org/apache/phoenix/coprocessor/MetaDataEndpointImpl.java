@@ -4361,7 +4361,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 rowLock.release();
             }
         } catch (Throwable t) {
-          LOGGER.error("updateIndexState failed", t);
+            LOGGER.error("updateIndexState failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
@@ -4600,7 +4600,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
-          LOGGER.error("createFunction failed", t);
+            LOGGER.error("createFunction failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(Bytes.toString(functionName), t));
         }
@@ -4652,7 +4652,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 ServerUtil.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
-          LOGGER.error("dropFunction failed", t);
+            LOGGER.error("dropFunction failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(Bytes.toString(functionName), t));
         }

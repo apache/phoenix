@@ -237,7 +237,8 @@ public class PhoenixMRJobSubmitter {
 
         if (!ZKBasedMasterElectionUtil.acquireLock(zookeeperWatcher, PHOENIX_LOCKS_PARENT,
             AUTO_INDEX_BUILD_LOCK_NAME)) {
-            LOGGER.info("Some other node is already running Automated Index Build. Skipping execution!");
+            LOGGER.info("Some other node is already running Automated Index Build." +
+                    " Skipping execution!");
             return -1;
         }
         // 1) Query Phoenix SYSTEM.CATALOG table to get a list of all candidate indexes to be built

@@ -66,8 +66,9 @@ public class GlobalCache extends TenantCacheImpl {
     public long clearTenantCache() {
         long unfreedBytes = getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory();
         if (unfreedBytes != 0 && LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Found " + (getMemoryManager().getMaxMemory() - getMemoryManager()
-                    .getAvailableMemory()) + " bytes not freed from global cache");
+            LOGGER.debug("Found " + (getMemoryManager().getMaxMemory() -
+                    getMemoryManager().getAvailableMemory()) +
+                    " bytes not freed from global cache");
         }
         removeAllServerCache();
         for (Map.Entry<ImmutableBytesWritable, TenantCache> entry : perTenantCacheMap.entrySet()) {
@@ -75,9 +76,9 @@ public class GlobalCache extends TenantCacheImpl {
             long unfreedTenantBytes = cache.getMemoryManager().getMaxMemory() - cache.getMemoryManager().getAvailableMemory();
             if (unfreedTenantBytes != 0 && LOGGER.isDebugEnabled()) {
                 ImmutableBytesWritable cacheId = entry.getKey();
-                LOGGER.debug("Found " + unfreedTenantBytes + " bytes not freed for tenant "
-                        + Bytes.toStringBinary(cacheId.get(), cacheId.getOffset(),
-                        cacheId.getLength()));
+                LOGGER.debug("Found " + unfreedTenantBytes + " bytes not freed for tenant " +
+                        Bytes.toStringBinary(cacheId.get(), cacheId.getOffset(),
+                                cacheId.getLength()));
             }
             unfreedBytes += unfreedTenantBytes;
             cache.removeAllServerCache();

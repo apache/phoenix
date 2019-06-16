@@ -391,8 +391,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             final RegionScanner scanner, final List<Expression> expressions,
             final ServerAggregators aggregators, long limit) throws IOException {
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
-                    + ", group by " + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
+            LOGGER.debug(LogUtil.addCustomAnnotations(
+                    "Grouped aggregation over unordered rows with scan " + scan
+                    + ", group by " + expressions + ", aggregators " + aggregators,
+                    ScanUtil.getCustomAnnotations(scan)));
         }
         RegionCoprocessorEnvironment env = c.getEnvironment();
         Configuration conf = env.getConfiguration();
@@ -419,7 +421,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             boolean hasMore;
             Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
             if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(LogUtil.addCustomAnnotations("Spillable groupby enabled: " + spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Spillable groupby enabled: " + spillableEnabled,
+                        ScanUtil.getCustomAnnotations(scan)));
             }
             Region region = c.getEnvironment().getRegion();
             boolean acquiredLock = false;
@@ -475,8 +479,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             final ServerAggregators aggregators, final long limit) throws IOException {
 
         if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
-                    + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
+            LOGGER.debug(LogUtil.addCustomAnnotations(
+                    "Grouped aggregation over ordered rows with scan " + scan + ", group by "
+                    + expressions + ", aggregators " + aggregators,
+                    ScanUtil.getCustomAnnotations(scan)));
         }
         final Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
         final boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);

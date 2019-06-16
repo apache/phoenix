@@ -208,7 +208,8 @@ public class TenantCacheImpl implements TenantCache {
             ImmutableBytesPtr cacheId = entry.getCacheId();
             getPersistentServerCaches().invalidate(cacheId);
             available = this.getMemoryManager().getAvailableMemory();
-            LOGGER.debug("Evicted cache ID " + Bytes.toLong(cacheId.get()) + ", we now have " + available + " bytes available");
+            LOGGER.debug("Evicted cache ID " + Bytes.toLong(cacheId.get()) + ", we now have "
+                    + available + " bytes available");
         }
     }
 
@@ -273,7 +274,8 @@ public class TenantCacheImpl implements TenantCache {
         }
         entry.decrementLiveQueryCount();
         if (!entry.isLive()) {
-            LOGGER.debug("Cache ID " + Bytes.toLong(cacheId.get()) + " is no longer live, invalidate it");
+            LOGGER.debug("Cache ID " + Bytes.toLong(cacheId.get())
+                    + " is no longer live, invalidate it");
             getServerCaches().invalidate(cacheId);
         }
     }

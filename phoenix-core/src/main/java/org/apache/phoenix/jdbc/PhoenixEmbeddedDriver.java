@@ -67,7 +67,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */ 
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(PhoenixEmbeddedDriver.class);
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -634,8 +633,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw getMalFormedUrlException(url);
             }
             String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
-            LOGGER.debug("Getting default jdbc connection url " + quorum + ":" +
-                    port + ":" + znodeParent);
+            LOGGER.debug("Getting default jdbc connection url "
+                    + quorum + ":" + port + ":" + znodeParent);
             return new ConnectionInfo(quorum, port, znodeParent);
         }
     }
