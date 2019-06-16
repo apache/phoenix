@@ -169,10 +169,10 @@ public class InListIT extends ParallelStatsDisabledIT {
     
     // the different combinations to check each test against
     private static final List<Boolean> TENANCIES = Arrays.asList(false, true);
-    private static final List<? extends PDataType> INTEGER_TYPES = Arrays.asList(PInteger.INSTANCE, PLong.INSTANCE);
+    private static final List<? extends PDataType> INTEGER_TYPES = Arrays.asList(PInteger.INSTANCE);
     private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
 
-    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
+    private static final List<String> HINTS = Arrays.asList("/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
     
     /**
      * Tests the given where clause against the given upserts by comparing against the list of
