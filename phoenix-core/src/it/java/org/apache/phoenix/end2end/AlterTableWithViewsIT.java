@@ -93,9 +93,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     // name is used by failsafe as file name in reports
     @Parameters(name = "AlterTableWithViewsIT_columnEncoded={0}, multiTenant={1}, salted={2}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { { false, false, false }, { false, false, true },
-                { false, true, false }, { false, true, true }, { true, false, false },
-                { true, false, true }, { true, true, false }, { true, true, true } });
+        return Arrays.asList(new Boolean[][] { { false, false, false }, { true, false, true },
+                { true, true, false }, { true, true, true } });
     }
     
     // transform PColumn to String
