@@ -86,6 +86,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
         Connection viewConn = null;
         try {
             conn = DriverManager.getConnection(getUrl());
+            conn.setAutoCommit(false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT1);
 
@@ -108,7 +109,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             viewConn.createStatement().execute(idxSDDL);
 
             // Insert rows
-            int numOfValues = 1;
+            int numOfValues = 1000;
             for (int i=0; i < numOfValues; i++){
                 viewConn.createStatement().execute(
                         String.format("UPSERT INTO %s VALUES('%s', '%s', '%s')", viewName, String.valueOf(i), "y",
