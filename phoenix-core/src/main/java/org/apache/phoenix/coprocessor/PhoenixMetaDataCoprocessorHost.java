@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -145,6 +146,10 @@ public class PhoenixMetaDataCoprocessorHost
         
         public RegionCoprocessorHost getCoprocessorHost() {
             return ((HRegion)env.getRegion()).getCoprocessorHost();
+        }
+
+        public RegionCoprocessorEnvironment getRegionCoprocessorEnvironment() {
+            return env;
         }
     }
     

@@ -126,6 +126,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
+import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
@@ -300,6 +301,7 @@ import com.google.protobuf.Service;
  * @since 0.1
  */
 @SuppressWarnings("deprecation")
+@CoreCoprocessor
 public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCoprocessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
