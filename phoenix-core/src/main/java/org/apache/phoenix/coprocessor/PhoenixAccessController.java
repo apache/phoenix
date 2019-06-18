@@ -27,9 +27,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
+import org.apache.hadoop.hbase.CompoundConfiguration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -42,6 +42,8 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.coprocessor.BaseMasterAndRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcServer;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
@@ -51,12 +53,15 @@ import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.UserProvider;
+import org.apache.hadoop.hbase.security.access.AccessChecker;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.AuthResult;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
+import org.apache.hadoop.hbase.security.access.TableAuthManager;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -67,13 +72,16 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     private PhoenixMetaDataControllerEnvironment env;
     AtomicReference<ArrayList<BaseMasterAndRegionObserver>> accessControllers = new AtomicReference<>();
+    private boolean hbaseAccessControllerEnabled = false;
     private boolean accessCheckEnabled;
+    private AccessChecker accessChecker;
     private UserProvider userProvider;
     public static final Logger LOGGER = LoggerFactory.getLogger(PhoenixAccessController.class);
     private static final Logger AUDITLOG =
@@ -88,6 +96,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             for (BaseMasterAndRegionObserver cp : coprocessors) {
                 if (cp instanceof AccessControlService.Interface) {
                     oldAccessControllers.add(cp);
+                    if (cp.getClass().getName().equals(
+                        org.apache.hadoop.hbase.security.access.AccessController.class.getName())) {
+                        hbaseAccessControllerEnabled = true;
+                    }
                 }
             }
             accessControllers.set(oldAccessControllers);
@@ -116,6 +128,23 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             throw new IllegalArgumentException(
                     "Not a valid environment, should be loaded by PhoenixMetaDataControllerEnvironment");
         }
+        CompoundConfiguration compoundConf = new CompoundConfiguration();
+        compoundConf.add(env.getConfiguration());
+        ZooKeeperWatcher zk = null;
+        if (env instanceof MasterCoprocessorEnvironment) {
+            // if running on HMaster
+            MasterCoprocessorEnvironment mEnv = (MasterCoprocessorEnvironment) env;
+            zk = mEnv.getMasterServices().getZooKeeper();
+          } else if (env instanceof RegionServerCoprocessorEnvironment) {
+            RegionServerCoprocessorEnvironment rsEnv = (RegionServerCoprocessorEnvironment) env;
+            zk = rsEnv.getRegionServerServices().getZooKeeper();
+          } else if (env instanceof RegionCoprocessorEnvironment) {
+            // if running at region
+            RegionCoprocessorEnvironment regionEnv = (RegionCoprocessorEnvironment) env;
+            compoundConf.addStringMap(regionEnv.getRegion().getTableDesc().getConfiguration());
+            zk = regionEnv.getRegionServerServices().getZooKeeper();
+        }
+        accessChecker = new AccessChecker(env.getConfiguration(), zk);
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
         // init superusers and add the server principal (if using security)
@@ -124,7 +153,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     }
 
     @Override
-    public void stop(CoprocessorEnvironment env) throws IOException {}
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        if(accessChecker.getAuthManager() != null) {
+            TableAuthManager.release(accessChecker.getAuthManager());
+        }
+    }
 
     @Override
     public void preCreateTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
@@ -398,9 +431,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
      * @throws IOException
      */
     private List<UserPermission> getUserPermissions(final TableName tableName) throws IOException {
-        return User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
-            @Override
-            public List<UserPermission> run() throws Exception {
+        List<UserPermission> userPermissions =
+                User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
+                    @Override
+                    public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
                     // Merge permissions from all accessController coprocessors loaded in memory
@@ -410,8 +444,39 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             userPermissions.addAll(AccessControlClient.getUserPermissions(connection, tableName.getNameAsString()));
                             userPermissions.addAll(AccessControlClient.getUserPermissions(
                                     connection, AuthUtil.toGroupEntry(tableName.getNamespaceAsString())));
+                        }
+                    }
+                } catch (Throwable e) {
+                    if (e instanceof Exception) {
+                        throw (Exception) e;
+                    } else if (e instanceof Error) {
+                        throw (Error) e;
+                    }
+                    throw new Exception(e);
+                }
+                return userPermissions;
+            }
+                });
+        getUserDefinedPermissions(tableName, userPermissions);
+        return userPermissions;
+    }
+
+    private void getUserDefinedPermissions(final TableName tableName,
+            final List<UserPermission> userPermissions) throws IOException {
+        User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
+            @Override
+            public List<UserPermission> run() throws Exception {
+                final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
+                try (Connection connection =
+                        ConnectionFactory.createConnection(env.getConfiguration())) {
+                    for (BaseMasterAndRegionObserver service : getAccessControllers()) {
+                        if (service.getClass().getName().equals(
+                            org.apache.hadoop.hbase.security.access.AccessController.class
+                                    .getName())) {
+                            continue;
                         } else {
-                            getUserPermsFromUserDefinedAccessController(userPermissions, connection, (AccessControlService.Interface) service);
+                            getUserPermsFromUserDefinedAccessController(userPermissions, connection,
+                                (AccessControlService.Interface) service);
                         }
                     }
                 } catch (Throwable e) {
@@ -476,8 +541,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User user = getActiveUser();
         AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
+        List<UserPermission> userPermissions = new ArrayList<>();
+        if(permissions.length > 0) {
+           getUserDefinedPermissions(tableName, userPermissions);
+        }
         for (Action permission : permissions) {
-             if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
+             if (hasAccess(userPermissions, tableName, permission, user)) {
                 result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
             } else {
                 result = AuthResult.deny(request, "Insufficient permissions", user, permission, tableName, null, null);
@@ -505,6 +574,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             return true;
         }
         if (perms != null) {
+            if (hbaseAccessControllerEnabled
+                    && accessChecker.getAuthManager().userHasAccess(user, table, action)) {
+                return true;
+            }
             List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName().getBytes());
             if (permissionsForUser != null) {
                 for (UserPermission permissionForUser : permissionsForUser) {
@@ -515,6 +588,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             if (groupNames != null) {
               for (String group : groupNames) {
                 List<UserPermission> groupPerms = getPermissionForUser(perms,(AuthUtil.toGroupEntry(group)).getBytes());
+                if (hbaseAccessControllerEnabled && accessChecker.getAuthManager()
+                        .groupHasAccess(group, table, action)) {
+                    return true;
+                }
                 if (groupPerms != null) for (UserPermission permissionForUser : groupPerms) {
                     if (permissionForUser.implies(action)) { return true; }
                 }
