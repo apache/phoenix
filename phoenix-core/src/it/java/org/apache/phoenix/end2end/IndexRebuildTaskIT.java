@@ -53,7 +53,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
+// disabled -- see PHOENIX-5348
+public abstract class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     protected static String TENANT1 = "tenant1";
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
