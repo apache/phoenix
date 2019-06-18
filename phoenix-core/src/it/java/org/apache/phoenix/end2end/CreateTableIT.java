@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -24,6 +25,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -34,12 +36,17 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -47,10 +54,12 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
@@ -799,6 +808,59 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 assertEquals(SQLExceptionCode.CANNOT_SET_GUIDE_POST_WIDTH.getErrorCode(),
                     e.getErrorCode());
             }
+        }
+    }
+
+    /**
+     * Ensure that HTD contains table priorities correctly.
+     */
+    @Test
+    public void testTableDescriptorPriority() throws SQLException, IOException {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        // Check system tables priorities.
+        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
+                Connection c = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = c.getMetaData().getTables("", 
+                    "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
+                    null, 
+                    new String[] {PTableType.SYSTEM.toString()});
+            ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+                org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
+                HTableDescriptor htd = admin.getTableDescriptor(hbaseTableName);
+                String val = htd.getValue("PRIORITY");
+                assertNotNull("PRIORITY is not set for table:" + htd, val);
+                assertTrue(Integer.parseInt(val)
+                        >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
+            }
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA;
+            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                conn.setAutoCommit(false);
+                Statement stmt = conn.createStatement();
+                stmt.execute(ddl);
+                BaseTest.populateTestTable(fullTableName);
+                ddl = "CREATE INDEX " + indexName
+                        + " ON " + fullTableName + " (long_col1, long_col2)"
+                        + " INCLUDE (decimal_col1, decimal_col2)";
+                stmt.execute(ddl);
+            }
+
+            HTableDescriptor dataTable = admin.getTableDescriptor(
+                    org.apache.hadoop.hbase.TableName.valueOf(fullTableName));
+            String val = dataTable.getValue("PRIORITY");
+            assertTrue(val == null || Integer.parseInt(val) < HConstants.HIGH_QOS);
+
+            HTableDescriptor indexTable = admin.getTableDescriptor(
+                    org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
+            val = indexTable.getValue("PRIORITY");
+            assertNotNull("PRIORITY is not set for table:" + indexTable, val);
+            assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
         }
     }
 
