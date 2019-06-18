@@ -22,9 +22,11 @@ import java.util.Map;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class OrderByWithSpillingIT extends OrderByIT {
     @BeforeClass
     public static void doSetup() throws Exception {
