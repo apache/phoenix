@@ -1152,61 +1152,6 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         assertNull(tableScanner.next());
     }
 
-    /**
-     * Ensure that HTD contains table priorities correctly.
-     */
-    @Test
-    public void testTableDescriptorPriority() throws SQLException, IOException {
-        String tableName = "TBL_" + generateUniqueName();
-        String indexName = "IND_" + generateUniqueName();
-        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        // Check system tables priorities.
-        try (Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
-                Connection c = DriverManager.getConnection(getUrl())) {
-            ResultSet rs = c.getMetaData().getTables("", 
-                    "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
-                    null, 
-                    new String[] {PTableType.SYSTEM.toString()});
-            ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();
-            while (rs.next()) {
-                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
-                String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
-                org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
-                TableDescriptor htd = admin.getDescriptor(hbaseTableName);
-                String val = htd.getValue("PRIORITY");
-                assertNotNull("PRIORITY is not set for table:" + htd, val);
-                assertTrue(Integer.parseInt(val)
-                        >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
-            }
-            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
-            try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                conn.setAutoCommit(false);
-                Statement stmt = conn.createStatement();
-                stmt.execute(ddl);
-                BaseTest.populateTestTable(fullTableName);
-                ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName
-                        + " ON " + fullTableName + " (long_col1, long_col2)"
-                        + " INCLUDE (decimal_col1, decimal_col2)";
-                stmt.execute(ddl);
-            }
-
-            TableDescriptor dataTable = admin.getDescriptor(
-                    org.apache.hadoop.hbase.TableName.valueOf(fullTableName));
-            String val = dataTable.getValue("PRIORITY");
-            assertTrue(val == null || Integer.parseInt(val) < HConstants.HIGH_QOS);
-
-            if (!localIndex && mutable) {
-                TableDescriptor indexTable = admin.getDescriptor(
-                        org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
-                val = indexTable.getValue("PRIORITY");
-                assertNotNull("PRIORITY is not set for table:" + indexTable, val);
-                assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
-            }
-        }
-    }
-
     @Test
     public void testQueryBackToDataTableWithDescPKColumn() throws SQLException {
         doTestQueryBackToDataTableWithDescPKColumn(true);
@@ -1301,42 +1246,6 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
         } finally {
             conn.close();
-        }
-    }
-
-    @Test
-    public void testMaxIndexesPerTable() throws SQLException {
-        String tableName = "TBL_" + generateUniqueName();
-        String indexName = "IND_" + generateUniqueName();
-        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            Configuration conf =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
-            int maxIndexes =
-                    conf.getInt(QueryServices.MAX_INDEXES_PER_TABLE,
-                        QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
-            conn.createStatement()
-                    .execute("CREATE TABLE " + fullTableName
-                            + " (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)"
-                            + tableDDLOptions);
-            for (int i = 0; i < maxIndexes; i++) {
-                conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX "
-                        + indexName + i + " ON " + fullTableName + "(\"v2\") INCLUDE (\"V1\")");
-            }
-            try {
-                conn.createStatement()
-                        .execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName
-                                + maxIndexes + " ON " + fullTableName
-                                + "(\"v2\") INCLUDE (\"V1\")");
-                fail("Expected exception TOO_MANY_INDEXES");
-            } catch (SQLException e) {
-                assertEquals(e.getErrorCode(), SQLExceptionCode.TOO_MANY_INDEXES.getErrorCode());
-            }
-            conn.createStatement()
-                    .execute("CREATE " + (localIndex ? "LOCAL " : "") + "INDEX IF NOT EXISTS "
-                            + indexName + "0" + " ON " + fullTableName
-                            + "(\"v2\") INCLUDE (\"V1\")");
         }
     }
 
