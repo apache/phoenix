@@ -57,6 +57,26 @@ public final class PhoenixMapReduceUtil {
 
     /**
      *
+     * @param job MR job instance
+     * @param inputClass DBWritable class
+     * @param inputFormatClass  InputFormat class
+     * @param tableName  Input table name
+     * @param conditions Condition clause to be added to the WHERE clause.
+     *                   Can be <tt>null</tt> if there are no conditions.
+     * @param fieldNames fields being projected for the SELECT query.
+     */
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass,
+            final Class<? extends InputFormat> inputFormatClass, final String tableName,
+            final String conditions, final String... fieldNames) {
+        final Configuration configuration = setInput(job, inputClass, inputFormatClass, tableName);
+        if(conditions != null) {
+            PhoenixConfigurationUtil.setInputTableConditions(configuration, conditions);
+        }
+        PhoenixConfigurationUtil.setSelectColumnNames(configuration, fieldNames);
+    }
+
+    /**
+     *
      * @param job
      * @param inputClass  DBWritable class
      * @param tableName   Input table name
