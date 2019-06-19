@@ -25,20 +25,30 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.iterate.TestingMapReduceParallelScanGrouper;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.PhoenixTestingInputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.sql.*;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test that our MapReduce basic tools work as expected
@@ -48,26 +58,35 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     private static final String STOCK_NAME = "STOCK_NAME";
     private static final String RECORDING_YEAR = "RECORDING_YEAR";
     private static final String RECORDINGS_QUARTER = "RECORDINGS_QUARTER";
-    private  String CREATE_STOCK_TABLE = "CREATE TABLE IF NOT EXISTS %s ( " +
+
+    // We pre-split the table to ensure that we have multiple mappers.
+    // This is used to test scenarios with more than 1 mapper
+    private static final String CREATE_STOCK_TABLE = "CREATE TABLE IF NOT EXISTS %s ( " +
             " STOCK_NAME VARCHAR NOT NULL , RECORDING_YEAR  INTEGER NOT  NULL,  RECORDINGS_QUARTER " +
-            " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( STOCK_NAME, RECORDING_YEAR ))";
+            " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( STOCK_NAME, RECORDING_YEAR )) "
+            + "SPLIT ON ('AA')";
 
     private static final String CREATE_STOCK_VIEW = "CREATE VIEW IF NOT EXISTS %s (v1 VARCHAR) AS "
         + " SELECT * FROM %s WHERE RECORDING_YEAR = 2008";
 
     private static final String MAX_RECORDING = "MAX_RECORDING";
-    private  String CREATE_STOCK_STATS_TABLE =
+    private static final String CREATE_STOCK_STATS_TABLE =
             "CREATE TABLE IF NOT EXISTS %s(STOCK_NAME VARCHAR NOT NULL , "
                     + " MAX_RECORDING DOUBLE CONSTRAINT pk PRIMARY KEY (STOCK_NAME ))";
 
 
-    private String UPSERT = "UPSERT into %s values (?, ?, ?)";
+    private static final String UPSERT = "UPSERT into %s values (?, ?, ?)";
 
-    private String TENANT_ID = "1234567890";
+    private static final String TENANT_ID = "1234567890";
 
     @Before
     public void setupTables() throws Exception {
 
+    }
+
+    @After
+    public void clearCountersForScanGrouper() {
+        TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
     }
 
     @Test
@@ -93,7 +112,8 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     }
 
-    private void createAndTestJob(Connection conn, String s, double v, String tenantId) throws SQLException, IOException, InterruptedException, ClassNotFoundException {
+    private void createAndTestJob(Connection conn, String s, double v, String tenantId) throws
+            SQLException, IOException, InterruptedException, ClassNotFoundException {
         String stockTableName = generateUniqueName();
         String stockStatsTableName = generateUniqueName();
         conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
@@ -103,10 +123,9 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         Job job = Job.getInstance(conf);
         if (tenantId != null) {
             setInputForTenant(job, tenantId, stockTableName, s);
-
         } else {
-            PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, s,
-                STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+            PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
+                    stockTableName, s, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
         }
         testJob(conn, job, stockTableName, stockStatsTableName, v);
 
@@ -120,13 +139,15 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
             String stockViewName = generateUniqueName();
             tenantConn.createStatement().execute(String.format(CREATE_STOCK_VIEW, stockViewName, stockTableName));
             tenantConn.commit();
-            PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockViewName, s,
-                STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+            PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
+                    stockViewName, s, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
         }
     }
 
     private void testJob(Connection conn, Job job, String stockTableName, String stockStatsTableName, double expectedMax)
             throws SQLException, InterruptedException, IOException, ClassNotFoundException {
+        assertEquals("Failed to reset getRegionBoundaries counter for scanGrouper", 0,
+                TestingMapReduceParallelScanGrouper.getNumCallsToGetRegionBoundaries());
         upsertData(conn, stockTableName);
 
         // only run locally, rather than having to spin up a MiniMapReduce cluster and lets us use breakpoints
@@ -154,6 +175,9 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         assertEquals("Got the wrong stock name!", "AAPL", name);
         assertEquals("Max value didn't match the expected!", expectedMax, max, 0);
         assertFalse("Should only have stored one row in stats table!", stats.next());
+        assertEquals("There should have been only be 1 call to getRegionBoundaries "
+                        + "(corresponding to the driver code)", 1,
+                TestingMapReduceParallelScanGrouper.getNumCallsToGetRegionBoundaries());
     }
 
     /**

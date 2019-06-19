@@ -36,7 +36,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
-import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
@@ -63,18 +63,22 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRecordReader.class);
     protected final Configuration  configuration;
     protected final QueryPlan queryPlan;
+    private final ParallelScanGrouper scanGrouper;
     private NullWritable key =  NullWritable.get();
     private T value = null;
     private Class<T> inputClass;
     private ResultIterator resultIterator = null;
     private PhoenixResultSet resultSet;
-    
-    public PhoenixRecordReader(Class<T> inputClass,final Configuration configuration,final QueryPlan queryPlan) {
+
+    PhoenixRecordReader(Class<T> inputClass, final Configuration configuration,
+            final QueryPlan queryPlan, final ParallelScanGrouper scanGrouper) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(queryPlan);
+        Preconditions.checkNotNull(scanGrouper);
         this.inputClass = inputClass;
         this.configuration = configuration;
         this.queryPlan = queryPlan;
+        this.scanGrouper = scanGrouper;
     }
 
     @Override
@@ -141,7 +145,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                       new TableResultIterator(
                           queryPlan.getContext().getConnection().getMutationState(), scan,
                           scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
-                          MapReduceParallelScanGrouper.getInstance());
+                          this.scanGrouper);
                   peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                   LOGGER.info("Adding TableResultIterator for scan: " + scan);
                 }
