@@ -42,6 +42,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -75,7 +76,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
         @SuppressWarnings("unchecked")
         final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
-        return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
+        return getPhoenixRecordReader(inputClass, configuration, queryPlan);
     }
     
    
@@ -84,13 +85,13 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  
         final Configuration configuration = context.getConfiguration();
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
-        final List<KeyRange> allSplits = queryPlan.getSplits();
-        final List<InputSplit> splits = generateSplits(queryPlan, allSplits, configuration);
-        return splits;
+        return generateSplits(queryPlan, configuration);
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, final List<KeyRange> splits, Configuration config) throws IOException {
-        Preconditions.checkNotNull(qplan);
+    private List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
+        // We must call this in order to initialize the scans and splits from the query plan
+        setupParallelScansFromQueryPlan(qplan);
+        final List<KeyRange> splits = qplan.getSplits();
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
@@ -197,14 +198,38 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
                 PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
                     getQueryServices().getConfiguration(), snapshotName);
 
-              // Initialize the query plan so it sets up the parallel scans
-              queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
               return queryPlan;
             }
         } catch (Exception exception) {
             LOGGER.error(String.format("Failed to get the query plan with error [%s]",
                 exception.getMessage()));
             throw new RuntimeException(exception);
+        }
+    }
+
+    void setupParallelScansFromQueryPlan(QueryPlan queryPlan) {
+        setupParallelScansWithScanGrouper(queryPlan, MapReduceParallelScanGrouper.getInstance());
+    }
+
+    RecordReader<NullWritable,T> getPhoenixRecordReader(Class<T> inputClass,
+            Configuration configuration, QueryPlan queryPlan) {
+        return new PhoenixRecordReader<>(inputClass , configuration, queryPlan,
+                MapReduceParallelScanGrouper.getInstance());
+    }
+
+    /**
+     * Initialize the query plan so it sets up the parallel scans
+     * @param queryPlan Query plan corresponding to the select query
+     * @param scanGrouper Parallel scan grouper
+     */
+    void setupParallelScansWithScanGrouper(QueryPlan queryPlan, ParallelScanGrouper scanGrouper) {
+        Preconditions.checkNotNull(queryPlan);
+        try {
+            queryPlan.iterator(scanGrouper);
+        } catch (SQLException e) {
+            LOGGER.error(String.format("Setting up parallel scans for the query plan failed "
+                    + "with error [%s]", e.getMessage()));
+            throw new RuntimeException(e);
         }
     }
 
