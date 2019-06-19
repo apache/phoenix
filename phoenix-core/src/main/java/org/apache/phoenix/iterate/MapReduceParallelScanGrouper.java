@@ -20,6 +20,7 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
@@ -49,7 +50,8 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 		return INSTANCE;
 	}
 
-   private MapReduceParallelScanGrouper() {}
+    @VisibleForTesting
+    MapReduceParallelScanGrouper() {}
 
 	@Override
 	public boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans,
