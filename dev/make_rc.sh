@@ -103,8 +103,8 @@ rm -rf $DIR_REL_BIN_PATH;
 echo "DONE generating binary and source tars in release directory."
 
 # Generate parcels folder
-FILE_PARCEL_TAR=$(find $DIR_PARCEL_TAR -name '*.parcel.tar' -printf '%f\n')
-PARCEL_BASENAME=$(echo $FILE_PARCEL_TAR | sed 's/\.parcel\.tar//')
+FILE_PARCEL_TAR=$(find $DIR_PARCEL_TAR -name '*.parcel.tar.gz' -printf '%f\n')
+PARCEL_BASENAME=$(echo $FILE_PARCEL_TAR | sed 's/\.parcel\.tar.gz//')
 
 PARCEL_DISTROS=( "el6" "el7" "sles12" "xenial")
 for distro in "${PARCEL_DISTROS[@]}"
