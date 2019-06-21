@@ -111,6 +111,7 @@
             </goals>
             <configuration>
               <finalName>${parcel.file}</finalName>
+              <formats>tar.gz</formats>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
