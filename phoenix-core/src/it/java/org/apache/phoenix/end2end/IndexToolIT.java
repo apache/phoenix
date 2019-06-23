@@ -80,6 +80,7 @@ import com.google.common.collect.Maps;
 public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
+    private final boolean mutable;
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
@@ -89,6 +90,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     public IndexToolIT(String transactionProvider, boolean mutable, boolean localIndex,
             boolean directApi, boolean useSnapshot, boolean useTenantId) {
         this.localIndex = localIndex;
+        this.mutable = mutable;
         this.transactional = transactionProvider != null;
         this.directApi = directApi;
         this.useSnapshot = useSnapshot;
@@ -331,6 +333,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testSaltedVariableLengthPK() throws Exception {
+        if (!mutable) return;
+        if (transactional) return;
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -375,6 +379,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testSplitIndex() throws Exception {
         if (localIndex) return; // can't split local indexes
+        if (!mutable) return;
+        if (transactional) return;
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
