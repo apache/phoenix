@@ -57,7 +57,6 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);
 
     private final boolean isMultiTenant;
-    private final boolean columnEncoded;
 
     private static final long fanout = 2;
     private static final long childCount = fanout;
@@ -118,16 +117,13 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
 
     private static final String deleteSchemaRows = "DELETE FROM %s WHERE " + TABLE_SCHEM + " %s";
 
-    public OrphanViewToolIT(boolean isMultiTenant, boolean columnEncoded) {
+    public OrphanViewToolIT(boolean isMultiTenant) {
         this.isMultiTenant = isMultiTenant;
-        this.columnEncoded = columnEncoded;
     }
 
-    @Parameters(name="OrphanViewToolIT_multiTenant={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, false }, { false, true },
-                { true, false }, { true, true } });
+    @Parameters(name="OrphanViewToolIT_multiTenant={0}") // name is used by failsafe as file name in reports
+    public static Collection<Boolean> data() {
+        return Arrays.asList(false, true);
     }
 
     @AfterClass
@@ -146,11 +142,6 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
 
     private String generateDDL(String options, String format) {
         StringBuilder optionsBuilder = new StringBuilder(options);
-        if (!columnEncoded) {
-            if (optionsBuilder.length()!=0)
-                optionsBuilder.append(",");
-            optionsBuilder.append("COLUMN_ENCODED_BYTES=0");
-        }
         if (isMultiTenant) {
             if (optionsBuilder.length()!=0)
                 optionsBuilder.append(",");
@@ -216,6 +207,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         if (count != lineCount)
             LOGGER.debug(count + " != " + lineCount);
         assertTrue(count == lineCount);
+        reader.close();
     }
 
     private void verifyCountQuery(Connection connection, String query, String schemaName, long count)
