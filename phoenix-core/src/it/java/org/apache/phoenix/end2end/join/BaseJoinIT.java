@@ -100,7 +100,7 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
     }
     
     protected String seqName;
-    protected String schemaName;
+    private String schemaName;
     protected final SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     protected final String[] plans;
     private final String[] indexDDL;
@@ -116,11 +116,19 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
         this.plans = new String[0];
     }
 
+    protected String getSchemaName() {
+        return schemaName;
+    }
+
+    protected Map<String,String> getTableNameMap() {
+        return virtualNameToRealNameMap;
+    }
+
     protected String getTableName(Connection conn, String virtualName) throws Exception {
-        String realName = virtualNameToRealNameMap.get(virtualName);
+        String realName = getTableNameMap().get(virtualName);
         if (realName == null) {
-            realName = SchemaUtil.getTableName(schemaName, generateUniqueName());
-            virtualNameToRealNameMap.put(virtualName, realName);
+            realName = SchemaUtil.getTableName(getSchemaName(), generateUniqueName());
+            getTableNameMap().put(virtualName, realName);
             createTable(conn, virtualName, realName);
             initValues(conn, virtualName, realName);
             createIndexes(conn, virtualName, realName);
@@ -154,16 +162,16 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
     }
     
     private String translateToVirtualPlan(String actualPlan) {
-        int size = virtualNameToRealNameMap.size();
+        int size = getTableNameMap().size();
         String[] virtualNames = new String[size+1];
         String[] realNames = new String[size+1];
         int count = 0;
-        for (Map.Entry<String, String>entry : virtualNameToRealNameMap.entrySet()) {
+        for (Map.Entry<String, String>entry : getTableNameMap().entrySet()) {
             virtualNames[count] = entry.getKey();
             realNames[count] = entry.getValue();
             count++;
         }
-        realNames[count] = schemaName;
+        realNames[count] = getSchemaName();
         virtualNames[count]= JOIN_SCHEMA;
         String convertedPlan =  StringUtil.replace(actualPlan, realNames, virtualNames);
         return convertedPlan;
