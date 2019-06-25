@@ -19,12 +19,30 @@ package org.apache.phoenix.end2end.join;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 public class HashJoinNoIndexIT extends HashJoinIT {
+
+    private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();
+    private static final String schemaName = "S_" + generateUniqueName();
+
+    @Override
+    protected String getSchemaName() {
+        // run all tests in a single schema
+        return schemaName;
+    }
+
+    @Override
+    protected Map<String,String> getTableNameMap() {
+        // cache across tests, so that tables and
+        // indexes are not recreated each time
+        return virtualNameToRealNameMap;
+    }
 
     public HashJoinNoIndexIT(String[] indexDDL, String[] plans) {
         super(indexDDL, plans);
