@@ -28,6 +28,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
@@ -38,9 +39,27 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class HashJoinLocalIndexIT extends HashJoinIT {
+
+    private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();
+    private static final String schemaName = "S_" + generateUniqueName();
+
+    @Override
+    protected String getSchemaName() {
+        // run all tests in a single schema
+        return schemaName;
+    }
+
+    @Override
+    protected Map<String,String> getTableNameMap() {
+        // cache across tests, so that tables and
+        // indexes are not recreated each time
+        return virtualNameToRealNameMap;
+    }
+
     
     public HashJoinLocalIndexIT(String[] indexDDL, String[] plans) {
         super(indexDDL, plans);
