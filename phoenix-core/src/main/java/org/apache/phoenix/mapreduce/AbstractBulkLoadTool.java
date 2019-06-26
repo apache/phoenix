@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -87,7 +88,6 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     static final Option IMPORT_COLUMNS_OPT = new Option("c", "import-columns", true, "Comma-separated list of columns to be imported");
     static final Option IGNORE_ERRORS_OPT = new Option("g", "ignore-errors", false, "Ignore input errors");
     static final Option HELP_OPT = new Option("h", "help", false, "Show this help and quit");
-    static final Option SKIP_HEADER_OPT = new Option("k", "skip-header", false, "Skip the first line of CSV files (the header)");
 
     /**
      * Set configuration values based on parsed command line options.
@@ -111,7 +111,6 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         options.addOption(IMPORT_COLUMNS_OPT);
         options.addOption(IGNORE_ERRORS_OPT);
         options.addOption(HELP_OPT);
-        options.addOption(SKIP_HEADER_OPT);
         return options;
     }
 
@@ -203,17 +202,13 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                 conf.set(entry.getKey(), entry.getValue());
             }
         }
-        // Skip the first line of the CSV file(s)?
-        if (cmdLine.hasOption(SKIP_HEADER_OPT.getOpt())) {
-            PhoenixTextInputFormat.setSkipHeader(conf);
-        }
 
         final Connection conn = QueryUtil.getConnection(conf);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
                     qualifiedTableName);
         }
-        List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
+        List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName, conf);
         Preconditions.checkNotNull(importColumns);
         Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
         FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
@@ -379,10 +374,12 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
      * @param conn connection to Phoenix
      * @param cmdLine supplied command line options
      * @param qualifiedTableName table name (possibly with schema) of the table to be imported
+     * @param conf Configured options
      * @return the list of columns to be imported
      */
-    List<ColumnInfo> buildImportColumns(Connection conn, CommandLine cmdLine,
-                                        String qualifiedTableName) throws SQLException {
+    List<ColumnInfo> buildImportColumns(
+            Connection conn, CommandLine cmdLine, String qualifiedTableName, Configuration conf
+    ) throws SQLException, IOException {
         List<String> userSuppliedColumnNames = null;
         if (cmdLine.hasOption(IMPORT_COLUMNS_OPT.getOpt())) {
             userSuppliedColumnNames = Lists.newArrayList(

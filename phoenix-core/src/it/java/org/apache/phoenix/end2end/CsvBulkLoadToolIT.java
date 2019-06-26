@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
@@ -527,6 +528,282 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 assertTrue(rs.next());
                 assertEquals(3, rs.getInt(1));
                 assertFalse(rs.next());
+            }
+        }
+    }
+
+    @Test
+    public void testHeaderAndSkipHeaderAbsent() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE14 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input14.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // If the --parse-header or --skip-header is not passed, the upsert executor
+            // should fail as the total number of columns in CSV is less than that defined
+            // in table
+            int exitCode = csvBulkLoadTool.run(new String[]{
+                    "--input", "/tmp/input14.csv",
+                    "--table", "table14",
+                    "--schema", "s",
+                    "--zookeeper", zkQuorum});
+            assertEquals(-1, exitCode);
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE14")) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
+
+    @Test
+    public void testParseCsvHeaderAsInputColumns() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE15 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR, \"category\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input15.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should ingest data successfully if --parse-header arg is passed
+            int exitCode = csvBulkLoadTool.run(new String[] {
+                    "--input", "/tmp/input15.csv",
+                    "--table", "table15",
+                    "--schema", "s",
+                    "--parse-header",
+                    "--zookeeper", zkQuorum});
+            assertEquals(0, exitCode);
+
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE15")) {
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
+
+    @Test
+    public void testParseHeaderMultipleFiles() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE16 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input16-1.csv"));
+            FSDataOutputStream outputStream2 = fs.create(new Path("/tmp/input16-2.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+            try (PrintWriter printWriter = new PrintWriter(outputStream2)) {
+                printWriter.println("id,name");
+                printWriter.println("4,Name 4");
+                printWriter.println("2,Name 5");
+                printWriter.println("5,Name 6");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should pass if there are multiple input paths provided having same headers
+            int exitCode = csvBulkLoadTool.run(new String[] {
+                    "--input", "/tmp/input16-1.csv,/tmp/input16-2.csv",
+                    "--table", "table16",
+                    "--schema", "s",
+                    "--parse-header",
+                    "--zookeeper", zkQuorum});
+            assertEquals(0, exitCode);
+
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE16")) {
+                assertTrue(rs.next());
+                assertEquals(5, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
+
+    @Test
+    public void testParseHeaderMultipleFilesFailure() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE17 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input17-1.csv"));
+            FSDataOutputStream outputStream2 = fs.create(new Path("/tmp/input17-2.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+            try (PrintWriter printWriter = new PrintWriter(outputStream2)) {
+                printWriter.println("id,name,type");
+                printWriter.println("1,Name 1,Type 1");
+                printWriter.println("2,Name 2,Type 2");
+                printWriter.println("4,Name 4,Type 4");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should fail if there are multitple input paths having different headers in
+            // either of them.  Here, input17-1 and input17-2 have different headers
+            try {
+                csvBulkLoadTool.run(new String[] {
+                        "--input", "/tmp/input17-1.csv,/tmp/input17-2.csv",
+                        "--table", "table17",
+                        "--schema", "s",
+                        "--parse-header",
+                        "--zookeeper", zkQuorum});
+                fail("Random error message");
+            } catch (Exception ex) {
+                assertTrue(ex instanceof IllegalArgumentException);
+                assertTrue(ex.getMessage().contains(
+                        "Headers in provided input files are different. Headers must be unique for all input files"
+                ));
+            }
+        }
+    }
+
+    @Test
+    public void testParseCsvHeaderWithoutHeaderOption() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE18 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input18.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("4,Name 4");
+                printWriter.println("2,Name 5");
+                printWriter.println("5,Name 6");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should fail if the input file does not contain the header and --parse-header
+            // option is also passed.
+            try {
+                csvBulkLoadTool.run(new String[] {
+                        "--input", "/tmp/input18.csv",
+                        "--table", "table18",
+                        "--schema", "s",
+                        "--parse-header",
+                        "--zookeeper", zkQuorum});
+                fail("Random error message");
+            } catch (Exception ex) {
+                assertTrue(ex instanceof ColumnNotFoundException);
+                assertTrue(ex.getMessage().contains(
+                        "Undefined column. columnName=S.TABLE18.4"
+                ));
+            }
+        }
+    }
+
+    @Test
+    public void testBothParseHeaderSkipHeaderPassed() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE19 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"name\" VARCHAR, \"type\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input19.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,name");
+                printWriter.println("1,Name 1");
+                printWriter.println("2,Name 2");
+                printWriter.println("3,Name 3");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should fail if both parse-header and skip-header is passed.
+            try {
+                csvBulkLoadTool.run(new String[] {
+                        "--input", "/tmp/input19.csv",
+                        "--table", "table19",
+                        "--schema", "s",
+                        "--parse-header",
+                        "--skip-header",
+                        "--zookeeper", zkQuorum});
+                fail("Random error message");
+            } catch (Exception ex) {
+                System.out.println(ex.getMessage());
+                assertTrue(ex instanceof IllegalArgumentException);
+                assertTrue(ex.getMessage().contains(
+                        "parse-header and skip-header cannot be used together."
+                ));
+            }
+        }
+    }
+
+    @Test
+    public void testParseHeaderWithColumnFamily() throws Exception {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE S.TABLE20 (\"id\" INTEGER NOT NULL PRIMARY KEY, \"cf1\".\"name\" VARCHAR, \"cf2\".\"type\" VARCHAR, \"cf1\".\"category\" VARCHAR)");
+
+            final Configuration conf = new Configuration(getUtility().getConfiguration());
+            FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+            FSDataOutputStream outputStream1 = fs.create(new Path("/tmp/input20.csv"));
+            try (PrintWriter printWriter = new PrintWriter(outputStream1)) {
+                printWriter.println("id,cf1.name,cf2.type,cf1.category");
+                printWriter.println("1,Name 1,Type1,Category1");
+                printWriter.println("2,Name 2,Type2,Category2");
+                printWriter.println("3,Name 3,Type3,Category3");
+            }
+            CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+            csvBulkLoadTool.setConf(conf);
+
+            // Should ingest data successfully if --parse-header arg is passed
+            int exitCode = csvBulkLoadTool.run(new String[] {
+                    "--input", "/tmp/input20.csv",
+                    "--table", "table20",
+                    "--schema", "s",
+                    "--parse-header",
+                    "--zookeeper", zkQuorum});
+            assertEquals(0, exitCode);
+
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(1) FROM S.TABLE20")) {
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertFalse(rs.next());
+            }
+
+            try (ResultSet rs = stmt.executeQuery("SELECT \"id\",\"cf1\".\"name\", \"cf2\".\"type\", \"cf1\".\"category\" FROM S.TABLE20")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+                assertEquals("Name 1", rs.getString(2));
+                assertEquals("Type1", rs.getString(3));
+                assertEquals("Category1", rs.getString(4));
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertEquals("Name 2", rs.getString(2));
+                assertEquals("Type2", rs.getString(3));
+                assertEquals("Category2", rs.getString(4));
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertEquals("Name 3", rs.getString(2));
+                assertEquals("Type3", rs.getString(3));
+                assertEquals("Category3", rs.getString(4));
             }
         }
     }
