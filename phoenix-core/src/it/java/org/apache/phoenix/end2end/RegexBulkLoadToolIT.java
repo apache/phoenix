@@ -40,6 +40,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
@@ -171,9 +172,11 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         rs.close();
         stmt.close();
     }
-
+    // Due to PHOENIX-5376, the bulk load option is ignored for global indexes
+    @Ignore
     @Test
     public void testImportWithIndex() throws Exception {
+
 
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE3 (ID INTEGER NOT NULL PRIMARY KEY, " +
@@ -244,7 +247,8 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         rs.close();
         stmt.close();
     }
-
+    // Due to PHOENIX-5376, the bulk load option is ignored for global indexes
+    @Ignore
     @Test
     public void testImportOneIndexTable() throws Exception {
         testImportOneIndexTable("TABLE4", false);
