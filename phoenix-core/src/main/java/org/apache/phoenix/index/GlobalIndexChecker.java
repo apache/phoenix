@@ -21,7 +21,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VER
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -32,6 +32,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -51,6 +52,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.hbase.index.table.HTableFactory;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -64,12 +67,13 @@ import org.apache.phoenix.util.ServerUtil;
  */
 public class GlobalIndexChecker extends BaseRegionObserver {
     private static final Log LOG = LogFactory.getLog(GlobalIndexChecker.class);
+    private HTableFactory hTableFactory;
     /**
      * Class that verifies a given row of a non-transactional global index.
      * An instance of this class is created for each scanner on an index
      * and used to verify individual rows and rebuild them if they are not valid
      */
-    private static class GlobalIndexScanner implements RegionScanner {
+    private class GlobalIndexScanner implements RegionScanner {
         RegionScanner scanner;
         private long ageThreshold;
         private int repairCount;
@@ -210,7 +214,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 indexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
                 byte[] indexTableName = region.getRegionInfo().getTable().getName();
-                dataHTable = ServerUtil.getHTableForCoprocessorScan(env, dataTableName);
+                dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
                 if (indexMaintainer == null) {
                     byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
                     List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
@@ -290,8 +294,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 LOG.warn("The empty column does not exist in a row in " + region.getRegionInfo().getTable().getNameAsString());
                 return false;
             }
-            if (Bytes.compareTo(result.getValue(emptyCF, emptyCQ), 0, UNVERIFIED_BYTES.length,
-                    UNVERIFIED_BYTES, 0, UNVERIFIED_BYTES.length) == 0) {
+            if (Bytes.compareTo(result.getValue(emptyCF, emptyCQ), 0, VERIFIED_BYTES.length,
+                    VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
                 return false;
             }
             return true;
@@ -307,12 +311,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             while (cellIterator.hasNext()) {
                 cell = cellIterator.next();
                 if (isEmptyColumn(cell)) {
-                    // Before PHOENIX-5156, the empty column value was set to 'x'. With PHOENIX-5156, it is now
-                    // set to VERIFIED (1) and UNVERIFIED (2). In order to skip the index rows that are inserted before PHOENIX-5156
-                    // we consider anything that is not UNVERIFIED means VERIFIED. IndexTool should be used to
-                    // rebuild old rows to ensure their correctness after the PHOENIX-5156 upgrade
                     if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                            UNVERIFIED_BYTES, 0, UNVERIFIED_BYTES.length) == 0) {
+                            VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
                         return false;
                     }
                     // Empty column is not supposed to be returned to the client except it is the only column included
@@ -375,4 +375,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         return new GlobalIndexScanner(c.getEnvironment(), scan, s);
     }
 
+    @Override
+    public void start(CoprocessorEnvironment e) throws IOException {
+        this.hTableFactory = ServerUtil.getDelegateHTableFactory(e, ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION);
+    }
+
+    @Override
+    public void stop(CoprocessorEnvironment e) throws IOException {
+        this.hTableFactory.shutdown();
+    }
 }

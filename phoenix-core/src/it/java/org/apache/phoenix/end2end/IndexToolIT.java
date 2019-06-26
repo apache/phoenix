@@ -128,10 +128,16 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
         for (boolean transactional : Booleans) {
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
-                    for (boolean directApi : Booleans) {
-                        for (boolean useSnapshot : Booleans) {
-                            list.add(new Boolean[] { transactional, mutable, localIndex, directApi, useSnapshot, false});
+                    if (localIndex) {
+                        for (boolean directApi : Booleans) {
+                            for (boolean useSnapshot : Booleans) {
+                                list.add(new Boolean[]{transactional, mutable, true, directApi, useSnapshot, false});
+                            }
                         }
+                    }
+                    else {
+                        // Due to PHOENIX-5375 and PHOENIX-5376, the useSnapshot and bulk load option are ignored for global indexes
+                        list.add(new Boolean[]{transactional, mutable, false, true, false, false});
                     }
                 }
             }

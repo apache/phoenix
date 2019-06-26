@@ -88,16 +88,16 @@ public class IndexExtendedIT extends BaseTest {
     
     @Parameters(name="mutable = {0} , localIndex = {1}, directApi = {2}, useSnapshot = {3}")
     public static Collection<Boolean[]> data() {
-        List<Boolean[]> list = Lists.newArrayListWithExpectedSize(16);
+        List<Boolean[]> list = Lists.newArrayListWithExpectedSize(10);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans ) {
-            for (boolean localIndex : Booleans ) {
-                for (boolean directApi : Booleans ) {
-                    for (boolean useSnapshot : Booleans ) {
-                        list.add(new Boolean[]{ mutable, localIndex, directApi, useSnapshot});
-                    }
+            for (boolean directApi : Booleans ) {
+                for (boolean useSnapshot : Booleans) {
+                    list.add(new Boolean[]{mutable, true, directApi, useSnapshot});
                 }
             }
+            // Due to PHOENIX-5375 and PHOENIX-5376, the useSnapshot and bulk load options are ignored for global indexes
+            list.add(new Boolean[]{ mutable, false, true, false});
         }
         return list;
     }
