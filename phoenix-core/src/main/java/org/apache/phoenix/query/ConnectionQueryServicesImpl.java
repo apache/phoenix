@@ -906,12 +906,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             TransactionFactory.Provider provider = getTransactionProvider(tableProps);
             boolean isTransactional = (provider != null);
 
-            boolean globalIndexerEnabled = config.getBoolean(
+            boolean indexRegionObserverEnabled = config.getBoolean(
                     QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
                     QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
 
             if (tableType == PTableType.INDEX && !isTransactional) {
-                if (globalIndexerEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                    builder.removeCoprocessor(GlobalIndexChecker.class.getName());
+                } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
                 }
             }
@@ -952,14 +954,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                     }
-                    if (globalIndexerEnabled) {
+                    if (indexRegionObserverEnabled) {
+                        if (newDesc.hasCoprocessor(Indexer.class.getName())) {
+                            builder.removeCoprocessor(Indexer.class.getName());
+                        }
                         if (!newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
                             Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                             IndexRegionObserver.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
                         }
-
                     } else {
+                        if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                            builder.removeCoprocessor(IndexRegionObserver.class.getName());
+                        }
                         if (!newDesc.hasCoprocessor(Indexer.class.getName())) {
                             Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
