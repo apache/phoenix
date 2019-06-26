@@ -1365,8 +1365,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return MetaDataUtil.areClientAndServerCompatible(serverVersion);
     }
 
-    private void checkClientServerCompatibility(byte[] metaTable) throws SQLException {
-        StringBuilder buf = new StringBuilder("Newer Phoenix clients can't communicate with older Phoenix servers. The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_JAR_NAME + " to be put in the classpath of HBase: ");
+    private void checkClientServerCompatibility(byte[] metaTable) throws SQLException,
+            AccessDeniedException {
+        StringBuilder buf = new StringBuilder("Newer Phoenix clients can't communicate with older "
+                + "Phoenix servers. The following servers require an updated "
+                + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
+                + " to be put in the classpath of HBase: ");
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
@@ -1435,7 +1439,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             + " is consistent on client and server.")
                             .build().buildException(); }
             lowestClusterHBaseVersion = minHBaseVersion;
-        } catch (SQLException e) {
+        } catch (SQLException | AccessDeniedException e) {
             throw e;
         } catch (Throwable t) {
             // This is the case if the "phoenix.jar" is not on the classpath of HBase on the region server
