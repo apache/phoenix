@@ -186,7 +186,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
                 if (traceInfo.contains(tracingTableName)) {
                     return false;
                 }
-                return traceInfo.contains("Completing index");
+                return traceInfo.contains("Completing post index");
             }
         });
 
