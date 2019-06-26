@@ -134,9 +134,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                             || !TransactionFactory.getTransactionProvider(
                                     TransactionFactory.Provider.valueOf(transactionProvider))
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
-                        for (boolean directApi : Booleans) {
-                            list.add(new Object[] { transactionProvider, mutable, localIndex,
-                                    directApi, false, false});
+                        if (localIndex) {
+                            for (boolean directApi : Booleans) {
+                                list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                        directApi, false, false});
+                            }
+                        }
+                        else {
+                            // Due to PHOENIX-5376, the bulk load option is ignored for global indexes
+                            list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                    true, false, false});
                         }
                     }
                 }
