@@ -850,12 +850,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) || nonTxToTx;
 
-            boolean globalIndexerEnabled = config.getBoolean(
+            boolean indexRegionObserverEnabled = config.getBoolean(
                     QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
                     QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
 
             if (tableType == PTableType.INDEX && !isTransactional) {
-                if (globalIndexerEnabled && !descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                if (!indexRegionObserverEnabled && descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                    descriptor.removeCoprocessor(GlobalIndexChecker.class.getName());
+                } else if (indexRegionObserverEnabled && !descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     descriptor.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
                 }
             }
@@ -897,7 +899,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                     }
-                    if (globalIndexerEnabled) {
+                    if (indexRegionObserverEnabled) {
+                        if (descriptor.hasCoprocessor(Indexer.class.getName())) {
+                            descriptor.removeCoprocessor(Indexer.class.getName());
+                        }
                         if (!descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
                             Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
@@ -905,6 +910,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
 
                     } else {
+                        if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                            descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
+                        }
                         if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
                             Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
