@@ -739,10 +739,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     return true;
                 }
 
-				@Override
-				public Operation getOperation() {
-					return this.getOperation();
-				}
+                @Override
+                public Operation getOperation() {
+                    return ExecutableExplainStatement.this.getOperation();
+                }
+
                 @Override
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
