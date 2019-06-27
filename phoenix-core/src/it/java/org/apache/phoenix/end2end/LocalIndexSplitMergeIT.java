@@ -112,7 +112,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             assertTrue(rs.next());
 
             HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            for (int i = 1; i < 5; i++) {
+            for (int i = 1; i < 3; i++) {
                 admin.split(physicalTableName, ByteUtil.concat(Bytes.toBytes(strings[3 * i])));
                 List<HRegionInfo> regionsOfUserTable =
                         MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
