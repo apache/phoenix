@@ -98,6 +98,8 @@ public class ScanningResultIterator implements ResultIterator {
 
         if (scanMetricsEnabled && !scanMetricsUpdated) {
             ScanMetrics scanMetrics = scan.getScanMetrics();
+            if (scanMetrics == null)
+                return; // See PHOENIX-5345
             Map<String, Long> scanMetricsMap = scanMetrics.getMetricsMap();
             scanMetricsHolder.setScanMetricMap(scanMetricsMap);
 
