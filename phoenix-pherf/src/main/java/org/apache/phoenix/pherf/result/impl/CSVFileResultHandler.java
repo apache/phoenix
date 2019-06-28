@@ -47,11 +47,10 @@ public class CSVFileResultHandler extends CSVResultHandler {
     }
 
     public synchronized List<Result> read() throws IOException {
-        CSVParser parser = null;
         util.ensureBaseResultDirExists();
-        try {
-            File file = new File(resultFileName);
-            parser = CSVParser.parse(file, Charset.defaultCharset(), CSVFormat.DEFAULT);
+        File file = new File(resultFileName);
+        try (CSVParser parser = CSVParser
+                .parse(file, Charset.defaultCharset(), CSVFormat.DEFAULT)) {
             List<CSVRecord> records = parser.getRecords();
             List<Result> results = new ArrayList<>();
             String header = null;
@@ -70,8 +69,6 @@ public class CSVFileResultHandler extends CSVResultHandler {
                 results.add(result);
             }
             return results;
-        } finally {
-            parser.close();
         }
     }
 
