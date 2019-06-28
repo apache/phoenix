@@ -62,6 +62,9 @@ public class Column {
      */
     @Override
     public boolean equals(Object column) {
+        if (!(column instanceof Column)) {
+            return false;
+        }
         Column col = (Column)column;
         return (getType() == col.getType());
     }

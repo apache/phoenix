@@ -56,6 +56,9 @@ public class Scenario {
      */
     @Override
     public boolean equals(Object object) {
+        if (!(object instanceof Scenario)) {
+            return false;
+        }
         Scenario scenario = (Scenario) object;
         return (this.tableName.equals(scenario.getTableName()));
     }
