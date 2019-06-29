@@ -18,7 +18,10 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedList;
 
 import com.google.common.collect.Iterables;
 
@@ -83,7 +86,7 @@ public class SQLCloseables {
         private boolean hasSetStackTrace;
         
         /**
-         * Use the {@link #fromIOExceptions(Collection) factory}.
+         * Use the {@link #fromSQLExceptions(Collection) factory}.
          */
         private MultipleCausesSQLException(Collection<? extends SQLException> exceptions) {
             this.exceptions = exceptions;
@@ -113,9 +116,7 @@ public class SQLCloseables {
                             0);
                     
                     frames.add(header);
-                    for (StackTraceElement ste : exception.getStackTrace()) {
-                        frames.add(ste);
-                    }
+                    Collections.addAll(frames, exception.getStackTrace());
                     exceptionNum++;
                 }
                 

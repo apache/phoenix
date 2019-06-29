@@ -140,13 +140,11 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
                         }
                         for (List<Cell> cellList : mutation.getFamilyCellMap().values()) {
                             List<Cell>keyValueList = preUpdateProcessor.preUpsert(mutation.getRow(), cellList);
-                            for (Cell keyValue : keyValueList) {
-                                keyValues.add(keyValue);
-                            }
+                            keyValues.addAll(keyValueList);
                         }
                     }
                 }
-                Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
+                keyValues.sort(pconn.getKeyValueBuilder().getKeyValueComparator());
                 for (Cell kv : keyValues) {
                     outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                     context.write(outputKey, PhoenixKeyValueUtil.maybeCopyCell(kv));
