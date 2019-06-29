@@ -749,13 +749,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             findAncestorViewsOfIndex(tenantId, schemaName, tableName, viewFinderResult,
                 table.isNamespaceMapped());
         }
-        if (viewFinderResult.getLinks().isEmpty()) {
+        List<TableInfo> tableViewInfoList = viewFinderResult.getLinks();
+        if (tableViewInfoList.isEmpty()) {
             // no need to combine columns for local indexes on regular tables
             return table;
         }
-        for (TableInfo viewInfo : viewFinderResult.getLinks()) {
-            ancestorList.add(viewInfo);
-        }
+        ancestorList.addAll(tableViewInfoList);
         List<PColumn> allColumns = Lists.newArrayList();
         List<PColumn> excludedColumns = Lists.newArrayList();
         // add my own columns first in reverse order

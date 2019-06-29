@@ -26,6 +26,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 
 
@@ -136,9 +137,7 @@ public class Closeables {
                             0);
                     
                     frames.add(header);
-                    for (StackTraceElement ste : exception.getStackTrace()) {
-                        frames.add(ste);
-                    }
+                    Collections.addAll(frames, exception.getStackTrace());
                     exceptionNum++;
                 }
                 
