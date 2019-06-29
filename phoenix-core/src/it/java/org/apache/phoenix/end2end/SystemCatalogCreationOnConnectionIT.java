@@ -188,23 +188,6 @@ public class SystemCatalogCreationOnConnectionIT {
     /********************* Testing SYSTEM.CATALOG/SYSTEM:CATALOG creation/upgrade behavior for subsequent connections *********************/
 
 
-    // Conditions: server-side namespace mapping is enabled, the first connection to the server will create unmapped
-    // SYSTEM tables i.e. SYSTEM\..*, the second connection has client-side namespace mapping enabled and
-    // system table to system namespace mapping enabled
-    // Expected: We will migrate all SYSTEM\..* tables to the SYSTEM namespace
-    @Test
-    public void testMigrateToSystemNamespace() throws Exception {
-        SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
-          firstConnectionNSMappingServerEnabledClientEnabledMappingDisabled();
-        driver.resetCQS();
-        // Setting this to true to effect migration of SYSTEM tables to the SYSTEM namespace
-        Properties clientProps = getClientProperties(true, true);
-        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-        hbaseTables = getHBaseTables();
-        assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
-        assertEquals(1, countUpgradeAttempts);
-    }
-
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will create all namespace
     // mapped SYSTEM tables i.e. SYSTEM:.*, the SYSTEM:CATALOG timestamp at creation is purposefully set to be <
     // MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP. The subsequent connection has client-side namespace mapping enabled
@@ -260,22 +243,6 @@ public class SystemCatalogCreationOnConnectionIT {
         }
     }
 
-    // Conditions: server-side namespace mapping is enabled, the first connection to the server will create only SYSTEM.CATALOG,
-    // the second connection has client-side namespace mapping enabled
-    // Expected: We will migrate SYSTEM.CATALOG to SYSTEM namespace and create all other SYSTEM:.* tables
-    @Test
-    public void testMigrateSysCatCreateOthers() throws Exception {
-        SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
-          firstConnectionNSMappingServerEnabledClientDisabled();
-        driver.resetCQS();
-        Properties clientProps = getClientProperties(true, true);
-        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-        hbaseTables = getHBaseTables();
-        assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
-        // SYSTEM.CATALOG migration to the SYSTEM namespace is counted as an upgrade
-        assertEquals(1, countUpgradeAttempts);
-    }
-
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will create unmapped SYSTEM
     // tables SYSTEM\..* whose timestamp at creation is purposefully set to be < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP.
     // The second connection has client-side namespace mapping enabled and system table to system namespace mapping enabled
@@ -318,8 +285,11 @@ public class SystemCatalogCreationOnConnectionIT {
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will create only SYSTEM.CATALOG,
     // the second connection has client-side namespace mapping disabled
     // Expected: Throw Inconsistent namespace mapping exception when you check client-server compatibility
+    //
+    // A third connection has client-side namespace mapping enabled
+    // Expected: We will migrate SYSTEM.CATALOG to SYSTEM namespace and create all other SYSTEM:.* tables
     @Test
-    public void testUnmappedSysCatExistsInconsistentNSMappingFails() throws Exception {
+    public void testUnmappedSysCat() throws Exception {
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           firstConnectionNSMappingServerEnabledClientDisabled();
         driver.resetCQS();
@@ -334,13 +304,24 @@ public class SystemCatalogCreationOnConnectionIT {
         assertTrue(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG));
         assertTrue(hbaseTables.size() == 1);
         assertEquals(0, countUpgradeAttempts);
+
+        driver.resetCQS();
+        clientProps = getClientProperties(true, true);
+        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
+        hbaseTables = getHBaseTables();
+        assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
+        // SYSTEM.CATALOG migration to the SYSTEM namespace is counted as an upgrade
+        assertEquals(1, countUpgradeAttempts);
     }
 
     // Conditions: server-side namespace mapping is disabled, the first connection to the server will create all unmapped
     // SYSTEM tables i.e. SYSTEM\..*, the second connection has client-side namespace mapping enabled
     // Expected: Throw Inconsistent namespace mapping exception when you check client-server compatibility
+    //
+    // Then another connection has client-side namespace mapping disabled
+    // Expected: All SYSTEM\..* tables exist and no upgrade is required
     @Test
-    public void testSysTablesExistInconsistentNSMappingFails() throws Exception {
+    public void testSysTablesExistNSMappingDisabled() throws Exception {
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           firstConnectionNSMappingServerDisabledClientDisabled();
         driver.resetCQS();
@@ -354,17 +335,27 @@ public class SystemCatalogCreationOnConnectionIT {
         hbaseTables = getHBaseTables();
         assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
         assertEquals(0, countUpgradeAttempts);
+
+        driver.resetCQS();
+        clientProps = getClientProperties(false, false);
+        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
+        hbaseTables = getHBaseTables();
+        assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
+        assertEquals(0, countUpgradeAttempts);
     }
 
     // Conditions: server-side namespace mapping is disabled, the first connection to the server will create only SYSTEM:CATALOG
-    // and the second connection has client-side namespace mapping enabled
-    // Expected: Throw Inconsistent namespace mapping exception when you check client-server compatibility
+    // and the second connection has client-side namespace mapping disabled
+    // Expected: The second connection should fail with Inconsistent namespace mapping exception
+    //
+    // A third connection has client-side namespace mapping enabled
+    // Expected: The third connection should fail with Inconsistent namespace mapping exception
     @Test
-    public void testMappedSysCatExistsInconsistentNSMappingFails() throws Exception {
+    public void testClientNSMappingDisabledConnectionFails() throws Exception {
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           firstConnectionNSMappingServerDisabledClientEnabled();
         driver.resetCQS();
-        Properties clientProps = getClientProperties(true, true);
+        Properties clientProps = getClientProperties(false, false);
         try{
             driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
             fail("Client should not be able to connect to cluster with inconsistent client-server namespace mapping properties");
@@ -375,32 +366,10 @@ public class SystemCatalogCreationOnConnectionIT {
         assertTrue(hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
         assertTrue(hbaseTables.size() == 1);
         assertEquals(0, countUpgradeAttempts);
-    }
 
-    // Conditions: server-side namespace mapping is disabled, the first connection to the server will create all SYSTEM\..*
-    // tables and the second connection has client-side namespace mapping disabled
-    // Expected: All SYSTEM\..* tables exist and no upgrade is required
-    @Test
-    public void testNSMappingDisabledNoUpgradeRequired() throws Exception {
-        SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
-          firstConnectionNSMappingServerDisabledClientDisabled();
+        // now try a client with ns mapping enabled
         driver.resetCQS();
-        Properties clientProps = getClientProperties(false, false);
-        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-        hbaseTables = getHBaseTables();
-        assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
-        assertEquals(0, countUpgradeAttempts);
-    }
-
-    // Conditions: server-side namespace mapping is disabled, the first connection to the server will create only SYSTEM:CATALOG
-    // and the second connection has client-side namespace mapping disabled
-    // Expected: The second connection should fail with Inconsistent namespace mapping exception
-    @Test
-    public void testClientNSMappingDisabledConnectionFails() throws Exception {
-        SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
-          firstConnectionNSMappingServerDisabledClientEnabled();
-        driver.resetCQS();
-        Properties clientProps = getClientProperties(false, false);
+        clientProps = getClientProperties(true, true);
         try{
             driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
             fail("Client should not be able to connect to cluster with inconsistent client-server namespace mapping properties");
