@@ -973,9 +973,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                             Indexer.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
                         }
-                        if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                            builder.removeCoprocessor(IndexRegionObserver.class.getName());
-                        }
                     }
                 }
             }
