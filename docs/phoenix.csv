@@ -1974,7 +1974,7 @@ similarly to the single-argument ""TO_DATE"" function.
 ","
 TO_DATE('Sat, 3 Feb 2001 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z')
 TO_DATE('1970-01-01', 'yyyy-MM-dd', 'GMT+1')
-date "1970-01-01 12:30:00"
+date '1970-01-01 12:30:00'
 "
 
 "Functions (Time and Date)","CURRENT_DATE","
