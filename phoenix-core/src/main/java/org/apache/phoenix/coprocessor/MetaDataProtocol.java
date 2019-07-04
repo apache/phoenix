@@ -260,6 +260,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private PTable table;
         private List<byte[]> tableNamesToDelete;
         private List<SharedTableState> sharedTablesToDelete;
+        private List<PTable> sharedPTablesToDelete;
         private byte[] columnName;
         private byte[] familyName;
         private boolean wasUpdated;
@@ -321,6 +322,15 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.sharedTablesToDelete = sharedTablesToDelete;
         }
 
+        public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table,
+                                      List<byte[]> tableNamesToDelete,
+                                      List<SharedTableState> sharedTablesToDelete,
+                                      List<PTable> sharedPTablesToDelete) {
+            this(returnCode, currentTime, table, tableNamesToDelete);
+            this.sharedPTablesToDelete = sharedPTablesToDelete;
+            this.sharedTablesToDelete = sharedTablesToDelete;
+        }
+
         public MutationCode getMutationCode() {
             return returnCode;
         }
@@ -363,6 +373,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         
         public List<SharedTableState> getSharedTablesToDelete() {
             return sharedTablesToDelete;
+        }
+
+        public List<PTable> getSharedPTablesToDelete() {
+            return sharedPTablesToDelete;
         }
 
         public long getAutoPartitionNum() {
@@ -411,6 +425,14 @@ public abstract class MetaDataProtocol extends MetaDataService {
                   proto.getSharedTablesToDeleteList()) {
                 result.sharedTablesToDelete.add(new SharedTableState(sharedTable));
                 }
+          }
+          if (proto.getSharedPTablesToDeleteCount() > 0) {
+              result.sharedPTablesToDelete =
+                      Lists.newArrayListWithExpectedSize(proto.getSharedPTablesToDeleteCount());
+              for (org.apache.phoenix.coprocessor.generated.PTableProtos.PTable pTable :
+                    proto.getSharedPTablesToDeleteList()) {
+                  result.sharedPTablesToDelete.add(PTableImpl.createFromProto(pTable));
+              }
           }
           if (proto.hasSchema()) {
             result.schema = PSchema.createFromProto(proto.getSchema());
@@ -468,6 +490,11 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 sharedTableStateBuilder.setViewIndexIdType(sharedTableState.viewIndexIdType.getSqlType());
                 builder.addSharedTablesToDelete(sharedTableStateBuilder.build());
               }
+            }
+            if (result.getSharedPTablesToDelete() != null) {
+                for (PTable pTable : result.sharedPTablesToDelete) {
+                    builder.addSharedPTablesToDelete(PTableImpl.toProto(pTable));
+                }
             }
             if (result.getSchema() != null) {
               builder.setSchema(PSchema.toProto(result.schema));

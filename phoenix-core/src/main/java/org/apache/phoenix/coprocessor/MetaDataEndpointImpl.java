@@ -2136,6 +2136,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
             List<byte[]> tableNamesToDelete = Lists.newArrayList();
             List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
+            List<PTable> sharedPTablesToDelete = Lists.newArrayList();
 
             byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             Region region = env.getRegion();
@@ -2180,8 +2181,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result =
                         doDropTable(lockKey, tenantIdBytes, schemaName, tableName, parentTableName,
-                                PTableType.fromSerializedValue(tableType), tableMetadata, childLinkMutations,
-                                invalidateList, tableNamesToDelete, sharedTablesToDelete, isCascade, request.getClientVersion());
+                            PTableType.fromSerializedValue(tableType), tableMetadata, childLinkMutations,
+                            invalidateList, tableNamesToDelete, sharedTablesToDelete, isCascade,
+                                request.getClientVersion(), sharedPTablesToDelete);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
@@ -2269,9 +2271,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName, byte[] tableName,
-                                               byte[] parentTableName, PTableType tableType, List<Mutation> catalogMutations,
-                                               List<Mutation> childLinkMutations, List<ImmutableBytesPtr> invalidateList, List<byte[]> tableNamesToDelete,
-                                               List<SharedTableState> sharedTablesToDelete, boolean isCascade, int clientVersion)
+            byte[] parentTableName, PTableType tableType, List<Mutation> catalogMutations,
+            List<Mutation> childLinkMutations, List<ImmutableBytesPtr> invalidateList, List<byte[]> tableNamesToDelete,
+            List<SharedTableState> sharedTablesToDelete, boolean isCascade, int clientVersion,
+                                               List<PTable> sharedPTablesToDelete)
             throws IOException, SQLException {
 
         Region region = env.getRegion();
@@ -2347,6 +2350,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             // Add to list of HTables to delete, unless it's a view or its a shared index 
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));
+                sharedPTablesToDelete.add(table);
+
             } else if (tableType != PTableType.VIEW) {
                 tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
@@ -2389,14 +2394,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             catalogMutations.add(delete);
             MetaDataMutationResult result =
                     doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX,
-                            catalogMutations, childLinkMutations, invalidateList, tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
+                        catalogMutations, childLinkMutations, invalidateList, tableNamesToDelete,
+                            sharedTablesToDelete, false, clientVersion,
+                            sharedPTablesToDelete);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
             }
         }
 
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
-                EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete, sharedTablesToDelete);
+                EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete,
+                sharedTablesToDelete, sharedPTablesToDelete);
     }
 
     private MetaDataMutationResult
@@ -2414,6 +2422,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 new ImmutableBytesWritable());
         List<byte[]> tableNamesToDelete = Lists.newArrayList();
         List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
+        List<PTable> sharedPTablesToDelete = Lists.newArrayList();
         List<PTable> childViews = Lists.newArrayList();
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
         try {
@@ -2575,7 +2584,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         iterator.remove();
                         result = dropIndexes(env, pair.getFirst(), invalidateList, locks, clientTimeStamp,
                                 tableMetadata, pair.getSecond(), tableNamesToDelete, sharedTablesToDelete,
-                                clientVersion);
+                                clientVersion, sharedPTablesToDelete);
                         if (result != null
                                 && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                             return result;
@@ -2636,7 +2645,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 } else {
                     table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
                     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table,
-                            tableNamesToDelete, sharedTablesToDelete);
+                            tableNamesToDelete, sharedTablesToDelete, sharedPTablesToDelete);
                 }
             } finally {
                 ServerUtil.releaseRowLocks(locks);
@@ -2844,11 +2853,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         List<Mutation> tableMetaData = null;
         final List<byte[]> tableNamesToDelete = Lists.newArrayList();
         final List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
+        final List<PTable> sharedPTablesToDelete = Lists.newArrayList();
         try {
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
                     request.getClientVersion(), parentTable);
+
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -2863,7 +2874,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                                List<ImmutableBytesPtr> invalidateList, List<RowLock> locks,
                                                long clientTimeStamp, List<Mutation> tableMetaData,
                                                PColumn columnToDelete, List<byte[]> tableNamesToDelete,
-                                               List<SharedTableState> sharedTablesToDelete, int clientVersion)
+                                               List<SharedTableState> sharedTablesToDelete,
+                                               int clientVersion, List<PTable> sharedPTablesToDelete)
             throws IOException, SQLException {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
@@ -2914,7 +2926,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 MetaDataMutationResult result = doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(),
                         index.getTableName().getBytes(), table.getName().getBytes(), index.getType(),
                         tableMetaData, childLinksMutations, invalidateList, tableNamesToDelete, sharedTablesToDelete,
-                        false, clientVersion);
+                        false, clientVersion, sharedPTablesToDelete);
                 if (result != null && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
@@ -2922,6 +2934,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 if (!childLinksMutations.isEmpty()) {
                     LOGGER.error("Found unexpected child link mutations while dropping an index "
                             + childLinksMutations);
+
                 }
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
@@ -2936,7 +2949,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private MetaDataMutationResult dropRemoteIndexes(RegionCoprocessorEnvironment env, PTable table,
                                                      long clientTimeStamp, PColumn columnToDelete,
                                                      List<byte[]> tableNamesToDelete,
-                                                     List<SharedTableState> sharedTablesToDelete)
+                                                     List<SharedTableState> sharedTablesToDelete,
+                                                     List<PTable> sharedPTablesToDelete)
             throws SQLException {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
@@ -2991,6 +3005,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     tableNamesToDelete.addAll(result.getTableNamesToDelete());
                 if (result.getSharedTablesToDelete() != null && !result.getSharedTablesToDelete().isEmpty())
                     sharedTablesToDelete.addAll(result.getSharedTablesToDelete());
+                if (result.getSharedPTablesToDelete() != null && !result.getSharedPTablesToDelete().isEmpty())
+                    sharedPTablesToDelete.addAll(result.getSharedPTablesToDelete());
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
