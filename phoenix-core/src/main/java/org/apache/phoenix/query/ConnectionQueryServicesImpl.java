@@ -22,6 +22,7 @@ import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -3397,15 +3398,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
                     );
         }
-        if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+        if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
             addViewIndexToParentLinks(metaConnection);
-            moveChildLinks(metaConnection);
         }
-        if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0) {
+        if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
             metaConnection = addColumnsIfNotExists(
                     metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0,
                     PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE + " "
                             + PInteger.INSTANCE.getSqlTypeName());
         }
@@ -3414,7 +3414,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     /**
      * There is no other locking needed here since only one connection (on the same or different JVM) will be able to
-     * acquire the upgrade mutex via {@link #acquireUpgradeMutex(long, byte[])}.
+     * acquire the upgrade mutex via {@link #acquireUpgradeMutex(long)} .
      */
     @Override
     public void upgradeSystemTables(final String url, final Properties props) throws SQLException {
@@ -3425,6 +3425,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException toThrow = null;
         boolean acquiredMutexLock = false;
         boolean snapshotCreated = false;
+        boolean moveChildLinks = false;
+        boolean syncAllTableAndIndexProps = false;
         try {
             if (!isUpgradeRequired()) {
                 throw new UpgradeNotRequiredException();
@@ -3437,8 +3439,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                     scnProps, newEmptyMetaData());
             metaConnection.setRunningUpgrade(true);
-            // Always try to create SYSTEM.MUTEX table since we need it to acquire the upgrade mutex.
-            // Upgrade or migration is not possible without the upgrade mutex
+            // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
+            // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
             try (Admin admin = getAdmin()) {
                 createSysMutexTableIfNotExists(admin);
             }
@@ -3449,8 +3451,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // timestamp. A TableAlreadyExistsException is not thrown, since the table only exists
                 // *after* this fixed timestamp.
             } catch (UpgradeRequiredException e) {
-                // This is thrown while trying to create SYSTEM:CATALOG to indicate that we must migrate SYSTEM tables
-                // to the SYSTEM namespace and/or upgrade SYSCAT if required
+                // This is thrown while trying to create SYSTEM:CATALOG to indicate that we must
+                // migrate SYSTEM tables to the SYSTEM namespace and/or upgrade SYSCAT if required
+                long currentServerSideTableTimeStamp = e.getSystemCatalogTimeStamp();
+                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+                    moveChildLinks = true;
+                }
                 sysCatalogTableName = SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getNameAsString();
                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
                     // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table.
@@ -3464,7 +3470,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // If they don't exist or they're already migrated, this method will return immediately
                     ensureSystemTablesMigratedToSystemNamespace();
                     LOGGER.debug("Migrated SYSTEM tables to SYSTEM namespace");
-                    metaConnection = upgradeSystemCatalogIfRequired(metaConnection, e.getSystemCatalogTimeStamp());
+                    metaConnection = upgradeSystemCatalogIfRequired(metaConnection,
+                            currentServerSideTableTimeStamp);
                 }
             } catch (TableAlreadyExistsException e) {
                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
@@ -3483,131 +3490,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // We will not reach here if we fail to acquire the lock, since it throws UpgradeInProgressException
                 }
                 metaConnection = upgradeSystemCatalogIfRequired(metaConnection, currentServerSideTableTimeStamp);
-                // Synchronize necessary properties amongst all column families of a base table and its indexes
-                // See PHOENIX-3955
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
-                    syncTableAndIndexProperties(metaConnection, getAdmin());
+                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+                    moveChildLinks = true;
+                    syncAllTableAndIndexProps = true;
                     //Combine view index id sequences for the same physical view index table
                     //to avoid collisions. See PHOENIX-5132 and PHOENIX-5138
                     UpgradeUtil.mergeViewIndexIdSequences(this, metaConnection);
                 }
             }
 
-            int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
-            try {
-                String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
-                metaConnection.createStatement().executeUpdate(createSequenceTable);
-                nSequenceSaltBuckets = nSaltBuckets;
-            } catch (NewerTableAlreadyExistsException e) {
-                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
-                // timestamp.
-                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this
-                // fixed timestamp.
-                nSequenceSaltBuckets = getSaltBuckets(e);
-            } catch (TableAlreadyExistsException e) {
-                // This will occur if we have an older SYSTEM.SEQUENCE and we need to update it to
-                // include
-                // any new columns we've added.
-                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
-                    // If the table time stamp is before 4.1.0 then we need to add below columns
-                    // to the SYSTEM.SEQUENCE table.
-                    String columnsToAdd = PhoenixDatabaseMetaData.MIN_VALUE + " "
-                            + PLong.INSTANCE.getSqlTypeName() + ", "
-                            + PhoenixDatabaseMetaData.MAX_VALUE + " "
-                            + PLong.INSTANCE.getSqlTypeName() + ", "
-                            + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
-                            + PBoolean.INSTANCE.getSqlTypeName() + ", "
-                            + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
-                            + PBoolean.INSTANCE.getSqlTypeName();
-                    addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
-                }
-                // If the table timestamp is before 4.2.1 then run the upgrade script
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
-                    if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
-                        metaConnection.removeTable(null,
-                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
-                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
-                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                        clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
-                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA_BYTES,
-                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE_BYTES,
-                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                        clearTableRegionCache(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
-                    }
-                    nSequenceSaltBuckets = nSaltBuckets;
-                } else {
-                    nSequenceSaltBuckets = getSaltBuckets(e);
-                }
+            metaConnection = upgradeOtherSystemTablesIfRequired(metaConnection, moveChildLinks);
+            // Synchronize necessary properties amongst all column families of a base table
+            // and its indexes. See PHOENIX-3955
+            if (syncAllTableAndIndexProps) {
+                syncTableAndIndexProperties(metaConnection, getAdmin());
             }
-            try {
-                metaConnection.createStatement().executeUpdate(
-                        QueryConstants.CREATE_STATS_TABLE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {
-
-            } catch (TableAlreadyExistsException e) {
-                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
-                    metaConnection = addColumnsIfNotExists(
-                            metaConnection,
-                            SYSTEM_STATS_NAME,
-                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
-                            PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
-                                    + PLong.INSTANCE.getSqlTypeName());
-                }
-                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
-                    // The COLUMN_FAMILY column should be nullable as we create a row in it without
-                    // any column family to mark when guideposts were last collected.
-                    metaConnection = removeNotNullConstraint(metaConnection,
-                            PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
-                            PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
-                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
-                            PhoenixDatabaseMetaData.COLUMN_FAMILY);
-                    ConnectionQueryServicesImpl.this.removeTable(null,
-                            PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, null,
-                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
-                    clearCache();
-                }
-            }
-
-            try {
-                metaConnection.createStatement().executeUpdate(getTaskDDL());
-            } catch (NewerTableAlreadyExistsException e) {
-
-            } catch (TableAlreadyExistsException e) {
-                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
-                if (currentServerSideTableTimeStamp <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
-                    String
-                            columnsToAdd =
-                            PhoenixDatabaseMetaData.TASK_STATUS + " " + PVarchar.INSTANCE.getSqlTypeName() + ", "
-                                    + PhoenixDatabaseMetaData.TASK_END_TS + " " + PTimestamp.INSTANCE.getSqlTypeName() + ", "
-                                    + PhoenixDatabaseMetaData.TASK_PRIORITY + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName() + ", "
-                                    + PhoenixDatabaseMetaData.TASK_DATA + " " + PVarchar.INSTANCE.getSqlTypeName();
-                    String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
-                    metaConnection =
-                            addColumnsIfNotExists(metaConnection, taskTableFullName,
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
-                    metaConnection.createStatement().executeUpdate(
-                            "ALTER TABLE " + taskTableFullName + " SET " + TTL + "=" + TASK_TABLE_TTL);
-                    clearCache();
-                }
-            }
-
-            try {
-                metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
-            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
-            try {
-                metaConnection.createStatement().executeUpdate(getLogTableDDL());
-            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
-            try {
-                metaConnection.createStatement().executeUpdate(getChildLinkDDL());
-            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
-            try {
-                metaConnection.createStatement().executeUpdate(getMutexDDL());
-            } catch (NewerTableAlreadyExistsException e) {} catch (TableAlreadyExistsException e) {}
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
             // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
@@ -3661,6 +3558,197 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
+
+    /**
+     * Create or upgrade SYSTEM tables other than SYSTEM.CATALOG
+     * @param metaConnection Phoenix connection
+     * @param moveChildLinks true if we need to move child links from SYSTEM.CATALOG to
+     *                       SYSTEM.CHILD_LINK
+     * @return Phoenix connection
+     * @throws SQLException
+     */
+    private PhoenixConnection upgradeOtherSystemTablesIfRequired(PhoenixConnection metaConnection,
+            boolean moveChildLinks)
+    throws SQLException, IOException {
+        metaConnection = upgradeSystemChildLink(metaConnection, moveChildLinks);
+        metaConnection = upgradeSystemSequence(metaConnection);
+        metaConnection = upgradeSystemStats(metaConnection);
+        metaConnection = upgradeSystemTask(metaConnection);
+        metaConnection = upgradeSystemFunction(metaConnection);
+        metaConnection = upgradeSystemLog(metaConnection);
+        return upgradeSystemMutex(metaConnection);
+    }
+
+    private PhoenixConnection upgradeSystemChildLink(PhoenixConnection metaConnection,
+            boolean moveChildLinks)
+    throws SQLException, IOException {
+        try {
+            metaConnection.createStatement().executeUpdate(getChildLinkDDL());
+        } catch (TableAlreadyExistsException ignored) {
+
+        }
+        if (moveChildLinks) {
+            moveChildLinks(metaConnection);
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemSequence(PhoenixConnection metaConnection)
+    throws SQLException {
+        int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
+                QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+        try {
+            String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
+            metaConnection.createStatement().executeUpdate(createSequenceTable);
+            nSequenceSaltBuckets = nSaltBuckets;
+        } catch (NewerTableAlreadyExistsException e) {
+            // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
+            // timestamp.
+            // A TableAlreadyExistsException is not thrown, since the table only exists *after* this
+            // fixed timestamp.
+            nSequenceSaltBuckets = getSaltBuckets(e);
+        } catch (TableAlreadyExistsException e) {
+            // This will occur if we have an older SYSTEM.SEQUENCE and we need to update it to
+            // include
+            // any new columns we've added.
+            long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+            if (currentServerSideTableTimeStamp <
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
+                // If the table time stamp is before 4.1.0 then we need to add below columns
+                // to the SYSTEM.SEQUENCE table.
+                String columnsToAdd = PhoenixDatabaseMetaData.MIN_VALUE + " "
+                        + PLong.INSTANCE.getSqlTypeName() + ", "
+                        + PhoenixDatabaseMetaData.MAX_VALUE + " "
+                        + PLong.INSTANCE.getSqlTypeName() + ", "
+                        + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
+                        + PBoolean.INSTANCE.getSqlTypeName() + ", "
+                        + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
+                        + PBoolean.INSTANCE.getSqlTypeName();
+                addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+            }
+            // If the table timestamp is before 4.2.1 then run the upgrade script
+            if (currentServerSideTableTimeStamp <
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
+                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
+                    metaConnection.removeTable(null,
+                            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
+                            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                    clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
+                            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA_BYTES,
+                            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE_BYTES,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                    clearTableRegionCache(TableName.valueOf(
+                            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
+                }
+                nSequenceSaltBuckets = nSaltBuckets;
+            } else {
+                nSequenceSaltBuckets = getSaltBuckets(e);
+            }
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemStats(PhoenixConnection metaConnection)
+    throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(
+                    QueryConstants.CREATE_STATS_TABLE_METADATA);
+        } catch (NewerTableAlreadyExistsException ignored) {
+
+        } catch (TableAlreadyExistsException e) {
+            long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+            if (currentServerSideTableTimeStamp <
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
+                metaConnection = addColumnsIfNotExists(
+                        metaConnection,
+                        SYSTEM_STATS_NAME,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                        PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
+                                + PLong.INSTANCE.getSqlTypeName());
+            }
+            if (currentServerSideTableTimeStamp <
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
+                // The COLUMN_FAMILY column should be nullable as we create a row in it without
+                // any column family to mark when guideposts were last collected.
+                metaConnection = removeNotNullConstraint(metaConnection,
+                        PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                        PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
+                        PhoenixDatabaseMetaData.COLUMN_FAMILY);
+                ConnectionQueryServicesImpl.this.removeTable(null,
+                        PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, null,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
+                clearCache();
+            }
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemTask(PhoenixConnection metaConnection)
+    throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getTaskDDL());
+        } catch (NewerTableAlreadyExistsException ignored) {
+
+        } catch (TableAlreadyExistsException e) {
+            long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+            if (currentServerSideTableTimeStamp <=
+                    MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
+                String columnsToAdd =
+                        PhoenixDatabaseMetaData.TASK_STATUS + " " +
+                                PVarchar.INSTANCE.getSqlTypeName() + ", "
+                                + PhoenixDatabaseMetaData.TASK_END_TS + " " +
+                                PTimestamp.INSTANCE.getSqlTypeName() + ", "
+                                + PhoenixDatabaseMetaData.TASK_PRIORITY + " " +
+                                PUnsignedTinyint.INSTANCE.getSqlTypeName() + ", "
+                                + PhoenixDatabaseMetaData.TASK_DATA + " " +
+                                PVarchar.INSTANCE.getSqlTypeName();
+                String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
+                        SYSTEM_TASK_TABLE);
+                metaConnection =
+                        addColumnsIfNotExists(metaConnection, taskTableFullName,
+                                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
+                metaConnection.createStatement().executeUpdate(
+                        "ALTER TABLE " + taskTableFullName + " SET " + TTL + "=" + TASK_TABLE_TTL);
+                clearCache();
+            }
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemFunction(PhoenixConnection metaConnection)
+    throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getFunctionTableDDL());
+        } catch (TableAlreadyExistsException ignored) {
+
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemLog(PhoenixConnection metaConnection)
+    throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getLogTableDDL());
+        } catch (TableAlreadyExistsException ignored) {
+
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemMutex(PhoenixConnection metaConnection)
+    throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getMutexDDL());
+        } catch (TableAlreadyExistsException ignored) {
+
+        }
+        return metaConnection;
+    }
+
 
     // Special method for adding the column qualifier column for 4.10. 
     private PhoenixConnection addColumnQualifierColumn(PhoenixConnection oldMetaConnection, Long timestamp) throws SQLException {
