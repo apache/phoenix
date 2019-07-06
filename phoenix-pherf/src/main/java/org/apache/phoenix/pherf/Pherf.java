@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Properties;
 
 import com.google.common.annotations.VisibleForTesting;
-import jline.internal.TestAccessible;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -229,10 +228,10 @@ public class Pherf {
             }
             
             // Compare results and exit  
-			if (null != compareResults) {
+            if (null != compareResults) {
                 LOGGER.info("\nStarting to compare results and exiting for " + compareResults);
-				new GoogleChartGenerator(compareResults, compareType).readAndRender();
-				return;
+                new GoogleChartGenerator(compareResults, compareType).readAndRender();
+                return;
             }
             
             XMLConfigParser parser = new XMLConfigParser(scenarioFile);
