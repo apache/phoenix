@@ -125,6 +125,12 @@ public class CreateTableCompiler {
             // Used to track column references in a view
             ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
             parentToBe = tableRef.getTable();
+            // Disallow creating views on top of SYSTEM tables. See PHOENIX-5386
+            if (parentToBe.getType() == PTableType.SYSTEM) {
+                throw new SQLExceptionInfo
+                        .Builder(SQLExceptionCode.CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES)
+                        .build().buildException();
+            }
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
                 viewStatementToBe = parentToBe.getViewStatement();
