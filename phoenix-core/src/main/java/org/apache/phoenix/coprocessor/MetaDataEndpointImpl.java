@@ -2075,7 +2075,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 table = loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP,
                         clientVersion);
             } catch (ParentTableNotFoundException e) {
-                dropChildViews(env, e.getParentTenantId(), e.getParentSchemaName(), e.getParentTableName());
+                if (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                    dropChildViews(env, e.getParentTenantId(), e.getParentSchemaName(), e.getParentTableName());
+                }
             }
             if (table != null) {
                 if (table.getTimeStamp() < clientTimeStamp) {
@@ -2098,7 +2100,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             
             // check if the table was dropped, but had child views that were have not yet been cleaned up
-            if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+            // We don't need to do this for older clients
+            if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME) &&
+                    clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG) {
                 dropChildViews(env, tenantIdBytes, schemaName, tableName);
             }
             
@@ -3443,7 +3447,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             getParentPhysicalTableName(table),type);
 
                     List<Mutation> additionalTableMetadataMutations = Lists.newArrayListWithExpectedSize(2);
-                    if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
+                    if (type == PTableType.TABLE) {
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
                         findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
                         if (childViewsResult.hasLinks()) {
@@ -3833,7 +3837,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                     List<Mutation> additionalTableMetaData = Lists.newArrayList();
                     PTableType type = table.getType();
-                    if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
+                    if (type == PTableType.TABLE) {
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
                         findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
                         if (childViewsResult.hasLinks()) {
