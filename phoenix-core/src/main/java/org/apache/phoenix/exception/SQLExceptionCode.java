@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.schema.SchemaNotFoundException;
@@ -406,6 +407,8 @@ public enum SQLExceptionCode {
     INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES(1137, "XCL37", "If IMMUTABLE_STORAGE_SCHEME property is not set to ONE_CELL_PER_COLUMN COLUMN_ENCODED_BYTES cannot be 0"),
     INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE(1138, "XCL38", "IMMUTABLE_STORAGE_SCHEME property cannot be changed from/to ONE_CELL_PER_COLUMN "),
     CANNOT_SET_GUIDE_POST_WIDTH(1139, "XCL39", "Guide post width can only be set on base data tables"),
+    CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES(1141, "XCL41", "Cannot create views on tables of type" +
+            PTableType.SYSTEM),
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */
