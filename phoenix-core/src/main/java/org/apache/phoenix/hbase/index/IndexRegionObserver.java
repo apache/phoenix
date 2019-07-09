@@ -869,7 +869,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
+   * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
  * @param builder class to use when building the index for this table
  * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
