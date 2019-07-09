@@ -1409,12 +1409,16 @@ public class UpgradeUtil {
                 continue;
             }
             PTable table;
-            String tableName = origTableDesc.getTableName().getNameAsString();
+            String fullTableName = SchemaUtil.getPhysicalTableName(
+                    origTableDesc.getTableName().getName(),
+                    SchemaUtil.isNamespaceMappingEnabled(
+                            null, conn.getQueryServices().getProps())).getNameAsString();
             try {
-                table = PhoenixRuntime.getTable(conn, tableName);
+                // Use this getTable API to get the latest PTable
+                table = PhoenixRuntime.getTable(conn, null, fullTableName);
             } catch (TableNotFoundException e) {
                 // Ignore tables not mapped to a Phoenix Table
-                LOGGER.warn("Error getting PTable for HBase table: " + tableName);
+                LOGGER.warn("Error getting PTable for HBase table: " + fullTableName);
                 continue;
             }
             if (table.getType() == PTableType.INDEX) {

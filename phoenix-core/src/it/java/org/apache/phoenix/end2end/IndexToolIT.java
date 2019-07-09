@@ -134,9 +134,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                             || !TransactionFactory.getTransactionProvider(
                                     TransactionFactory.Provider.valueOf(transactionProvider))
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
-                        for (boolean directApi : Booleans) {
-                            list.add(new Object[] { transactionProvider, mutable, localIndex,
-                                    directApi, false, false});
+                        if (localIndex) {
+                            for (boolean directApi : Booleans) {
+                                list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                        directApi, false, false});
+                            }
+                        }
+                        else {
+                            // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
+                            list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                    true, false, false});
                         }
                     }
                 }
@@ -144,8 +151,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
         // Add the usetenantId
         list.add(new Object[] { null, false, false, true, false, true});
-        // do one run over snapshots
-        list.add(new Object[] { null, false, false, true, true, false});
         return TestUtil.filterTxParamData(list,0);
     }
 

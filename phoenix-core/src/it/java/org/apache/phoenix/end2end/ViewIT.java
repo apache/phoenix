@@ -55,10 +55,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.util.Pair;
@@ -68,6 +65,7 @@ import org.apache.phoenix.coprocessor.MetaDataEndpointObserver;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -966,6 +964,22 @@ public class ViewIT extends SplitSystemCatalogIT {
             conn.createStatement().execute(ddl);
             tableDdl = "ALTER VIEW " + fullViewName2 + " ADD v3 INTEGER";
             conn.createStatement().execute(tableDdl);
+        }
+    }
+
+    @Test
+    public void testDisallowCreatingViewsOnSystemTable() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String viewDDL = "CREATE VIEW " + generateUniqueName() + " AS SELECT * FROM " +
+                    "SYSTEM.CATALOG";
+            try {
+                conn.createStatement().execute(viewDDL);
+                fail("Should have thrown an exception");
+            } catch (SQLException sqlE) {
+                assertEquals("Expected a different Error code",
+                        SQLExceptionCode.CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES.getErrorCode(),
+                        sqlE.getErrorCode());
+            }
         }
     }
 

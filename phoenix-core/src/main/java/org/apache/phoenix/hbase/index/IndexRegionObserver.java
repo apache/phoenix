@@ -382,7 +382,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private long getMaxTimestamp(Mutation m) {
+  public static long getMaxTimestamp(Mutation m) {
       long maxTs = 0;
       long ts = 0;
       Iterator iterator = m.getFamilyCellMap().entrySet().iterator();
@@ -869,7 +869,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
+   * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
  * @param builder class to use when building the index for this table
  * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
