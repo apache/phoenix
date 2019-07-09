@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.query;
 
 import java.util.ArrayList;
@@ -31,7 +30,49 @@ import org.junit.Test;
 
 import junit.framework.TestCase;
 
+
 public class KeyRangeMoreTest extends TestCase {
+    private static List<KeyRange> createKeyRangeListWithFixedLowerRange(List<Integer> keys, List<Boolean> boundaryConditions) {
+        assertEquals(keys.size(), boundaryConditions.size());
+        List<Integer> newKeys = Lists.newArrayListWithCapacity(keys.size() * 2);
+        List<Boolean> newBoundaryConditions = Lists.newArrayListWithCapacity(boundaryConditions.size() * 2);
+
+        for (int i = 0; i < keys.size(); i++) {
+            newKeys.add(0);
+            newBoundaryConditions.add(true);
+            newKeys.add(keys.get(i));
+            newBoundaryConditions.add(boundaryConditions.get(i));
+        }
+
+        return createKeyRangeList(newKeys, newBoundaryConditions);
+    }
+
+    private static List<KeyRange> createKeyRangeList(List<Integer> keys, List<Boolean> boundaryConditions) {
+        assertEquals(keys.size(), boundaryConditions.size());
+        assertTrue(keys.size() % 2 == 0);
+
+        int size = keys.size() / 2;
+        List<KeyRange> keyRangeList = Lists.newArrayListWithCapacity(size);
+
+        for (int i = 0; i < size; i++) {
+            byte[] startKey = keys.get(2*i).equals(Integer.MIN_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i));
+            byte[] endKey = keys.get(2*i + 1).equals(Integer.MAX_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i + 1));
+            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1)));
+        }
+
+        return keyRangeList;
+    }
+
+    private static void listIntersectAndAssert(List<KeyRange> rowKeyRanges1,List<KeyRange> rowKeyRanges2,List<KeyRange> expected) {
+        for (int i = 0; i < 200; i++) {
+            List<KeyRange> result = KeyRange.intersect(rowKeyRanges1, rowKeyRanges2);
+            assertEquals(expected, result);
+            result = KeyRange.intersect(rowKeyRanges2, rowKeyRanges1);
+            assertEquals(expected, result);
+            Collections.shuffle(rowKeyRanges1);
+            Collections.shuffle(rowKeyRanges2);
+        }
+    }
 
     @Test
     public void testListIntersectWithOneResultRange() throws Exception {
@@ -244,48 +285,6 @@ public class KeyRangeMoreTest extends TestCase {
         for (int i = 0; i < expectedResults.size(); i++) {
             int compareResult = KeyRange.compareUpperRange(rowKeyRanges1.get(i), rowKeyRanges2.get(i));
             assertEquals(expectedResults.get(i).intValue(), compareResult);
-        }
-    }
-
-    private static List<KeyRange> createKeyRangeListWithFixedLowerRange(List<Integer> keys, List<Boolean> boundaryConditions) {
-        assertEquals(keys.size(), boundaryConditions.size());
-        List<Integer> newKeys = Lists.newArrayListWithCapacity(keys.size() * 2);
-        List<Boolean> newBoundaryConditions = Lists.newArrayListWithCapacity(boundaryConditions.size() * 2);
-
-        for (int i = 0; i < keys.size(); i++) {
-            newKeys.add(0);
-            newBoundaryConditions.add(true);
-            newKeys.add(keys.get(i));
-            newBoundaryConditions.add(boundaryConditions.get(i));
-        }
-
-        return createKeyRangeList(newKeys, newBoundaryConditions);
-    }
-
-    private static List<KeyRange> createKeyRangeList(List<Integer> keys, List<Boolean> boundaryConditions) {
-        assertEquals(keys.size(), boundaryConditions.size());
-        assertTrue(keys.size() % 2 == 0);
-
-        int size = keys.size() / 2;
-        List<KeyRange> keyRangeList = Lists.newArrayListWithCapacity(size);
-
-        for (int i = 0; i < size; i++) {
-            byte[] startKey = keys.get(2*i).equals(Integer.MIN_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i));
-            byte[] endKey = keys.get(2*i + 1).equals(Integer.MAX_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i + 1));
-            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1)));
-        }
-
-        return keyRangeList;
-    }
-
-    private static void listIntersectAndAssert(List<KeyRange> rowKeyRanges1,List<KeyRange> rowKeyRanges2,List<KeyRange> expected) {
-        for (int i = 0; i < 200; i++) {
-            List<KeyRange> result = KeyRange.intersect(rowKeyRanges1, rowKeyRanges2);
-            assertEquals(expected, result);
-            result = KeyRange.intersect(rowKeyRanges2, rowKeyRanges1);
-            assertEquals(expected, result);
-            Collections.shuffle(rowKeyRanges1);
-            Collections.shuffle(rowKeyRanges2);
         }
     }
 }

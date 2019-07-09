@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -47,6 +46,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 
@@ -54,6 +55,8 @@ import com.google.common.collect.Sets;
  * Simple utility class for managing multiple key parts of the statistic
  */
 public class StatisticsUtil {
+    private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsUtil.class);
+
     /**
      * Indication to client that the statistics estimates were not
      * calculated based on statistics but instead are based on row
@@ -143,7 +146,8 @@ public class StatisticsUtil {
         return key;
     }
 
-    public static GuidePostsInfo readStatistics(Table statsHTable, GuidePostsKey key, long clientTimeStamp)
+    public static GuidePostsInfo readStatistics(GuidePostsInfoBuilder guidePostsInfoBuilder,
+            Table statsHTable, GuidePostsKey key, long clientTimeStamp)
             throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(key.getColumnFamily());
@@ -154,16 +158,17 @@ public class StatisticsUtil {
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
-        GuidePostsInfoBuilder guidePostsInfoBuilder = new GuidePostsInfoBuilder();
+
         Cell current = null;
-        GuidePostsInfo emptyGuidePost = null;
+        GuidePostEstimation estimationForEmptyGuidePost = new GuidePostEstimation();
+
         try (ResultScanner scanner = statsHTable.getScanner(s)) {
-            Result result = null;
+            Result result;
             while ((result = scanner.next()) != null) {
                 CellScanner cellScanner = result.cellScanner();
                 long rowCount = 0;
                 long byteCount = 0;
-                 while (cellScanner.advance()) {
+                while (cellScanner.advance()) {
                     current = cellScanner.current();
                     if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
                             current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, 0,
@@ -177,6 +182,7 @@ public class StatisticsUtil {
                                 current.getValueOffset(), SortOrder.getDefault());
                     }
                 }
+
                 if (current != null) {
                     int tableNameLength = tableNameBytes.length + 1;
                     int cfOffset = current.getRowOffset() + tableNameLength;
@@ -185,24 +191,34 @@ public class StatisticsUtil {
                     ptr.set(current.getRowArray(), cfOffset, cfLength);
                     byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     byte[] newGPStartKey = getGuidePostsInfoFromRowKey(tableNameBytes, cfName, result.getRow());
-                    boolean isEmptyGuidePost = GuidePostsInfo.isEmptyGpsKey(newGPStartKey);
-                    // Use the timestamp of the cell as the time at which guidepost was
-                    // created/updated
-                    long guidePostUpdateTime = current.getTimestamp();
+                    boolean isEmptyGuidePost = GuidePost.isEmptyGuidePostKey(newGPStartKey);
+                    GuidePostEstimation estimation = new GuidePostEstimation(byteCount, rowCount, current.getTimestamp());
+
+                    // Use the timestamp of the cell as the time at which guidepost was created/updated
                     if (isEmptyGuidePost) {
-                        emptyGuidePost =
-                                GuidePostsInfo.createEmptyGuidePost(byteCount, guidePostUpdateTime);
+                        // Statistics collector could insert empty guide post if the region doesn't have enough data to
+                        // generate guide post. When an empty guide post is inserted, the byte count is guide post width,
+                        // and the row count is 0 because the row count can't be decided at the time of insertion.
+                        estimationForEmptyGuidePost.merge(estimation);
                     } else {
-                        guidePostsInfoBuilder.trackGuidePost(
-                            new ImmutableBytesWritable(newGPStartKey), byteCount, rowCount,
-                            guidePostUpdateTime);
+                        guidePostsInfoBuilder.trackGuidePost(new ImmutableBytesWritable(newGPStartKey), estimation);
                     }
                 }
             }
         }
-        // We write a row with an empty KeyValue in the case that stats were generated but without enough data
-        // for any guideposts. If we have no rows, it means stats were never generated.
-        return current == null ? GuidePostsInfo.NO_GUIDEPOST : guidePostsInfoBuilder.isEmpty() ? emptyGuidePost : guidePostsInfoBuilder.build();
+
+        // If we have no rows, it means stats were never generated.
+        GuidePostsInfo guidePostsInfo = GuidePostsInfo.NO_GUIDEPOST;
+        if (current != null) {
+            // If there is non-empty guide post, ignore the empty guide post.
+            guidePostsInfo = guidePostsInfoBuilder.getGuidePostsCount() > 0 ?
+                    guidePostsInfoBuilder.build() : guidePostsInfoBuilder.build(estimationForEmptyGuidePost);
+        }
+        guidePostsInfo.setGuidePostsKey(key);
+
+        LOGGER.info("Loaded Guide Posts From Stats Table. " + guidePostsInfo.toString());
+
+        return guidePostsInfo;
     }
 
     public static long getGuidePostDepth(int guidepostPerRegion, long guidepostWidth, HTableDescriptor tableDesc) {

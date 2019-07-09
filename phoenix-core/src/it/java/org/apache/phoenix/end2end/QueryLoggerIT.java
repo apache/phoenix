@@ -76,21 +76,7 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // need the non-test driver for some tests that check number of hconnections, etc.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-    } 
-    
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock (long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
     }
-    
 
     @Test
     public void testDebugLogs() throws Exception {

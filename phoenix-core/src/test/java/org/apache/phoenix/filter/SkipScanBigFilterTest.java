@@ -37,6 +37,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.stats.GuidePostEstimation;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
@@ -649,7 +650,8 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         final PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "PERF.BIG_OLAP_DOC"));
         GuidePostsInfoBuilder gpWriter = new GuidePostsInfoBuilder();
         for (byte[] gp : guidePosts) {
-            gpWriter.trackGuidePost(new ImmutableBytesWritable(gp), 1000, 0, 0);
+            GuidePostEstimation estimation = new GuidePostEstimation(1000, 0, 0);
+            gpWriter.trackGuidePost(new ImmutableBytesWritable(gp), estimation);
         }
         GuidePostsInfo info = gpWriter.build();
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);

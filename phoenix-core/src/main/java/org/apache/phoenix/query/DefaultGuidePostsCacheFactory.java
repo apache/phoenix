@@ -20,7 +20,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
 
 public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultGuidePostsCacheFactory.class);
 
     @Override
@@ -29,11 +28,15 @@ public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
         Preconditions.checkNotNull(config);
 
         final boolean isStatsEnabled = config.getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED);
-        if (queryServices == null || !isStatsEnabled) {
+        if (queryServices == null || ! isStatsEnabled) {
             LOGGER.info("Using EmptyStatsLoader from DefaultGuidePostsCacheFactory");
             return new EmptyStatsLoader();
         }
-        return new StatsLoaderImpl(queryServices);
+
+        int targetedChunkSize = config.getInt(
+                QueryServices.STATS_TARGETED_CHUNK_SIZE,
+                QueryServicesOptions.DEFAULT_STATS_TARGETED_CHUNK_SIZE);
+        return new StatsLoaderImpl(queryServices, targetedChunkSize);
     }
 
     @Override

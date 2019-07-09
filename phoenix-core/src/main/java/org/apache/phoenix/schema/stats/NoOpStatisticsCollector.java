@@ -55,11 +55,16 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
+    public void flushGuidePosts() {
+        // No-op
+    }
+
+    @Override
     public void init() {
         // No-op
     }
 
-    @Override public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
+    @Override public GuidePostChunk getGuidePosts(ImmutableBytesPtr fam) {
         return null;
     }
 

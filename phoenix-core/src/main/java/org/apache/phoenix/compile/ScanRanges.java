@@ -342,8 +342,10 @@ public class ScanRanges {
             // TODO: it seems that our SkipScanFilter or HBase runs into problems if we don't
             // have an enclosing range when we do a point lookup.
             if (isPointLookup) {
-                scanStartKey = ScanUtil.getMinKey(schema, newSkipScanFilter.getSlots(), slotSpan);
-                scanStopKey = ScanUtil.getMaxKey(schema, newSkipScanFilter.getSlots(), slotSpan);
+                scanStartKey = ScanUtil.getMinKey(
+                        newSkipScanFilter.getSchema(), newSkipScanFilter.getSlots(), newSkipScanFilter.getSlotSpan());
+                scanStopKey = ScanUtil.getMaxKey(
+                        newSkipScanFilter.getSchema(), newSkipScanFilter.getSlots(), newSkipScanFilter.getSlotSpan());
             }
         }
         // If we've got this far, we know we have an intersection
@@ -374,6 +376,7 @@ public class ScanRanges {
         if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) { 
             return null; 
         }
+
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);
@@ -698,7 +701,7 @@ public class ScanRanges {
      * Produces the list of KeyRanges representing the fully qualified row key by calling into ScanUtil.setKey
      * repeatedly for every combination of KeyRanges in the ranges field. The bounds will be set according to the
      * properties of the setKey method.
-     * 
+     *
      * @return list of KeyRanges representing the fully qualified rowkey, coalesced
      */
     public List<KeyRange> getRowKeyRanges() {
@@ -708,7 +711,6 @@ public class ScanRanges {
         if (isDegenerate()) { return Lists.newArrayList(KeyRange.EMPTY_RANGE); }
 
         List<KeyRange> queryRowKeyRanges = Lists.newArrayListWithExpectedSize(this.ranges.size());
-
 
         // If scanRanges.ranges has no information then should be in the scanRanges.scanRange
         if (ranges.size() == 0) {
@@ -720,9 +722,9 @@ public class ScanRanges {
             int[] slotSpans = this.getSlotSpans();
 
             int fieldSpan = 0;
-            for(int i = 0; i < slotSpans.length; i++){
-                //Account for a slot covering multiple fields
-                fieldSpan = fieldSpan + slotSpans[i] + 1;
+            for (int i = 0; i < slotSpans.length; i++) {
+                // Account for a slot covering multiple fields
+                fieldSpan += slotSpans[i] + 1;
             }
 
             // If the spans here do not qualify all the keys then those keys are unbound
@@ -826,5 +828,4 @@ public class ScanRanges {
 
         return queryRowKeyRanges;
     }
-
 }

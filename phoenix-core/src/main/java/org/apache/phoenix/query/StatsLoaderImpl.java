@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -33,17 +34,19 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Objects;
 
+
 /**
  * {@link PhoenixStatsLoader} implementation for the Stats Loader.
  */
 class StatsLoaderImpl implements PhoenixStatsLoader {
-
     private static final Logger LOGGER = LoggerFactory.getLogger(StatsLoaderImpl.class);
 
     private final ConnectionQueryServices queryServices;
+    private final int targetedChunkSize;
 
-    public StatsLoaderImpl(ConnectionQueryServices queryServices){
+    public StatsLoaderImpl(ConnectionQueryServices queryServices, int targetedChunkSize){
         this.queryServices = queryServices;
+        this.targetedChunkSize = targetedChunkSize;
     }
 
     @Override
@@ -71,8 +74,9 @@ class StatsLoaderImpl implements PhoenixStatsLoader {
         Table statsHTable = queryServices.getTable(tableName.getName());
 
         try {
-            GuidePostsInfo guidePostsInfo = StatisticsUtil.readStatistics(statsHTable, statsKey,
-                    HConstants.LATEST_TIMESTAMP);
+            GuidePostsInfoBuilder guidePostsInfoBuilder = new GuidePostsInfoBuilder(targetedChunkSize);
+            GuidePostsInfo guidePostsInfo = StatisticsUtil.readStatistics(
+                    guidePostsInfoBuilder, statsHTable, statsKey, HConstants.LATEST_TIMESTAMP);
             traceStatsUpdate(statsKey, guidePostsInfo);
             return guidePostsInfo;
         } catch (TableNotFoundException e) {

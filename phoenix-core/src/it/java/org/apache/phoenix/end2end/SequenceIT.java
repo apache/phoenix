@@ -94,19 +94,6 @@ public class SequenceIT extends ParallelStatsDisabledIT {
 		assertTrue(rs.next());
 	}
 
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-
-        public MyClock (long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
-    }
-
 	@Test
 	public void testDuplicateSequences() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();

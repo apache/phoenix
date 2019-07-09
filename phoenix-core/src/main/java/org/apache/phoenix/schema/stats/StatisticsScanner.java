@@ -67,7 +67,7 @@ public class StatisticsScanner implements InternalScanner {
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean ret = delegate.next(result);
-        updateStats(result);
+        updateStats(result, ret);
         return ret;
     }
 
@@ -83,9 +83,13 @@ public class StatisticsScanner implements InternalScanner {
      *            next batch of {@link KeyValue}s
      * @throws IOException 
      */
-    private void updateStats(final List<Cell> results) throws IOException {
-        if (!results.isEmpty()) {
+    private void updateStats(final List<Cell> results, boolean hasMore) throws IOException {
+        if (! results.isEmpty()) {
             tracker.collectStatistics(results);
+        }
+
+        if (! hasMore) {
+            tracker.flushGuidePosts();
         }
     }
 
@@ -158,7 +162,7 @@ public class StatisticsScanner implements InternalScanner {
                     LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                getStatisticsWriter().addStats(tracker, family,
+                getStatisticsWriter().addStats(region, tracker, family,
                         mutations, tracker.getGuidePostDepth());
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()

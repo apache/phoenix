@@ -17,16 +17,13 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 
-import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -181,9 +178,9 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200l, info.estimatedBytes);
-            assertEquals((Long) 2l, info.estimatedRows);
-            assertTrue(info.estimatedRows > 0);
+            assertEquals((Long) 200l, info.getEstimatedBytes());
+            assertEquals((Long) 2l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimateInfoTs());
         }
     }
 
@@ -209,9 +206,9 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             initData(conn, tableA);
             conn.setAutoCommit(false);
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 200l, info.estimatedBytes);
-            assertEquals((Long) 2l, info.estimatedRows);
-            assertTrue(info.estimatedRows > 0);
+            assertEquals((Long) 200l, info.getEstimatedBytes());
+            assertEquals((Long) 2l, info.getEstimatedRows());
+            assertEquals((Long) 0l, info.getEstimateInfoTs());
         }
     }
 
@@ -244,16 +241,16 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
     public static void assertEstimatesAreNull(String sql, List<Object> binds, Connection conn)
             throws Exception {
         Estimate info = getByteRowEstimates(conn, sql, binds);
-        assertNull(info.estimatedBytes);
-        assertNull(info.estimatedRows);
-        assertNull(info.estimateInfoTs);
+        assertNull(info.getEstimatedBytes());
+        assertNull(info.getEstimatedRows());
+        assertNull(info.getEstimateInfoTs());
     }
 
     private void assertEstimatesAreZero(String sql, List<Object> binds, Connection conn)
             throws Exception {
         Estimate info = getByteRowEstimates(conn, sql, binds);
-        assertEquals((Long) 0l, info.estimatedBytes);
-        assertEquals((Long) 0l, info.estimatedRows);
-        assertEquals((Long) 0l, info.estimateInfoTs);
+        assertEquals((Long) 0l, info.getEstimatedBytes());
+        assertEquals((Long) 0l, info.getEstimatedRows());
+        assertEquals((Long) 0l, info.getEstimateInfoTs());
     }
 }

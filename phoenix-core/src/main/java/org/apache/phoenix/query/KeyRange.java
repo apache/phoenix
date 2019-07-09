@@ -220,13 +220,21 @@ public class KeyRange implements Writable {
     public int compareLowerToUpperBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
         return compareLowerToUpperBound(ptr, true, comparator);
     }
-    
+
+    public int compareLowerToUpperBound(KeyRange keyRange, BytesComparator comparator) {
+        return compareLowerToUpperBound(keyRange.getUpperRange(), 0, keyRange.getUpperRange().length, keyRange.isUpperInclusive(), comparator);
+    }
+
     public int compareUpperToLowerBound(ImmutableBytesWritable ptr, boolean isInclusive, BytesComparator comparator) {
         return compareUpperToLowerBound(ptr.get(), ptr.getOffset(), ptr.getLength(), isInclusive, comparator);
     }
     
     public int compareUpperToLowerBound(ImmutableBytesWritable ptr, BytesComparator comparator) {
         return compareUpperToLowerBound(ptr, true, comparator);
+    }
+
+    public int compareUpperToLowerBound(KeyRange keyRange, BytesComparator comparator) {
+        return compareUpperToLowerBound(keyRange.getLowerRange(), 0, keyRange.getLowerRange().length, keyRange.isLowerInclusive(), comparator);
     }
     
     public int compareLowerToUpperBound( byte[] b, int o, int l, BytesComparator comparator) {
@@ -544,19 +552,46 @@ public class KeyRange implements Writable {
         return Boolean.compare(isUpperInclusive(), isInclusive);
     }
 
-    /**
-     * Compare the upper ranges of the two given key ranges
-     *
-     * @param rowKeyRange1
-     * @param rowKeyRange2
-     * @return
-     *        < 0, the first key range's upper range < the second key range's upper range
-     *        = 0, the first key range's upper range = the second key range's upper range
-     *        > 0, the first key range's upper range > the second key range's upper range
-     */
     public static int compareUpperRange(KeyRange rowKeyRange1, KeyRange rowKeyRange2) {
         return rowKeyRange1.compareUpperRange(rowKeyRange2.getUpperRange(), 0,
                 rowKeyRange2.getUpperRange().length, rowKeyRange2.isUpperInclusive());
+    }
+
+    public int compareLowerRange(byte[] b, int o, int l, boolean isInclusive) {
+        int result = Boolean.compare(b == KeyRange.UNBOUND, lowerUnbound());
+        if (result != 0) {
+            return result;
+        }
+        result = Bytes.BYTES_RAWCOMPARATOR.compare(lowerRange, 0, lowerRange.length, b, o, l);
+        if (result != 0) {
+            return result;
+        }
+        return Boolean.compare(isInclusive, isLowerInclusive());
+    }
+
+    /**
+     * Check whether or not this key range contains the given key range
+     *
+     * @param rowKeyRange
+     * @return
+     */
+    public boolean contains(KeyRange rowKeyRange) {
+        // If this node's lower boundary is on the right side of the given range's lower boundary,
+        // this node doesn't cover it.
+        int lowerToLower = compareLowerRange(rowKeyRange.getLowerRange(), 0,
+                rowKeyRange.getLowerRange().length, rowKeyRange.isLowerInclusive());
+        if (lowerToLower > 0) {
+            return false;
+        }
+
+        // If this node's upper boundary is on the left side of the given range's upper boundary,
+        // this node doesn't cover it.
+        int upperToUpper = compareUpperRange(rowKeyRange.getUpperRange(), 0,
+                rowKeyRange.getUpperRange().length, rowKeyRange.isUpperInclusive());
+        if (upperToUpper < 0) {
+            return false;
+        }
+        return true;
     }
 
     public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {

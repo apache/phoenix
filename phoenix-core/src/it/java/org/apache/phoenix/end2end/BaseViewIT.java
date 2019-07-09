@@ -76,7 +76,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     public static Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { {"TEPHRA"}, {"OMID"}, {null} }), 0);
     }
-    
+
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {
         String viewName = testUpdatableView(saltBuckets);
         Pair<String,Scan> pair = testUpdatableViewIndex(saltBuckets, localIndex, viewName);

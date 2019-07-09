@@ -532,7 +532,7 @@ public class ScanUtil {
         return isFixedWidth || sortOrder == SortOrder.ASC ? ASC_FIXED_WIDTH_COMPARATOR : DESC_VAR_WIDTH_COMPARATOR;
     }
     public static BytesComparator getComparator(Field field) {
-        return getComparator(field.getDataType().isFixedWidth(),field.getSortOrder());
+        return getComparator(field.getDataType().isFixedWidth(), field.getSortOrder());
     }
     /**
      * Perform a binary lookup on the list of KeyRange for the tightest slot such that the slotBound

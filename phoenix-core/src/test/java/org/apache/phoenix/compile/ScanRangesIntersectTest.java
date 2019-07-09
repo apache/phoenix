@@ -36,8 +36,6 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
@@ -467,7 +465,6 @@ public class ScanRangesIntersectTest {
      *  single         inclusive      lower         no
      *  single         inclusive      upper         yes, at the end if it is the last slots.
      */
-
     @Test
     public void getRangeKeyExclusiveLowerIncrementedUpperNotIncremented() {
         int rowKeySchemaFields = 1;

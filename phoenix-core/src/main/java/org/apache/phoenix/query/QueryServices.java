@@ -185,13 +185,14 @@ public interface QueryServices extends SQLCloseable {
 
     public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
 
-    // Config parameters for stats collection
+    // Config parameters for stats related
+    public static final String USE_STATS_FOR_PARALLELIZATION = "phoenix.use.stats.parallelization";
+    public static final String STATS_COLLECTION_ENABLED = "phoenix.stats.collection.enabled";
     public static final String STATS_UPDATE_FREQ_MS_ATTRIB = "phoenix.stats.updateFrequency";
     public static final String MIN_STATS_UPDATE_FREQ_MS_ATTRIB = "phoenix.stats.minUpdateFrequency";
     public static final String STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB = "phoenix.stats.guidepost.width";
     public static final String STATS_GUIDEPOST_PER_REGION_ATTRIB = "phoenix.stats.guidepost.per.region";
     public static final String STATS_USE_CURRENT_TIME_ATTRIB = "phoenix.stats.useCurrentTime";
-    
     public static final String RUN_UPDATE_STATS_ASYNC = "phoenix.update.stats.command.async";
     public static final String STATS_SERVER_POOL_SIZE = "phoenix.stats.pool.size";
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
@@ -199,6 +200,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String STATS_MAX_CACHE_SIZE = "phoenix.stats.cache.maxSize";
     // The size of the thread pool used for refreshing cached table stats in stats client cache
     public static final String STATS_CACHE_THREAD_POOL_SIZE = "phoenix.stats.cache.threadPoolSize";
+    // The targeted size of the guide post chunk measured in the number of guide posts.
+    public static final String STATS_TARGETED_CHUNK_SIZE = "phoenix.stats.targeted.chunk.size";
 
     public static final String LOG_SALT_BUCKETS_ATTRIB = "phoenix.log.saltBuckets";
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
@@ -303,8 +306,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_QUERY_SERVER_SERVICE_NAME = "phoenix.queryserver.service.name";
     public static final String PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME = "phoenix.queryserver.zookeeper.acl.username";
     public static final String PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD = "phoenix.queryserver.zookeeper.acl.password";
-    public static final String STATS_COLLECTION_ENABLED = "phoenix.stats.collection.enabled";
-    public static final String USE_STATS_FOR_PARALLELIZATION = "phoenix.use.stats.parallelization";
 
     // whether to enable server side RS -> RS calls for upsert select statements
     public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";

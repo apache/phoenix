@@ -49,7 +49,8 @@ public class SplitKeyRangesByBoundariesTest extends TestCase {
         this.keyRanges = keyRanges;
     }
 
-    @Parameters(name = "{0} {1} {2}") public static Collection<Object> data() {
+    @Parameters(name = "{0} {1} {2}")
+    public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
 
         // 1, region boundaries is null, return null
@@ -217,7 +218,8 @@ public class SplitKeyRangesByBoundariesTest extends TestCase {
         return testCases;
     }
 
-    @Test public void test() {
+    @Test
+    public void test() {
         List<Pair<Integer, List<KeyRange>>> ret = ScanUtil.splitKeyRangesByBoundaries(boundaries, keyRanges);
         assertEquals(expected, ret);
     }
