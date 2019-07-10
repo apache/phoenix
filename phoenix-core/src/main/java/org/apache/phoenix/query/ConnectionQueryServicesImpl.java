@@ -3747,8 +3747,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             mutateTable.setInt(6, numColumns + 1);
             mutateTable.execute();
         }
-        List<Mutation> tableMetadata = new ArrayList<>();
-        tableMetadata.addAll(metaConnection.getMutationState().toMutations(metaConnection.getSCN()).next().getSecond());
+        List<Mutation> tableMetadata = new ArrayList<>(
+                metaConnection.getMutationState().toMutations(metaConnection.getSCN()).next()
+                        .getSecond());
         metaConnection.rollback();
         PColumn column = new PColumnImpl(PNameFactory.newName("COLUMN_QUALIFIER"),
                 PNameFactory.newName(DEFAULT_COLUMN_FAMILY_NAME), PVarbinary.INSTANCE, null, null, true, numColumns,
