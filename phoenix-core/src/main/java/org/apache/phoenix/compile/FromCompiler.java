@@ -734,10 +734,11 @@ public class FromCompiler {
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
-                List<PColumn> allcolumns = new ArrayList<PColumn>();
                 List<PColumn> existingColumns = theTable.getColumns();
                 // Need to skip the salting column, as it's handled in the PTable builder call below
-                allcolumns.addAll(theTable.getBucketNum() == null ? existingColumns : existingColumns.subList(1, existingColumns.size()));
+                List<PColumn> allcolumns = new ArrayList<>(
+                        theTable.getBucketNum() == null ? existingColumns :
+                                existingColumns.subList(1, existingColumns.size()));
                 // Position still based on with the salting columns
                 int position = existingColumns.size();
                 PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
