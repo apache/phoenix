@@ -64,6 +64,21 @@ public interface MetricsIndexerSource extends BaseSource {
   String SLOW_POST_OPEN = "slowPostOpenCalls";
   String SLOW_POST_OPEN_DESC = "The number of postOpen calls slower than the configured threshold";
 
+  String PRE_INDEX_UPDATE_TIME = "preIndexUpdateTime";
+  String PRE_INDEX_UPDATE_TIME_DESC = "Histogram for the time in milliseconds for index updates pre data updates";
+  String POST_INDEX_UPDATE_TIME = "postIndexUpdateTime";
+  String POST_INDEX_UPDATE_TIME_DESC = "Histogram for the time in milliseconds for index updates post data updates";
+
+  String PRE_INDEX_UPDATE_FAILURE_TIME = "preIndexUpdateFailureTime";
+  String PRE_INDEX_UPDATE_FAILURE_TIME_DESC = "Histogram for the time in milliseconds on failures of index updates pre data updates";
+  String POST_INDEX_UPDATE_FAILURE_TIME = "postIndexUpdateFailureTime";
+  String POST_INDEX_UPDATE_FAILURE_TIME_DESC = "Histogram for the time in milliseconds on failures of index updates post data updates";
+
+  String PRE_INDEX_UPDATE_FAILURE = "preIndexUpdateFailure";
+  String PRE_INDEX_UPDATE_FAILURE_DESC = "The number of failures of index updates pre data updates";
+  String POST_INDEX_UPDATE_FAILURE = "postIndexUpdateFailure";
+  String POST_INDEX_UPDATE_FAILURE_DESC = "The number of failures of index updates post data updates";
+
   /**
    * Updates the index preparation time histogram (preBatchMutate).
    *
@@ -147,4 +162,43 @@ public interface MetricsIndexerSource extends BaseSource {
    * Increments the number of slow preIncrementAfteRowLock calls.
    */
   void incrementSlowDuplicateKeyCheckCalls();
+
+  // Below metrics are introduced by IndexRegionObserver coprocessor
+  /**
+   * Updates the pre index update time histogram.
+   *
+   * @param t time taken in milliseconds
+   */
+  void updatePreIndexUpdateTime(long t);
+
+  /**
+   * Updates the post index update time histogram.
+   *
+   * @param t time taken in milliseconds
+   */
+  void updatePostIndexUpdateTime(long t);
+
+  /**
+   * Updates the pre index update failure time histogram.
+   *
+   * @param t time taken in milliseconds
+   */
+  void updatePreIndexUpdateFailureTime(long t);
+
+  /**
+   * Updates the post index update failure time histogram.
+   *
+   * @param t time taken in milliseconds
+   */
+  void updatePostIndexUpdateFailureTime(long t);
+
+  /**
+   * Increments the number of pre index update failures.
+   */
+  void incrementPreIndexUpdateFailures();
+
+  /**
+   * Increments the number of post index update failures.
+   */
+  void incrementPostIndexUpdateFailures();
 }
