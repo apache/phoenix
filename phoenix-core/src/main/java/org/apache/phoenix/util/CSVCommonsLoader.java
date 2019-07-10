@@ -158,11 +158,7 @@ public class CSVCommonsLoader {
      * @return
      */
     public static char asControlCharacter(char delimiter) {
-        if(CTRL_CHARACTER_TABLE.containsKey(delimiter)) {
-            return CTRL_CHARACTER_TABLE.get(delimiter);
-        } else {
-            return delimiter;
-        }
+        return CTRL_CHARACTER_TABLE.getOrDefault(delimiter, delimiter);
     }
 
     /**
@@ -242,10 +238,7 @@ public class CSVCommonsLoader {
             System.out.println(String.format("csv columns from database."));
             break;
         case IN_LINE:
-            columns = new ArrayList<String>();
-            for (String colName : parser.getHeaderMap().keySet()) {
-                columns.add(colName); // iterates in column order
-            }
+            columns = new ArrayList<>(parser.getHeaderMap().keySet());
             System.out.println(String.format("csv columns from header line. length=%s, %s",
                     columns.size(), buildStringFromList(columns)));
             break;
