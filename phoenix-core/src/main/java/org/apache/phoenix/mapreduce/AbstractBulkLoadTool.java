@@ -178,16 +178,45 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         return loadData(conf, cmdLine);
     }
 
+    /**
+     * Check schema or table name that start with two double quotes i.e ""t"" -> true
+     */
+    private boolean isStartWithTwoDoubleQuotes (String name) {
+        boolean start = false;
+        boolean end = false;
+        if (name != null && name.length() > 1) {
+             int length = name.length();
+             start = name.substring(0,2).equals("\"\"");
+             end =  name.substring(length-2, length).equals("\"\"");
+             if (start && !end) {
+                 throw new IllegalArgumentException("Invalid table/schema name " + name +
+                         ". Please check if name end with two double quotes.");
+             }
+        }
+        return start;
+    }
+
+
     private int loadData(Configuration conf, CommandLine cmdLine) throws Exception {
         String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
+        boolean quotedTableName = isStartWithTwoDoubleQuotes(tableName);
+        if (quotedTableName) {
+            // Commons-cli cannot parse full quoted argument i.e "t" (CLI-275).
+            // if \"\"t\"\" passed, then both pairs of quoted are left intact as ""t"".
+            // So remove one pair of quote from tablename ""t"" -> "t".
+            tableName = tableName.substring(1, tableName.length() - 1);
+        }
+        boolean quotedSchemaName = isStartWithTwoDoubleQuotes(schemaName);
+        if (quotedSchemaName) {
+            schemaName = schemaName.substring(1,schemaName.length() - 1);
+        }
         String qualifiedTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String qualifiedIndexTableName = null;
         if (indexTableName != null){
             qualifiedIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
         }
-
         if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
             // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
@@ -216,12 +245,14 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
         boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
         conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
-        conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
-
+        conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY,
+                SchemaUtil.getEscapedFullTableName(qualifiedTableName));
         // give subclasses their hook
         configureOptions(cmdLine, importColumns, conf);
+        String sName = SchemaUtil.normalizeIdentifier(schemaName);
+        String tName = SchemaUtil.normalizeIdentifier(tableName);
         try {
-            validateTable(conn, schemaName, tableName);
+            validateTable(conn, sName, tName);
         } finally {
             conn.close();
         }
@@ -247,7 +278,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             }
         }
         // using conn after it's been closed... o.O
-        tablesToBeLoaded.addAll(getIndexTables(conn, schemaName, qualifiedTableName));
+        tablesToBeLoaded.addAll(getIndexTables(conn, qualifiedTableName));
 
         // When loading a single index table, check index table name is correct
         if (qualifiedIndexTableName != null){
@@ -410,7 +441,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
      * Get the index tables of current data table
      * @throws java.sql.SQLException
      */
-    private List<TargetTableRef> getIndexTables(Connection conn, String schemaName, String qualifiedTableName)
+    private List<TargetTableRef> getIndexTables(Connection conn, String qualifiedTableName)
             throws SQLException {
         PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
