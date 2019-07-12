@@ -59,6 +59,7 @@ import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
@@ -5977,5 +5978,211 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 conn.close();
             }
         }
+    }
+
+    @Test
+    public void testPushDownPostFilterToSubJoinBug5389() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String orderTableName = "order_table";
+            String itemTableName = "item_table";
+            String supplierTableName = "supplier_table";
+            String sql = "create table " + orderTableName +
+                    "   (order_id varchar(15) not null primary key, " +
+                    "    customer_id varchar(10), " +
+                    "    item_id varchar(10), " +
+                    "    price integer, " +
+                    "    quantity integer, " +
+                    "    date timestamp)";
+            conn.createStatement().execute(sql);
+
+            sql = "create table " + itemTableName +
+                    "   (item_id varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    price integer, " +
+                    "    discount1 integer, " +
+                    "    discount2 integer, " +
+                    "    supplier_id varchar(10), " +
+                    "    description varchar)";
+            conn.createStatement().execute(sql);
+
+            sql = "create table " + supplierTableName +
+                    "   (supplier_id varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    phone varchar(12), " +
+                    "    address varchar, " +
+                    "    loc_id varchar(5))";
+            conn.createStatement().execute(sql);
+
+            doTestPushDownPostFilterToSubJoinForNoStarJoinBug5389(conn, supplierTableName, itemTableName, orderTableName);
+            doTestPushDownPostFilterToSubJoinForSortMergeJoinBug5389(conn, supplierTableName, itemTableName, orderTableName);
+        } finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    private void doTestPushDownPostFilterToSubJoinForNoStarJoinBug5389(
+            Connection conn,
+            String supplierTableName,
+            String itemTableName,
+            String orderTableName) throws Exception {
+        //one condition pushdown.
+        String sql = "select /*+ NO_STAR_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName + " s inner join " + itemTableName + " i on  s.supplier_id = i.supplier_id "+
+                "inner join " + orderTableName + " o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai')";
+        QueryPlan queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        HashJoinPlan hashJoinPlan = (HashJoinPlan)queryPlan;
+        assertTrue(hashJoinPlan.getJoinInfo().getPostJoinFilterExpression() == null);
+        HashSubPlan[] hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+        assertTrue(hashSubPlans.length == 1);
+        HashJoinPlan subHashJoinPlan = (HashJoinPlan)(hashSubPlans[0].getInnerPlan());
+        Expression postFilterExpression = subHashJoinPlan.getJoinInfo().getPostJoinFilterExpression();
+        assertTrue(postFilterExpression.toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai')"));
+
+        //postFilter references all tables can not pushdown to subjoin.
+        sql = "select /*+ NO_STAR_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName + " s inner join " + itemTableName + " i on  s.supplier_id = i.supplier_id "+
+                "inner join " + orderTableName + " o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai' or o.quantity = 8)";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        hashJoinPlan = (HashJoinPlan)queryPlan;
+        assertTrue(hashJoinPlan.getJoinInfo().getPostJoinFilterExpression().toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai' OR O.QUANTITY = 8)"));
+        hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+        assertTrue(hashSubPlans.length == 1);
+        subHashJoinPlan = (HashJoinPlan)(hashSubPlans[0].getInnerPlan());
+        assertTrue(subHashJoinPlan.getJoinInfo().getPostJoinFilterExpression() == null);
+
+        //one condition can not pushdwon and two condition can pushdown.
+        sql = "select /*+ NO_STAR_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName + " s inner join " + itemTableName + " i on  s.supplier_id = i.supplier_id "+
+                "inner join " + orderTableName + " o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.description= 'desc1' or o.quantity > 10) and (i.supplier_id != 'medi' or s.address = 'hai') and (i.name is not null or s.loc_id != '8')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        hashJoinPlan = (HashJoinPlan)queryPlan;
+        assertTrue(hashJoinPlan.getJoinInfo().getPostJoinFilterExpression().toString().equals(
+                "(I.DESCRIPTION = 'desc1' OR O.QUANTITY > 10)"));
+        hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+        assertTrue(hashSubPlans.length == 1);
+        subHashJoinPlan = (HashJoinPlan)(hashSubPlans[0].getInnerPlan());
+        postFilterExpression = subHashJoinPlan.getJoinInfo().getPostJoinFilterExpression();
+        assertTrue(postFilterExpression.toString().equals(
+                "((I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai') AND (I.NAME IS NOT NULL OR S.LOC_ID != '8'))"));
+
+        //for right join,can not push down
+        sql = "select /*+ NO_STAR_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName + " s inner join " + itemTableName + " i on  s.supplier_id = i.supplier_id "+
+                "right join " + orderTableName + " o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        hashJoinPlan = (HashJoinPlan)queryPlan;
+        assertTrue(hashJoinPlan.getJoinInfo().getPostJoinFilterExpression().toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai')"));
+        hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+        assertTrue(hashSubPlans.length == 1);
+        subHashJoinPlan = (HashJoinPlan)(hashSubPlans[0].getInnerPlan());
+        assertTrue(subHashJoinPlan.getJoinInfo().getPostJoinFilterExpression() == null);
+
+        //for right join,can not push down
+        sql = "select /*+ NO_STAR_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName + " s inner join " + itemTableName + " i on  s.supplier_id = i.supplier_id "+
+                "right join " + orderTableName + " o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.description= 'desc1' or o.quantity > 10) and (i.supplier_id != 'medi' or s.address = 'hai') and (i.name is not null or s.loc_id != '8')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        hashJoinPlan = (HashJoinPlan)queryPlan;
+        assertTrue(hashJoinPlan.getJoinInfo().getPostJoinFilterExpression().toString().equals(
+                "((I.DESCRIPTION = 'desc1' OR O.QUANTITY > 10) AND (I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai') AND (I.NAME IS NOT NULL OR S.LOC_ID != '8'))"));
+        hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+        assertTrue(hashSubPlans.length == 1);
+        subHashJoinPlan = (HashJoinPlan)(hashSubPlans[0].getInnerPlan());
+        assertTrue(subHashJoinPlan.getJoinInfo().getPostJoinFilterExpression() == null);
+    }
+
+    private void doTestPushDownPostFilterToSubJoinForSortMergeJoinBug5389(
+            Connection conn,
+            String supplierTableName,
+            String itemTableName,
+            String orderTableName) throws Exception {
+        //one condition pushdown.
+        String sql = "select /*+ USE_SORT_MERGE_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName+" s inner join "+itemTableName+" i on  s.supplier_id = i.supplier_id "+
+                "inner join "+orderTableName+" o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai')";
+        QueryPlan queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        ClientScanPlan clientScanPlan = (ClientScanPlan)queryPlan;
+        assertTrue(clientScanPlan.getWhere() == null);
+        SortMergeJoinPlan sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+        ClientScanPlan lhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getLhsPlan();
+        assertTrue(lhsClientScanPlan.getWhere().toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai')"));
+
+        //can not pushdown to subjoin.
+        sql = "select /*+ USE_SORT_MERGE_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName+" s inner join "+itemTableName+" i on  s.supplier_id = i.supplier_id "+
+                "inner join "+orderTableName+" o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai' or o.quantity = 8)";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        clientScanPlan = (ClientScanPlan)queryPlan;
+        assertTrue(clientScanPlan.getWhere().toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai' OR O.QUANTITY = 8)"));
+        sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+        lhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getLhsPlan();
+        assertTrue(lhsClientScanPlan.getWhere() == null);
+
+        //one condition can not pushdwon and two condition can pushdown.
+        sql = "select /*+ USE_SORT_MERGE_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName+" s inner join "+itemTableName+" i on  s.supplier_id = i.supplier_id "+
+                "inner join "+orderTableName+" o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.description= 'desc1' or o.quantity > 10) and (i.supplier_id != 'medi' or s.address = 'hai') and (i.name is not null or s.loc_id != '8')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        clientScanPlan = (ClientScanPlan)queryPlan;
+        assertTrue(clientScanPlan.getWhere().toString().equals(
+                "(I.DESCRIPTION = 'desc1' OR O.QUANTITY > 10)"));
+        sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+        lhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getLhsPlan();
+        assertTrue(lhsClientScanPlan.getWhere().toString().equals(
+                "((I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai') AND (I.NAME IS NOT NULL OR S.LOC_ID != '8'))"));
+
+       //for right join,can not push down
+        sql = "select /*+ USE_SORT_MERGE_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName+" s inner join "+itemTableName+" i on  s.supplier_id = i.supplier_id "+
+                "right join "+orderTableName+" o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.supplier_id != 'medi' or s.address = 'hai')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        clientScanPlan = (ClientScanPlan)queryPlan;
+        assertTrue(clientScanPlan.getWhere().toString().equals(
+                "(I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai')"));
+        sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+        //for right join, SortMergeJoinPlan exchanges left and right
+        ClientScanPlan rhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getRhsPlan();
+        assertTrue(rhsClientScanPlan.getWhere() == null);
+
+        //for full join,can not push down
+        sql = "select /*+ USE_SORT_MERGE_JOIN */ COALESCE(o.order_id,'empty_order_id'),i.item_id, i.discount2+5, s.supplier_id, lower(s.name) from "+
+                supplierTableName+" s inner join "+itemTableName+" i on  s.supplier_id = i.supplier_id "+
+                "full join "+orderTableName+" o on  i.item_id = o.item_id "+
+                "where (o.price < 10 or o.price > 20) and "+
+                "(i.description= 'desc1' or o.quantity > 10) and (i.supplier_id != 'medi' or s.address = 'hai') and (i.name is not null or s.loc_id != '8')";
+        queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        clientScanPlan = (ClientScanPlan)queryPlan;
+        assertTrue(clientScanPlan.getWhere().toString().equals(
+                "((O.PRICE < 10 OR O.PRICE > 20) AND (I.DESCRIPTION = 'desc1' OR O.QUANTITY > 10) AND (I.SUPPLIER_ID != 'medi' OR S.ADDRESS = 'hai') AND (I.NAME IS NOT NULL OR S.LOC_ID != '8'))"));
+        sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+        lhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getLhsPlan();
+        assertTrue(lhsClientScanPlan.getWhere() == null);
     }
 }
