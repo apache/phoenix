@@ -66,27 +66,20 @@ import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
-import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
-import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
-import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
-import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -208,20 +201,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
   // The collection of pending data table rows
   private Map<ImmutableBytesPtr, PendingRow> pendingRows = new ConcurrentHashMap<>();
 
-  /**
-   * cache the failed updates to the various regions. Used for making the WAL recovery mechanisms
-   * more robust in the face of recoverying index regions that were on the same server as the
-   * primary table region
-   */
-  private PerRegionIndexWriteCache failedIndexEdits = new PerRegionIndexWriteCache();
-
   private MetricsIndexerSource metricSource;
 
   private boolean stopped;
   private boolean disabled;
-  private long slowIndexWriteThreshold;
   private long slowIndexPrepareThreshold;
-  private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
 
@@ -259,7 +243,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           this.lockManager = new LockManager();
 
           // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
-          this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
+          this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
           setSlowThresholds(e.getConfiguration());
       } catch (NoSuchMethodError ex) {
           disabled = true;
@@ -274,10 +258,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
   private void setSlowThresholds(Configuration c) {
       slowIndexPrepareThreshold = c.getLong(INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY,
           INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT);
-      slowIndexWriteThreshold = c.getLong(INDEXER_INDEX_PREPARE_SLOW_THRESHOLD_KEY,
-          INDEXER_INDEX_PREPARE_SLOW_THREHSOLD_DEFAULT);
-      slowPostOpenThreshold = c.getLong(INDEXER_POST_OPEN_SLOW_THRESHOLD_KEY,
-          INDEXER_POST_OPEN_SLOW_THRESHOLD_DEFAULT);
       slowPreIncrementThreshold = c.getLong(INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_KEY,
           INDEXER_PRE_INCREMENT_SLOW_THRESHOLD_DEFAULT);
   }
@@ -356,21 +336,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
       if (this.disabled) {
           return;
       }
-      long start = EnvironmentEdgeManager.currentTimeMillis();
       try {
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
       } catch (Throwable t) {
           rethrowIndexingException(t);
-      } finally {
-          long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-          if (duration >= slowIndexPrepareThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("preBatchMutate", duration, slowIndexPrepareThreshold));
-              }
-              metricSource.incrementNumSlowIndexPrepareCalls();
-          }
-          metricSource.updateIndexPrepareTime(duration);
       }
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
@@ -535,20 +505,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
           if (current == null) {
               current = NullSpan.INSTANCE;
           }
-          long start = EnvironmentEdgeManager.currentTimeMillis();
 
           // get the index updates for all elements in this batch
           Collection<Pair<Pair<Mutation, byte[]>, byte[]>> indexUpdates =
                   this.builder.getIndexUpdates(miniBatchOp, mutations);
 
-          long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-          if (duration >= slowIndexPrepareThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("indexPrepare", duration, slowIndexPrepareThreshold));
-              }
-              metricSource.incrementNumSlowIndexPrepareCalls();
-          }
-          metricSource.updateIndexPrepareTime(duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
           byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
@@ -651,7 +612,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
       if (mutations == null) {
           return;
       }
+
+      long start = EnvironmentEdgeManager.currentTimeMillis();
       prepareIndexMutations(c, miniBatchOp, context, mutations);
+      metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+
       // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
       // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
       // can be prepared in less than one millisecond
@@ -717,7 +682,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
       if (this.disabled) {
           return;
       }
-      long start = EnvironmentEdgeManager.currentTimeMillis();
       BatchMutateContext context = getBatchMutateContext(c);
       if (context == null) {
           return;
@@ -735,22 +699,19 @@ public class IndexRegionObserver extends BaseRegionObserver {
           }
        } finally {
            removeBatchMutateContext(c);
-           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-           if (duration >= slowIndexWriteThreshold) {
-               if (LOG.isDebugEnabled()) {
-                   LOG.debug(getCallTooSlowMessage("postBatchMutateIndispensably", duration, slowIndexWriteThreshold));
-               }
-               metricSource.incrementNumSlowIndexWriteCalls();
-           }
-           metricSource.updateIndexWriteTime(duration);
        }
   }
 
   private void doPost(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) throws IOException {
+      long start = EnvironmentEdgeManager.currentTimeMillis();
+
       try {
           doIndexWritesWithExceptions(context, true);
+          metricSource.updatePostIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
       } catch (Throwable e) {
+          metricSource.updatePostIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.incrementPostIndexUpdateFailures();
           rethrowIndexingException(e);
       }
       throw new RuntimeException(
@@ -772,21 +733,12 @@ public class IndexRegionObserver extends BaseRegionObserver {
           if (current == null) {
               current = NullSpan.INSTANCE;
           }
-          long start = EnvironmentEdgeManager.currentTimeMillis();
           current.addTimelineAnnotation("Actually doing " + (post ? "post" : "pre") + " index update for first time");
           if (post) {
               postWriter.writeAndHandleFailure(indexUpdates, false, context.clientVersion);
           } else {
               preWriter.writeAndHandleFailure(indexUpdates, false, context.clientVersion);
           }
-          long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-          if (duration >= slowIndexWriteThreshold) {
-              if (LOG.isDebugEnabled()) {
-                  LOG.debug(getCallTooSlowMessage("indexWrite", duration, slowIndexWriteThreshold));
-              }
-              metricSource.incrementNumSlowIndexWriteCalls();
-          }
-          metricSource.updateIndexWriteTime(duration);
       }
   }
 
@@ -805,52 +757,20 @@ public class IndexRegionObserver extends BaseRegionObserver {
 
   private void doPre(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context,
                      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      long start = EnvironmentEdgeManager.currentTimeMillis();
+
       try {
           doIndexWritesWithExceptions(context, false);
+          metricSource.updatePreIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
       } catch (Throwable e) {
+          metricSource.updatePreIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.incrementPreIndexUpdateFailures();
           removePendingRows(context);
           rethrowIndexingException(e);
       }
       throw new RuntimeException(
               "Somehow didn't complete the index update, but didn't return succesfully either!");
-  }
-
-  @Override
-  public void postOpen(final ObserverContext<RegionCoprocessorEnvironment> c) {
-    Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
-
-    if (this.disabled) {
-        return;
-    }
-
-    long start = EnvironmentEdgeManager.currentTimeMillis();
-    try {
-        //if we have no pending edits to complete, then we are done
-        if (updates == null || updates.size() == 0) {
-          return;
-        }
-
-        LOG.info("Found some outstanding index updates that didn't succeed during"
-                + " WAL replay - attempting to replay now.");
-
-        // do the usual preWriter stuff
-        try {
-            preWriter.writeAndHandleFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
-        } catch (IOException e) {
-                LOG.error("During WAL replay of outstanding index updates, "
-                        + "Exception is thrown instead of killing server during index writing", e);
-        }
-    } finally {
-         long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-         if (duration >= slowPostOpenThreshold) {
-             if (LOG.isDebugEnabled()) {
-                 LOG.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
-             }
-             metricSource.incrementNumSlowPostOpenCalls();
-         }
-         metricSource.updatePostOpenTime(duration);
-    }
   }
 
   /**
