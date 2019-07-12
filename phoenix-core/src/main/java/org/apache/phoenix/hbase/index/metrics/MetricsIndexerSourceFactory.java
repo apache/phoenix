@@ -21,7 +21,7 @@ package org.apache.phoenix.hbase.index.metrics;
  */
 public class MetricsIndexerSourceFactory {
   private static final MetricsIndexerSourceFactory INSTANCE = new MetricsIndexerSourceFactory();
-  private MetricsIndexerSource source;
+  private MetricsIndexerSource indexerSource;
 
   private MetricsIndexerSourceFactory() {}
 
@@ -29,10 +29,10 @@ public class MetricsIndexerSourceFactory {
     return INSTANCE;
   }
 
-  public synchronized MetricsIndexerSource create() {
-    if (INSTANCE.source == null) {
-      INSTANCE.source = new MetricsIndexerSourceImpl();
+  public synchronized MetricsIndexerSource getIndexerSource() {
+    if (INSTANCE.indexerSource == null) {
+      INSTANCE.indexerSource = new MetricsIndexerSourceImpl();
     }
-    return INSTANCE.source;
+    return INSTANCE.indexerSource;
   }
 }
