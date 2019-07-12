@@ -222,7 +222,7 @@ public class Indexer extends BaseRegionObserver {
         this.lockManager = new LockManager();
 
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
-        this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
+        this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
         setSlowThresholds(e.getConfiguration());
 
         try {
