@@ -97,7 +97,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         Collections.fill(parameters, BindManager.UNBOUND_PARAMETER);
     }
 
-    public PhoenixPreparedStatement(PhoenixPreparedStatement statement) throws SQLException {
+    public PhoenixPreparedStatement(PhoenixPreparedStatement statement) {
         super(statement.connection);
         this.query = statement.query;
         this.statement = statement.statement;
