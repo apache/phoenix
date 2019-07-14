@@ -29,6 +29,7 @@ import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ArrayAllComparisonNode;
 import org.apache.phoenix.parse.ArrayAnyComparisonNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
@@ -408,7 +409,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         return count == 1 ? equalNodes.get(0) : NODE_FACTORY.and(equalNodes);
     }
     
-    private static class JoinConditionExtractor extends BooleanParseNodeVisitor<ParseNode> {
+    private static class JoinConditionExtractor extends AndRewriterBooleanParseNodeVisitor {
         private final TableName tableName;
         private ColumnResolveVisitor columnResolveVisitor;
         private List<AliasedNode> additionalSelectNodes;
@@ -416,6 +417,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         
         public JoinConditionExtractor(SelectStatement subquery, ColumnResolver outerResolver, 
                 PhoenixConnection connection, String tableAlias) throws SQLException {
+            super(NODE_FACTORY);
             this.tableName = NODE_FACTORY.table(null, tableAlias);
             ColumnResolver localResolver = FromCompiler.getResolverForQuery(subquery, connection);
             this.columnResolveVisitor = new ColumnResolveVisitor(localResolver, outerResolver);
@@ -436,43 +438,6 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             
             return NODE_FACTORY.and(this.joinConditions);            
         }
-        
-        @Override
-        public List<ParseNode> newElementList(int size) {
-            return Lists.<ParseNode> newArrayListWithExpectedSize(size);
-        }
-
-        @Override
-        public void addElement(List<ParseNode> l, ParseNode element) {
-            if (element != null) {
-                l.add(element);
-            }
-        }
-
-        @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public ParseNode visitLeave(AndParseNode node, List<ParseNode> l)
-                throws SQLException {
-            if (l.equals(node.getChildren()))
-                return node;
-
-            if (l.isEmpty())
-                return null;
-            
-            if (l.size() == 1)
-                return l.get(0);
-            
-            return NODE_FACTORY.and(l);
-        }
-
-        @Override
-        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
-            return false;
-        }
 
         @Override
         protected ParseNode leaveBooleanNode(ParseNode node, List<ParseNode> l)
@@ -484,18 +449,6 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                     && type != ColumnResolveVisitor.ColumnResolveType.LOCAL)
                 throw new SQLFeatureNotSupportedException("Does not support non-standard or non-equi correlated-subquery conditions.");
             
-            return node;
-        }
-
-        @Override
-        protected boolean enterNonBooleanNode(ParseNode node)
-                throws SQLException {
-            return false;
-        }
-
-        @Override
-        protected ParseNode leaveNonBooleanNode(ParseNode node,
-                List<ParseNode> l) throws SQLException {
             return node;
         }
 

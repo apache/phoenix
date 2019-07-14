@@ -1085,10 +1085,16 @@ public class TestUtil {
         return ByteUtil.compare(op, compareResult);
     }
 
-    public static QueryPlan getOptimizeQueryPlan(Connection conn,String sql) throws SQLException {
+    public static QueryPlan getOptimizeQueryPlan(Connection conn, String sql) throws SQLException {
         PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
         QueryPlan queryPlan = statement.optimizeQuery(sql);
         queryPlan.iterator();
+        return queryPlan;
+    }
+
+    public static QueryPlan getOptimizeQueryPlanNoIterator(Connection conn, String sql) throws SQLException {
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        QueryPlan queryPlan = statement.optimizeQuery(sql);
         return queryPlan;
     }
 
