@@ -4223,14 +4223,16 @@ public class MetaDataClient {
                                         .build();
                                 TableRef indexTableRef = new TableRef(viewIndexTable);
                                 PName indexTableTenantId = sharedTableState.getTenantId();
-                                if (indexTableTenantId==null) {
+                                if (indexTableTenantId == null) {
                                     tableRefsToDrop.add(indexTableRef);
-                                }
-                                else {
-                                    if (!tenantIdTableRefMap.containsKey(indexTableTenantId)) {
-                                        tenantIdTableRefMap.put(indexTableTenantId.getString(), Lists.<TableRef>newArrayList());
+                                } else {
+                                    if (!tenantIdTableRefMap.containsKey(
+                                            indexTableTenantId.getString())) {
+                                        tenantIdTableRefMap.put(indexTableTenantId.getString(),
+                                            Lists.<TableRef>newArrayList());
                                     }
-                                    tenantIdTableRefMap.get(indexTableTenantId.getString()).add(indexTableRef);
+                                    tenantIdTableRefMap.get(indexTableTenantId.getString())
+                                            .add(indexTableRef);
                                 }
 
                             }
