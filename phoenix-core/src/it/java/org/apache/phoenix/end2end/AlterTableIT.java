@@ -1345,6 +1345,30 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
-    
+
+    @Test
+    public void testAddNonPKColumnWhenlastPKIsVARBINARYOrARRAY() throws Exception {
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+          Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+
+            String ddl = "CREATE TABLE " + tableName1 + " (id VARBINARY PRIMARY KEY, "
+              + "col1 INTEGER)";
+            stmt.execute(ddl);
+
+            String alterDdl = "ALTER TABLE " + tableName1 + " ADD col2 INTEGER";
+            stmt.execute(alterDdl);
+
+            String ddl2 = "CREATE TABLE " + tableName2 + " (id INTEGER ARRAY PRIMARY KEY, "
+              + "col1 INTEGER)";
+            stmt.execute(ddl2);
+
+            String alterDdl2 = "ALTER TABLE " + tableName2 + " ADD col2 INTEGER";
+            stmt.execute(alterDdl2);
+        }
+    }
 }
  
