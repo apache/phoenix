@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -144,7 +145,7 @@ public class QueryOptimizer {
                 || (select.getWhere() != null && select.getWhere().hasSubquery())) {
             JoinCompiler.JoinTable join = JoinCompiler.compile(statement, select, resolver);
             Map<TableRef, TableRef> replacement = null;
-            for (JoinCompiler.Table table : join.getTables()) {
+            for (JoinCompiler.Table table : join.getAllTables()) {
                 if (table.isSubselect())
                     continue;
                 TableRef tableRef = table.getTableRef();
@@ -548,12 +549,13 @@ public class QueryOptimizer {
     }
 
     
-    private static class WhereConditionRewriter extends BooleanParseNodeVisitor<ParseNode> {
+    private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {
         private final ColumnResolver dataResolver;
         private final ExpressionCompiler expressionCompiler;
         private List<ParseNode> extractedConditions;
         
         public WhereConditionRewriter(ColumnResolver dataResolver, StatementContext context) throws SQLException {
+            super(FACTORY);
             this.dataResolver = dataResolver;
             this.expressionCompiler = new ExpressionCompiler(context);
             this.extractedConditions = Lists.<ParseNode> newArrayList();
@@ -567,43 +569,6 @@ public class QueryOptimizer {
                 return this.extractedConditions.get(0);
             
             return FACTORY.and(this.extractedConditions);            
-        }
-        
-        @Override
-        public List<ParseNode> newElementList(int size) {
-            return Lists.<ParseNode> newArrayListWithExpectedSize(size);
-        }
-
-        @Override
-        public void addElement(List<ParseNode> l, ParseNode element) {
-            if (element != null) {
-                l.add(element);
-            }
-        }
-
-        @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public ParseNode visitLeave(AndParseNode node, List<ParseNode> l)
-                throws SQLException {
-            if (l.equals(node.getChildren()))
-                return node;
-
-            if (l.isEmpty())
-                return null;
-            
-            if (l.size() == 1)
-                return l.get(0);
-            
-            return FACTORY.and(l);
-        }
-
-        @Override
-        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
-            return false;
         }
 
         @Override
@@ -619,18 +584,6 @@ public class QueryOptimizer {
             }
             
             return translatedNode;
-        }
-
-        @Override
-        protected boolean enterNonBooleanNode(ParseNode node)
-                throws SQLException {
-            return false;
-        }
-
-        @Override
-        protected ParseNode leaveNonBooleanNode(ParseNode node,
-                List<ParseNode> l) throws SQLException {
-            return node;
         }
     }
 

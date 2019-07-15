@@ -215,7 +215,7 @@ public class QueryCompiler {
      */
     protected QueryPlan compileJoinQuery(StatementContext context, List<Object> binds, JoinTable joinTable, boolean asSubquery, boolean projectPKColumns, List<OrderByNode> orderBy) throws SQLException {
         if (joinTable.getJoinSpecs().isEmpty()) {
-            Table table = joinTable.getTable();
+            Table table = joinTable.getLeftTable();
             SelectStatement subquery = table.getAsSubquery(orderBy);
             if (!table.isSubselect()) {
                 context.setCurrentTable(table.getTableRef());
@@ -280,7 +280,7 @@ public class QueryCompiler {
         switch (strategy) {
             case HASH_BUILD_RIGHT: {
                 boolean[] starJoinVector = joinTable.getStarJoinVector();
-                Table table = joinTable.getTable();
+                Table table = joinTable.getLeftTable();
                 PTable initialProjectedTable;
                 TableRef tableRef;
                 SelectStatement query;
@@ -317,8 +317,14 @@ public class QueryCompiler {
                     JoinSpec joinSpec = joinSpecs.get(i);
                     Scan subScan = ScanUtil.newScan(originalScan);
                     subContexts[i] = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
-                    subPlans[i] = compileJoinQuery(subContexts[i], binds, joinSpec.getJoinTable(), true, true, null);
-                    boolean hasPostReference = joinSpec.getJoinTable().hasPostReference();
+                    subPlans[i] = compileJoinQuery(
+                            subContexts[i],
+                            binds,
+                            joinSpec.getRhsJoinTable(),
+                            true,
+                            true,
+                            null);
+                    boolean hasPostReference = joinSpec.getRhsJoinTable().hasPostReference();
                     if (hasPostReference) {
                         tables[i] = subContexts[i].getResolver().getTables().get(0).getTable();
                         projectedTable = JoinCompiler.joinProjectedTables(projectedTable, tables[i], joinSpec.getType());
@@ -366,9 +372,9 @@ public class QueryCompiler {
             case HASH_BUILD_LEFT: {
                 JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
                 JoinType type = lastJoinSpec.getType();
-                JoinTable rhsJoinTable = lastJoinSpec.getJoinTable();
-                Table rhsTable = rhsJoinTable.getTable();
-                JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
+                JoinTable rhsJoinTable = lastJoinSpec.getRhsJoinTable();
+                Table rhsTable = rhsJoinTable.getLeftTable();
+                JoinTable lhsJoin = joinTable.createSubJoinTable(statement.getConnection());
                 Scan subScan = ScanUtil.newScan(originalScan);
                 StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
                 QueryPlan lhsPlan = compileJoinQuery(lhsCtx, binds, lhsJoin, true, true, null);
@@ -428,10 +434,10 @@ public class QueryCompiler {
                 return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[]{new HashSubPlan(0, lhsPlan, hashExpressions, false, usePersistentCache, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
             }
             case SORT_MERGE: {
-                JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
+                JoinTable lhsJoin =  joinTable.createSubJoinTable(statement.getConnection());
                 JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
                 JoinType type = lastJoinSpec.getType();
-                JoinTable rhsJoin = lastJoinSpec.getJoinTable();
+                JoinTable rhsJoin = lastJoinSpec.getRhsJoinTable();
                 if (type == JoinType.Right) {
                     JoinTable temp = lhsJoin;
                     lhsJoin = rhsJoin;
