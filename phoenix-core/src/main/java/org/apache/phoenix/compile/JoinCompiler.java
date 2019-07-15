@@ -23,6 +23,7 @@ import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCOD
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableList;
+
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -46,7 +48,9 @@ import org.apache.phoenix.expression.function.MinAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.AndBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnDef;
@@ -140,7 +144,7 @@ public class JoinCompiler {
         Pair<Table, List<JoinSpec>> res = select.getFrom().accept(constructor);
         JoinTable joinTable = res.getSecond() == null ? compiler.new JoinTable(res.getFirst()) : compiler.new JoinTable(res.getFirst(), res.getSecond());
         if (select.getWhere() != null) {
-            joinTable.addFilter(select.getWhere());
+            joinTable.pushDownFilter(select.getWhere());
         }
 
         ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
@@ -231,47 +235,47 @@ public class JoinCompiler {
     }
 
     public class JoinTable {
-        private final Table table;
+        private final Table leftTable;
         private final List<JoinSpec> joinSpecs;
-        private final List<ParseNode> postFilters;
-        private final List<Table> tables;
-        private final List<TableRef> tableRefs;
+        private List<ParseNode> postFilters;
+        private final List<Table> allTables;
+        private final List<TableRef> allTableRefs;
         private final boolean allLeftJoin;
         private final boolean isPrefilterAccepted;
         private final List<JoinSpec> prefilterAcceptedTables;
 
         private JoinTable(Table table) {
-            this.table = table;
+            this.leftTable = table;
             this.joinSpecs = Collections.<JoinSpec>emptyList();
-            this.postFilters = Collections.<ParseNode>emptyList();
-            this.tables = Collections.<Table>singletonList(table);
-            this.tableRefs = Collections.<TableRef>singletonList(table.getTableRef());
+            this.postFilters = Collections.EMPTY_LIST;
+            this.allTables = Collections.<Table>singletonList(table);
+            this.allTableRefs = Collections.<TableRef>singletonList(table.getTableRef());
             this.allLeftJoin = false;
             this.isPrefilterAccepted = true;
             this.prefilterAcceptedTables = Collections.<JoinSpec>emptyList();
         }
 
         private JoinTable(Table table, List<JoinSpec> joinSpecs) {
-            this.table = table;
+            this.leftTable = table;
             this.joinSpecs = joinSpecs;
             this.postFilters = new ArrayList<ParseNode>();
-            this.tables = new ArrayList<Table>();
-            this.tableRefs = new ArrayList<TableRef>();
-            this.tables.add(table);
+            this.allTables = new ArrayList<Table>();
+            this.allTableRefs = new ArrayList<TableRef>();
+            this.allTables.add(table);
             boolean allLeftJoin = true;
             int lastRightJoinIndex = -1;
             boolean hasFullJoin = false;
             for (int i = 0; i < joinSpecs.size(); i++) {
                 JoinSpec joinSpec = joinSpecs.get(i);
-                this.tables.addAll(joinSpec.getJoinTable().getTables());
+                this.allTables.addAll(joinSpec.getRhsJoinTable().getAllTables());
                 allLeftJoin = allLeftJoin && joinSpec.getType() == JoinType.Left;
                 hasFullJoin = hasFullJoin || joinSpec.getType() == JoinType.Full;
                 if (joinSpec.getType() == JoinType.Right) {
                     lastRightJoinIndex = i;
                 }
             }
-            for (Table t : this.tables) {
-                this.tableRefs.add(t.getTableRef());
+            for (Table t : this.allTables) {
+                this.allTableRefs.add(t.getTableRef());
             }
             this.allLeftJoin = allLeftJoin;
             this.isPrefilterAccepted = !hasFullJoin && lastRightJoinIndex == -1;
@@ -284,20 +288,24 @@ public class JoinCompiler {
             }
         }
 
-        public Table getTable() {
-            return table;
+        public Table getLeftTable() {
+            return leftTable;
         }
 
         public List<JoinSpec> getJoinSpecs() {
             return joinSpecs;
         }
 
-        public List<Table> getTables() {
-            return tables;
+        public List<Table> getAllTables() {
+            return allTables;
         }
 
-        public List<TableRef> getTableRefs() {
-            return tableRefs;
+        public List<TableRef> getAllTableRefs() {
+            return allTableRefs;
+        }
+
+        public List<TableRef> getLeftTableRef() {
+            return Collections.<TableRef>singletonList(leftTable.getTableRef());
         }
 
         public boolean isAllLeftJoin() {
@@ -320,32 +328,57 @@ public class JoinCompiler {
             return combine(postFilters);
         }
 
-        public void addFilter(ParseNode filter) throws SQLException {
+        public void addPostJoinFilter(ParseNode parseNode) {
+            if(this.postFilters == Collections.EMPTY_LIST) {
+                this.postFilters = new ArrayList<ParseNode>();
+            }
+            this.postFilters.add(parseNode);
+        }
+
+        public void addLeftTableFilter(ParseNode parseNode) {
+            if (isPrefilterAccepted) {
+                leftTable.addFilter(parseNode);
+            } else {
+                addPostJoinFilter(parseNode);
+            }
+        }
+
+        public List<JoinSpec> getPrefilterAcceptedJoinSpecs() {
+            return this.prefilterAcceptedTables;
+        }
+
+        /**
+         * try to decompose filter and push down to single table.
+         * @param filter
+         * @throws SQLException
+         */
+        public void pushDownFilter(ParseNode filter) throws SQLException {
             if (joinSpecs.isEmpty()) {
-                table.addFilter(filter);
+                leftTable.addFilter(filter);
                 return;
             }
 
-            WhereNodeVisitor visitor = new WhereNodeVisitor(origResolver, table,
-                    postFilters, Collections.<TableRef>singletonList(table.getTableRef()),
-                    isPrefilterAccepted, prefilterAcceptedTables, statement.getConnection());
+            WhereNodeVisitor visitor = new WhereNodeVisitor(
+                    origResolver,
+                    this,
+                    statement.getConnection());
             filter.accept(visitor);
         }
 
         public void pushDownColumnRefVisitors(ColumnRefParseNodeVisitor generalRefVisitor,
                 ColumnRefParseNodeVisitor joinLocalRefVisitor,
                 ColumnRefParseNodeVisitor prefilterRefVisitor) throws SQLException {
-            for (ParseNode node : table.getPreFilters()) {
+            for (ParseNode node : leftTable.getPreFilters()) {
                 node.accept(prefilterRefVisitor);
             }
-            for (ParseNode node : table.getPostFilters()) {
+            for (ParseNode node : leftTable.getPostFilters()) {
                 node.accept(generalRefVisitor);
             }
             for (ParseNode node : postFilters) {
                 node.accept(generalRefVisitor);
             }
             for (JoinSpec joinSpec : joinSpecs) {
-                JoinTable joinTable = joinSpec.getJoinTable();
+                JoinTable joinTable = joinSpec.getRhsJoinTable();
                 boolean hasSubJoin = !joinTable.getJoinSpecs().isEmpty();
                 for (EqualParseNode node : joinSpec.getOnConditions()) {
                     node.getLHS().accept(generalRefVisitor);
@@ -390,8 +423,8 @@ public class JoinCompiler {
                 JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
                 JoinType type = lastJoinSpec.getType();
                 if ((type == JoinType.Right || type == JoinType.Inner)
-                        && lastJoinSpec.getJoinTable().getJoinSpecs().isEmpty()
-                        && lastJoinSpec.getJoinTable().getTable().isFlat()) {
+                        && lastJoinSpec.getRhsJoinTable().getJoinSpecs().isEmpty()
+                        && lastJoinSpec.getRhsJoinTable().getLeftTable().isFlat()) {
                     strategies.add(Strategy.HASH_BUILD_LEFT);
                 }
                 strategies.add(Strategy.SORT_MERGE);
@@ -408,7 +441,7 @@ public class JoinCompiler {
          */
         public boolean[] getStarJoinVector() {
             int count = joinSpecs.size();
-            if (!table.isFlat() ||
+            if (!leftTable.isFlat() ||
                     (!useStarJoin
                             && count > 1
                             && joinSpecs.get(count - 1).getType() != JoinType.Left
@@ -426,10 +459,10 @@ public class JoinCompiler {
                         && joinSpec.getType() != JoinType.Anti)
                     return null;
                 vector[i] = true;
-                Iterator<TableRef> iter = joinSpec.getDependencies().iterator();
+                Iterator<TableRef> iter = joinSpec.getDependentTableRefs().iterator();
                 while (vector[i] == true && iter.hasNext()) {
                     TableRef tableRef = iter.next();
-                    if (!tableRef.equals(table.getTableRef())) {
+                    if (!tableRef.equals(leftTable.getTableRef())) {
                         vector[i] = false;
                     }
                 }
@@ -438,9 +471,52 @@ public class JoinCompiler {
             return vector;
         }
 
-        public JoinTable getSubJoinTableWithoutPostFilters() {
-            return joinSpecs.size() > 1 ? new JoinTable(table, joinSpecs.subList(0, joinSpecs.size() - 1)) :
-                new JoinTable(table);
+        /**
+         * create a new {@link JoinTable} exclude the last {@link JoinSpec},
+         * and try to push {@link #postFilters} to the new {@link JoinTable}.
+         * @param phoenixConnection
+         * @return
+         * @throws SQLException
+         */
+        public JoinTable createSubJoinTable(
+                PhoenixConnection phoenixConnection) throws SQLException {
+            assert joinSpecs.size() > 0;
+            JoinTable newJoinTablesContext = joinSpecs.size() > 1 ?
+                    new JoinTable(leftTable, joinSpecs.subList(0, joinSpecs.size() - 1)) :
+                    new JoinTable(leftTable);
+            JoinType rightmostJoinType = joinSpecs.get(joinSpecs.size() - 1).getType();
+            if(rightmostJoinType == JoinType.Right || rightmostJoinType == JoinType.Full) {
+                return newJoinTablesContext;
+            }
+
+            if(this.postFilters.isEmpty()) {
+                return newJoinTablesContext;
+            }
+
+            PushDownPostFilterParseNodeVisitor pushDownPostFilterNodeVistor =
+                    new PushDownPostFilterParseNodeVisitor(
+                            JoinCompiler.this.origResolver,
+                            newJoinTablesContext,
+                            phoenixConnection);
+            int index = 0;
+            List<ParseNode> newPostFilterParseNodes = null;
+            for(ParseNode postFilterParseNode : this.postFilters) {
+                ParseNode newPostFilterParseNode =
+                        postFilterParseNode.accept(pushDownPostFilterNodeVistor);
+                if(newPostFilterParseNode != postFilterParseNode &&
+                   newPostFilterParseNodes == null) {
+                    newPostFilterParseNodes =
+                            new ArrayList<ParseNode>(this.postFilters.subList(0, index));
+                }
+                if(newPostFilterParseNodes != null && newPostFilterParseNode != null) {
+                    newPostFilterParseNodes.add(newPostFilterParseNode);
+                }
+                index++;
+            }
+            if(newPostFilterParseNodes != null) {
+                this.postFilters = newPostFilterParseNodes;
+            }
+            return newJoinTablesContext;
         }
 
         public SelectStatement getAsSingleSubquery(SelectStatement query, boolean asSubquery) throws SQLException {
@@ -453,14 +529,15 @@ public class JoinCompiler {
         }
 
         public boolean hasPostReference() {
-            for (Table table : tables) {
+            for (Table table : allTables) {
                 if (table.isWildCardSelect()) {
                     return true;
                 }
             }
 
             for (Map.Entry<ColumnRef, ColumnRefType> e : columnRefs.entrySet()) {
-                if (e.getValue() == ColumnRefType.GENERAL && tableRefs.contains(e.getKey().getTableRef())) {
+                if (e.getValue() == ColumnRefType.GENERAL &&
+                    allTableRefs.contains(e.getKey().getTableRef())) {
                     return true;
                 }
             }
@@ -472,11 +549,11 @@ public class JoinCompiler {
            if (!postFilters.isEmpty())
                return true;
 
-           if (isPrefilterAccepted && table.hasFilters())
+           if (isPrefilterAccepted && leftTable.hasFilters())
                return true;
 
            for (JoinSpec joinSpec : prefilterAcceptedTables) {
-               if (joinSpec.getJoinTable().hasFilters())
+               if (joinSpec.getRhsJoinTable().hasFilters())
                    return true;
            }
 
@@ -487,25 +564,38 @@ public class JoinCompiler {
     public class JoinSpec {
         private final JoinType type;
         private final List<EqualParseNode> onConditions;
-        private final JoinTable joinTable;
+        private final JoinTable rhsJoinTable;
         private final boolean singleValueOnly;
-        private Set<TableRef> dependencies;
+        private Set<TableRef> dependentTableRefs;
         private OnNodeVisitor onNodeVisitor;
 
         private JoinSpec(JoinType type, ParseNode onNode, JoinTable joinTable,
                 boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
             this.type = type;
             this.onConditions = new ArrayList<EqualParseNode>();
-            this.joinTable = joinTable;
+            this.rhsJoinTable = joinTable;
             this.singleValueOnly = singleValueOnly;
-            this.dependencies = new HashSet<TableRef>();
-            this.onNodeVisitor = new OnNodeVisitor(resolver, onConditions, dependencies, joinTable, statement.getConnection());
+            this.dependentTableRefs = new HashSet<TableRef>();
+            this.onNodeVisitor = new OnNodeVisitor(resolver, this, statement.getConnection());
             if (onNode != null) {
-                onNode.accept(this.onNodeVisitor);
+                this.pushDownOnCondition(onNode);
             }
         }
 
-        public void addOnCondition(ParseNode node) throws SQLException {
+        /**
+         * <pre>
+         * 1.in {@link JoinSpec} ctor,try to push the filter in join on clause to where clause,
+         *   eg. for "a join b on a.id = b.id and b.code = 1 where a.name is not null", try to
+         *   push "b.code =1" in join on clause to where clause.
+         * 2.in{@link WhereNodeVisitor#visitLeave(ComparisonParseNode, List)}, for inner join,
+         *   try to push the join on condition in where clause to join on clause，
+         *   eg. for "a join b on a.id = b.id where a.name = b.name", try to push "a.name=b.name"
+         *   in where clause to join on clause.
+         * </pre>
+         * @param node
+         * @throws SQLException
+         */
+        public void pushDownOnCondition(ParseNode node) throws SQLException {
             node.accept(onNodeVisitor);
         }
 
@@ -517,16 +607,32 @@ public class JoinCompiler {
             return onConditions;
         }
 
-        public JoinTable getJoinTable() {
-            return joinTable;
+        public JoinTable getRhsJoinTable() {
+            return rhsJoinTable;
+        }
+
+        public List<TableRef>  getRhsJoinTableRefs() {
+            return this.rhsJoinTable.getAllTableRefs();
+        }
+
+        public void pushDownFilterToRhsJoinTable(ParseNode parseNode) throws SQLException {
+             this.rhsJoinTable.pushDownFilter(parseNode);
+        }
+
+        public void addOnCondition(EqualParseNode equalParseNode) {
+            this.onConditions.add(equalParseNode);
+        }
+
+        public void addDependentTableRefs(Collection<TableRef> tableRefs) {
+            this.dependentTableRefs.addAll(tableRefs);
         }
 
         public boolean isSingleValueOnly() {
             return singleValueOnly;
         }
 
-        public Set<TableRef> getDependencies() {
-            return dependencies;
+        public Set<TableRef> getDependentTableRefs() {
+            return dependentTableRefs;
         }
 
         public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx, StatementContext rhsCtx, Strategy strategy) throws SQLException {
@@ -889,28 +995,53 @@ public class JoinCompiler {
         }
     }
 
-    private static class WhereNodeVisitor extends BooleanParseNodeVisitor<Void> {
-        private Table table;
-        private List<ParseNode> postFilters;
-        private List<TableRef> selfTableRefs;
-        private boolean isPrefilterAccepted;
-        private List<JoinSpec> prefilterAcceptedTables;
-        ColumnRefParseNodeVisitor columnRefVisitor;
+    /**
+     * Push down {@link JoinTable#postFilters} of Outermost-JoinTable to
+     * {@link JoinTable#postFilters} of Sub-JoinTable
+     */
+    private static class PushDownPostFilterParseNodeVisitor extends AndRewriterBooleanParseNodeVisitor {
+        private ColumnRefParseNodeVisitor columnRefParseNodeVisitor;
+        /**
+         * Sub-JoinTable to accept pushed down PostFilters.
+         */
+        private JoinTable joinTable;
 
-        public WhereNodeVisitor(ColumnResolver resolver, Table table,
-                List<ParseNode> postFilters, List<TableRef> selfTableRefs, boolean isPrefilterAccepted,
-                List<JoinSpec> prefilterAcceptedTables, PhoenixConnection connection) {
-            this.table = table;
-            this.postFilters = postFilters;
-            this.selfTableRefs = selfTableRefs;
-            this.isPrefilterAccepted = isPrefilterAccepted;
-            this.prefilterAcceptedTables = prefilterAcceptedTables;
-            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
+        public PushDownPostFilterParseNodeVisitor(
+                ColumnResolver resolver,
+                JoinTable joinTablesContext,
+                PhoenixConnection connection) {
+            super(NODE_FACTORY);
+            this.joinTable = joinTablesContext;
+            this.columnRefParseNodeVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
         }
 
         @Override
-        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
-            return false;
+        protected ParseNode leaveBooleanNode(
+                ParseNode parentParseNode, List<ParseNode> childParseNodes) throws SQLException {
+            columnRefParseNodeVisitor.reset();
+            parentParseNode.accept(columnRefParseNodeVisitor);
+            ColumnRefParseNodeVisitor.ColumnRefType columnRefType =
+                    columnRefParseNodeVisitor.getContentType(
+                            this.joinTable.getAllTableRefs());
+            if(columnRefType == ColumnRefParseNodeVisitor.ColumnRefType.NONE ||
+               columnRefType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY){
+                this.joinTable.postFilters.add(parentParseNode);
+                return null;
+            }
+            return parentParseNode;
+        }
+    }
+
+    private static class WhereNodeVisitor extends AndBooleanParseNodeVisitor<Void> {
+        private ColumnRefParseNodeVisitor columnRefVisitor;
+        private JoinTable joinTable;
+
+        public WhereNodeVisitor(
+                ColumnResolver resolver,
+                JoinTable joinTablesContext,
+                PhoenixConnection connection) {
+            this.joinTable = joinTablesContext;
+            this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
         }
 
         @Override
@@ -918,50 +1049,39 @@ public class JoinCompiler {
                 List<Void> l) throws SQLException {
             columnRefVisitor.reset();
             node.accept(columnRefVisitor);
-            ColumnRefParseNodeVisitor.ColumnRefType type = columnRefVisitor.getContentType(selfTableRefs);
+            ColumnRefParseNodeVisitor.ColumnRefType type =
+                    columnRefVisitor.getContentType(this.joinTable.getLeftTableRef());
             switch (type) {
             case NONE:
             case SELF_ONLY:
-                if (isPrefilterAccepted) {
-                    table.addFilter(node);
-                } else {
-                    postFilters.add(node);
-                }
+                this.joinTable.addLeftTableFilter(node);
                 break;
             case FOREIGN_ONLY:
                 JoinTable matched = null;
-                for (JoinSpec joinSpec : prefilterAcceptedTables) {
-                    if (columnRefVisitor.getContentType(joinSpec.getJoinTable().getTableRefs()) == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                        matched = joinSpec.getJoinTable();
+                for (JoinSpec joinSpec : this.joinTable.getPrefilterAcceptedJoinSpecs()) {
+                    if (columnRefVisitor.getContentType(
+                            joinSpec.getRhsJoinTable().getAllTableRefs()) ==
+                        ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
+                        matched = joinSpec.getRhsJoinTable();
                         break;
                     }
                 }
                 if (matched != null) {
-                    matched.addFilter(node);
+                    matched.pushDownFilter(node);
                 } else {
-                    postFilters.add(node);
+                    this.joinTable.addPostJoinFilter(node);
                 }
                 break;
             default:
-                postFilters.add(node);
+                this.joinTable.addPostJoinFilter(node);
                 break;
             }
             return null;
         }
 
         @Override
-        protected boolean enterNonBooleanNode(ParseNode node) throws SQLException {
-            return false;
-        }
-
-        @Override
         protected Void leaveNonBooleanNode(ParseNode node, List<Void> l) throws SQLException {
             return null;
-        }
-
-        @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
         }
 
         @Override
@@ -975,7 +1095,10 @@ public class JoinCompiler {
             if (!(node instanceof EqualParseNode))
                 return leaveBooleanNode(node, l);
 
-            ListIterator<JoinSpec> iter = prefilterAcceptedTables.listIterator(prefilterAcceptedTables.size());
+            List<JoinSpec> prefilterAcceptedJoinSpecs =
+                    this.joinTable.getPrefilterAcceptedJoinSpecs();
+            ListIterator<JoinSpec> iter =
+                    prefilterAcceptedJoinSpecs.listIterator(prefilterAcceptedJoinSpecs.size());
             while (iter.hasPrevious()) {
                 JoinSpec joinSpec = iter.previous();
                 if (joinSpec.getType() != JoinType.Inner || joinSpec.isSingleValueOnly()) {
@@ -983,7 +1106,7 @@ public class JoinCompiler {
                 }
 
                 try {
-                    joinSpec.addOnCondition(node);
+                    joinSpec.pushDownOnCondition(node);
                     return null;
                 } catch (SQLException e) {
                 }
@@ -993,22 +1116,14 @@ public class JoinCompiler {
         }
     }
 
-    private static class OnNodeVisitor extends BooleanParseNodeVisitor<Void> {
-        private List<EqualParseNode> onConditions;
-        private Set<TableRef> dependencies;
-        private JoinTable joinTable;
-        private ColumnRefParseNodeVisitor columnRefVisitor;
+    private static class OnNodeVisitor extends AndBooleanParseNodeVisitor<Void> {
+        private final ColumnRefParseNodeVisitor columnRefVisitor;
+        private final JoinSpec joinSpec;
 
-        public OnNodeVisitor(ColumnResolver resolver, List<EqualParseNode> onConditions,
-                Set<TableRef> dependencies, JoinTable joinTable, PhoenixConnection connection) {
-            this.onConditions = onConditions;
-            this.dependencies = dependencies;
-            this.joinTable = joinTable;
+        public OnNodeVisitor(
+                ColumnResolver resolver, JoinSpec joinSpec, PhoenixConnection connection) {
+            this.joinSpec = joinSpec;
             this.columnRefVisitor = new ColumnRefParseNodeVisitor(resolver, connection);
-        }
-        @Override
-        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
-            return false;
         }
 
         @Override
@@ -1016,10 +1131,11 @@ public class JoinCompiler {
                 List<Void> l) throws SQLException {
             columnRefVisitor.reset();
             node.accept(columnRefVisitor);
-            ColumnRefParseNodeVisitor.ColumnRefType type = columnRefVisitor.getContentType(joinTable.getTableRefs());
+            ColumnRefParseNodeVisitor.ColumnRefType type =
+                    columnRefVisitor.getContentType(this.joinSpec.getRhsJoinTableRefs());
             if (type == ColumnRefParseNodeVisitor.ColumnRefType.NONE
                     || type == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                joinTable.addFilter(node);
+                this.joinSpec.pushDownFilterToRhsJoinTable(node);
             } else {
                 throwAmbiguousJoinConditionException();
             }
@@ -1027,19 +1143,10 @@ public class JoinCompiler {
         }
 
         @Override
-        protected boolean enterNonBooleanNode(ParseNode node) throws SQLException {
-            return false;
-        }
-
-        @Override
         protected Void leaveNonBooleanNode(ParseNode node, List<Void> l) throws SQLException {
             return null;
         }
 
-        @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
-        }
         @Override
         public Void visitLeave(AndParseNode node, List<Void> l) throws SQLException {
             return null;
@@ -1052,23 +1159,25 @@ public class JoinCompiler {
                 return leaveBooleanNode(node, l);
             columnRefVisitor.reset();
             node.getLHS().accept(columnRefVisitor);
-            ColumnRefParseNodeVisitor.ColumnRefType lhsType = columnRefVisitor.getContentType(joinTable.getTableRefs());
+            ColumnRefParseNodeVisitor.ColumnRefType lhsType =
+                    columnRefVisitor.getContentType(this.joinSpec.getRhsJoinTableRefs());
             Set<TableRef> lhsTableRefSet = Sets.newHashSet(columnRefVisitor.getTableRefSet());
             columnRefVisitor.reset();
             node.getRHS().accept(columnRefVisitor);
-            ColumnRefParseNodeVisitor.ColumnRefType rhsType = columnRefVisitor.getContentType(joinTable.getTableRefs());
+            ColumnRefParseNodeVisitor.ColumnRefType rhsType =
+                    columnRefVisitor.getContentType(this.joinSpec.getRhsJoinTableRefs());
             Set<TableRef> rhsTableRefSet = Sets.newHashSet(columnRefVisitor.getTableRefSet());
             if ((lhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY || lhsType == ColumnRefParseNodeVisitor.ColumnRefType.NONE)
                     && (rhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY || rhsType == ColumnRefParseNodeVisitor.ColumnRefType.NONE)) {
-                joinTable.addFilter(node);
+                this.joinSpec.pushDownFilterToRhsJoinTable(node);
             } else if (lhsType == ColumnRefParseNodeVisitor.ColumnRefType.FOREIGN_ONLY
                     && rhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                onConditions.add((EqualParseNode) node);
-                dependencies.addAll(lhsTableRefSet);
+                this.joinSpec.addOnCondition((EqualParseNode) node);
+                this.joinSpec.addDependentTableRefs(lhsTableRefSet);
             } else if (rhsType == ColumnRefParseNodeVisitor.ColumnRefType.FOREIGN_ONLY
                     && lhsType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                onConditions.add(NODE_FACTORY.equal(node.getRHS(), node.getLHS()));
-                dependencies.addAll(rhsTableRefSet);
+                this.joinSpec.addOnCondition(NODE_FACTORY.equal(node.getRHS(), node.getLHS()));
+                this.joinSpec.addDependentTableRefs(rhsTableRefSet);
             } else {
                 throwAmbiguousJoinConditionException();
             }
