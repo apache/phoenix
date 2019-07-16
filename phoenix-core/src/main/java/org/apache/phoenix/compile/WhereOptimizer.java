@@ -347,7 +347,9 @@ public class WhereOptimizer {
         byte[] lowerRange = KeyRange.UNBOUND;
         boolean lowerInclusive = false;
         // Lower range of trailing part of RVC must be true, so we can form a new range to intersect going forward
-        if (!range.lowerUnbound() && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
+        if (!range.lowerUnbound()
+                && range.getLowerRange().length > clippedResult.getLowerRange().length
+                && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
             lowerRange = range.getLowerRange();
             int offset = clippedResult.getLowerRange().length + separatorLength;
             ptr.set(lowerRange, offset, lowerRange.length - offset);
@@ -356,7 +358,9 @@ public class WhereOptimizer {
         }
         byte[] upperRange = KeyRange.UNBOUND;
         boolean upperInclusive = false;
-        if (!range.upperUnbound() && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
+        if (!range.upperUnbound()
+                && range.getUpperRange().length > clippedResult.getUpperRange().length
+                && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
             upperRange = range.getUpperRange();
             int offset = clippedResult.getUpperRange().length + separatorLength;
             ptr.set(upperRange, offset, upperRange.length - offset);
