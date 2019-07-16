@@ -28,6 +28,9 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.util.PhoenixRuntime;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+
 import org.junit.Test;
 
 public class PhoenixEmbeddedDriverTest {
@@ -124,14 +127,14 @@ public class PhoenixEmbeddedDriverTest {
     @Test
     public void testNegativeGetConnectionInfo() throws SQLException {
         String[] urls = new String[] {
-            "jdbc:phoenix::",
-            "jdbc:phoenix:;",
-            "jdbc:phoenix:v1:1,v2:2,v3:3",
-            "jdbc:phoenix:v1:1,v2:2,v3:3;test=true",
-            "jdbc:phoenix:v1,v2,v3:-1:/hbase;test=true",
-            "jdbc:phoenix:v1,v2,v3:-1",
-            "jdbc:phoenix:v1,v2,v3:123::/hbase",
-            "jdbc:phoenix:v1,v2,v3:123::/hbase;test=false",
+                "jdbc:phoenix::",
+                "jdbc:phoenix:;",
+                "jdbc:phoenix:v1:1,v2:2,v3:3",
+                "jdbc:phoenix:v1:1,v2:2,v3:3;test=true",
+                "jdbc:phoenix:v1,v2,v3:-1:/hbase;test=true",
+                "jdbc:phoenix:v1,v2,v3:-1",
+                "jdbc:phoenix:v1,v2,v3:123::/hbase",
+                "jdbc:phoenix:v1,v2,v3:123::/hbase;test=false",
         };
         for (String url : urls) {
             try {
@@ -146,7 +149,61 @@ public class PhoenixEmbeddedDriverTest {
             }
         }
     }
-    
+
+    @Test
+    public void testDiffTenantID() throws Exception {
+        String tenantId1 = "1";
+        String tenantId2 = "2";
+        String[] urls = new String[] {
+                "jdbc:phoenix:localhost:2181" + JDBC_PROTOCOL_TERMINATOR
+                        + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId1,
+                "jdbc:phoenix:localhost:2181;test=true" + JDBC_PROTOCOL_TERMINATOR
+                        + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + tenantId2,
+        };
+        ConnectionInfo[] infos = new ConnectionInfo[]{
+                new ConnectionInfo("localhost", 2181, null, null, null, tenantId1),
+                new ConnectionInfo("localhost", 2181, null, null, null, tenantId2)
+        };
+
+        assertEquals(urls.length,infos.length);
+
+        for (int i = 0; i < urls.length; i++) {
+            ConnectionInfo info = ConnectionInfo.create(urls[i]);
+            assertEquals(infos[i], info);
+        }
+    }
+
+    @Test
+    public void testGetTenantIDFunction() {
+        String[] invalidUrls = new String[] {
+                null,
+                "",
+                "jdbc:phoenix",
+                "jdbc:phoenix;test=true",
+                "jdbc:phoenix:localhost",
+                "localhost:123:/foo-bar",
+                "localhost:123:/foo-bar;TenantId",
+                "localhost:123:/foo-bar;TenantId="
+        };
+        for (int i = 0; i < invalidUrls.length; i++) {
+            assertEquals(null, PhoenixEmbeddedDriver.getTenantIDParser(invalidUrls[i]));
+        }
+
+        String[] validUrls = new String[] {
+                "TenantId=1",
+                "jdbc:phoenix;TenantId=1",
+                "jdbc:phoenix;test=true;TenantId=1",
+                "jdbc:phoenix:localhost;TenantId=1",
+                "localhost:123:/foo-bar;TenantId=1"
+        };
+        for (int i = 0; i < validUrls.length; i++) {
+            assertEquals("1", PhoenixEmbeddedDriver.getTenantIDParser(validUrls[i]));
+        }
+
+        assertEquals("TenantId=", PhoenixEmbeddedDriver.getTenantIDParser("TenantId=TenantId="));
+        assertEquals("XY", PhoenixEmbeddedDriver.getTenantIDParser("TenantIdXY"));
+    }
+
     @Test
     public void testNotAccept() throws Exception {
         Driver driver = new PhoenixDriver();

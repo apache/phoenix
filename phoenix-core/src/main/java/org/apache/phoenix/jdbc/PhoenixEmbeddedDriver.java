@@ -253,11 +253,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (tokenizer.hasMoreTokens() && !TERMINATOR.equals(token)) {
                 String extraToken = tokenizer.nextToken();
                 if (WINDOWS_SEPARATOR_CHAR == extraToken.charAt(0)) {
-                  String prevToken = tokens[nTokens - 1];
-                  tokens[nTokens - 1] = prevToken + ":" + extraToken;
-                  if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
-                      throw getMalFormedUrlException(url);
-                  }
+                    String prevToken = tokens[nTokens - 1];
+                    tokens[nTokens - 1] = prevToken + ":" + extraToken;
+                    if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
+                        throw getMalFormedUrlException(url);
+                    }
                 } else {
                     throw getMalFormedUrlException(url);
                 }
@@ -304,15 +304,22 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     }
                 }
             }
-            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile);
+            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile,
+                    getTenantIDParser(url));
         }
-        
+
         public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
+            return normalize(props, info, null);
+        }
+
+        public ConnectionInfo normalize(ReadOnlyProps props, Properties info, String url)
+                throws SQLException {
             String zookeeperQuorum = this.getZookeeperQuorum();
             Integer port = this.getPort();
             String rootNode = this.getRootNode();
             String keytab = this.getKeytab();
             String principal = this.getPrincipal();
+            String tenantID = this.getTenantID();
             // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
             // the default values will both share the same ConnectionQueryServices.
             if (zookeeperQuorum == null) {
@@ -398,7 +405,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
             } // else, no connection, no need to login
             // Will use the current User from UGI
-            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab, tenantID);
         }
 
         // Visible for testing
@@ -489,8 +496,23 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final String principal;
         private final String keytab;
         private final User user;
+        private final String tenantID;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+            this(zookeeperQuorum, port, rootNode, principal, keytab, null);
+        }
+
+        /**
+         * Constructor ConnectionInfo
+         * @param zookeeperQuorum zookeeperQuorum info
+         * @param port port number
+         * @param rootNode rootNode
+         * @param principal Kerberos user principal
+         * @param tenantID tenantID
+         */
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode,
+                              String principal, String keytab, String tenantID) {
+
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -505,8 +527,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
             }
+            this.tenantID = tenantID;
         }
-        
+
+
+
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
         	this(zookeeperQuorum, port, rootNode, null, null);
         }
@@ -567,6 +592,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return user;
         }
 
+        public String getTenantID() {
+            return tenantID;
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -576,6 +605,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
             result = prime * result + ((principal == null) ? 0 : principal.hashCode());
             result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
+            result = prime * result + ((tenantID == null) ? 0 : tenantID.hashCode());
             // `user` is guaranteed to be non-null
             result = prime * result + user.hashCode();
             return result;
@@ -604,6 +634,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (keytab == null) {
                 if (other.keytab != null) return false;
             } else if (!keytab.equals(other.keytab)) return false;
+            if (tenantID == null) {
+                if (other.tenantID != null) return false;
+            } else if (!tenantID.equals(other.tenantID)) return false;
             return true;
         }
         
@@ -641,5 +674,27 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
     public static boolean isTestUrl(String url) {
         return url.endsWith(TEST_URL_AT_END) || url.contains(TEST_URL_IN_MIDDLE);
+    }
+
+    /**
+     * Parse the tenantID and return value from give URL. If invalid tenantID provide or
+     * no tenantID, null is returned.
+     *
+     * @return The tenantID String, or null.
+     */
+    public static String getTenantIDParser(String url) {
+        if (url != null && url.contains(PhoenixRuntime.TENANT_ID_ATTRIB)) {
+            for (String param : url.split(TERMINATOR)) {
+                if (param.startsWith(PhoenixRuntime.TENANT_ID_ATTRIB) &&
+                        param.length() > PhoenixRuntime.TENANT_ID_ATTRIB.length() + 1) {
+                    String tenantID = param.substring(PhoenixRuntime.TENANT_ID_ATTRIB.length());
+                    if (tenantID.charAt(0) == '=') {
+                        return tenantID.substring(1);
+                    }
+                    return tenantID;
+                }
+            }
+        }
+        return null;
     }
 }

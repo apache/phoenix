@@ -235,7 +235,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             final QueryServices services = getQueryServices();
             ConnectionQueryServices connectionQueryServices = null;
             // Also performs the Kerberos login if the URL/properties request this
-            final ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
+            final ConnectionInfo normalizedConnInfo =
+                    connInfo.normalize(services.getProps(), info, url);
             try {
                 connectionQueryServices =
                     connectionQueryServicesCache.get(normalizedConnInfo, new Callable<ConnectionQueryServices>() {
