@@ -1061,25 +1061,33 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
     }
 
-    void ensureNamespaceCreated(String schemaName) throws SQLException {
+    /**
+     * Ensure that the HBase namespace is created/exists already
+     * @param schemaName Phoenix schema name for which we ensure existence of the HBase namespace
+     * @return true if we created the HBase namespace because it didn't already exist
+     * @throws SQLException If there is an exception creating the HBase namespace
+     */
+    boolean ensureNamespaceCreated(String schemaName) throws SQLException {
         SQLException sqlE = null;
+        boolean createdNamespace = false;
         try (HBaseAdmin admin = getAdmin()) {
             NamespaceDescriptor namespaceDescriptor = null;
             try {
                 namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
-            } catch (org.apache.hadoop.hbase.NamespaceNotFoundException e) {
+            } catch (NamespaceNotFoundException ignored) {
 
             }
             if (namespaceDescriptor == null) {
                 namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
+                createdNamespace = true;
             }
-            return;
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } finally {
             if (sqlE != null) { throw sqlE; }
         }
+        return createdNamespace;
     }
 
     /**
@@ -1105,6 +1113,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.getProps().get(HConstants.ZOOKEEPER_ZNODE_PARENT);
+            boolean createdNamespace = false;
             LOGGER.debug("Found quorum: " + quorum + ":" + znode);
 
             if (isMetaTable) {
@@ -1112,7 +1121,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         // SYSTEM namespace needs to be created via HBase APIs because "CREATE SCHEMA" statement tries to write
                         // its metadata in SYSTEM:CATALOG table. Without SYSTEM namespace, SYSTEM:CATALOG table cannot be created
-                        ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
+                        createdNamespace = ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
                     } catch (PhoenixIOException e) {
                         // We could either:
                         // 1) Not access the NS descriptor. The NS may or may not exist at this point
@@ -1124,14 +1133,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     if (admin.tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, false))) {
                         // SYSTEM.CATALOG exists, so at this point, we have 3 cases:
-                        // 1) If server-side namespace mapping is disabled, throw Inconsistent namespace mapping exception
-                        // 2) If server-side namespace mapping is enabled and SYSCAT needs to be upgraded, upgrade SYSCAT
-                        //    and also migrate SYSTEM tables to the SYSTEM namespace
-                        // 3. If server-side namespace mapping is enabled and SYSCAT doesn't need to be upgraded, we still
-                        //    need to migrate SYSTEM tables to the SYSTEM namespace using the
+                        // 1) If server-side namespace mapping is disabled, drop the SYSTEM namespace if it was created
+                        //    above and throw Inconsistent namespace mapping exception
+                        // 2) If server-side namespace mapping is enabled and SYSTEM.CATALOG needs to be upgraded,
+                        //    upgrade SYSTEM.CATALOG and also migrate SYSTEM tables to the SYSTEM namespace
+                        // 3. If server-side namespace mapping is enabled and SYSTEM.CATALOG doesn't need to be
+                        //    upgraded, we still need to migrate SYSTEM tables to the SYSTEM namespace using the
                         //    {@link ensureSystemTablesMigratedToSystemNamespace(ReadOnlyProps)} method (as part of
                         //    {@link upgradeSystemTables(String, Properties)})
-                        checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
+                        try {
+                            checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
+                        } catch (SQLException possibleCompatException) {
+                            // Handles Case 1: Drop the SYSTEM namespace in case it was created above
+                            if (createdNamespace && possibleCompatException.getErrorCode() ==
+                                    SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
+                                ensureNamespaceDropped(QueryConstants.SYSTEM_SCHEMA_NAME);
+                            }
+                            // rethrow the SQLException
+                            throw possibleCompatException;
+                        }
                         // Thrown so we can force an upgrade which will just migrate SYSTEM tables to the SYSTEM namespace
                         throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
                     }
@@ -1187,7 +1207,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null;
                 }
                 if (isMetaTable && !isUpgradeRequired()) {
-                    checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                    try {
+                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES,
+                                this.getProps()).getName());
+                    } catch (SQLException possibleCompatException) {
+                        if (possibleCompatException.getErrorCode() ==
+                                SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
+                            try {
+                                // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG, we should drop it
+                                admin.disableTable(physicalTableName);
+                                admin.deleteTable(physicalTableName);
+                            } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
+                                // Ignore this since it just means that another client with a similar set of
+                                // incompatible configs and conditions beat us to dropping the SYSCAT HBase table
+                            }
+                            if (createdNamespace &&
+                                    SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.getProps())) {
+                                // We should drop the SYSTEM namespace which we just created, since
+                                // server-side namespace mapping is disabled
+                                ensureNamespaceDropped(QueryConstants.SYSTEM_SCHEMA_NAME);
+                            }
+                        }
+                        // rethrow the SQLException
+                        throw possibleCompatException;
+                    }
+
                 }
                 return null;
             } else {
@@ -4645,7 +4689,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             ReadOnlyProps props = this.getProps();
             boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
             if (dropMetadata) {
-                ensureNamespaceDropped(schemaName, result.getMutationTime());
+                ensureNamespaceDropped(schemaName);
             }
             break;
         default:
@@ -4654,7 +4698,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return result;
     }
 
-    private void ensureNamespaceDropped(String schemaName, long mutationTime) throws SQLException {
+    private void ensureNamespaceDropped(String schemaName) throws SQLException {
         SQLException sqlE = null;
         try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
