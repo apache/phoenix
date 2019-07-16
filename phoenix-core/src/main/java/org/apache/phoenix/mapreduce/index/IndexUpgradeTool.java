@@ -67,7 +67,8 @@ import java.util.UUID;
 import java.util.logging.FileHandler;
 import java.util.logging.SimpleFormatter;
 
-import static org.apache.phoenix.query.QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
+import static org.apache.phoenix.query.QueryServicesOptions.
+        GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
 
 public class IndexUpgradeTool extends Configured {
 
@@ -89,7 +90,7 @@ public class IndexUpgradeTool extends Configured {
     private static final Option LOG_FILE_OPTION = new Option("lf", "logfile",
             true,
             "Log file path where the logs are written");
-    private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr", "index-sync-rebuild",
+    private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr","index-sync-rebuild",
             false,
             "[Optional]Whether or not synchronously rebuild the indexes; default rebuild asynchronous");
 
@@ -150,7 +151,7 @@ public class IndexUpgradeTool extends Configured {
         IndexUpgradeTool iut = new IndexUpgradeTool();
         try {
             cmdLine = iut.parseOptions(args);
-            LOGGER.info("Index Upgrade tool initiated: "+ StringUtils.join( args, ","));
+            LOGGER.info("Index Upgrade tool initiated: "+ StringUtils.join( args,","));
         } catch (IllegalStateException e) {
             iut.printHelpAndExit(e.getMessage(), iut.getOptions());
         }
@@ -331,8 +332,8 @@ public class IndexUpgradeTool extends Configured {
                             + GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1
                             + " minutes for client cache to expire");
                     if (!test) {
-                        Thread.sleep(
-                                (GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1) * 60 * 1000);
+                        Thread.sleep((GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1)
+                                * 60 * 1000);
                     }
                 }
                 disableTable(admin, dataTableFullName, indexes);
@@ -346,7 +347,8 @@ public class IndexUpgradeTool extends Configured {
                     rebuildIndexes(dataTableFullName, indexingTool);
                 }
             } catch (IOException | SQLException | InterruptedException e) {
-                LOGGER.severe("Something went wrong while executing " + operation + " steps " + e);
+                LOGGER.severe("Something went wrong while executing "
+                        + operation + " steps " + e);
                 return -1;
             }
         }
@@ -423,7 +425,8 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
-    private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc, String coprocName) throws IOException {
+    private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
+            String coprocName) throws IOException {
         if (!admin.getTableDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
                 tableDesc.addCoprocessor(coprocName,
@@ -435,7 +438,8 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
-    private void removeCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc, String coprocName) throws IOException {
+    private void removeCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
+            String coprocName) throws IOException {
         if (admin.getTableDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
                 tableDesc.removeCoprocessor(coprocName);
@@ -453,7 +457,8 @@ public class IndexUpgradeTool extends Configured {
             if (upgrade) {
                 addCoprocessor(admin, indexName, indexTableDesc, GlobalIndexChecker.class.getName());
             } else {
-                removeCoprocessor(admin, indexName, indexTableDesc, GlobalIndexChecker.class.getName());
+                removeCoprocessor(admin, indexName, indexTableDesc,
+                        GlobalIndexChecker.class.getName());
             }
             if (!dryRun) {
                 admin.modifyTable(TableName.valueOf(indexName),indexTableDesc);
@@ -469,7 +474,8 @@ public class IndexUpgradeTool extends Configured {
             String tenantId = indexMap.getValue();
             String indexName = SchemaUtil.getTableNameFromFullName(index);
             String outFile = "/tmp/index_rebuild_" + indexName +
-                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"+ UUID.randomUUID().toString();
+                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
+                    + UUID.randomUUID().toString();
             String[] args =
                     { "-s", schema, "-dt", table, "-it", indexName, "-direct", "-op", outFile };
             ArrayList<String> list = new ArrayList<>(Arrays.asList(args));
@@ -488,7 +494,8 @@ public class IndexUpgradeTool extends Configured {
                     indexingTool.run(args);
                 }
             } catch (Exception e) {
-                LOGGER.severe("Something went wrong while building the index " + index + " " + e);
+                LOGGER.severe("Something went wrong while building the index "
+                        + index + " " + e);
                 return -1;
             }
         }
@@ -509,19 +516,22 @@ public class IndexUpgradeTool extends Configured {
                     for (PTable indexTable : dataTable.getIndexes()) {
                         if (indexTable.getIndexType().equals(PTable.IndexType.GLOBAL)) {
                             physicalIndexes.add(indexTable.getPhysicalName().getString());
-                            rebuildIndexes.put(indexTable.getPhysicalName().getString(), GLOBAL_INDEX_ID);
+                            rebuildIndexes.put(indexTable.getPhysicalName().getString(),
+                                    GLOBAL_INDEX_ID);
                         }
                     }
 
                     if (MetaDataUtil.hasViewIndexTable(conn, dataTable.getPhysicalName())) {
-                        String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
+                        String viewIndexPhysicalName = MetaDataUtil
+                                .getViewIndexPhysicalName(physicalTableName);
                         physicalIndexes.add(viewIndexPhysicalName);
 
                         ResultSet rs =
                                 conn.createStatement().executeQuery(
                                         "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
                                                 + "SYSTEM.CATALOG WHERE COLUMN_FAMILY = \'"
-                                                + viewIndexPhysicalName +"\' AND TABLE_TYPE = \'i\'");
+                                                + viewIndexPhysicalName
+                                                +"\' AND TABLE_TYPE = \'i\'");
                         while (rs.next()) {
                             String viewIndexName = rs.getString(1);
                             String tenantId = rs.getString(2);
