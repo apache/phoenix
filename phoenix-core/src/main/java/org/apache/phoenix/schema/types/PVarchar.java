@@ -175,7 +175,7 @@ public class PVarchar extends PDataType<String> {
             sampleChars = new char[length];
         }
         for (int i = 0; i < length; i++) {
-            sampleChars[i] = (char) RANDOM.get().nextInt(Byte.MAX_VALUE);
+            sampleChars[i] = (char) (RANDOM.get().nextInt(Byte.MAX_VALUE-2) + 1);
         }
         return new String(sampleChars);
     }
