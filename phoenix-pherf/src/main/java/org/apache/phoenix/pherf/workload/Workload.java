@@ -20,10 +20,13 @@ package org.apache.phoenix.pherf.workload;
 import java.util.concurrent.Callable;
 
 public interface Workload {
-    public Callable<Void> execute() throws Exception;
 
-    /**
-     * Use this method to perform any cleanup or forced shutdown of the thread.
-     */
-    public void complete();
+
+  Callable<Void> execute() throws Exception;
+
+  /**
+   * Use this method to perform any cleanup or forced shutdown of the thread.
+   */
+  void complete();
+
 }
