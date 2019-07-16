@@ -916,12 +916,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean indexRegionObserverEnabled = config.getBoolean(
                     QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
                     QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
+            boolean isViewIndex = TRUE_BYTES_AS_STRING
+                    .equals(tableProps.get(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME));
 
-            if (tableType == PTableType.INDEX && !isTransactional) {
+            if ((tableType == PTableType.INDEX && !isTransactional) || isViewIndex) {
                 if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     builder.removeCoprocessor(GlobalIndexChecker.class.getName());
                 } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName()) &&
                         !isLocalIndexTable(newDesc.getColumnFamilyNames())) {
+                    if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                        builder.removeCoprocessor(IndexRegionObserver.class.getName());
+                    }
                     builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
                 }
             }
@@ -943,7 +948,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
             // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
-            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW)
+            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW && !isViewIndex)
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
@@ -1538,7 +1543,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         TableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits,
-                false, isNamespaceMapped, false);
+                true, isNamespaceMapped, false);
         if (desc != null) {
             if (!Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
                 String fullTableName = Bytes.toString(physicalIndexName);
@@ -1861,7 +1866,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
         SQLException sqlE = null;
         try (Admin admin = getAdmin()) {
-            if (tableNamesToDelete != null){
+            if (tableNamesToDelete != null) {
                 for ( byte[] tableName : tableNamesToDelete ) {
                     try {
                         TableName tn = TableName.valueOf(tableName);

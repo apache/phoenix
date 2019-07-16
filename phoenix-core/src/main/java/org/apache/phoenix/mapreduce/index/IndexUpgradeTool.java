@@ -48,6 +48,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -96,6 +97,7 @@ public class IndexUpgradeTool extends Configured {
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
     private static final String GLOBAL_INDEX_ID = "#NA#";
+    private IndexTool indexingTool;
 
     private HashMap<String, HashSet<String>> tablesAndIndexes = new HashMap<>();
     private HashMap<String, HashMap<String,String>> rebuildMap = new HashMap<>();
@@ -106,7 +108,6 @@ public class IndexUpgradeTool extends Configured {
     private String inputTables;
     private String logFile;
     private String inputFile;
-    private IndexTool indexingTool;
 
     private boolean test = false;
 
@@ -160,13 +161,13 @@ public class IndexUpgradeTool extends Configured {
     }
 
     public IndexUpgradeTool(String mode, String tables, String inputFile,
-            String outputFile, boolean dryRun, IndexTool indexingTool) {
+            String outputFile, boolean dryRun, IndexTool indexTool) {
         this.operation = mode;
         this.inputTables = tables;
         this.inputFile = inputFile;
         this.logFile = outputFile;
         this.dryRun = dryRun;
-        this.indexingTool = indexingTool;
+        this.indexingTool = indexTool;
     }
 
     public IndexUpgradeTool () { }
@@ -253,7 +254,6 @@ public class IndexUpgradeTool extends Configured {
         inputFile = cmdLine.getOptionValue(TABLE_CSV_FILE_OPTION.getOpt());
         dryRun = cmdLine.hasOption(DRY_RUN_OPTION.getOpt());
         syncRebuild = cmdLine.hasOption(INDEX_SYNC_REBUILD_OPTION.getOpt());
-        indexingTool = new IndexTool();
     }
 
     @VisibleForTesting
@@ -340,7 +340,11 @@ public class IndexUpgradeTool extends Configured {
                 modifyTable(admin, dataTableFullName, indexes);
                 enableTable(admin, dataTableFullName, indexes);
                 if (upgrade) {
-                    rebuildIndexes(dataTableFullName, conf);
+                    if(!test) {
+                        indexingTool = new IndexTool();
+                    }
+                    indexingTool.setConf(conf);
+                    rebuildIndexes(dataTableFullName, indexingTool);
                 }
             } catch (IOException | SQLException | InterruptedException e) {
                 LOGGER.severe("Something went wrong while executing " + operation + " steps " + e);
@@ -461,7 +465,7 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
-    private int rebuildIndexes(String dataTable, Configuration conf) {
+    private int rebuildIndexes(String dataTable, IndexTool indexingTool) {
         String schema = SchemaUtil.getSchemaNameFromFullName(dataTable);
         String table = SchemaUtil.getTableNameFromFullName(dataTable);
         for(Map.Entry<String, String> indexMap : rebuildMap.get(dataTable).entrySet()) {
@@ -469,12 +473,11 @@ public class IndexUpgradeTool extends Configured {
             String tenantId = indexMap.getValue();
             String indexName = SchemaUtil.getTableNameFromFullName(index);
             String outFile = "/tmp/index_rebuild_" + indexName +
-                    (tenantId.equals(GLOBAL_INDEX_ID)?"":"_"+tenantId) +"_"+ UUID.randomUUID().toString();
+                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"+ UUID.randomUUID().toString();
             String[] args =
                     { "-s", schema, "-dt", table, "-it", indexName, "-direct", "-op", outFile };
-            indexingTool.setConf(conf);
-            List<String> list = Arrays.asList(args);
-            if (!tenantId.equals(GLOBAL_INDEX_ID)) {
+            ArrayList<String> list = new ArrayList<>(Arrays.asList(args));
+            if (!GLOBAL_INDEX_ID.equals(tenantId)) {
                 list.add("-tenant");
                 list.add(tenantId);
             }
