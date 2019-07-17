@@ -40,6 +40,13 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
     private final MetricHistogram duplicateKeyTimeHisto;
     private final MutableFastCounter slowDuplicateKeyCalls;
 
+    private final MetricHistogram preIndexUpdateTimeHisto;
+    private final MetricHistogram postIndexUpdateTimeHisto;
+    private final MetricHistogram preIndexUpdateFailureTimeHisto;
+    private final MetricHistogram postIndexUpdateFailureTimeHisto;
+    private final MutableFastCounter preIndexUpdateFailures;
+    private final MutableFastCounter postIndexUpdateFailures;
+
     public MetricsIndexerSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
     }
@@ -62,6 +69,19 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
         slowPostOpenCalls = getMetricsRegistry().newCounter(SLOW_POST_OPEN, SLOW_POST_OPEN_DESC, 0L);
         duplicateKeyTimeHisto = getMetricsRegistry().newHistogram(DUPLICATE_KEY_TIME, DUPLICATE_KEY_TIME_DESC);
         slowDuplicateKeyCalls = getMetricsRegistry().newCounter(SLOW_DUPLICATE_KEY, SLOW_DUPLICATE_KEY_DESC, 0L);
+
+        postIndexUpdateTimeHisto = getMetricsRegistry().newHistogram(
+                POST_INDEX_UPDATE_TIME, POST_INDEX_UPDATE_TIME_DESC);
+        preIndexUpdateTimeHisto = getMetricsRegistry().newHistogram(
+                PRE_INDEX_UPDATE_TIME, PRE_INDEX_UPDATE_TIME_DESC);
+        postIndexUpdateFailureTimeHisto = getMetricsRegistry().newHistogram(
+                POST_INDEX_UPDATE_FAILURE_TIME, POST_INDEX_UPDATE_FAILURE_TIME_DESC);
+        preIndexUpdateFailureTimeHisto = getMetricsRegistry().newHistogram(
+                PRE_INDEX_UPDATE_FAILURE_TIME, PRE_INDEX_UPDATE_FAILURE_TIME_DESC);
+        postIndexUpdateFailures = getMetricsRegistry().newCounter(
+                POST_INDEX_UPDATE_FAILURE, POST_INDEX_UPDATE_FAILURE_DESC, 0L);
+        preIndexUpdateFailures = getMetricsRegistry().newCounter(
+                PRE_INDEX_UPDATE_FAILURE, PRE_INDEX_UPDATE_FAILURE_DESC, 0L);
     }
 
     @Override
@@ -132,5 +152,35 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
     @Override
     public void incrementSlowDuplicateKeyCheckCalls() {
         slowDuplicateKeyCalls.incr();
+    }
+
+    @Override
+    public void updatePreIndexUpdateTime(long t) {
+        preIndexUpdateTimeHisto.add(t);
+    }
+
+    @Override
+    public void updatePostIndexUpdateTime(long t) {
+        postIndexUpdateTimeHisto.add(t);
+    }
+
+    @Override
+    public void updatePreIndexUpdateFailureTime(long t) {
+        preIndexUpdateFailureTimeHisto.add(t);
+    }
+
+    @Override
+    public void updatePostIndexUpdateFailureTime(long t) {
+        postIndexUpdateFailureTimeHisto.add(t);
+    }
+
+    @Override
+    public void incrementPreIndexUpdateFailures() {
+        preIndexUpdateFailures.incr();
+    }
+
+    @Override
+    public void incrementPostIndexUpdateFailures() {
+        postIndexUpdateFailures.incr();
     }
 }
