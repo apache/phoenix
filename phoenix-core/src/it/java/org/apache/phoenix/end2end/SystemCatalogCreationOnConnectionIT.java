@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,6 +27,7 @@ import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -39,6 +41,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -89,7 +92,7 @@ public class SystemCatalogCreationOnConnectionIT {
 
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
-        public PhoenixSysCatCreationServices(QueryServices services, PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
+        PhoenixSysCatCreationServices(QueryServices services, PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
 
@@ -123,7 +126,7 @@ public class SystemCatalogCreationOnConnectionIT {
         private ConnectionQueryServices cqs;
         private final ReadOnlyProps overrideProps;
 
-        public PhoenixSysCatCreationTestingDriver(ReadOnlyProps props) {
+        PhoenixSysCatCreationTestingDriver(ReadOnlyProps props) {
             overrideProps = props;
         }
 
@@ -140,7 +143,7 @@ public class SystemCatalogCreationOnConnectionIT {
         // used ConnectionQueryServices instance. This is used only in cases where we need to test server-side
         // changes and don't care about client-side properties set from the init method.
         // Reset the Connection Query Services instance so we can create a new connection to the cluster
-        public void resetCQS() {
+        void resetCQS() {
             cqs = null;
         }
     }
@@ -180,7 +183,7 @@ public class SystemCatalogCreationOnConnectionIT {
         driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 0);
+        assertEquals(0, hbaseTables.size());
         assertEquals(1, countUpgradeAttempts);
     }
 
@@ -282,36 +285,25 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(0, countUpgradeAttempts);
     }
 
-    // Conditions: server-side namespace mapping is enabled, the first connection to the server will create only SYSTEM.CATALOG,
-    // the second connection has client-side namespace mapping disabled
-    // Expected: Throw Inconsistent namespace mapping exception when you check client-server compatibility
-    //
-    // A third connection has client-side namespace mapping enabled
-    // Expected: We will migrate SYSTEM.CATALOG to SYSTEM namespace and create all other SYSTEM:.* tables
+    // Conditions: server-side namespace mapping is enabled, the first connection to the server will not create any
+    // SYSTEM tables. The second connection has client-side namespace mapping enabled
+    // Expected: We create SYSTEM:.* tables
     @Test
-    public void testUnmappedSysCat() throws Exception {
+    public void testIncompatibleNSMappingServerEnabledConnectionFails() throws Exception {
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           firstConnectionNSMappingServerEnabledClientDisabled();
         driver.resetCQS();
-        Properties clientProps = getClientProperties(false, false);
-        try {
-            driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-            fail("Client should not be able to connect to cluster with inconsistent client-server namespace mapping properties");
-        } catch (SQLException sqlE) {
-            assertEquals(SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode(), sqlE.getErrorCode());
-        }
-        hbaseTables = getHBaseTables();
-        assertTrue(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 1);
-        assertEquals(0, countUpgradeAttempts);
-
-        driver.resetCQS();
-        clientProps = getClientProperties(true, true);
-        driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
+        // now try a client with ns mapping enabled
+        Properties clientProps = getClientProperties(true, true);
+        Connection conn = driver.getConnectionQueryServices(getJdbcUrl(), clientProps)
+                .connect(getJdbcUrl(), new Properties());
         hbaseTables = getHBaseTables();
         assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
-        // SYSTEM.CATALOG migration to the SYSTEM namespace is counted as an upgrade
-        assertEquals(1, countUpgradeAttempts);
+        assertEquals(0, countUpgradeAttempts);
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM SYSTEM.CATALOG LIMIT 1");
+        // Tests that SYSTEM:CATALOG contains necessary metadata rows for itself (See PHOENIX-5302)
+        assertTrue(rs.next());
     }
 
     // Conditions: server-side namespace mapping is disabled, the first connection to the server will create all unmapped
@@ -344,42 +336,25 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(0, countUpgradeAttempts);
     }
 
-    // Conditions: server-side namespace mapping is disabled, the first connection to the server will create only SYSTEM:CATALOG
-    // and the second connection has client-side namespace mapping disabled
-    // Expected: The second connection should fail with Inconsistent namespace mapping exception
-    //
-    // A third connection has client-side namespace mapping enabled
-    // Expected: The third connection should fail with Inconsistent namespace mapping exception
+    // Conditions: server-side namespace mapping is disabled, the first connection to the server will not create any
+    // SYSTEM tables. The second connection has client-side namespace mapping disabled
+    // Expected: The second connection should create all SYSTEM.* tables
     @Test
-    public void testClientNSMappingDisabledConnectionFails() throws Exception {
+    public void testIncompatibleNSMappingServerDisabledConnectionFails() throws Exception {
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           firstConnectionNSMappingServerDisabledClientEnabled();
         driver.resetCQS();
+        // now try a client with ns mapping disabled
         Properties clientProps = getClientProperties(false, false);
-        try{
-            driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-            fail("Client should not be able to connect to cluster with inconsistent client-server namespace mapping properties");
-        } catch (SQLException sqlE) {
-            assertEquals(SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode(), sqlE.getErrorCode());
-        }
+        Connection conn = driver.getConnectionQueryServices(getJdbcUrl(), clientProps)
+                .connect(getJdbcUrl(), new Properties());
         hbaseTables = getHBaseTables();
-        assertTrue(hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 1);
+        assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
         assertEquals(0, countUpgradeAttempts);
 
-        // now try a client with ns mapping enabled
-        driver.resetCQS();
-        clientProps = getClientProperties(true, true);
-        try{
-            driver.getConnectionQueryServices(getJdbcUrl(), clientProps);
-            fail("Client should not be able to connect to cluster with inconsistent client-server namespace mapping properties");
-        } catch (SQLException sqlE) {
-            assertEquals(SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode(), sqlE.getErrorCode());
-        }
-        hbaseTables = getHBaseTables();
-        assertTrue(hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 1);
-        assertEquals(0, countUpgradeAttempts);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM SYSTEM.CATALOG LIMIT 1");
+        // Tests that SYSTEM.CATALOG contains necessary metadata rows for itself (See PHOENIX-5302)
+        assertTrue(rs.next());
     }
 
     // Conditions: The first connection creates all SYSTEM tables via "EXECUTE UPGRADE" since auto-upgrade is disabled
@@ -418,7 +393,7 @@ public class SystemCatalogCreationOnConnectionIT {
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG)
                 || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 0);
+        assertEquals(0, hbaseTables.size());
 
         // Test that we are unable to run any other queries using this connection until we upgrade
         final String tableName = generateUniqueName();
@@ -477,6 +452,16 @@ public class SystemCatalogCreationOnConnectionIT {
             tables.add(tn.getNameAsString());
         }
         return tables;
+    }
+
+    // Check if the SYSTEM namespace has been created
+    private boolean isSystemNamespaceCreated() throws IOException {
+        try {
+            testUtil.getAdmin().getNamespaceDescriptor(SYSTEM_CATALOG_SCHEMA);
+        } catch (NamespaceNotFoundException ex) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -565,7 +550,7 @@ public class SystemCatalogCreationOnConnectionIT {
                 .connect(getJdbcUrl(), new Properties());
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 0);
+        assertEquals(0, hbaseTables.size());
         assertEquals(1, countUpgradeAttempts);
 
         // We use the same connection to run "EXECUTE UPGRADE"
@@ -592,6 +577,7 @@ public class SystemCatalogCreationOnConnectionIT {
         hbaseTables = getHBaseTables();
         assertEquals(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, hbaseTables);
         assertEquals(0, countUpgradeAttempts);
+        assertTrue(isSystemNamespaceCreated());
         return driver;
     }
 
@@ -609,12 +595,13 @@ public class SystemCatalogCreationOnConnectionIT {
         hbaseTables = getHBaseTables();
         assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
         assertEquals(0, countUpgradeAttempts);
+        assertFalse(isSystemNamespaceCreated());
         return driver;
     }
 
     // Conditions: server-side namespace mapping is enabled, client-side namespace mapping is disabled
-    // Expected: Since this is the first connection to the server, we will create SYSTEM.CATALOG but immediately
-    // throw an exception for inconsistent namespace mapping
+    // Expected: Since this is the first connection to the server, we will immediately
+    // throw an exception for inconsistent namespace mapping without creating any SYSTEM tables
     private SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver firstConnectionNSMappingServerEnabledClientDisabled()
     throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.TRUE.toString());
@@ -628,15 +615,14 @@ public class SystemCatalogCreationOnConnectionIT {
             assertEquals(SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode(), sqlE.getErrorCode());
         }
         hbaseTables = getHBaseTables();
-        assertTrue(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 1);
+        assertEquals(0, hbaseTables.size());
         assertEquals(0, countUpgradeAttempts);
         return driver;
     }
 
     // Conditions: server-side namespace mapping is disabled, client-side namespace mapping is enabled
-    // Expected: Since this is the first connection to the server, we will create the SYSTEM namespace and create
-    // SYSTEM:CATALOG and then immediately throw an exception for inconsistent namespace mapping
+    // Expected: Since this is the first connection to the server, we will immediately throw an exception for
+    // inconsistent namespace mapping without creating any SYSTEM tables or SYSTEM namespace
     private SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver firstConnectionNSMappingServerDisabledClientEnabled()
     throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
@@ -650,9 +636,9 @@ public class SystemCatalogCreationOnConnectionIT {
             assertEquals(SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode(), sqlE.getErrorCode());
         }
         hbaseTables = getHBaseTables();
-        assertTrue(hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
-        assertTrue(hbaseTables.size() == 1);
+        assertEquals(0, hbaseTables.size());
         assertEquals(0, countUpgradeAttempts);
+        assertFalse(isSystemNamespaceCreated());
         return driver;
     }
 
@@ -669,6 +655,7 @@ public class SystemCatalogCreationOnConnectionIT {
         hbaseTables = getHBaseTables();
         assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
         assertEquals(0, countUpgradeAttempts);
+        assertFalse(isSystemNamespaceCreated());
         return driver;
     }
 }
