@@ -22,6 +22,7 @@ package org.apache.phoenix.hbase.index.metrics;
 public class MetricsIndexerSourceFactory {
   private static final MetricsIndexerSourceFactory INSTANCE = new MetricsIndexerSourceFactory();
   private MetricsIndexerSource indexerSource;
+  private GlobalIndexCheckerSource globalIndexCheckerSource;
 
   private MetricsIndexerSourceFactory() {}
 
@@ -34,5 +35,12 @@ public class MetricsIndexerSourceFactory {
       INSTANCE.indexerSource = new MetricsIndexerSourceImpl();
     }
     return INSTANCE.indexerSource;
+  }
+
+  public synchronized GlobalIndexCheckerSource getGlobalIndexCheckerSource() {
+    if (INSTANCE.globalIndexCheckerSource == null) {
+      INSTANCE.globalIndexCheckerSource = new GlobalIndexCheckerSourceImpl();
+    }
+    return INSTANCE.globalIndexCheckerSource;
   }
 }
