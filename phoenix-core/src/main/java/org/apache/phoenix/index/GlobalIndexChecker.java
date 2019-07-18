@@ -52,6 +52,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
@@ -68,6 +70,8 @@ import org.apache.phoenix.util.ServerUtil;
 public class GlobalIndexChecker extends BaseRegionObserver {
     private static final Log LOG = LogFactory.getLog(GlobalIndexChecker.class);
     private HTableFactory hTableFactory;
+    private GlobalIndexCheckerSource metricsSource;
+
     /**
      * Class that verifies a given row of a non-transactional global index.
      * An instance of this class is created for each scanner on an index
@@ -89,12 +93,18 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         private Region region;
         private long minTimestamp;
         private long maxTimestamp;
+        private GlobalIndexCheckerSource metricsSource;
 
-        public GlobalIndexScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner) throws IOException {
+        public GlobalIndexScanner(RegionCoprocessorEnvironment env,
+                                  Scan scan,
+                                  RegionScanner scanner,
+                                  GlobalIndexCheckerSource metricsSource) throws IOException {
             this.env = env;
             this.scan = scan;
-            region = env.getRegion();
             this.scanner = scanner;
+            this.metricsSource = metricsSource;
+
+            region = env.getRegion();
             emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
             emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
             ageThreshold = env.getConfiguration().getLong(
@@ -352,11 +362,23 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             if (verifyRowAndRemoveEmptyColumn(cellList)) {
                 return true;
             } else {
+                long repairStart = EnvironmentEdgeManager.currentTimeMillis();
+
                 byte[] rowKey = new byte[cell.getRowLength()];
                 System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowKey, 0, cell.getRowLength());
                 long ts = getMaxTimestamp(cellList);
                 cellList.clear();
-                repairIndexRows(rowKey, ts, cellList);
+
+                try {
+                    repairIndexRows(rowKey, ts, cellList);
+                    metricsSource.incrementIndexRepairs();
+                    metricsSource.updateIndexRepairTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                } catch (IOException e) {
+                    metricsSource.incrementIndexRepairFailures();
+                    metricsSource.updateIndexRepairFailureTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    throw e;
+                }
+
                 if (cellList.isEmpty()) {
                     // This means that the index row is invalid. Return false to tell the caller that this row should be skipped
                     return false;
@@ -372,12 +394,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         if (scan.getAttribute(CHECK_VERIFY_COLUMN) == null) {
             return s;
         }
-        return new GlobalIndexScanner(c.getEnvironment(), scan, s);
+        return new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
     }
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         this.hTableFactory = ServerUtil.getDelegateHTableFactory(e, ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION);
+        this.metricsSource = MetricsIndexerSourceFactory.getInstance().getGlobalIndexCheckerSource();
     }
 
     @Override
