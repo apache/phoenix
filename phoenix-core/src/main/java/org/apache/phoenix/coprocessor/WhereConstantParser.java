@@ -49,7 +49,7 @@ import com.google.common.collect.Lists;
 
 public class WhereConstantParser {
 
-    static PTable addViewInfoToPColumnsIfNeeded(PTable view) throws SQLException {
+    public static PTable addViewInfoToPColumnsIfNeeded(PTable view) throws SQLException {
     	boolean[] viewColumnConstantsMatched = new boolean[view.getColumns().size()];
         byte[][] viewColumnConstantsToBe = new byte[view.getColumns().size()][];
         if (view.getViewStatement() == null) {

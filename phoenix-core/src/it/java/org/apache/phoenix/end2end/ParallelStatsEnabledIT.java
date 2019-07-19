@@ -20,6 +20,9 @@ package org.apache.phoenix.end2end;
 
 import java.util.Map;
 
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -37,6 +40,8 @@ import com.google.common.collect.Maps;
 @Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseTest {
 
+    protected static RegionCoprocessorEnvironment TaskRegionEnvironment;
+
     @BeforeClass
     public static final void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
@@ -45,6 +50,14 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
         props.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+
+        TaskRegionEnvironment =
+                getUtility()
+                        .getRSForFirstRegionInTable(
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                        .get(0).getCoprocessorHost()
+                        .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
 
     @AfterClass

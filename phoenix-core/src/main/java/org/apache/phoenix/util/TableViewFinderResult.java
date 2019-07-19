@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.util;
 
 import java.util.List;
 
 import com.google.common.collect.Lists;
+import org.apache.phoenix.coprocessor.TableInfo;
 
 /**
  * This class wraps the results of a scanning SYSTEM.CATALOG or SYSTEM.CHILD_LINK

@@ -109,14 +109,14 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             }
             
             // verify getTable rpcs
-            verify(connectionQueryServices, sameClient ? never() : times(1)).getTable(
-                (PName) isNull(), eq(new byte[0]), eq(Bytes.toBytes(viewName)), anyLong(),
-                anyLong(), eq(false), eq(false), (PTable) isNull());
+            verify(connectionQueryServices, sameClient ? never() : times(1))
+                    .getTable((PName) isNull(), eq(new byte[0]),
+                            eq(Bytes.toBytes(viewName)), anyLong(), anyLong());
             
             // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
                 any(byte[].class), any(PTableType.class), anyMap(), anyList(), any(byte[][].class),
-                eq(false), eq(false), eq(false));
+                eq(false), eq(false), eq(false), any(PTable.class));
             reset(connectionQueryServices);
             
             // execute alter table ddl that adds the same column
@@ -135,7 +135,10 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             
             // if not verify exists is true one call to add column table with empty mutation list (which does not make a rpc) 
             // else verify no add column calls
-            verify(connectionQueryServices, notExists ? times(1) : never() ).addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), anyMap(), anySetOf(String.class), anyListOf(PColumn.class));
+            verify(connectionQueryServices, notExists ? times(1) : never() )
+                    .addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class),
+                            any(PTable.class), anyMap(), anySetOf(String.class),
+                            anyListOf(PColumn.class));
 
             // upsert one row
             conn2.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host2', 2.0)");

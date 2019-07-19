@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
@@ -27,16 +26,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.coprocessor.TableViewFinderResult;
+import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.coprocessor.ViewFinder;
+import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -144,7 +142,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             // Views should be dropped by now
             TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            ViewFinder.findAllRelatives(getUtility().getConnection().getTable(linkTable),
+            ViewUtil.findAllRelatives(getUtility().getConnection().getTable(linkTable),
                     HConstants.EMPTY_BYTE_ARRAY,
                     SchemaUtil.getSchemaNameFromFullName(baseTable).getBytes(),
                     SchemaUtil.getTableNameFromFullName(baseTable).getBytes(),

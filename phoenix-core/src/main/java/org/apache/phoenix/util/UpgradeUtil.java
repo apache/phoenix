@@ -105,8 +105,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.TableInfo;
-import org.apache.phoenix.coprocessor.TableViewFinderResult;
-import org.apache.phoenix.coprocessor.ViewFinder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -1367,7 +1365,7 @@ public class UpgradeUtil {
                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
                             newConn.getQueryServices().getProps())
                             .getName())) {
-                ViewFinder.findAllRelatives(childLinkTable, tenantId,
+                ViewUtil.findAllRelatives(childLinkTable, tenantId,
                         table.getSchemaName().getBytes(), table.getTableName().getBytes(),
                         LinkType.CHILD_TABLE, childViewsResult);
 
@@ -2131,7 +2129,7 @@ public class UpgradeUtil {
                                 PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, readOnlyProps)
                                     .getName())) {
                 byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
-                ViewFinder.findAllRelatives(childLinkTable, tenantId, schemaName.getBytes(),
+                ViewUtil.findAllRelatives(childLinkTable, tenantId, schemaName.getBytes(),
                     tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
             }
 

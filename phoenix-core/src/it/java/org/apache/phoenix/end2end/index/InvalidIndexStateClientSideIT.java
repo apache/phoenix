@@ -111,8 +111,6 @@ public class InvalidIndexStateClientSideIT extends ParallelStatsDisabledIT {
                         builder.setClientTimestamp(resolvedTimestamp);
                         builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
                             13, PHOENIX_PATCH_NUMBER));
-                        builder.setSkipAddingParentColumns(false);
-                        builder.setSkipAddingIndexes(false);
                         instance.getTable(controller, builder.build(), rpcCallback);
                         if (controller.getFailedOn() != null) {
                             throw controller.getFailedOn();

@@ -108,32 +108,42 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp, boolean skipAddingIndexes, boolean skipAddingParentColumns, PTable ancestorTable) throws SQLException {
-        return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp, skipAddingIndexes, skipAddingParentColumns, ancestorTable);
+    public MetaDataMutationResult getTable(PName tenantId, byte[] schemaBytes, byte[] tableBytes, long tableTimestamp, long clientTimestamp) throws SQLException {
+        return getDelegate().getTable(tenantId, schemaBytes, tableBytes, tableTimestamp, clientTimestamp);
     }
 
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
-            Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped, boolean allocateIndexId, boolean isDoNotUpgradePropSet) throws SQLException {
+                                              Map<String, Object> tableProps,
+                                              List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
+                                              boolean isNamespaceMapped, boolean allocateIndexId,
+                                              boolean isDoNotUpgradePropSet, PTable parentTable) throws SQLException {
         return getDelegate().createTable(tableMetaData, physicalName, tableType, tableProps, families, splits,
-                isNamespaceMapped, allocateIndexId, isDoNotUpgradePropSet);
+                isNamespaceMapped, allocateIndexId, isDoNotUpgradePropSet, parentTable);
     }
 
     @Override
-    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade, boolean skipAddingParentColumns) throws SQLException {
-        return getDelegate().dropTable(tabeMetaData, tableType, cascade, skipAddingParentColumns);
+    public MetaDataMutationResult dropTable(List<Mutation> tabeMetaData, PTableType tableType, boolean cascade) throws SQLException {
+        return getDelegate().dropTable(tabeMetaData, tableType, cascade);
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException {
-        return getDelegate().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded, columns);
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData,
+                                            PTable table,
+                                            PTable parentTable,
+                                            Map<String, List<Pair<String, Object>>> properties,
+                                            Set<String> colFamiliesForPColumnsToBeAdded,
+                                            List<PColumn> columns) throws SQLException {
+        return getDelegate().addColumn(tableMetaData, table, parentTable,
+                properties, colFamiliesForPColumnsToBeAdded, columns);
     }
 
 
     @Override
-    public MetaDataMutationResult dropColumn(List<Mutation> tabeMetaData, PTableType tableType) throws SQLException {
-        return getDelegate().dropColumn(tabeMetaData, tableType);
+    public MetaDataMutationResult dropColumn(List<Mutation> tabeMetaData,
+                                             PTableType tableType,
+                                             PTable parentTable) throws SQLException {
+        return getDelegate().dropColumn(tabeMetaData, tableType, parentTable);
     }
 
     @Override

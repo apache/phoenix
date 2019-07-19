@@ -397,6 +397,7 @@ public enum SQLExceptionCode {
     
     UPDATE_CACHE_FREQUENCY_INVALID(1130, "XCL30", "UPDATE_CACHE_FREQUENCY cannot be set to ALWAYS if APPEND_ONLY_SCHEMA is true."),
     CANNOT_DROP_COL_APPEND_ONLY_SCHEMA(1131, "XCL31", "Cannot drop column from table that with append only schema."),
+    CANNOT_DROP_VIEW_REFERENCED_COL(1132, "XCL32", "Cannot drop column that is referenced in view where clause."),
     
     CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY(1133, "XCL33", "IMMUTABLE_ROWS property can be changed only if the table storage scheme is ONE_CELL_PER_KEYVALUE_COLUMN"),
     CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW(1134, "XCL34", "Altering this table property on a view is not allowed"),
@@ -424,6 +425,8 @@ public enum SQLExceptionCode {
     CONCURRENT_UPGRADE_IN_PROGRESS(2010, "INT12", ""),
     UPGRADE_REQUIRED(2011, "INT13", ""),
     UPGRADE_NOT_REQUIRED(2012, "INT14", ""),
+    GET_TABLE_ERROR(2013, "INT15", "MetadataEndpointImpl doGetTable called for table not present " +
+            "on region"),
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
