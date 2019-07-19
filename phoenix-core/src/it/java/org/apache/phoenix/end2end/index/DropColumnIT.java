@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -375,9 +376,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             
             // verify that the regular index physical table was dropped
             try {
-                conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(indexTablePhysicalName);
+                conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()
+                            .getTableDescriptor(TableName.valueOf(indexTableName));
                 fail("Index table should have been dropped");
-            } catch (TableNotFoundException e) {
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
             
             // verify that the local index physical table was *not* dropped

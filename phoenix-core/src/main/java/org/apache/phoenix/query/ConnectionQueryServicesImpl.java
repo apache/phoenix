@@ -849,12 +849,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) || nonTxToTx;
-
+            boolean isViewIndex = TRUE_BYTES_AS_STRING
+                    .equals(tableProps.get(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME));
             boolean indexRegionObserverEnabled = config.getBoolean(
                     QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
                     QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
 
-            if (tableType == PTableType.INDEX && !isTransactional) {
+            if ((tableType == PTableType.INDEX && !isTransactional) || isViewIndex ) {
                 if (!indexRegionObserverEnabled && descriptor.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     descriptor.removeCoprocessor(GlobalIndexChecker.class.getName());
                 } else if (indexRegionObserverEnabled && !descriptor.hasCoprocessor(GlobalIndexChecker.class.getName()) &&
@@ -881,7 +882,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
             // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
-            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW)
+            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW && !isViewIndex)
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
@@ -909,10 +910,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                             IndexRegionObserver.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
                         }
-                        if (descriptor.hasCoprocessor(Indexer.class.getName())) {
-                            descriptor.removeCoprocessor(Indexer.class.getName());
-                        }
-
                     } else {
                         if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
                             descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
@@ -1430,7 +1427,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits,
-                false, isNamespaceMapped, false);
+                true, isNamespaceMapped, false);
         if (desc != null) {
             if (!Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
                 String fullTableName = Bytes.toString(physicalIndexName);

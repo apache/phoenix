@@ -505,7 +505,7 @@ public class MutationState implements SQLCloseable {
         return ptr;
     }
 
-    private Iterator<Pair<PName, List<Mutation>>> addRowMutations(final TableRef tableRef,
+    private Iterator<Pair<PTable, List<Mutation>>> addRowMutations(final TableRef tableRef,
             final MultiRowMutationState values, final long mutationTimestamp, final long serverTimestamp,
             boolean includeAllIndexes, final boolean sendAll) {
         final PTable table = tableRef.getTable();
@@ -518,7 +518,7 @@ public class MutationState implements SQLCloseable {
                 .<Mutation> newArrayListWithExpectedSize(values.size()) : null;
         generateMutations(tableRef, mutationTimestamp, serverTimestamp, values, mutationList,
                 mutationsPertainingToIndex);
-        return new Iterator<Pair<PName, List<Mutation>>>() {
+        return new Iterator<Pair<PTable, List<Mutation>>>() {
             boolean isFirst = true;
             Map<byte[], List<Mutation>> indexMutationsMap = null;
 
@@ -528,10 +528,10 @@ public class MutationState implements SQLCloseable {
             }
 
             @Override
-            public Pair<PName, List<Mutation>> next() {
+            public Pair<PTable, List<Mutation>> next() {
                 if (isFirst) {
                     isFirst = false;
-                    return new Pair<PName, List<Mutation>>(table.getPhysicalName(), mutationList);
+                    return new Pair<PTable, List<Mutation>>(table, mutationList);
                 }
 
                 PTable index = indexes.next();
@@ -584,7 +584,7 @@ public class MutationState implements SQLCloseable {
                 } catch (SQLException | IOException e) {
                     throw new IllegalDataException(e);
                 }
-                return new Pair<PName, List<Mutation>>(index.getPhysicalName(),
+                return new Pair<PTable, List<Mutation>>(index,
                         indexMutations == null ? Collections.<Mutation> emptyList() : indexMutations);
             }
 
@@ -684,7 +684,7 @@ public class MutationState implements SQLCloseable {
             private Iterator<Pair<byte[], List<Mutation>>> innerIterator = init();
 
             private Iterator<Pair<byte[], List<Mutation>>> init() {
-                final Iterator<Pair<PName, List<Mutation>>> mutationIterator = addRowMutations(current.getKey(),
+                final Iterator<Pair<PTable, List<Mutation>>> mutationIterator = addRowMutations(current.getKey(),
                         current.getValue(), mutationTimestamp, serverTimestamp, includeMutableIndexes, true);
                 return new Iterator<Pair<byte[], List<Mutation>>>() {
                     @Override
@@ -694,8 +694,9 @@ public class MutationState implements SQLCloseable {
 
                     @Override
                     public Pair<byte[], List<Mutation>> next() {
-                        Pair<PName, List<Mutation>> pair = mutationIterator.next();
-                        return new Pair<byte[], List<Mutation>>(pair.getFirst().getBytes(), pair.getSecond());
+                        Pair<PTable, List<Mutation>> pair = mutationIterator.next();
+                        return new Pair<byte[], List<Mutation>>(pair.getFirst().getPhysicalName()
+                                .getBytes(), pair.getSecond());
                     }
 
                     @Override
@@ -831,14 +832,16 @@ public class MutationState implements SQLCloseable {
         private final PName hTableName;
         @Nonnull
         private final TableRef origTableRef;
+        private final PTable pTable;
 
-        public TableInfo(boolean isDataTable, PName hTableName, TableRef origTableRef) {
+        public TableInfo(boolean isDataTable, PName hTableName, TableRef origTableRef, PTable pTable) {
             super();
             checkNotNull(hTableName);
             checkNotNull(origTableRef);
             this.isDataTable = isDataTable;
             this.hTableName = hTableName;
             this.origTableRef = origTableRef;
+            this.pTable = pTable;
         }
 
         public boolean isDataTable() {
@@ -851,6 +854,10 @@ public class MutationState implements SQLCloseable {
 
         public TableRef getOrigTableRef() {
             return origTableRef;
+        }
+
+        public PTable getPTable() {
+            return pTable;
         }
 
         @Override
@@ -870,6 +877,7 @@ public class MutationState implements SQLCloseable {
             TableInfo other = (TableInfo)obj;
             if (!hTableName.equals(other.hTableName)) return false;
             if (isDataTable != other.isDataTable) return false;
+            if (pTable.equals(other.pTable)) return false;
             return true;
         }
 
@@ -910,17 +918,18 @@ public class MutationState implements SQLCloseable {
                 long mutationTimestamp = scn == null ?
                     (table.isTransactional() == true ? HConstants.LATEST_TIMESTAMP : EnvironmentEdgeManager.currentTimeMillis())
                         : scn;
-                Iterator<Pair<PName, List<Mutation>>>
+                Iterator<Pair<PTable, List<Mutation>>>
                         mutationsIterator =
                         addRowMutations(tableRef, multiRowMutationState, mutationTimestamp,
                                 serverTimestamp, false, sendAll);
                 // build map from physical table to mutation list
                 boolean isDataTable = true;
                 while (mutationsIterator.hasNext()) {
-                    Pair<PName, List<Mutation>> pair = mutationsIterator.next();
-                    PName hTableName = pair.getFirst();
+                    Pair<PTable, List<Mutation>> pair = mutationsIterator.next();
+                    PTable logicalTableName = pair.getFirst();
                     List<Mutation> mutationList = pair.getSecond();
-                    TableInfo tableInfo = new TableInfo(isDataTable, hTableName, tableRef);
+                    TableInfo tableInfo = new TableInfo(isDataTable, logicalTableName
+                            .getPhysicalName(), tableRef, logicalTableName);
                     List<Mutation>
                             oldMutationList =
                             physicalTableMutationMap.put(tableInfo, mutationList);
@@ -1192,10 +1201,12 @@ public class MutationState implements SQLCloseable {
         while (mapIter.hasNext()) {
             Entry<TableInfo, List<Mutation>> pair = mapIter.next();
             TableInfo tableInfo = pair.getKey();
-            if (tableInfo.getOrigTableRef().getTable().isImmutableRows() && IndexUtil.isGlobalIndexCheckerEnabled(connection, tableInfo.getHTableName())) {
-                PTable table = PhoenixRuntime.getTable(connection, tableInfo.getHTableName().getString());
-                byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-                byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
+            PTable logicalTable = tableInfo.getPTable();
+            if (tableInfo.getOrigTableRef().getTable()
+                    .isImmutableRows() && IndexUtil.isGlobalIndexCheckerEnabled(connection,
+                    tableInfo.getHTableName())) {
+                byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(logicalTable);
+                byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(logicalTable).getFirst();
 
                 List<Mutation> mutations = pair.getValue();
 

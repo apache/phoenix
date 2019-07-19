@@ -60,11 +60,10 @@ import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
-    //Please do not remove/uncomment commented items in the list until PHOENIX-5385 is fixed
     private static final String [] INDEXES_LIST = {"TEST.INDEX1", "TEST.INDEX2", "TEST1.INDEX3",
-            "TEST1.INDEX2","TEST1.INDEX1","TEST.INDEX3"/*, "_IDX_TEST.MOCK1", "_IDX_TEST1.MOCK2"*/};
+            "TEST1.INDEX2","TEST1.INDEX1","TEST.INDEX3", "_IDX_TEST.MOCK1", "_IDX_TEST1.MOCK2"};
     private static final String [] INDEXES_LIST_NAMESPACE = {"TEST:INDEX1", "TEST:INDEX2", "TEST1:INDEX3",
-            "TEST1:INDEX2","TEST1:INDEX1","TEST:INDEX3"/*, "TEST:_IDX_MOCK1", "TEST1:_IDX_MOCK2"*/};
+            "TEST1:INDEX2","TEST1:INDEX1","TEST:INDEX3", "TEST:_IDX_MOCK1", "TEST1:_IDX_MOCK2"};
     private static final String [] TABLE_LIST = {"TEST.MOCK1","TEST1.MOCK2","TEST.MOCK3"};
     private static final String [] TABLE_LIST_NAMESPACE = {"TEST:MOCK1","TEST1:MOCK2","TEST:MOCK3"};
 
@@ -99,7 +98,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 .getQueryServices();
         admin = queryServices.getAdmin();
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-                null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),true, Mockito.mock(IndexTool.class));
+                null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+                true, Mockito.mock(IndexTool.class));
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
         if (!mutable) {
@@ -141,9 +141,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("CREATE TABLE TEST.MOCK3 (id bigint NOT NULL "
                 + "PRIMARY KEY, name varchar, age bigint)"+tableDDLOptions);
 
-        //Please do not remove/uncomment commented code until PHOENIX-5385 is fixed
         //views
-        /*conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW (view_column varchar) "
+        conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW (view_column varchar) "
                 + "AS SELECT * FROM TEST.MOCK1 WHERE a.name = 'a'");
         conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW1 (view_column varchar,"
                 + " zip varchar) AS SELECT * FROM TEST.MOCK1 WHERE a.name = 'a'");
@@ -157,7 +156,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("CREATE INDEX MOCK2_INDEX1 ON TEST1.MOCK2_VIEW "
                 + "(state, city)");
         conn.createStatement().execute("CREATE INDEX MOCK1_INDEX3 ON TEST.MOCK1_VIEW "
-                + "(view_column)");*/
+                + "(view_column)");
         //indexes
         conn.createStatement().execute("CREATE INDEX INDEX1 ON TEST.MOCK1 (sal, a.name)");
         conn.createStatement().execute("CREATE INDEX INDEX2 ON TEST.MOCK1 (a.name)");
@@ -189,7 +188,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
     }
 
-    private void checkNewIndexingCoprocessors(String [] indexList, String [] tableList) throws IOException {
+    private void checkNewIndexingCoprocessors(String [] indexList, String [] tableList)
+            throws IOException {
         if (mutable) {
             for (String table : tableList) {
                 Assert.assertTrue(admin.getTableDescriptor(TableName.valueOf(table))
@@ -204,7 +204,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
     }
 
-    private void checkOldIndexingCoprocessors(String [] indexList, String [] tableList) throws IOException {
+    private void checkOldIndexingCoprocessors(String [] indexList, String [] tableList)
+            throws IOException {
         if (mutable) {
             for (String table : tableList) {
                 Assert.assertTrue(admin.getTableDescriptor(TableName.valueOf(table))
@@ -233,7 +234,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         });
     }
 
-    public ParameterizedIndexUpgradeToolIT(boolean mutable, boolean upgrade, boolean isNamespaceEnabled) {
+    public ParameterizedIndexUpgradeToolIT(boolean mutable, boolean upgrade,
+            boolean isNamespaceEnabled) {
         this.mutable = mutable;
         this.upgrade = upgrade;
         this.isNamespaceEnabled = isNamespaceEnabled;
@@ -303,16 +305,14 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("DROP INDEX INDEX3 ON TEST1.MOCK2");
         conn.createStatement().execute("DROP INDEX INDEX3 ON TEST.MOCK3");
 
-
-        //Please do not remove/uncomment commented code until PHOENIX-5385 is fixed
-        /*conn.createStatement().execute("DROP INDEX MOCK1_INDEX3 ON TEST.MOCK1_VIEW");
+        conn.createStatement().execute("DROP INDEX MOCK1_INDEX3 ON TEST.MOCK1_VIEW");
         conn.createStatement().execute("DROP INDEX MOCK1_INDEX1 ON TEST.MOCK1_VIEW1");
         conn.createStatement().execute("DROP INDEX MOCK1_INDEX2 ON TEST.MOCK1_VIEW1");
         conn.createStatement().execute("DROP INDEX MOCK2_INDEX1 ON TEST1.MOCK2_VIEW");
 
         conn.createStatement().execute("DROP VIEW TEST.MOCK1_VIEW");
         conn.createStatement().execute("DROP VIEW TEST.MOCK1_VIEW1");
-        conn.createStatement().execute("DROP VIEW TEST1.MOCK2_VIEW");*/
+        conn.createStatement().execute("DROP VIEW TEST1.MOCK2_VIEW");
 
         conn.createStatement().execute("DROP TABLE TEST.MOCK1");
         conn.createStatement().execute("DROP TABLE TEST1.MOCK2");
