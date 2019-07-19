@@ -440,6 +440,19 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testNowWithSubquery() throws Exception {
+        String query =
+                "SELECT now(), reference_date FROM (select now() as "
+                        + "reference_date union all select now() as reference_date) limit 1";
+        Statement statement = conn.createStatement();
+        ResultSet rs = statement.executeQuery(query);
+        assertTrue(rs.next());
+        assertTrue(Math.abs(rs.getTime(1).getTime()-rs.getTime(2).getTime())<10000);
+        assertEquals(rs.getDate(2).toString(), rs.getDate(1).toString());
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void testSelectLiteralDate() throws Exception {
         String s = DateUtil.DEFAULT_DATE_FORMATTER.format(date);
         String query = "SELECT DATE '" + s + "' FROM " + this.tableName;
