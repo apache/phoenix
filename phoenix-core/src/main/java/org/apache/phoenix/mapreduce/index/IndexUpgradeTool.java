@@ -67,7 +67,8 @@ import java.util.UUID;
 import java.util.logging.FileHandler;
 import java.util.logging.SimpleFormatter;
 
-import static org.apache.phoenix.query.QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
+import static org.apache.phoenix.query.QueryServicesOptions
+        .GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
 
 public class IndexUpgradeTool extends Configured {
 
@@ -423,7 +424,8 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
-    private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc, String coprocName) throws IOException {
+    private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
+            String coprocName) throws IOException {
         if (!admin.getTableDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
                 tableDesc.addCoprocessor(coprocName,
@@ -435,7 +437,8 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
-    private void removeCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc, String coprocName) throws IOException {
+    private void removeCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
+            String coprocName) throws IOException {
         if (admin.getTableDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
                 tableDesc.removeCoprocessor(coprocName);
@@ -469,7 +472,8 @@ public class IndexUpgradeTool extends Configured {
             String tenantId = indexMap.getValue();
             String indexName = SchemaUtil.getTableNameFromFullName(index);
             String outFile = "/tmp/index_rebuild_" + indexName +
-                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"+ UUID.randomUUID().toString();
+                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId)
+                    +"_"+ UUID.randomUUID().toString();
             String[] args =
                     { "-s", schema, "-dt", table, "-it", indexName, "-direct", "-op", outFile };
             ArrayList<String> list = new ArrayList<>(Arrays.asList(args));
@@ -509,19 +513,22 @@ public class IndexUpgradeTool extends Configured {
                     for (PTable indexTable : dataTable.getIndexes()) {
                         if (indexTable.getIndexType().equals(PTable.IndexType.GLOBAL)) {
                             physicalIndexes.add(indexTable.getPhysicalName().getString());
-                            rebuildIndexes.put(indexTable.getPhysicalName().getString(), GLOBAL_INDEX_ID);
+                            rebuildIndexes.put(indexTable.getPhysicalName().getString(),
+                                    GLOBAL_INDEX_ID);
                         }
                     }
 
                     if (MetaDataUtil.hasViewIndexTable(conn, dataTable.getPhysicalName())) {
-                        String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
+                        String viewIndexPhysicalName = MetaDataUtil
+                                .getViewIndexPhysicalName(physicalTableName);
                         physicalIndexes.add(viewIndexPhysicalName);
 
                         ResultSet rs =
                                 conn.createStatement().executeQuery(
                                         "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
                                                 + "SYSTEM.CATALOG WHERE COLUMN_FAMILY = \'"
-                                                + viewIndexPhysicalName +"\' AND TABLE_TYPE = \'i\'");
+                                                + viewIndexPhysicalName
+                                                +"\' AND TABLE_TYPE = \'i\'");
                         while (rs.next()) {
                             String viewIndexName = rs.getString(1);
                             String tenantId = rs.getString(2);

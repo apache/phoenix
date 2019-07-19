@@ -144,7 +144,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             }
         }
         // Add the usetenantId
-        list.add(new Boolean[] { null, false, false, true, false, true});
+        list.add(new Boolean[] { false, false, false, true, false, true});
         return list;
     }
 
