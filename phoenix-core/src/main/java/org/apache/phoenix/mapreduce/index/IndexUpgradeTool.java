@@ -100,7 +100,7 @@ public class IndexUpgradeTool extends Configured {
     private IndexTool indexingTool;
 
     private HashMap<String, HashSet<String>> tablesAndIndexes = new HashMap<>();
-    private HashMap<String, HashMap<String,String>> rebuildMap = new HashMap<>();
+    private HashMap<String, HashMap<String,IndexInfo>> rebuildMap = new HashMap<>();
     private HashMap<String, String> prop = new  HashMap<>();
 
     private boolean dryRun, upgrade, syncRebuild;
@@ -339,13 +339,7 @@ public class IndexUpgradeTool extends Configured {
                 disableTable(admin, dataTableFullName, indexes);
                 modifyTable(admin, dataTableFullName, indexes);
                 enableTable(admin, dataTableFullName, indexes);
-                if (upgrade) {
-                    if(!test) {
-                        indexingTool = new IndexTool();
-                    }
-                    indexingTool.setConf(conf);
-                    rebuildIndexes(dataTableFullName, indexingTool);
-                }
+                rebuildIndexes(conn, conf, dataTableFullName);
             } catch (IOException | SQLException | InterruptedException e) {
                 LOGGER.severe("Something went wrong while executing " + operation + " steps " + e);
                 return -1;
@@ -410,6 +404,17 @@ public class IndexUpgradeTool extends Configured {
         }
     }
 
+    private void rebuildIndexes(Connection conn, Configuration conf, String dataTableFullName) {
+        if (upgrade) {
+            prepareToRebuildIndexes(conn, dataTableFullName);
+            if(!test) {
+                indexingTool = new IndexTool();
+            }
+            indexingTool.setConf(conf);
+            rebuildIndexes(dataTableFullName, indexingTool);
+        }
+    }
+
     private void modifyDataTable(Admin admin, String tableName)
             throws IOException {
         TableDescriptorBuilder tableDescBuilder = TableDescriptorBuilder
@@ -464,39 +469,46 @@ public class IndexUpgradeTool extends Configured {
             }
         }
     }
-
     private int rebuildIndexes(String dataTable, IndexTool indexingTool) {
-        String schema = SchemaUtil.getSchemaNameFromFullName(dataTable);
-        String table = SchemaUtil.getTableNameFromFullName(dataTable);
-        for(Map.Entry<String, String> indexMap : rebuildMap.get(dataTable).entrySet()) {
+        for(Map.Entry<String, IndexInfo> indexMap : rebuildMap.get(dataTable).entrySet()) {
             String index = indexMap.getKey();
-            String tenantId = indexMap.getValue();
+            IndexInfo indexInfo = indexMap.getValue();
             String indexName = SchemaUtil.getTableNameFromFullName(index);
-            String outFile = "/tmp/index_rebuild_" + indexName +
-                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"+ UUID.randomUUID().toString();
-            String[] args =
-                    { "-s", schema, "-dt", table, "-it", indexName, "-direct", "-op", outFile };
-            ArrayList<String> list = new ArrayList<>(Arrays.asList(args));
-            if (!GLOBAL_INDEX_ID.equals(tenantId)) {
-                list.add("-tenant");
-                list.add(tenantId);
-            }
-            if (syncRebuild) {
-                list.add("-runfg");
-            }
-            args = list.toArray(new String[list.size()]);
+            String tenantId = indexInfo.getTenantId();
+            String baseTable = indexInfo.getBaseTable();
+            String schema = indexInfo.getSchemaName();
+            String outFile = "/tmp/index_rebuild_" +schema+"_"+ indexName +
+                    (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
+                    + UUID.randomUUID().toString();
+            String[] args = getIndexToolArgValues(schema, baseTable, indexName, outFile, tenantId);
 
             try {
-                LOGGER.info("Rebuilding index " + indexName);
+                LOGGER.info("Rebuilding index: " + String.join(",", args));
                 if (!dryRun) {
                     indexingTool.run(args);
                 }
             } catch (Exception e) {
-                LOGGER.severe("Something went wrong while building the index " + index + " " + e);
+                LOGGER.severe("Something went wrong while building the index "
+                        + index + " " + e);
                 return -1;
             }
         }
         return 0;
+    }
+
+    private String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
+            String outFile, String tenantId) {
+        String args[] = { "-s", schema, "-dt", baseTable, "-it", indexName,
+                "-direct", "-op", outFile };
+        ArrayList<String> list = new ArrayList<>(Arrays.asList(args));
+        if (!GLOBAL_INDEX_ID.equals(tenantId)) {
+            list.add("-tenant");
+            list.add(tenantId);
+        }
+        if (syncRebuild) {
+            list.add("-runfg");
+        }
+        return list.toArray(new String[list.size()]);
     }
 
     private boolean extractTablesAndIndexes(PhoenixConnection conn) {
@@ -507,32 +519,19 @@ public class IndexUpgradeTool extends Configured {
                 HashSet<String> physicalIndexes = new HashSet<>();
                 dataTable = PhoenixRuntime.getTableNoCache(conn, tableName);
                 String physicalTableName = dataTable.getPhysicalName().getString();
-                HashMap<String, String> rebuildIndexes = new HashMap<>();
-
                 if (!dataTable.isTransactional() && dataTable.getType().equals(PTableType.TABLE)) {
                     for (PTable indexTable : dataTable.getIndexes()) {
                         if (indexTable.getIndexType().equals(PTable.IndexType.GLOBAL)) {
-                            physicalIndexes.add(indexTable.getPhysicalName().getString());
-                            rebuildIndexes.put(indexTable.getPhysicalName().getString(), GLOBAL_INDEX_ID);
+                            String physicalIndexName = indexTable.getPhysicalName().getString();
+                            physicalIndexes.add(physicalIndexName);
                         }
                     }
-
                     if (MetaDataUtil.hasViewIndexTable(conn, dataTable.getPhysicalName())) {
-                        String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
+                        String viewIndexPhysicalName = MetaDataUtil
+                                .getViewIndexPhysicalName(physicalTableName);
                         physicalIndexes.add(viewIndexPhysicalName);
-
-                        ResultSet rs =
-                                conn.createStatement().executeQuery(
-                                "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
-                                    + "SYSTEM.CATALOG WHERE COLUMN_FAMILY = \'"
-                                    + viewIndexPhysicalName +"\' AND TABLE_TYPE = \'i\'");
-                        while (rs.next()) {
-                            String viewIndexName = rs.getString(1);
-                            String tenantId = rs.getString(2);
-                            rebuildIndexes.put(viewIndexName, tenantId);
-                        }
                     }
-                    rebuildMap.put(physicalTableName, rebuildIndexes);
+                    //for upgrade or rollback
                     tablesAndIndexes.put(physicalTableName, physicalIndexes);
                 } else {
                     LOGGER.info("Skipping Table " + tableName + " because it is "+
@@ -546,6 +545,94 @@ public class IndexUpgradeTool extends Configured {
                 LOGGER.severe("Unable to find the provided data table");
             }
             return false;
+        }
+    }
+
+    private void prepareToRebuildIndexes(Connection conn, String dataTableFullName) {
+        try {
+            HashMap<String, IndexInfo> rebuildIndexes = new HashMap<>();
+            HashSet<String> physicalIndexes = tablesAndIndexes.get(dataTableFullName);
+
+            String viewIndexPhysicalName = MetaDataUtil
+                    .getViewIndexPhysicalName(dataTableFullName);
+            boolean hasViewIndex =  physicalIndexes.contains(viewIndexPhysicalName);
+
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(dataTableFullName);
+            String tableName = SchemaUtil.getTableNameFromFullName(dataTableFullName);
+
+            for (String physicalIndexName : physicalIndexes) {
+                if (physicalIndexName.equals(viewIndexPhysicalName)) {
+                    continue;
+                }
+                String indexTableName = SchemaUtil.getTableNameFromFullName(physicalIndexName);
+                String pIndexName = SchemaUtil.getTableName(schemaName, indexTableName);
+                IndexInfo indexInfo = new IndexInfo(schemaName, tableName,
+                        GLOBAL_INDEX_ID, pIndexName);
+                rebuildIndexes.put(physicalIndexName, indexInfo);
+            }
+
+            if (hasViewIndex) {
+                ResultSet
+                        rs =
+                        conn.createStatement().executeQuery(
+                                "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
+                                        + "SYSTEM.CATALOG WHERE COLUMN_FAMILY = \'"
+                                        + viewIndexPhysicalName
+                                        + "\' AND TABLE_TYPE = \'i\' AND " + "LINK_TYPE = "
+                                        + PTable.LinkType.PHYSICAL_TABLE.getSerializedValue());
+                while (rs.next()) {
+                    String viewIndexName = rs.getString(1);
+                    String tenantId = rs.getString(2);
+                    ResultSet
+                            innerRS =
+                            conn.createStatement().executeQuery(
+                                    "SELECT DISTINCT TABLE_NAME FROM "
+                                            + "SYSTEM.CATALOG WHERE COLUMN_FAMILY = \'"
+                                            + viewIndexName
+                                            + "\' AND TABLE_TYPE = \'i\' AND " + "LINK_TYPE = "
+                                            + PTable.LinkType.INDEX_TABLE.getSerializedValue());
+                    innerRS.next();
+                    String viewName = innerRS.getString(1);
+                    IndexInfo indexInfo = new IndexInfo(schemaName, viewName, tenantId == null ?
+                            GLOBAL_INDEX_ID: tenantId, viewIndexName);
+                    rebuildIndexes.put(viewIndexName, indexInfo);
+                }
+            }
+            //for rebuilding indexes in case of upgrade.
+            rebuildMap.put(dataTableFullName, rebuildIndexes);
+        } catch (SQLException e) {
+            LOGGER.severe("Failed to prepare the map for index rebuilds "+e);
+            throw new RuntimeException("Failed to prepare the map for index rebuilds");
+        }
+    }
+
+    private class IndexInfo {
+        final private String schemaName;
+        final private String baseTable;
+        final private String tenantId;
+        final private String indexName;
+
+        public IndexInfo(String schemaName, String baseTable, String tenantId, String indexName) {
+            this.schemaName = schemaName;
+            this.baseTable = baseTable;
+            this.tenantId = tenantId;
+            this.indexName = indexName;
+        }
+
+        public String getSchemaName() {
+            return schemaName;
+        }
+
+        public String getBaseTable() {
+            return baseTable;
+        }
+
+        public String getTenantId() {
+            return tenantId;
+        }
+
+        public String getIndexName() {
+            return indexName;
         }
     }
 }
