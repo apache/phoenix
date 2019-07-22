@@ -72,7 +72,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         final Properties overridingProps = new Properties();
         if(txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
-            overridingProps.put(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, currentScnValue);
         }
         if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
             overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -99,9 +98,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             if (txnScnValue != null) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
             }
-
-            // Initialize the query plan so it sets up the parallel scans
-            queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
             return queryPlan;
         } catch (Exception exception) {
             LOGGER.error(String.format("Failed to get the query plan with error [%s]",
