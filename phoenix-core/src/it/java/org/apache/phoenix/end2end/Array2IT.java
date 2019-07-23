@@ -37,6 +37,7 @@ import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class Array2IT extends ArrayIT {
@@ -669,27 +670,19 @@ public class Array2IT extends ArrayIT {
 
     }
 
-    @Test
+    @Test // see PHOENIX-5416
+    @Ignore
     public void testArrayRefToLiteral() throws Exception {
-        Connection conn;
-
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement stmt = conn.prepareStatement("select ?[2] from \"SYSTEM\".\"catalog\" limit 1");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement stmt = conn.prepareStatement("select ?[2] from \"SYSTEM\".\"CATALOG\" limit 1");
             Array array = conn.createArrayOf("CHAR", new String[] {"a","b","c"});
             stmt.setArray(1, array);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertFalse(rs.next());
-        } catch (SQLException e) {
-        } finally {
-            if (conn != null) {
-                conn.close();
-            }
         }
-
     }
     
     @Test
