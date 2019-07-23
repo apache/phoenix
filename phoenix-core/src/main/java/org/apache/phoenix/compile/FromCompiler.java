@@ -174,11 +174,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            // We need to always get the latest meta data for the parent table of a create view call to ensure that
-            // that we're copying the current table meta data as of when the view is created. Once we no longer
-            // copy the parent meta data, but store only the local diffs (PHOENIX-3534), we will no longer need
-            // to do this.
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true, true);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
