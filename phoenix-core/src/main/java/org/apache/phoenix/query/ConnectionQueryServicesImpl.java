@@ -223,6 +223,7 @@ import org.apache.phoenix.schema.PSynchronizedMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -266,6 +267,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
@@ -637,8 +639,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 throwConnectionClosedIfNullMetaData();
                 // If existing table isn't older than new table, don't replace
                 // If a client opens a connection at an earlier timestamp, this can happen
-                PTable existingTable = latestMetaData.getTableRef(new PTableKey(table.getTenantId(), table.getName().getString())).getTable();
+                PTableRef existingTableRef = latestMetaData.getTableRef(new PTableKey(
+                        table.getTenantId(), table.getName().getString()));
+                PTable existingTable = existingTableRef.getTable();
                 if (existingTable.getTimeStamp() > table.getTimeStamp()) {
+                    existingTableRef.setLastAccessTime(TimeKeeper.SYSTEM.getCurrentTime());
                     return;
                 }
             } catch (TableNotFoundException e) {}
