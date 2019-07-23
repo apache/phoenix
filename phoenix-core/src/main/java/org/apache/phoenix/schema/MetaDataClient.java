@@ -408,8 +408,6 @@ public class MetaDataClient {
                     INDEX_DISABLE_TIMESTAMP +","+
                     ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?, ?, ?)";
-    //TODO: merge INSERT_COLUMN_CREATE_TABLE and INSERT_COLUMN_ALTER_TABLE column when
-    // the new major release is out.
     private static final String INSERT_COLUMN_CREATE_TABLE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
@@ -433,29 +431,6 @@ public class MetaDataClient {
                     COLUMN_QUALIFIER + ", " +
                     IS_ROW_TIMESTAMP +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-    private static final String INSERT_COLUMN_ALTER_TABLE =
-            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
-                    TENANT_ID + "," +
-                    TABLE_SCHEM + "," +
-                    TABLE_NAME + "," +
-                    COLUMN_NAME + "," +
-                    COLUMN_FAMILY + "," +
-                    DATA_TYPE + "," +
-                    NULLABLE + "," +
-                    COLUMN_SIZE + "," +
-                    DECIMAL_DIGITS + "," +
-                    ORDINAL_POSITION + "," +
-                    SORT_ORDER + "," +
-                    DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
-                    ARRAY_SIZE + "," +
-                    VIEW_CONSTANT + "," +
-                    IS_VIEW_REFERENCED + "," +
-                    PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
-                    KEY_SEQ + "," +
-                    COLUMN_DEF + "," +
-                    COLUMN_QUALIFIER +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
@@ -597,12 +572,23 @@ public class MetaDataClient {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long tableTimestamp = HConstants.LATEST_TIMESTAMP;
         long tableResolvedTimestamp = HConstants.LATEST_TIMESTAMP;
-        try {
-            tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
-            table = tableRef.getTable();
-            tableTimestamp = table.getTimeStamp();
-            tableResolvedTimestamp = tableRef.getResolvedTimeStamp();
-        } catch (TableNotFoundException e) {
+        int tryCount = 0;
+        // for tenant specific connection, look up the global table without using tenantId
+        int maxTryCount = tenantId == null ? 1 : 2;
+        do {
+            try {
+                tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
+                table = tableRef.getTable();
+                tableTimestamp = table.getTimeStamp();
+                tableResolvedTimestamp = tableRef.getResolvedTimeStamp();
+                break;
+            } catch (TableNotFoundException e) {
+                tenantId = null;
+            }
+        } while (++tryCount < maxTryCount);
+        // reset the tenantId if the global table isn't found in the cache
+        if (table==null) {
+            tenantId = systemTable ? null : origTenantId;
         }
 
         // start a txn if all table are transactional by default or if we found the table in the cache and it is transactional
@@ -622,10 +608,7 @@ public class MetaDataClient {
             return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, QueryConstants.UNSET_TIMESTAMP, table);
         }
 
-        int maxTryCount = tenantId == null ? 1 : 2;
-        int tryCount = 0;
         MetaDataMutationResult result;
-
         // if we are looking up an index on a child view that is inherited from its
         // parent, then we need to resolve the parent of the child view which will also
         // load any of its indexes instead of trying to load the inherited view index
@@ -655,6 +638,7 @@ public class MetaDataClient {
             }
         }
         else {
+            tryCount = 0;
             do {
                 final byte[] schemaBytes = PVarchar.INSTANCE.toBytes(schemaName);
                 final byte[] tableBytes = PVarchar.INSTANCE.toBytes(tableName);
@@ -680,6 +664,9 @@ public class MetaDataClient {
                     if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS
                             && result.getTable() == null) {
                         result.setTable(table);
+                    }
+                    if (result.getTable()!=null) {
+                        addTableToCache(result);
                     }
                     return result;
                 }
@@ -914,16 +901,12 @@ public class MetaDataClient {
         } else {
             colUpsert.setString(18, column.getExpressionStr());
         }
-        if (colUpsert.getParameterMetaData().getParameterCount() > 18) {
-            if (column.getColumnQualifierBytes() == null) {
-                colUpsert.setNull(19, Types.VARBINARY);
-            } else {
-                colUpsert.setBytes(19, column.getColumnQualifierBytes());
-            }
+        if (column.getColumnQualifierBytes() == null) {
+            colUpsert.setNull(19, Types.VARBINARY);
+        } else {
+            colUpsert.setBytes(19, column.getColumnQualifierBytes());
         }
-        if (colUpsert.getParameterMetaData().getParameterCount() > 19) {
-            colUpsert.setBoolean(20, column.isRowTimestamp());
-        }
+        colUpsert.setBoolean(20, column.isRowTimestamp());
         colUpsert.execute();
     }
 
@@ -3587,10 +3570,7 @@ public class MetaDataClient {
                 Map<String, Integer> changedCqCounters = new HashMap<>(numCols);
                 if (numCols > 0 ) {
                     StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
-                    String addColumnSqlToUse = connection.isRunningUpgrade()
-                            && tableName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)
-                            && schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA) ? ALTER_SYSCATALOG_TABLE_UPGRADE
-                            : INSERT_COLUMN_ALTER_TABLE;
+                    String addColumnSqlToUse = INSERT_COLUMN_CREATE_TABLE;
                     try (PreparedStatement colUpsert = connection.prepareStatement(addColumnSqlToUse)) {
                         short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
                         for( ColumnDef colDef : columnDefs) {
