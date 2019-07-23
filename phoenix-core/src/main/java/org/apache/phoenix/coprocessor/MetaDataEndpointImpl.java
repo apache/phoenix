@@ -2640,6 +2640,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
             } finally {
                 ServerUtil.releaseRowLocks(locks);
+                // drop indexes on views that require the column being dropped
+                // these could be on a different region server so don't hold row locks while dropping them
+                for (Pair<PTable, PColumn> pair : mutator.getTableAndDroppedColumnPairs()) {
+                    result = dropRemoteIndexes(env, pair.getFirst(), clientTimeStamp, pair.getSecond(),
+                            tableNamesToDelete, sharedTablesToDelete);
+                    if (result != null
+                            && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                        return result;
+                    }
+                }
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException(fullTableName, t);
