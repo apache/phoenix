@@ -158,7 +158,11 @@ public class CSVCommonsLoader {
      * @return
      */
     public static char asControlCharacter(char delimiter) {
-        return CTRL_CHARACTER_TABLE.getOrDefault(delimiter, delimiter);
+        if(CTRL_CHARACTER_TABLE.containsKey(delimiter)) {
+            return CTRL_CHARACTER_TABLE.get(delimiter);
+        } else {
+            return delimiter;
+        }
     }
 
     /**
