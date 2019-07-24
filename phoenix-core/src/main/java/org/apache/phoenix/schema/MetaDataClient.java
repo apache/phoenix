@@ -4159,11 +4159,11 @@ public class MetaDataClient {
                         // so we need to issue deletes markers for all the rows of the index
                         final List<TableRef> tableRefsToDrop = Lists.newArrayList();
                         Map<String, List<TableRef>> tenantIdTableRefMap = Maps.newHashMap();
-                        if (result.getSharedTablesToDelete() != null) {
-                            for (SharedTableState sharedTableState : result.getSharedTablesToDelete()) {
+                        if (result.getSharedPTablesToDelete() != null) {
+                            for (PTable pTable : result.getSharedPTablesToDelete()) {
                                 ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
                                 QualifierEncodingScheme qualifierEncodingScheme = table.getEncodingScheme();
-                                List<PColumn> columns = sharedTableState.getColumns();
+                                List<PColumn> columns = pTable.getColumns();
                                 if (table.getBucketNum() != null) {
                                     columns = columns.subList(1, columns.size());
                                 }
@@ -4177,8 +4177,8 @@ public class MetaDataClient {
                                         .setType(PTableType.INDEX)
                                         .setTimeStamp(ts)
                                         .setMultiTenant(table.isMultiTenant())
-                                        .setViewIndexIdType(sharedTableState.getViewIndexIdType())
-                                        .setViewIndexId(sharedTableState.getViewIndexId())
+                                        .setViewIndexIdType(pTable.getviewIndexIdType())
+                                        .setViewIndexId(pTable.getViewIndexId())
                                         .setNamespaceMapped(table.isNamespaceMapped())
                                         .setAppendOnlySchema(false)
                                         .setImmutableStorageScheme(storageScheme == null ?
@@ -4188,19 +4188,19 @@ public class MetaDataClient {
                                         .setEncodedCQCounter(table.getEncodedCQCounter())
                                         .setUseStatsForParallelization(table.useStatsForParallelization())
                                         .setExcludedColumns(ImmutableList.of())
-                                        .setTenantId(sharedTableState.getTenantId())
-                                        .setSchemaName(sharedTableState.getSchemaName())
-                                        .setTableName(sharedTableState.getTableName())
+                                        .setTenantId(pTable.getTenantId())
+                                        .setSchemaName(pTable.getSchemaName())
+                                        .setTableName(pTable.getTableName())
                                         .setRowKeyOrderOptimizable(false)
                                         .setBucketNum(table.getBucketNum())
                                         .setIndexes(Collections.emptyList())
-                                        .setPhysicalNames(sharedTableState.getPhysicalNames() == null ?
+                                        .setPhysicalNames(pTable.getPhysicalNames() == null ?
                                                 ImmutableList.of() :
-                                                ImmutableList.copyOf(sharedTableState.getPhysicalNames()))
+                                                ImmutableList.copyOf(pTable.getPhysicalNames()))
                                         .setColumns(columns)
                                         .build();
                                 TableRef indexTableRef = new TableRef(viewIndexTable);
-                                PName indexTableTenantId = sharedTableState.getTenantId();
+                                PName indexTableTenantId = pTable.getTenantId();
                                 if (indexTableTenantId==null) {
                                     tableRefsToDrop.add(indexTableRef);
                                 }

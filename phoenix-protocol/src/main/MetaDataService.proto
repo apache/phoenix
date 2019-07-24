@@ -78,6 +78,7 @@ message MetaDataResponse {
   optional int64 autoPartitionNum = 11;
   optional int64 viewIndexId = 12;
   optional int32 viewIndexIdType = 13 [default = 5];
+  repeated PTable sharedPTablesToDelete = 14;
 }
 
 message GetTableRequest {
