@@ -119,12 +119,10 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
       viewConn.createStatement().execute(CREATE_INDEX + viewIndex5 + " ON " + viewOfTable2
           + "(v3) INCLUDE (v4)");
 
-
       viewConn.createStatement().execute(SELECT_ALL_FROM + fullNameViewIndex1);
       viewConn.createStatement().execute(SELECT_ALL_FROM + fullNameViewIndex2);
       viewConn.createStatement().execute(SELECT_ALL_FROM + fullNameViewIndex3);
       viewConn.createStatement().execute(SELECT_ALL_FROM + fullNameViewIndex4);
-
 
       // upsert a single row
       PreparedStatement stmt = viewConn.prepareStatement(UPSERT_INTO + viewOfTable1
@@ -236,7 +234,6 @@ public class DropIndexedColsIT extends SplitSystemCatalogIT {
 
     }
   }
-
 
   private String generateDDL(String format) {
     StringBuilder ddlGeneratorBuilder = new StringBuilder();
