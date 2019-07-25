@@ -658,7 +658,8 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             upsertStmt.setString(2, "val3");
             upsertStmt.execute();
 
-            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                    " WHERE TABLE_NAME ='" + testTable  + "'");
             conn.commit();
 
             conn.createStatement().execute(
@@ -676,7 +677,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
 
             // Check task status and other column values.
             DropTableWithViewsIT.assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(),
-                    PTable.TaskType.INDEX_REBUILD, null);
+                    PTable.TaskType.INDEX_REBUILD, testTable, null, null, null,indexName);
 
             // Check that the value is updated to correct one
             val = getIndexValue(conn, indexName, 2);

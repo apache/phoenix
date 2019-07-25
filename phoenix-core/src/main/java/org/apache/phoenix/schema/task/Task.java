@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 public class Task {
@@ -202,7 +203,8 @@ public class Task {
         return result;
     }
 
-    public static List<TaskRecord> queryTaskTable(Connection connection, String schema, String tableName,
+    public static List<TaskRecord> queryTaskTable(Connection connection, Timestamp ts,
+            String schema, String tableName,
             PTable.TaskType taskType, String tenantId, String indexName)
             throws SQLException {
         String taskQuery = "SELECT " +
@@ -230,7 +232,20 @@ public class Task {
                 taskQuery += " AND " + PhoenixDatabaseMetaData.TASK_DATA + " LIKE '%" + indexName + "%'";
             }
 
-        return populateTasks(connection, taskQuery);
+            List<TaskRecord> taskRecords = populateTasks(connection, taskQuery);
+            List<TaskRecord> result = new ArrayList<TaskRecord>();
+            if (ts != null) {
+                // Adding TASK_TS to the where clause did not work. It returns empty when directly querying with the timestamp.
+                for (TaskRecord tr : taskRecords) {
+                    if (tr.getTimeStamp().equals(ts)) {
+                        result.add(tr);
+                    }
+                }
+            } else {
+                result = taskRecords;
+            }
+
+        return result;
     }
 
     public static List<TaskRecord> queryTaskTable(Connection connection, String[] excludedTaskStatus)

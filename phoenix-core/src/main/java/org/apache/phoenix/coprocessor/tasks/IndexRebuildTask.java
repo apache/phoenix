@@ -163,7 +163,9 @@ public class IndexRebuildTask extends BaseTask  {
             Cluster cluster = new Cluster(configuration);
 
             Job job = cluster.getJob(org.apache.hadoop.mapreduce.JobID.forName(jobID));
-
+            if (job == null) {
+                return new  TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SKIPPED, "");
+            }
             if (job != null && job.isComplete()) {
                 if (job.isSuccessful()) {
                     LOGGER.warn("IndexRebuildTask checkCurrentResult job is successful "
