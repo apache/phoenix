@@ -4354,7 +4354,7 @@ public class MetaDataClient {
                     indexRef.setTable(result.getTable());
                     if (newIndexState == PIndexState.BUILDING && isAsync) {
                         if (isRebuildAll) {
-                            List<Task.TaskRecord> tasks = Task.queryTaskTable(connection, schemaName, tableName, PTable.TaskType.INDEX_REBUILD,
+                            List<Task.TaskRecord> tasks = Task.queryTaskTable(connection, null, schemaName, tableName, PTable.TaskType.INDEX_REBUILD,
                                     tenantId, indexName);
                             if (tasks == null || tasks.size() == 0) {
                                 Timestamp ts = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
