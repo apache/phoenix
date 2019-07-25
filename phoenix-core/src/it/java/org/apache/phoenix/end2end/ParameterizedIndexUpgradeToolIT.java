@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.cli.CommandLine;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -278,22 +277,6 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         iut.executeTool();
 
         validate(true);
-    }
-
-    @Test
-    public void testCommandLineParsing() {
-
-        String outputFile = "/tmp/index_upgrade_" + UUID.randomUUID().toString();
-        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
-                INPUT_LIST, "-lf", outputFile, "-d"};
-        IndexUpgradeTool iut = new IndexUpgradeTool();
-
-        CommandLine cmd = iut.parseOptions(args);
-        iut.initializeTool(cmd);
-        Assert.assertEquals(iut.getDryRun(),true);
-        Assert.assertEquals(iut.getInputTables(), INPUT_LIST);
-        Assert.assertEquals(iut.getOperation(), upgrade ? UPGRADE_OP : ROLLBACK_OP);
-        Assert.assertEquals(iut.getLogFile(), outputFile);
     }
 
     @After
