@@ -186,16 +186,19 @@ public class TaskRegionObserver extends BaseRegionObserver {
 
                         if (result == null) {
                             // reread task record. There might be async setting of task status
-                            taskRecord = Task.queryTaskTable(connForTask, taskRecord.getSchemaName(), taskRecord.getTableName(),
+                            taskRecord = Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
+                                    taskRecord.getSchemaName(), taskRecord.getTableName(),
                                     taskType, taskRecord.getTenantId(), null).get(0);
                             if (taskRecord.getStatus() != null && taskRecord.getStatus().equals(
                                     PTable.TaskStatus.COMPLETED.toString())) {
                                 continue;
                             }
+
                             // Change task status to STARTED
                             Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
                                     taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
-                                    taskRecord.getData(), taskRecord.getPriority(), taskRecord.getTimeStamp(), null, true);
+                                    taskRecord.getData(), taskRecord.getPriority(), taskRecord.getTimeStamp(), null,
+                                    true);
 
                             // invokes the method at runtime
                             result = (TaskResult) runMethod.invoke(obj, taskRecord);
@@ -237,7 +240,7 @@ public class TaskRegionObserver extends BaseRegionObserver {
         }
 
         public static void setEndTaskStatus(PhoenixConnection connForTask, Task.TaskRecord taskRecord, String taskStatus)
-                throws IOException {
+                throws IOException, SQLException {
             // update data with details.
             String data = taskRecord.getData();
             if (Strings.isNullOrEmpty(data)) {
