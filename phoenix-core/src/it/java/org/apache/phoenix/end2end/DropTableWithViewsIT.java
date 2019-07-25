@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -26,6 +27,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -137,7 +139,8 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             task.run();
             task.run();
 
-            assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(), PTable.TaskType.DROP_CHILD_VIEWS, null);
+            assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(), PTable.TaskType.DROP_CHILD_VIEWS,
+                    null, null, null, null, null);
 
             // Views should be dropped by now
             TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
@@ -156,7 +159,9 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
         }
     }
 
-    public static void assertTaskColumns(Connection conn, String expectedStatus, PTable.TaskType taskType, String expectedData)
+    public static void assertTaskColumns(Connection conn, String expectedStatus, PTable.TaskType taskType,
+            String expectedTableName, String expectedTenantId, String expectedSchema, Timestamp expectedTs,
+            String expectedIndexName)
             throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
                 " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
@@ -166,9 +171,29 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
         String taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
         assertEquals(expectedStatus, taskStatus);
 
-        if (expectedData != null) {
+        if (expectedTableName != null) {
+            String tableName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+            assertEquals(expectedTableName, tableName);
+        }
+
+        if (expectedTenantId != null) {
+            String tenantId = rs.getString(PhoenixDatabaseMetaData.TENANT_ID);
+            assertEquals(expectedTenantId, tenantId);
+        }
+
+        if (expectedSchema != null) {
+            String schema = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+            assertEquals(expectedSchema, schema);
+        }
+
+        if (expectedTs != null) {
+            Timestamp ts = rs.getTimestamp(PhoenixDatabaseMetaData.TASK_TS);
+            assertEquals(expectedTs, ts);
+        }
+
+        if (expectedIndexName != null) {
             String data = rs.getString(PhoenixDatabaseMetaData.TASK_DATA);
-            assertEquals(expectedData, data);
+            assertEquals(true, data.contains("\"IndexName\":\"" + expectedIndexName));
         }
     }
 }

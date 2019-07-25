@@ -35,8 +35,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -49,12 +47,11 @@ import java.util.HashMap;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.waitForIndexRebuild;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-// disabled -- see PHOENIX-5348
-public abstract class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
+public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     protected static String TENANT1 = "tenant1";
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
@@ -83,15 +80,16 @@ public abstract class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testIndexRebuildTask() throws Throwable {
         String baseTable = generateUniqueName();
+        String viewName = generateUniqueName();
         Connection conn = null;
-        Connection viewConn = null;
+        Connection tenantConn = null;
         try {
             conn = DriverManager.getConnection(getUrl());
             conn.setAutoCommit(false);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT1);
 
-            viewConn =DriverManager.getConnection(getUrl(), props);
+            tenantConn =DriverManager.getConnection(getUrl(), props);
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
                             + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -99,45 +97,37 @@ public abstract class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(generateDDL(ddlFormat));
             conn.commit();
             // Create a view
-            String viewName = generateUniqueName();
             String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + baseTable;
-            viewConn.createStatement().execute(viewDDL);
+            tenantConn.createStatement().execute(viewDDL);
 
             // Create index
             String indexName = generateUniqueName();
             String idxSDDL = String.format("CREATE INDEX %s ON %s (V1)", indexName, viewName);
 
-            viewConn.createStatement().execute(idxSDDL);
+            tenantConn.createStatement().execute(idxSDDL);
 
             // Insert rows
             int numOfValues = 1000;
             for (int i=0; i < numOfValues; i++){
-                viewConn.createStatement().execute(
+                tenantConn.createStatement().execute(
                         String.format("UPSERT INTO %s VALUES('%s', '%s', '%s')", viewName, String.valueOf(i), "y",
                                 "z"));
             }
-            viewConn.commit();
+            tenantConn.commit();
 
-            String data = "{IndexName:" + indexName + "}";
-            // Run IndexRebuildTask
-            TaskRegionObserver.SelfHealingTask task =
-                    new TaskRegionObserver.SelfHealingTask(
-                            TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
-
-            Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            // Add a task to System.Task to build indexes
-            Task.addTask(conn.unwrap(PhoenixConnection.class), PTable.TaskType.INDEX_REBUILD,
-                    TENANT1, null, viewName,
-                    PTable.TaskStatus.CREATED.toString(), data, null, startTs, null, true);
-
-
-            task.run();
-
+            waitForIndexRebuild(conn, indexName, PIndexState.ACTIVE);
             String viewIndexTableName = MetaDataUtil.getViewIndexPhysicalName(baseTable);
             ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            int count = getUtility().countRows(queryServices.getTable(Bytes.toBytes(viewIndexTableName)));
-            assertTrue(count == numOfValues);
 
+            Table indexHTable = queryServices.getTable(Bytes.toBytes(viewIndexTableName));
+            int count = getUtility().countRows(indexHTable);
+            assertEquals(numOfValues, count);
+
+            // Alter to Unusable makes the index status inactive.
+            // If I Alter to DISABLE, it fails to in Index tool while setting state to active due to Invalid transition.
+            tenantConn.createStatement().execute(
+                    String.format("ALTER INDEX %s ON %s UNUSABLE", indexName, viewName));
+            tenantConn.commit();
 
             // Remove index contents and try again
             Admin admin = queryServices.getAdmin();
@@ -145,50 +135,56 @@ public abstract class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             admin.disableTable(tableName);
             admin.truncateTable(tableName, false);
 
-            data = "{IndexName:" + indexName + ", DisableBefore:true}";
+            count = getUtility().countRows(indexHTable);
+            assertEquals(0, count);
 
-            // Add a new task (update status to created) to System.Task to rebuild indexes
+            String data = "{IndexName:" + indexName + ", DisableBefore: true}";
+
+            // Run IndexRebuildTask
+            TaskRegionObserver.SelfHealingTask task =
+                    new TaskRegionObserver.SelfHealingTask(
+                            TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+
+            Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
             Task.addTask(conn.unwrap(PhoenixConnection.class), PTable.TaskType.INDEX_REBUILD,
                     TENANT1, null, viewName,
                     PTable.TaskStatus.CREATED.toString(), data, null, startTs, null, true);
             task.run();
 
-            Table systemHTable= queryServices.getTable(Bytes.toBytes("SYSTEM."+PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE));
-            count = getUtility().countRows(systemHTable);
-            assertEquals(1, count);
-
             // Check task status and other column values.
-            waitForTaskState(conn, PTable.TaskType.INDEX_REBUILD, PTable.TaskStatus.COMPLETED);
+            waitForTaskState(conn, PTable.TaskType.INDEX_REBUILD, viewName, PTable.TaskStatus.COMPLETED);
 
             // See that index is rebuilt and confirm index has rows
-            Table htable= queryServices.getTable(Bytes.toBytes(viewIndexTableName));
-            count = getUtility().countRows(htable);
+            count = getUtility().countRows(indexHTable);
             assertEquals(numOfValues, count);
         } finally {
-            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
-            conn.commit();
             if (conn != null) {
+                conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
+                        + " WHERE TABLE_NAME ='" + viewName  + "'");
+                conn.commit();
                 conn.close();
             }
-            if (viewConn != null) {
-                viewConn.close();
+            if (tenantConn != null) {
+                tenantConn.close();
             }
         }
     }
 
-    public static void waitForTaskState(Connection conn, PTable.TaskType taskType, PTable.TaskStatus expectedTaskStatus) throws InterruptedException,
+    public static void waitForTaskState(Connection conn, PTable.TaskType taskType, String expectedTableName,
+            PTable.TaskStatus expectedTaskStatus) throws InterruptedException,
             SQLException {
         int maxTries = 100, nTries = 0;
         do {
             Thread.sleep(2000);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
                     " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                    " WHERE " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "' AND " +
+                    PhoenixDatabaseMetaData.TASK_TYPE + " = " +
                     taskType.getSerializedValue());
 
             String taskStatus = null;
 
-            if (rs.next()) {
+            while (rs.next()) {
                 taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
                 boolean matchesExpected = (expectedTaskStatus.toString().equals(taskStatus));
                 if (matchesExpected) {
