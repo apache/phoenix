@@ -56,6 +56,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
     private final KeyValueSchema rhsSchema;
     private final int rhsFieldPosition;
 
+
     public CorrelatePlan(QueryPlan lhs, QueryPlan rhs, String variableId, 
             JoinType joinType, boolean isSingleValueOnly, 
             RuntimeContext runtimeContext, PTable joinedTable, 
@@ -104,99 +105,8 @@ public class CorrelatePlan extends DelegateQueryPlan {
     @Override
     public ResultIterator iterator(final ParallelScanGrouper scanGrouper, final Scan scan)
             throws SQLException {
-        return new ResultIterator() {
-            private final ValueBitSet destBitSet = ValueBitSet.newInstance(joinedSchema);
-            private final ValueBitSet lhsBitSet = ValueBitSet.newInstance(lhsSchema);
-            private final ValueBitSet rhsBitSet = 
-                    (joinType == JoinType.Semi || joinType == JoinType.Anti) ?
-                            ValueBitSet.EMPTY_VALUE_BITSET 
-                          : ValueBitSet.newInstance(rhsSchema);
-            private final ResultIterator iter = delegate.iterator(scanGrouper, scan);
-            private ResultIterator rhsIter = null;
-            private Tuple current = null;
-            private boolean closed = false;
 
-            @Override
-            public void close() throws SQLException {
-                if (!closed) {
-                    closed = true;
-                    iter.close();
-                    if (rhsIter != null) {
-                        rhsIter.close();
-                    }
-                }
-            }
-
-            @Override
-            public Tuple next() throws SQLException {
-                if (closed)
-                    return null;
-                
-                Tuple rhsCurrent = null;
-                if (rhsIter != null) {
-                    rhsCurrent = rhsIter.next();
-                    if (rhsCurrent == null) {
-                        rhsIter.close();
-                        rhsIter = null;
-                    } else if (isSingleValueOnly) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
-                    }
-                }
-                while (rhsIter == null) {
-                    current = iter.next();
-                    if (current == null) {
-                        close();
-                        return null;
-                    }
-                    runtimeContext.setCorrelateVariableValue(variableId, current);
-                    rhsIter = rhs.iterator();
-                    rhsCurrent = rhsIter.next();
-                    if ((rhsCurrent == null && (joinType == JoinType.Inner || joinType == JoinType.Semi))
-                            || (rhsCurrent != null && joinType == JoinType.Anti)) {
-                        rhsIter.close();
-                        rhsIter = null;
-                    }
-                }
-                
-                Tuple joined;
-                try {
-                    joined = rhsBitSet == ValueBitSet.EMPTY_VALUE_BITSET ?
-                            current : TupleProjector.mergeProjectedValue(
-                                    convertLhs(current), destBitSet,
-                                    rhsCurrent, rhsBitSet, rhsFieldPosition, true);
-                } catch (IOException e) {
-                    throw new SQLException(e);
-                }
-                                
-                if ((joinType == JoinType.Semi || rhsCurrent == null) && rhsIter != null) {
-                    rhsIter.close();
-                    rhsIter = null;
-                }
-                
-                return joined;
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-            
-            private ProjectedValueTuple convertLhs(Tuple lhs) throws IOException {
-                ProjectedValueTuple t;
-                if (lhs instanceof ProjectedValueTuple) {
-                    t = (ProjectedValueTuple) lhs;
-                } else {
-                    ImmutableBytesWritable ptr = getContext().getTempPtr();
-                    TupleProjector.decodeProjectedValue(lhs, ptr);
-                    lhsBitSet.clear();
-                    lhsBitSet.or(ptr);
-                    int bitSetLen = lhsBitSet.getEstimatedLength();
-                    t = new ProjectedValueTuple(lhs, lhs.getValue(0).getTimestamp(), 
-                            ptr.get(), ptr.getOffset(), ptr.getLength(), bitSetLen);
-
-                }
-                return t;
-            }
-        };
+        return new CorrelateResultIterator(scanGrouper, scan) ;
     }
 
     @Override
@@ -225,6 +135,103 @@ public class CorrelatePlan extends DelegateQueryPlan {
         Cost cost = new Cost(0, 0, lhsByteCount * rhsRowCount);
         Cost lhsCost = delegate.getCost();
         return cost.plus(lhsCost).plus(rhs.getCost());
+    }
+
+    private class CorrelateResultIterator implements ResultIterator {
+        private final ValueBitSet destBitSet = ValueBitSet.newInstance(joinedSchema);
+        private final ValueBitSet lhsBitSet = ValueBitSet.newInstance(lhsSchema);
+        private final ValueBitSet rhsBitSet =
+                (joinType == JoinType.Semi || joinType == JoinType.Anti) ?
+                        ValueBitSet.EMPTY_VALUE_BITSET
+                        : ValueBitSet.newInstance(rhsSchema);
+        private final ResultIterator iter;
+        private ResultIterator rhsIter = null;
+        private Tuple current = null;
+        private boolean closed = false;
+
+        private CorrelateResultIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+            iter = delegate.iterator(scanGrouper, scan);
+        }
+
+        @Override
+        public void close() throws SQLException {
+            if (!closed) {
+                closed = true;
+                iter.close();
+                if (rhsIter != null) {
+                    rhsIter.close();
+                }
+            }
+        }
+
+        @Override
+        public Tuple next() throws SQLException {
+            if (closed)
+                return null;
+
+            Tuple rhsCurrent = null;
+            if (rhsIter != null) {
+                rhsCurrent = rhsIter.next();
+                if (rhsCurrent == null) {
+                    rhsIter.close();
+                    rhsIter = null;
+                } else if (isSingleValueOnly) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
+                }
+            }
+            while (rhsIter == null) {
+                current = iter.next();
+                if (current == null) {
+                    close();
+                    return null;
+                }
+                runtimeContext.setCorrelateVariableValue(variableId, current);
+                rhsIter = rhs.iterator();
+                rhsCurrent = rhsIter.next();
+                if ((rhsCurrent == null && (joinType == JoinType.Inner || joinType == JoinType.Semi))
+                        || (rhsCurrent != null && joinType == JoinType.Anti)) {
+                    rhsIter.close();
+                    rhsIter = null;
+                }
+            }
+
+            Tuple joined;
+            try {
+                joined = rhsBitSet == ValueBitSet.EMPTY_VALUE_BITSET ?
+                        current : TupleProjector.mergeProjectedValue(
+                        convertLhs(current), destBitSet,
+                        rhsCurrent, rhsBitSet, rhsFieldPosition, true);
+            } catch (IOException e) {
+                throw new SQLException(e);
+            }
+
+            if ((joinType == JoinType.Semi || rhsCurrent == null) && rhsIter != null) {
+                rhsIter.close();
+                rhsIter = null;
+            }
+
+            return joined;
+        }
+
+        @Override
+        public void explain(List<String> planSteps) { }
+
+        private ProjectedValueTuple convertLhs(Tuple lhs) throws IOException {
+            ProjectedValueTuple tuple;
+            if (lhs instanceof ProjectedValueTuple) {
+                tuple = (ProjectedValueTuple) lhs;
+            } else {
+                ImmutableBytesWritable ptr = getContext().getTempPtr();
+                TupleProjector.decodeProjectedValue(lhs, ptr);
+                lhsBitSet.clear();
+                lhsBitSet.or(ptr);
+                int bitSetLen = lhsBitSet.getEstimatedLength();
+                tuple = new ProjectedValueTuple(lhs, lhs.getValue(0).getTimestamp(),
+                        ptr.get(), ptr.getOffset(), ptr.getLength(), bitSetLen);
+
+            }
+            return tuple;
+        }
     }
 
 }

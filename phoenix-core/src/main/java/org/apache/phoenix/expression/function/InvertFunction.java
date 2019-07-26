@@ -91,46 +91,7 @@ public class InvertFunction extends ScalarFunction {
      */
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
-        return new KeyPart() {
-
-            @Override
-            public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                KeyRange range = childPart.getKeyRange(op, rhs);
-                byte[] lower = range.getLowerRange();
-                if (!range.lowerUnbound()) {
-                    lower = SortOrder.invert(lower, 0, lower.length);
-                }
-                byte[] upper;
-                if (range.isSingleKey()) {
-                    upper = lower;
-                } else {
-                    upper = range.getUpperRange();
-                    if (!range.upperUnbound()) {
-                        upper = SortOrder.invert(upper, 0, upper.length);
-                    }
-                }
-                range = KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
-                if (getColumn().getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
-                }
-                return range;
-            }
-
-            @Override
-            public List<Expression> getExtractNodes() {
-                return childPart.getExtractNodes();
-            }
-
-            @Override
-            public PColumn getColumn() {
-                return childPart.getColumn();
-            }
-
-            @Override
-            public PTable getTable() {
-                return childPart.getTable();
-            }
-        };
+        return new InvertKeyPart(childPart);
     }
 
     @Override
@@ -140,5 +101,52 @@ public class InvertFunction extends ScalarFunction {
 
     private Expression getChildExpression() {
         return children.get(0);
+    }
+
+    private static class InvertKeyPart implements  KeyPart {
+
+        private final KeyPart childPart;
+
+        public InvertKeyPart(KeyPart childPart) {
+            this.childPart = childPart;
+        }
+
+        @Override
+        public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+            KeyRange range = childPart.getKeyRange(op, rhs);
+            byte[] lower = range.getLowerRange();
+            if (!range.lowerUnbound()) {
+                lower = SortOrder.invert(lower, 0, lower.length);
+            }
+            byte[] upper;
+            if (range.isSingleKey()) {
+                upper = lower;
+            } else {
+                upper = range.getUpperRange();
+                if (!range.upperUnbound()) {
+                    upper = SortOrder.invert(upper, 0, upper.length);
+                }
+            }
+            range = KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
+            if (getColumn().getSortOrder() == SortOrder.DESC) {
+                range = range.invert();
+            }
+            return range;
+        }
+
+        @Override
+        public List<Expression> getExtractNodes() {
+            return childPart.getExtractNodes();
+        }
+
+        @Override
+        public PColumn getColumn() {
+            return childPart.getColumn();
+        }
+
+        @Override
+        public PTable getTable() {
+            return childPart.getTable();
+        }
     }
 }

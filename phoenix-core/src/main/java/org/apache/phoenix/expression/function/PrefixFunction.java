@@ -21,7 +21,6 @@ package org.apache.phoenix.expression.function;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
@@ -34,8 +33,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 abstract public class PrefixFunction extends ScalarFunction {
-    public PrefixFunction() {
-    }
+    public PrefixFunction() { }
 
     public PrefixFunction(List<Expression> children) {
         super(children);
@@ -52,26 +50,34 @@ abstract public class PrefixFunction extends ScalarFunction {
 
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
-        return new KeyPart() {
-            private final List<Expression> extractNodes = extractNode() ? Collections.<Expression>singletonList(PrefixFunction.this) : Collections.<Expression>emptyList();
+        return new PrefixKeyPart(childPart);
+    }
 
-            @Override
-            public PColumn getColumn() {
-                return childPart.getColumn();
-            }
+    private class PrefixKeyPart implements KeyPart {
+        private final List<Expression> extractNodes = extractNode() ? Collections.<Expression>singletonList(PrefixFunction.this) : Collections.<Expression>emptyList();
+        private final KeyPart childPart;
 
-            @Override
-            public List<Expression> getExtractNodes() {
-                return extractNodes;
-            }
+        PrefixKeyPart(KeyPart childPart) {
+            this.childPart = childPart;
+        }
 
-            @Override
-            public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                byte[] lowerRange = KeyRange.UNBOUND;
-                byte[] upperRange = KeyRange.UNBOUND;
-                boolean lowerInclusive = true;
-                PDataType type = getColumn().getDataType();
-                switch (op) {
+        @Override
+        public PColumn getColumn() {
+            return childPart.getColumn();
+        }
+
+        @Override
+        public List<Expression> getExtractNodes() {
+            return extractNodes;
+        }
+
+        @Override
+        public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+            byte[] lowerRange = KeyRange.UNBOUND;
+            byte[] upperRange = KeyRange.UNBOUND;
+            boolean lowerInclusive = true;
+            PDataType type = getColumn().getDataType();
+            switch (op) {
                 case EQUAL:
                     lowerRange = evaluateExpression(rhs);
                     upperRange = ByteUtil.nextKey(lowerRange);
@@ -85,44 +91,42 @@ abstract public class PrefixFunction extends ScalarFunction {
                     break;
                 default:
                     return childPart.getKeyRange(op, rhs);
-                }
-                PColumn column = getColumn();
-                Integer length = column.getMaxLength();
-                if (type.isFixedWidth()) {
-                    if (length != null) { // Sanity check - shouldn't be necessary
-                        // Don't pad based on current sort order, but instead use our
-                        // minimum byte as otherwise we'll end up skipping rows in
-                        // the case of descending, since rows with more padding appear
-                        // *after* rows with no padding.
-                        if (lowerRange != KeyRange.UNBOUND) {
-                            lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
-                        }
-                        if (upperRange != KeyRange.UNBOUND) {
-                            upperRange = type.pad(upperRange, length, SortOrder.ASC);
-                        }
-                    }
-                } else if (column.getSortOrder() == SortOrder.DESC && getTable().rowKeyOrderOptimizable()) {
-                    // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
-                    // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
-                    // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+            }
+            PColumn column = getColumn();
+            Integer length = column.getMaxLength();
+            if (type.isFixedWidth()) {
+                if (length != null) { // Sanity check - shouldn't be necessary
+                    // Don't pad based on current sort order, but instead use our
+                    // minimum byte as otherwise we'll end up skipping rows in
+                    // the case of descending, since rows with more padding appear
+                    // *after* rows with no padding.
                     if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
-                        lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
+                        lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
+                    }
+                    if (upperRange != KeyRange.UNBOUND) {
+                        upperRange = type.pad(upperRange, length, SortOrder.ASC);
                     }
                 }
-                KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
-                if (column.getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
+            } else if (column.getSortOrder() == SortOrder.DESC && getTable().rowKeyOrderOptimizable()) {
+                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
+                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                if (lowerRange != KeyRange.UNBOUND) {
+                    lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
+                    lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
                 }
-                return range;
             }
+            KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
+            if (column.getSortOrder() == SortOrder.DESC) {
+                range = range.invert();
+            }
+            return range;
+        }
 
-            @Override
-            public PTable getTable() {
-                return childPart.getTable();
-            }
-        };
+        @Override
+        public PTable getTable() {
+            return childPart.getTable();
+        }
     }
-
 
 }
