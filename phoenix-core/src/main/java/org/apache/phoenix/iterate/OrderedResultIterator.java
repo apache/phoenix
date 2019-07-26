@@ -257,52 +257,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
             final SizeAwareQueue<ResultEntry> queueEntries =
                     PhoenixQueues.newResultEntrySortedQueue(comparator, limit, spoolingEnabled,
                         thresholdBytes);
-            resultIterator = new PeekingResultIterator() {
-                int count = 0;
-
-                @Override
-                public Tuple next() throws SQLException {
-                    ResultEntry entry = queueEntries.poll();
-                    while (entry != null && offset != null && count < offset) {
-                        count++;
-                        if (entry.getResult() == null) { return null; }
-                        entry = queueEntries.poll();
-                    }
-                    if (entry == null || (limit != null && count++ > limit)) {
-                        resultIterator.close();
-                        resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
-                        return null;
-                    }
-                    return entry.getResult();
-                }
-                
-                @Override
-                public Tuple peek() throws SQLException {
-                    ResultEntry entry = queueEntries.peek();
-                    while (entry != null && offset != null && count < offset) {
-                        entry = queueEntries.poll();
-                        count++;
-                        if (entry == null) { return null; }
-                    }
-                    if (limit != null && count > limit) { return null; }
-                    entry = queueEntries.peek();
-                    if (entry == null) { return null; }
-                    return entry.getResult();
-                }
-
-                @Override
-                public void explain(List<String> planSteps) {
-                }
-                
-                @Override
-                public void close() throws SQLException {
-                    try {
-                      queueEntries.close();
-                    } catch (IOException e) {
-                      throw new SQLException(e);
-                    }
-                }
-            };
+            resultIterator = new RecordPeekingResultIterator(queueEntries);
             for (Tuple result = delegate.next(); result != null; result = delegate.next()) {
                 int pos = 0;
                 ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[numSortKeys];
@@ -355,5 +310,58 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 + ", estimatedByteSize=" + estimatedByteSize
                 + ", resultIterator=" + resultIterator + ", byteSize="
                 + byteSize + "]";
+    }
+
+    private class RecordPeekingResultIterator implements PeekingResultIterator {
+        int count = 0;
+
+        private SizeAwareQueue<ResultEntry> queueEntries;
+
+        RecordPeekingResultIterator(SizeAwareQueue<ResultEntry> queueEntries){
+            this.queueEntries = queueEntries;
+        }
+
+        @Override
+        public Tuple next() throws SQLException {
+            ResultEntry entry = queueEntries.poll();
+            while (entry != null && offset != null && count < offset) {
+                count++;
+                if (entry.getResult() == null) { return null; }
+                entry = queueEntries.poll();
+            }
+            if (entry == null || (limit != null && count++ > limit)) {
+                resultIterator.close();
+                resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
+                return null;
+            }
+            return entry.getResult();
+        }
+
+        @Override
+        public Tuple peek() throws SQLException {
+            ResultEntry entry = queueEntries.peek();
+            while (entry != null && offset != null && count < offset) {
+                entry = queueEntries.poll();
+                count++;
+                if (entry == null) { return null; }
+            }
+            if (limit != null && count > limit) { return null; }
+            entry = queueEntries.peek();
+            if (entry == null) { return null; }
+            return entry.getResult();
+        }
+
+        @Override
+        public void explain(List<String> planSteps) {
+        }
+
+        @Override
+        public void close() throws SQLException {
+            try {
+                queueEntries.close();
+            } catch (IOException e) {
+                throw new SQLException(e);
+            }
+        }
     }
 }

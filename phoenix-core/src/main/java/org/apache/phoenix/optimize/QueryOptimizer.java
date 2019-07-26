@@ -590,61 +590,7 @@ public class QueryOptimizer {
             final PhoenixConnection connection, final ColumnResolver resolver,
             final SelectStatement select, final Map<TableRef, TableRef> replacement) throws SQLException {
         TableNode from = select.getFrom();
-        TableNode newFrom = from.accept(new TableNodeVisitor<TableNode>() {
-            private TableRef resolveTable(String alias, TableName name) throws SQLException {
-                if (alias != null)
-                    return resolver.resolveTable(null, alias);
-
-                return resolver.resolveTable(name.getSchemaName(), name.getTableName());
-            }
-
-            private TableName getReplacedTableName(TableRef tableRef) {
-                String schemaName = tableRef.getTable().getSchemaName().getString();
-                return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
-            }
-
-            @Override
-            public TableNode visit(BindTableNode boundTableNode) throws SQLException {
-                TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return boundTableNode;
-
-                String alias = boundTableNode.getAlias();
-                return FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
-            }
-
-            @Override
-            public TableNode visit(JoinTableNode joinNode) throws SQLException {
-                TableNode lhs = joinNode.getLHS();
-                TableNode rhs = joinNode.getRHS();
-                TableNode lhsReplace = lhs.accept(this);
-                TableNode rhsReplace = rhs.accept(this);
-                if (lhs == lhsReplace && rhs == rhsReplace)
-                    return joinNode;
-
-                return FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
-            }
-
-            @Override
-            public TableNode visit(NamedTableNode namedTableNode)
-                    throws SQLException {
-                TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return namedTableNode;
-
-                String alias = namedTableNode.getAlias();
-                return FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
-            }
-
-            @Override
-            public TableNode visit(DerivedTableNode subselectNode)
-                    throws SQLException {
-                return subselectNode;
-            }
-        });
-
+        TableNode newFrom = from.accept(new QueryOptimizerTableNode(resolver, replacement));
         if (from == newFrom) {
             return select;
         }
@@ -656,5 +602,67 @@ public class QueryOptimizer {
         }
 
         return indexSelect;
+    }
+    private static class QueryOptimizerTableNode implements TableNodeVisitor<TableNode> {
+        private final ColumnResolver resolver;
+        private final Map<TableRef, TableRef> replacement;
+
+        QueryOptimizerTableNode (ColumnResolver resolver, final Map<TableRef, TableRef> replacement){
+            this.resolver = resolver;
+            this.replacement = replacement;
+        }
+
+        private TableRef resolveTable(String alias, TableName name) throws SQLException {
+            if (alias != null)
+                return resolver.resolveTable(null, alias);
+
+            return resolver.resolveTable(name.getSchemaName(), name.getTableName());
+        }
+
+        private TableName getReplacedTableName(TableRef tableRef) {
+            String schemaName = tableRef.getTable().getSchemaName().getString();
+            return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
+        }
+
+        @Override
+        public TableNode visit(BindTableNode boundTableNode) throws SQLException {
+            TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
+            TableRef replaceRef = replacement.get(tableRef);
+            if (replaceRef == null)
+                return boundTableNode;
+
+            String alias = boundTableNode.getAlias();
+            return FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
+        }
+
+        @Override
+        public TableNode visit(JoinTableNode joinNode) throws SQLException {
+            TableNode lhs = joinNode.getLHS();
+            TableNode rhs = joinNode.getRHS();
+            TableNode lhsReplace = lhs.accept(this);
+            TableNode rhsReplace = rhs.accept(this);
+            if (lhs == lhsReplace && rhs == rhsReplace)
+                return joinNode;
+
+            return FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
+        }
+
+        @Override
+        public TableNode visit(NamedTableNode namedTableNode)
+                    throws SQLException {
+            TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
+            TableRef replaceRef = replacement.get(tableRef);
+            if (replaceRef == null)
+                return namedTableNode;
+
+            String alias = namedTableNode.getAlias();
+            return FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
+        }
+
+        @Override
+        public TableNode visit(DerivedTableNode subselectNode)
+                    throws SQLException {
+            return subselectNode;
+        }
     }
 }
