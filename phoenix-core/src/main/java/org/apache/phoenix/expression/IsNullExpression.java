@@ -128,4 +128,20 @@ public class IsNullExpression extends BaseSingleExpression {
     public boolean requiresFinalEvaluation() {
         return super.requiresFinalEvaluation() || !this.isNegate();
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!super.equals(o)) {
+            return false;
+        }
+        IsNullExpression that = (IsNullExpression) o;
+        return isNegate == that.isNegate;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = super.hashCode();
+        result = 31 * result + (isNegate ? 1 : 0);
+        return result;
+    }
 }
