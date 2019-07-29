@@ -33,4 +33,13 @@
     version is X.X.X-SNAPSHOT"
     </description>
   </property>
+  <property>
+    <!--
+    We have some hardcoded viewIndex ids in the IT tests which assumes viewIndexId is of type Long.
+    However the default viewIndexId type is set to "short" by default until we upgrade all clients to support
+    long viewIndex ids.
+    -->
+    <name>phoenix.index.longViewIndex.enabled</name>
+    <value>true</value>
+  </property>
 </configuration>
