@@ -98,6 +98,7 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
@@ -1440,6 +1441,18 @@ public class MetaDataClient {
     }
 
     /**
+     * Supprort long viewIndexId only if client has explicitly set
+     * the QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB connection property to 'true'.
+     * @return
+     */
+    private PDataType getViewIndexDataType() throws SQLException {
+        boolean supportsLongViewIndexId = connection.getQueryServices().getProps().getBoolean(
+                                QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB,
+                                QueryServicesOptions.DEFAULT_LONG_VIEW_INDEX_ENABLED);
+        return supportsLongViewIndexId ? MetaDataUtil.getViewIndexIdDataType() : MetaDataUtil.getLegacyViewIndexIdDataType();
+    }
+
+    /**
      * Create an index table by morphing the CreateIndexStatement into a CreateTableStatement and calling
      * MetaDataClient.createTable. In doing so, we perform the following translations:
      * 1) Change the type of any columns being indexed to types that support null if the column is nullable.
@@ -1537,7 +1550,7 @@ public class MetaDataClient {
              */
             if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                 allocateIndexId = true;
-                PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
+                PDataType dataType = getViewIndexDataType();
                 ColumnName colName = ColumnName.caseSensitiveColumnName(MetaDataUtil.getViewIndexIdColumnName());
                 allPkColumns.add(new ColumnDefInPkConstraint(colName, SortOrder.getDefault(), false));
                 columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null, false));

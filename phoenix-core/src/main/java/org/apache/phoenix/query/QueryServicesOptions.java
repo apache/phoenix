@@ -393,6 +393,7 @@ public class QueryServicesOptions {
 
     public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
 
+    public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

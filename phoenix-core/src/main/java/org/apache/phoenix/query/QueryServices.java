@@ -352,6 +352,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB = "phoenix.global.index.row.repair.count.ms";
     // Enable the IndexRegionObserver Coprocessor
     public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+    // Enable support for long view index(default is false)
+    public static final String LONG_VIEW_INDEX_ENABLED_ATTRIB = "phoenix.index.longViewIndex.enabled";
 
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
