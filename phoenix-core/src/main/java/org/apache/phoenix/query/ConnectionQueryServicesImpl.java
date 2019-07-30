@@ -435,7 +435,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 this.queryDisruptor = new QueryLoggerDisruptor(this.config);
             } catch (SQLException e) {
-                LOGGER.warn("Unable to initiate qeuery logging service !!");
+                LOGGER.warn("Unable to initiate query logging service !!");
                 e.printStackTrace();
             }
         }
