@@ -17,16 +17,22 @@
  */
 package org.apache.phoenix.spark
 
+import java.sql.{Date, Timestamp}
+import java.text.Format
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.phoenix.util.StringUtil.escapeStringConstant
-import org.apache.phoenix.util.SchemaUtil
+import org.apache.phoenix.util.{DateUtil, SchemaUtil}
 
 case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Boolean = false)(@transient val sqlContext: SQLContext)
-    extends BaseRelation with PrunedFilteredScan {
+  extends BaseRelation with PrunedFilteredScan {
+
+  val dateformat:Format = DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT)
+  val timeformat:Format = DateUtil.DEFAULT_TIMESTAMP_FORMATTER
 
   /*
     This is the buildScan() implementing Spark's PrunedFilteredScan.
@@ -105,6 +111,7 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
 
   // Helper function to escape string values in SQL queries
   private def compileValue(value: Any): Any = value match {
+
     case stringValue: String => s"'${escapeStringConstant(stringValue)}'"
 
     // Borrowed from 'elasticsearch-hadoop', support these internal UTF types across Spark versions
@@ -112,12 +119,26 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
     case utf if (isClass(utf, "org.apache.spark.sql.types.UTF8String")) => s"'${escapeStringConstant(utf.toString)}'"
     // Spark 1.5
     case utf if (isClass(utf, "org.apache.spark.unsafe.types.UTF8String")) => s"'${escapeStringConstant(utf.toString)}'"
+    case timestampValue: Timestamp => getTimestampString(timestampValue)
 
+    case dateValue: Date => getDateString(dateValue)
+
+    // Wrapping value in to_timestamp if
     // Pass through anything else
     case _ => value
   }
 
   private def isClass(obj: Any, className: String) = {
     className.equals(obj.getClass().getName())
+  }
+
+  private def getTimestampString(timestampValue: Timestamp): String = {
+    "TO_TIMESTAMP('%s', '%s', '%s')".format(timeformat.format(timestampValue),
+      DateUtil.DEFAULT_TIME_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
+  }
+
+  private def getDateString(dateValue: Date): String = {
+    "TO_DATE('%s', '%s', '%s')".format(dateformat.format(dateValue),
+      DateUtil.DEFAULT_DATE_FORMAT, DateUtil.DEFAULT_TIME_ZONE_ID)
   }
 }
