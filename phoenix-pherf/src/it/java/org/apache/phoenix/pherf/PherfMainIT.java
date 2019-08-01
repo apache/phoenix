@@ -25,6 +25,7 @@ import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import java.util.concurrent.Future;
 
 public class PherfMainIT extends ResultBaseTestIT {
+
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
