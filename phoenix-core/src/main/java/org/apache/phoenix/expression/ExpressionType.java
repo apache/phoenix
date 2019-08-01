@@ -191,6 +191,7 @@ public enum ExpressionType {
     SinFunction(SinFunction.class),
     CosFunction(CosFunction.class),
     TanFunction(TanFunction.class),
+    TrimbFunction(TrimbFunction.class),
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
