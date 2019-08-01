@@ -44,7 +44,6 @@ import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.jcabi.jdbc.JdbcSession;
@@ -217,8 +216,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         assertExpectedNumberOfRecordsWritten(scenario);
     }
     
-    private void assertExpectedNumberOfRecordsWritten(Scenario scenario) throws Exception,
-            SQLException {
+    private void assertExpectedNumberOfRecordsWritten(Scenario scenario) throws Exception {
         Connection connection = util.getConnection(scenario.getTenantId());
         String sql = "select count(*) from " + scenario.getTableName();
         Integer count = new JdbcSession(connection).sql(sql).select(new Outcome<Integer>() {
@@ -230,7 +228,7 @@ public class DataIngestIT extends ResultBaseTestIT {
                 return null;
             }
         });
-        assertNotNull("Could not retrieve count. " + count);
+        assertNotNull("Could not retrieve count. ", count);
         assertEquals("Expected 100 rows to have been inserted",
                 scenario.getRowCount(), count.intValue());
     }

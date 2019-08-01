@@ -20,9 +20,18 @@ package org.apache.phoenix.pherf.workload;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
-import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.result.*;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.ExecutionType;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.result.DataModelResult;
+import org.apache.phoenix.pherf.result.QueryResult;
+import org.apache.phoenix.pherf.result.QuerySetResult;
+import org.apache.phoenix.pherf.result.ResultManager;
+import org.apache.phoenix.pherf.result.ScenarioResult;
+import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
@@ -90,6 +99,7 @@ public class QueryExecutor implements Workload {
         }
         return callable;
     }
+
 
     /**
      * Export all queries results to CSV

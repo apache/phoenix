@@ -177,6 +177,7 @@ public class WriteWorkload implements Workload {
         };
     }
 
+
     private synchronized void exec(DataLoadTimeSummary dataLoadTimeSummary,
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
         LOGGER.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
@@ -263,11 +264,8 @@ public class WriteWorkload implements Workload {
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
                     long logStartTime = System.currentTimeMillis();
-                    long
-                            maxDuration =
-                            (WriteWorkload.this.writeParams == null) ?
-                                    Long.MAX_VALUE :
-                                    WriteWorkload.this.writeParams.getExecutionDurationInMs();
+                    long maxDuration = WriteWorkload.this.writeParams == null ? Long.MAX_VALUE :
+                            WriteWorkload.this.writeParams.getExecutionDurationInMs();
 
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
