@@ -129,66 +129,7 @@ public class TraceQueryPlan implements QueryPlan {
         if (conn.getTraceScope() == null && !traceStatement.isTraceOn()) {
             return ResultIterator.EMPTY_ITERATOR;
         }
-        return new ResultIterator() {
-
-            @Override
-            public void close() throws SQLException {
-            }
-
-            @Override
-            public Tuple next() throws SQLException {
-                if(!first) return null;
-                TraceScope traceScope = conn.getTraceScope();
-                if (traceStatement.isTraceOn()) {
-                    conn.setSampler(Tracing.getConfiguredSampler(traceStatement));
-                    if (conn.getSampler() == Sampler.NEVER) {
-                        closeTraceScope(conn);
-                    }
-                    if (traceScope == null && !conn.getSampler().equals(Sampler.NEVER)) {
-                        traceScope = Tracing.startNewSpan(conn, "Enabling trace");
-                        if (traceScope.getSpan() != null) {
-                            conn.setTraceScope(traceScope);
-                        } else {
-                            closeTraceScope(conn);
-                        }
-                    }
-                } else {
-                    closeTraceScope(conn);
-                    conn.setSampler(Sampler.NEVER);
-                }
-                if (traceScope == null || traceScope.getSpan() == null) return null;
-                first = false;
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                ParseNodeFactory factory = new ParseNodeFactory();
-                LiteralParseNode literal =
-                        factory.literal(traceScope.getSpan().getTraceId());
-                LiteralExpression expression =
-                        LiteralExpression.newConstant(literal.getValue(), PLong.INSTANCE,
-                            Determinism.ALWAYS);
-                expression.evaluate(null, ptr);
-                byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                Cell cell =
-                        PhoenixKeyValueUtil
-                                .newKeyValue(rowKey, HConstants.EMPTY_BYTE_ARRAY,
-                                    HConstants.EMPTY_BYTE_ARRAY,
-                                    EnvironmentEdgeManager.currentTimeMillis(),
-                                    HConstants.EMPTY_BYTE_ARRAY);
-                List<Cell> cells = new ArrayList<Cell>(1);
-                cells.add(cell);
-                return new ResultTuple(Result.create(cells));
-            }
-
-            private void closeTraceScope(final PhoenixConnection conn) {
-                if(conn.getTraceScope()!=null) {
-                    conn.getTraceScope().close();
-                    conn.setTraceScope(null);
-                }
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-        };
+        return new TraceQueryResultIterator(conn);
     }
 
     @Override
@@ -294,5 +235,72 @@ public class TraceQueryPlan implements QueryPlan {
     @Override
     public List<OrderBy> getOutputOrderBys() {
         return Collections.<OrderBy> emptyList();
+    }
+
+    private class TraceQueryResultIterator implements ResultIterator {
+
+        private final PhoenixConnection conn;
+
+        public TraceQueryResultIterator(PhoenixConnection conn) {
+            this.conn = conn;
+        }
+
+        @Override
+        public void close() throws SQLException {
+        }
+
+        @Override
+        public Tuple next() throws SQLException {
+            if(!first) return null;
+            TraceScope traceScope = conn.getTraceScope();
+            if (traceStatement.isTraceOn()) {
+                conn.setSampler(Tracing.getConfiguredSampler(traceStatement));
+                if (conn.getSampler() == Sampler.NEVER) {
+                    closeTraceScope(conn);
+                }
+                if (traceScope == null && !conn.getSampler().equals(Sampler.NEVER)) {
+                    traceScope = Tracing.startNewSpan(conn, "Enabling trace");
+                    if (traceScope.getSpan() != null) {
+                        conn.setTraceScope(traceScope);
+                    } else {
+                        closeTraceScope(conn);
+                    }
+                }
+            } else {
+                closeTraceScope(conn);
+                conn.setSampler(Sampler.NEVER);
+            }
+            if (traceScope == null || traceScope.getSpan() == null) return null;
+            first = false;
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            ParseNodeFactory factory = new ParseNodeFactory();
+            LiteralParseNode literal =
+                    factory.literal(traceScope.getSpan().getTraceId());
+            LiteralExpression expression =
+                    LiteralExpression.newConstant(literal.getValue(), PLong.INSTANCE,
+                        Determinism.ALWAYS);
+            expression.evaluate(null, ptr);
+            byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
+            Cell cell =
+                    PhoenixKeyValueUtil
+                            .newKeyValue(rowKey, HConstants.EMPTY_BYTE_ARRAY,
+                                HConstants.EMPTY_BYTE_ARRAY,
+                                EnvironmentEdgeManager.currentTimeMillis(),
+                                HConstants.EMPTY_BYTE_ARRAY);
+            List<Cell> cells = new ArrayList<Cell>(1);
+            cells.add(cell);
+            return new ResultTuple(Result.create(cells));
+        }
+
+        private void closeTraceScope(final PhoenixConnection conn) {
+            if(conn.getTraceScope()!=null) {
+                conn.getTraceScope().close();
+                conn.setTraceScope(null);
+            }
+        }
+
+        @Override
+        public void explain(List<String> planSteps) {
+        }
     }
 }
