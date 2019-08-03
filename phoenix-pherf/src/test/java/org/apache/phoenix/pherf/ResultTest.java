@@ -163,9 +163,7 @@ public class ResultTest extends ResultBaseTest {
         dataModelResult.setZookeeper("mytestzk");
         ScenarioResult scenarioResult = new ScenarioResult();
         scenarioResult.setTableName("MY_TABLE_NAME");
-
-        // Scenario Name left blank on purpose to test that null values get generated correctly.
-        //scenarioResult.setName("MY_TEST_SCENARIO");
+        scenarioResult.setName("MY_TEST_SCENARIO");
 
         dataModelResult.getScenarioResult().add(scenarioResult);
         scenarioResult.setRowCount(999);
