@@ -308,7 +308,7 @@ public class HttpParamImpersonationQueryServerIT {
         }
     }
 
-    @Test
+    //@Test disabled until PHOENIX-5424 is fixed
     public void testSuccessfulImpersonation() throws Exception {
         final Entry<String,File> user1 = getUser(1);
         final Entry<String,File> user2 = getUser(2);
@@ -342,7 +342,7 @@ public class HttpParamImpersonationQueryServerIT {
         });
     }
 
-    @Test
+    //@Test disabled until PHOENIX-5424 is fixed
     public void testDisallowedImpersonation() throws Exception {
         final Entry<String,File> user2 = getUser(2);
         // Build the JDBC URL by hand with the doAs

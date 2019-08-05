@@ -285,7 +285,7 @@ public class SecureQueryServerIT {
         }
     }
 
-    @Test
+    //@Test disabled until PHOENIX-5423 is fixed
     public void testBasicReadWrite() throws Exception {
         final Entry<String,File> user1 = getUser(1);
         UserGroupInformation user1Ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(user1.getKey(), user1.getValue().getAbsolutePath());
