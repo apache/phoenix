@@ -54,7 +54,9 @@ abstract public class PrefixFunction extends ScalarFunction {
     }
 
     private class PrefixKeyPart implements KeyPart {
-        private final List<Expression> extractNodes = extractNode() ? Collections.<Expression>singletonList(PrefixFunction.this) : Collections.<Expression>emptyList();
+        private final List<Expression> extractNodes = extractNode() ?
+                Collections.<Expression>singletonList(PrefixFunction.this)
+                : Collections.<Expression>emptyList();
         private final KeyPart childPart;
 
         PrefixKeyPart(KeyPart childPart) {

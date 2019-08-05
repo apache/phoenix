@@ -103,7 +103,7 @@ public class InvertFunction extends ScalarFunction {
         return children.get(0);
     }
 
-    private static class InvertKeyPart implements  KeyPart {
+    private static class InvertKeyPart implements KeyPart {
 
         private final KeyPart childPart;
 

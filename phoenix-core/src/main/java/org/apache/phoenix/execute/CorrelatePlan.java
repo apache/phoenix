@@ -105,7 +105,6 @@ public class CorrelatePlan extends DelegateQueryPlan {
     @Override
     public ResultIterator iterator(final ParallelScanGrouper scanGrouper, final Scan scan)
             throws SQLException {
-
         return new CorrelateResultIterator(scanGrouper, scan) ;
     }
 
@@ -149,7 +148,8 @@ public class CorrelatePlan extends DelegateQueryPlan {
         private Tuple current = null;
         private boolean closed = false;
 
-        private CorrelateResultIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        private CorrelateResultIterator(ParallelScanGrouper scanGrouper, Scan scan)
+                throws SQLException {
             iter = delegate.iterator(scanGrouper, scan);
         }
 
@@ -176,7 +176,8 @@ public class CorrelatePlan extends DelegateQueryPlan {
                     rhsIter.close();
                     rhsIter = null;
                 } else if (isSingleValueOnly) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS)
+                            .build().buildException();
                 }
             }
             while (rhsIter == null) {
