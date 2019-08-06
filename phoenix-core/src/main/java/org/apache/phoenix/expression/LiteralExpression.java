@@ -338,6 +338,17 @@ public class LiteralExpression extends BaseTerminalExpression {
 
     @Override
     public Integer getMaxLength() {
+        // For literals representing arrays of CHAR or BINARY, the byte size is null and the max
+        // length of the expression is also null, so we must get the max length of the
+        // actual underlying array
+        if (maxLength == null && getDataType() != null && getDataType().isArrayType() &&
+                PDataType.arrayBaseType(getDataType()).getByteSize() == null) {
+            Object value = getValue();
+            if (value instanceof PhoenixArray) {
+                // Return the max length of the underlying PhoenixArray data
+                return ((PhoenixArray) value).getMaxLength();
+            }
+        }
         return maxLength;
     }
 
