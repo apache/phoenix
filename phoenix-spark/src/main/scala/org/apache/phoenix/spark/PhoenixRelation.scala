@@ -84,9 +84,9 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
 
       f match {
         // Spark 1.3.1+ supported filters
-        case And(leftFilter, rightFilter) => filter.append(buildFilter(Array(leftFilter, rightFilter)))
-        case Or(leftFilter, rightFilter) => filter.append(buildFilter(Array(leftFilter)) + " OR " + buildFilter(Array(rightFilter)))
-        case Not(aFilter) => filter.append(" NOT " + buildFilter(Array(aFilter)))
+        case And(leftFilter, rightFilter) => filter.append("(" + buildFilter(Array(leftFilter, rightFilter)) + ")")
+        case Or(leftFilter, rightFilter) => filter.append("(" + buildFilter(Array(leftFilter)) + " OR " + buildFilter(Array(rightFilter)) + ")")
+        case Not(aFilter) => filter.append(" NOT " + "(" + buildFilter(Array(aFilter)) + ")")
         case EqualTo(attr, value) => filter.append(s" ${escapeKey(attr)} = ${compileValue(value)}")
         case GreaterThan(attr, value) => filter.append(s" ${escapeKey(attr)} > ${compileValue(value)}")
         case GreaterThanOrEqual(attr, value) => filter.append(s" ${escapeKey(attr)} >= ${compileValue(value)}")
