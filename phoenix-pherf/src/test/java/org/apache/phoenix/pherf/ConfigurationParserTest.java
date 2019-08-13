@@ -199,6 +199,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
             data.setDataMappingColumns(columnList);
 
             Scenario scenario = new Scenario();
+            scenario.setName("Index_Scenario");
             scenario.setTenantId("00DXXXXXX");
         	List<Ddl> preScenarioDdls = new ArrayList<Ddl>();
         	preScenarioDdls.add(new Ddl("CREATE INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER) ASYNC", "FHAIDX_NEWVAL_NUMBER"));
@@ -219,6 +220,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
             querySet.setNumberOfExecutions(20);
             query.setStatement("select * from FHA");
             Scenario scenario2 = new Scenario();
+            scenario2.setName("RowCount_Scenario");
             scenario2.setPhoenixProperties(new HashMap<String, String>());
             scenario2.setDataOverride(new DataOverride());
             scenario2.setTableName("tableName2");
