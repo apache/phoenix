@@ -111,7 +111,7 @@ def setPath():
     phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
 
     global phoenix_client_jar
-    phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+    phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_jar_path)
     if phoenix_client_jar == "":
         phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
     if phoenix_client_jar == "":
