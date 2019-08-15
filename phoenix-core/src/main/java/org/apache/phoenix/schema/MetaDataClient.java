@@ -3680,7 +3680,7 @@ public class MetaDataClient {
             connection.setAutoCommit(false);
 
             List<ColumnDef> columnDefs;
-            if (table.isAppendOnlySchema() || ifNotExists) {
+            if ((table.isAppendOnlySchema() || ifNotExists) && origColumnDefs != null) {
                 // only make the rpc if we are adding new columns
                 columnDefs = Lists.newArrayList();
                 for (ColumnDef columnDef : origColumnDefs) {

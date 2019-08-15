@@ -39,6 +39,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -354,4 +355,27 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testAlterTableOptions() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+             Statement stmt = conn.createStatement()) {
+            String tableName = generateUniqueName();
+            // create a table
+            stmt.execute("CREATE TABLE " + tableName +
+              " (ID INTEGER PRIMARY KEY, COL INTEGER) APPEND_ONLY_SCHEMA = true,"
+              + " UPDATE_CACHE_FREQUENCY = 1");
+
+            // alter the table to set table options
+            stmt.execute("ALTER TABLE " + tableName + " SET STORE_NULLS = true");
+
+            try (ResultSet rs = stmt.executeQuery("SELECT STORE_NULLS FROM \"SYSTEM\".\"CATALOG\""
+              + " WHERE TABLE_NAME = '" + tableName + "' AND STORE_NULLS IS NOT NULL"
+              + " AND TENANT_ID IS NULL AND TABLE_SCHEM IS NULL")) {
+                assertTrue(rs.next());
+                assertTrue(rs.getBoolean(1));
+                assertFalse(rs.next());
+            }
+        }
+    }
 }
