@@ -2060,9 +2060,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // When adding a column to a view, base physical table should only be modified when new column families are being added.
                 modifyHTable = canViewsAddNewCF && !existingColumnFamiliesForBaseTable(table.getPhysicalName()).containsAll(colFamiliesForPColumnsToBeAdded);
             }
-            if (modifyHTable) {
-                sendHBaseMetaData(tableDescriptors, pollingNeeded);
-            }
 
             // Special case for call during drop table to ensure that the empty column family exists.
             // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
@@ -2126,6 +2123,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
+            }
+            else if (result.getMutationCode() == MutationCode.UNALLOWED_TABLE_MUTATION) {
+                modifyHTable = false;
+            }
+
+            if (modifyHTable) {
+                sendHBaseMetaData(tableDescriptors, pollingNeeded);
             }
         } finally {
             // If we weren't successful with our metadata update

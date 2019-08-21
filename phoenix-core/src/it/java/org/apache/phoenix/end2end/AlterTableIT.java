@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -852,6 +854,37 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         conn1.close();
     }
 
+    @Test
+    public void testAlterTableOnGlobalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            String tableName = generateUniqueName();
+            String globalIndexTableName = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            stmt.execute("DROP TABLE " + tableName);
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
+            conn.createStatement().execute("CREATE TABLE " + tableName +
+                " (ID INTEGER PRIMARY KEY, COL1 VARCHAR(10), COL2 BOOLEAN)");
+
+            conn.createStatement().execute("CREATE INDEX " + globalIndexTableName + " on " + tableName + " (COL2)");
+            TableDescriptor originalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
+            int expectedErrorCode = 0;
+            try {
+                conn.createStatement().execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
+                conn.commit();
+            } catch (SQLException e) {
+                expectedErrorCode = e.getErrorCode();
+            }
+
+            assertEquals(expectedErrorCode, CANNOT_MUTATE_TABLE.getErrorCode());
+            TableDescriptor finalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
+            assertTrue(finalDesc.equals(originalDesc));
+        }
+    }
 
     @Test
     public void testAlterStoreNulls() throws SQLException {
