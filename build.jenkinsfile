@@ -1,0 +1,25 @@
+#!/usr/bin/groovy
+@Library('intersetLib') _
+
+properties([
+    parameters([
+        string(defaultValue: params.BRANCH_NAME, description: 'Branch of git repo to get jenkinsfile from', name: 'BRANCH_NAME'),
+    ])
+])
+
+node("ops") {
+    stage('Cloning Repo') {
+        git branch: params.BRANCH_NAME, credentialsId: 'interset-readonly', url: 'git@github.com:Filetrek/phoenix.git'
+    }
+
+    stage('Building Phoenix Spark Jar') {
+       withCredentials([file(credentialsId: 'm2_settings.xml_password', variable: 'M2_SETTING')]) {
+            sh "mkdir -p ~/.m2 && cp -f $M2_SETTING ~/.m2/settings.xml"
+            sh "mvn clean package -pl phoenix-core -pl phoenix-spark -DskipTests"
+       }
+    }
+
+    stage('Archiving Artifacts') {
+       archiveArtifacts 'phoenix-spark/target/phoenix-spark-4.14-HBase-1.4-emr-5.23.0.jar'
+    }
+}
