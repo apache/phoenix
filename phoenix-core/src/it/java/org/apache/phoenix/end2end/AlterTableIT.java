@@ -856,21 +856,21 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAlterTableOnGlobalIndex() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            Statement stmt = conn.createStatement();
             String tableName = generateUniqueName();
             String globalIndexTableName = generateUniqueName();
 
-            conn.createStatement().execute("CREATE TABLE " + tableName +
+            stmt.execute("CREATE TABLE " + tableName +
                 " (ID INTEGER PRIMARY KEY, COL1 VARCHAR(10), COL2 BOOLEAN)");
 
-            conn.createStatement().execute("CREATE INDEX " + globalIndexTableName + " on " + tableName + " (COL2)");
+            stmt.execute("CREATE INDEX " + globalIndexTableName + " on " + tableName + " (COL2)");
             TableDescriptor originalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
             int expectedErrorCode = 0;
             try {
-                conn.createStatement().execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
+                stmt.execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
                 conn.commit();
                 fail("The alter table did not fail as expected");
             } catch (SQLException e) {
@@ -880,11 +880,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             TableDescriptor finalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
             assertTrue(finalDesc.equals(originalDesc));
 
-            // remove the table
+            // drop the table
             stmt.execute("DROP TABLE " + tableName);
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
-
         }
     }
 
