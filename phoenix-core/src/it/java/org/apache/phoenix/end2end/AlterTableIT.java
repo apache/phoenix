@@ -858,15 +858,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     public void testAlterTableOnGlobalIndex() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             Statement stmt = conn.createStatement();
             String tableName = generateUniqueName();
             String globalIndexTableName = generateUniqueName();
 
-            stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-            stmt.execute("DROP TABLE " + tableName);
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
             conn.createStatement().execute("CREATE TABLE " + tableName +
                 " (ID INTEGER PRIMARY KEY, COL1 VARCHAR(10), COL2 BOOLEAN)");
 
@@ -883,6 +879,12 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
             TableDescriptor finalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
             assertTrue(finalDesc.equals(originalDesc));
+
+            // remove the table
+            stmt.execute("DROP TABLE " + tableName);
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
+
         }
     }
 
