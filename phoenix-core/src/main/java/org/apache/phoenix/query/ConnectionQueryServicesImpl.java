@@ -2124,11 +2124,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
-            else if (result.getMutationCode() == MutationCode.UNALLOWED_TABLE_MUTATION) {
-                modifyHTable = false;
-            }
 
-            if (modifyHTable) {
+            if (modifyHTable && result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION) {
                 sendHBaseMetaData(tableDescriptors, pollingNeeded);
             }
         } finally {

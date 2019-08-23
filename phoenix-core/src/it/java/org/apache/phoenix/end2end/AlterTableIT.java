@@ -876,11 +876,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             try {
                 conn.createStatement().execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
                 conn.commit();
+                fail("The alter table did not fail as expected");
             } catch (SQLException e) {
-                expectedErrorCode = e.getErrorCode();
+                assertEquals(e.getErrorCode(), CANNOT_MUTATE_TABLE.getErrorCode());
             }
 
-            assertEquals(expectedErrorCode, CANNOT_MUTATE_TABLE.getErrorCode());
             TableDescriptor finalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
             assertTrue(finalDesc.equals(originalDesc));
         }
