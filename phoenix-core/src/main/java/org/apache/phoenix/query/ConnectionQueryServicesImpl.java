@@ -2067,6 +2067,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
             // Also, could be used to update property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
+                if (modifyHTable) {
+                    sendHBaseMetaData(tableDescriptors, pollingNeeded);
+                }
                 return new MetaDataMutationResult(MutationCode.NO_OP, EnvironmentEdgeManager.currentTimeMillis(), table);
             }
             byte[][] rowKeyMetaData = new byte[3][];
