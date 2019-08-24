@@ -2060,9 +2060,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // When adding a column to a view, base physical table should only be modified when new column families are being added.
                 modifyHTable = canViewsAddNewCF && !existingColumnFamiliesForBaseTable(table.getPhysicalName()).containsAll(colFamiliesForPColumnsToBeAdded);
             }
-            if (modifyHTable) {
-                sendHBaseMetaData(tableDescriptors, pollingNeeded);
-            }
 
             // Special case for call during drop table to ensure that the empty column family exists.
             // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
@@ -2070,6 +2067,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
             // Also, could be used to update property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
+                if (modifyHTable) {
+                    sendHBaseMetaData(tableDescriptors, pollingNeeded);
+                }
                 return new MetaDataMutationResult(MutationCode.NO_OP, EnvironmentEdgeManager.currentTimeMillis(), table);
             }
             byte[][] rowKeyMetaData = new byte[3][];
@@ -2126,6 +2126,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
+            }
+
+            if (modifyHTable && result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION) {
+                sendHBaseMetaData(tableDescriptors, pollingNeeded);
             }
         } finally {
             // If we weren't successful with our metadata update
