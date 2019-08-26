@@ -580,6 +580,40 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testRowsCreatedViaUpsertOnDuplicateKeyShouldNotBeReturnedInQueryIfNotMatched() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 smallint)";
+        conn.createStatement().execute(ddl);
+        createIndex(conn, tableName);
+        // The data has to be specifically starting with null for the first counter to fail the test. If you reverse the values, the test passes.
+        String dml1 = "UPSERT INTO " + tableName + " VALUES('a',NULL,2) ON DUPLICATE KEY UPDATE " +
+                "counter1 = CASE WHEN (counter1 IS NULL) THEN NULL ELSE counter1 END, " +
+                "counter2 = CASE WHEN (counter1 IS NULL) THEN 2 ELSE counter2 END";
+        conn.createStatement().execute(dml1);
+        conn.commit();
+
+        String dml2 = "UPSERT INTO " + tableName + " VALUES('b',1,2) ON DUPLICATE KEY UPDATE " +
+                "counter1 = CASE WHEN (counter1 IS NULL) THEN 1 ELSE counter1 END, " +
+                "counter2 = CASE WHEN (counter1 IS NULL) THEN 2 ELSE counter2 END";
+        conn.createStatement().execute(dml2);
+        conn.commit();
+
+        // Using this statement causes the test to pass
+        //ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE counter2 = 2 AND counter1 = 1");
+        // This statement should be equivalent to the one above, but it selects both rows.
+        ResultSet rs = conn.createStatement().executeQuery("SELECT pk, counter1, counter2 FROM " + tableName + " WHERE counter2 = 2 AND (counter1 = 1 OR counter1 = 1)");
+        assertTrue(rs.next());
+        assertEquals("b",rs.getString(1));
+        assertEquals(1,rs.getLong(2));
+        assertEquals(2,rs.getLong(3));
+        assertFalse(rs.next());
+
+        conn.close();
+    }
+
 
 }
     
