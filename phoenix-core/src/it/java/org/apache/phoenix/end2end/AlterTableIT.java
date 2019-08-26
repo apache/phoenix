@@ -851,6 +851,36 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         conn1.close();
     }
 
+    @Test
+    public void testAlterTableOnGlobalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            String tableName = generateUniqueName();
+            String globalIndexTableName = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + tableName +
+                " (ID INTEGER PRIMARY KEY, COL1 VARCHAR(10), COL2 BOOLEAN)");
+
+            stmt.execute("CREATE INDEX " + globalIndexTableName + " on " + tableName + " (COL2)");
+            HTableDescriptor originalDesc = admin.getTableDescriptor(Bytes.toBytes(globalIndexTableName));
+
+            try {
+                stmt.execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
+                conn.commit();
+                fail("The alter table did not fail as expected");
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode());
+            }
+
+            HTableDescriptor finalDesc = admin.getTableDescriptor(Bytes.toBytes(globalIndexTableName));
+            assertTrue(finalDesc.equals(originalDesc));
+
+            // drop the table
+            stmt.execute("DROP TABLE " + tableName);
+        }
+    }
 
     @Test
     public void testAlterStoreNulls() throws SQLException {
