@@ -115,11 +115,4 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=" + args.fastconnect + \
     " --verbose=" + args.verbose + " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
-childProc = subprocess.Popen(java_cmd, shell=True)
-#Wait for child process exit
-(output, error) = childProc.communicate()
-returncode = childProc.returncode
-childProc = None
-# Propagate Java return code to this script
-if returncode is not None:
-    sys.exit(returncode)
+os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)
