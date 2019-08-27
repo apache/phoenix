@@ -187,5 +187,4 @@ elif command == 'stop':
 else:
     # run in the foreground using defaults from log4j.properties
     cmd = java_cmd % {'java': java, 'root_logger': 'INFO,console', 'log_dir': '.', 'log_file': 'psql.log'}
-    child = subprocess.Popen(cmd.split())
-    sys.exit(child.wait())
+    os.execl("/bin/sh", "/bin/sh", "-c", cmd)
