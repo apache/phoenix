@@ -79,5 +79,4 @@ java_cmd = java +' -cp "' + hbasecp + os.pathsep + phoenix_utils.pherf_conf_path
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
-exitcode = subprocess.call(java_cmd, shell=True)
-sys.exit(exitcode)
+os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)

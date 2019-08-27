@@ -171,5 +171,4 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     " --color=" + colorSetting + " --fastConnect=" + args.fastconnect + " --verbose=" + args.verbose + \
     " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
-exitcode = subprocess.call(java_cmd, shell=True)
-sys.exit(exitcode)
+os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)
