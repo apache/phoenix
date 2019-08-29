@@ -61,9 +61,10 @@ public class IndexColumnNames {
         if (pindexTable.getViewIndexId() != null) {
             offset++;
         }
-        if (pindexTable.isMultiTenant()) {
+        if (pindexTable.isMultiTenant() && pindexTable.getViewIndexId() != null) {
             offset++;
         }
+
         if (offset > 0) {
             pindexCols = pindexCols.subList(offset, pindexCols.size());
             pkColumns = pkColumns.subList(offset, pkColumns.size());
