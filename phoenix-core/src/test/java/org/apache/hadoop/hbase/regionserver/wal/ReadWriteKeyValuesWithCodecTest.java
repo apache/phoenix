@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -110,7 +111,8 @@ public class ReadWriteKeyValuesWithCodecTest {
     
     WALEdit justIndexUpdates = new WALEdit();
     byte[] table = Bytes.toBytes("targetTable");
-    IndexedKeyValue ikv = new IndexedKeyValue(table, p);
+    Cell c = CellUtil.createCell(p.getRow());
+    IndexedKeyValue ikv = IndexedKeyValue.newIndexedKeyValue(table, p);
     justIndexUpdates.add(ikv);
     edits.add(justIndexUpdates);
 
