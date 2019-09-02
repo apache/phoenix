@@ -28,6 +28,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -130,7 +131,7 @@ public class ResourceList {
         ZipFile zf;
         try {
             zf = new ZipFile(file);
-        } catch (FileNotFoundException e) {
+        } catch (FileNotFoundException|NoSuchFileException e) {
             // Gracefully handle a jar listed on the classpath that doesn't actually exist.
             return Collections.emptyList();
         } catch (final ZipException e) {

@@ -36,6 +36,7 @@ import javax.xml.transform.stream.StreamSource;
 
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.exception.FileLoaderException;
+import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.util.ResourceList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -176,7 +177,20 @@ public class XMLConfigParser {
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
-            this.dataModels.add(XMLConfigParser.readDataModel(path));
+            DataModel dataModel = XMLConfigParser.readDataModel(path);
+            updateDataValueType(dataModel);
+            this.dataModels.add(dataModel);
+        }
+    }
+    
+    private void updateDataValueType(DataModel dataModel) {
+        for (Column column : dataModel.getDataMappingColumns()) {
+            if (column.getDataValues() != null) {
+                // DataValue type is inherited from the column
+                for (DataValue value : column.getDataValues()) {
+                    value.setType(column.getType());
+                }
+            }
         }
     }
 

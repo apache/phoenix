@@ -211,11 +211,6 @@ public class Column {
     @XmlElement(name = "datavalue")
     public void setDataValues(List<DataValue> dataValues) {
         this.dataValues = dataValues;
-
-        // DataValue type is inherited from the column
-        for (DataValue value : dataValues) {
-            value.setType(getType());
-        }
     }
 
     public String getPrefix() {
