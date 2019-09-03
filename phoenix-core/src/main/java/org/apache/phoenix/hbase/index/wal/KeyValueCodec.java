@@ -26,7 +26,10 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
-
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 /**
  * Codec to encode/decode {@link KeyValue}s and {@link IndexedKeyValue}s within a {@link WALEdit}
  */
@@ -68,8 +71,16 @@ public class KeyValueCodec {
     int length = in.readInt();
     // its a special IndexedKeyValue
     if (length == INDEX_TYPE_LENGTH_MARKER) {
-      IndexedKeyValue kv = new IndexedKeyValue();
-      kv.readFields(in);
+      ImmutableBytesPtr indexTableName = new ImmutableBytesPtr(Bytes.readByteArray(in));
+      byte[] mutationData = Bytes.readByteArray(in);
+      ClientProtos.MutationProto mProto = ClientProtos.MutationProto.parseFrom(mutationData);
+      Mutation mutation = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto);
+      IndexedKeyValue kv = null;
+      if (mutation != null){
+        kv = IndexedKeyValue.newIndexedKeyValue(indexTableName.copyBytesIfNecessary(), mutation);
+      } else {
+        kv = new IndexedKeyValue();
+      }
       return kv;
     } else {
       return KeyValue.create(length, in);
