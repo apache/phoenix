@@ -528,11 +528,13 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
               if (durability != Durability.SKIP_WAL) {
                   // we have all the WAL durability, so we just update the WAL entry and move on
                   for (Pair<Mutation, byte[]> entry : indexUpdates) {
-                    edit.add(new IndexedKeyValue(entry.getSecond(), entry.getFirst()));
+                      edit.add(IndexedKeyValue.newIndexedKeyValue(entry.getSecond(),
+                          entry.getFirst()));
+                      }
                   }              
               }
           }
-      }
+
   }
 
   private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
@@ -620,21 +622,6 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           }
           metricSource.updateIndexWriteTime(duration);
       }
-  }
-
-  /**
-   * Search the {@link WALEdit} for the first {@link IndexedKeyValue} present
-   * @param edit {@link WALEdit}
-   * @return the first {@link IndexedKeyValue} in the {@link WALEdit} or <tt>null</tt> if not
-   *         present
-   */
-  private IndexedKeyValue getFirstIndexedKeyValue(WALEdit edit) {
-    for (Cell kv : edit.getCells()) {
-      if (kv instanceof IndexedKeyValue) {
-        return (IndexedKeyValue) kv;
-      }
-    }
-    return null;
   }
 
   /**
