@@ -769,28 +769,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             public PDatum getBindMetaData(int i, List<Expression> children, final Expression expression) {
                 PDataType type = expression.getDataType();
                 if (type != null && type.isCoercibleTo(PDate.INSTANCE)) {
-                    return new PDatum() {
-                        @Override
-                        public boolean isNullable() {
-                            return expression.isNullable();
-                        }
-                        @Override
-                        public PDataType getDataType() {
-                            return PDecimal.INSTANCE;
-                        }
-                        @Override
-                        public Integer getMaxLength() {
-                            return expression.getMaxLength();
-                        }
-                        @Override
-                        public Integer getScale() {
-                            return expression.getScale();
-                        }
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return expression.getSortOrder();
-                        }
-                    };
+                    return getPDatumByExpression(expression, PDecimal.INSTANCE);
                 }
                 return expression;
             }
@@ -867,53 +846,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 // we know that the first parameter must be a date type too.
                 if (i == 0 && (type = children.get(1).getDataType()) != null
                         && type.isCoercibleTo(PDate.INSTANCE)) {
-                    return new PDatum() {
-                        @Override
-                        public boolean isNullable() {
-                            return expression.isNullable();
-                        }
-                        @Override
-                        public PDataType getDataType() {
-                            return type;
-                        }
-                        @Override
-                        public Integer getMaxLength() {
-                            return expression.getMaxLength();
-                        }
-                        @Override
-                        public Integer getScale() {
-                            return expression.getScale();
-                        }
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return expression.getSortOrder();
-                        }                        
-                    };
+                  return getPDatumByExpression(expression, type);
                 } else if (expression.getDataType() != null
-                        && expression.getDataType().isCoercibleTo(
-                    PDate.INSTANCE)) {
-                    return new PDatum() { // Same as with addition
-                        @Override
-                        public boolean isNullable() {
-                            return expression.isNullable();
-                        }
-                        @Override
-                        public PDataType getDataType() {
-                            return PDecimal.INSTANCE;
-                        }
-                        @Override
-                        public Integer getMaxLength() {
-                            return expression.getMaxLength();
-                        }
-                        @Override
-                        public Integer getScale() {
-                            return expression.getScale();
-                        }
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return expression.getSortOrder();
-                        }
-                    };
+                        && expression.getDataType().isCoercibleTo(PDate.INSTANCE)) {
+                  return getPDatumByExpression(expression, PDecimal.INSTANCE);
                 }
                 // Otherwise just go with what was calculated for the expression
                 return expression;
@@ -1035,26 +971,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
                 PDataType theType = null;
                 Determinism determinism = Determinism.ALWAYS;
-                for(int i = 0; i < children.size(); i++) {
-                    Expression e = children.get(i);
-                    determinism = determinism.combine(e.getDeterminism());
-                    PDataType type = e.getDataType();
-                    if (type == null) {
-                        continue;
-                    } else if (type == PDecimal.INSTANCE) {
-                        theType = PDecimal.INSTANCE;
-                    } else if (type.isCoercibleTo(PLong.INSTANCE)) {
-                        if (theType == null) {
-                            theType = PLong.INSTANCE;
-                        }
-                    } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
-                        if (theType == null) {
-                            theType = PDouble.INSTANCE;
-                        }
-                    } else {
-                        throw TypeMismatchException.newException(type, node.toString());
-                    }
-                }
+                ExpressionDeterminism expressionDeterminism =
+                  new ExpressionDeterminism(node, children, theType, determinism).invoke();
+                theType = expressionDeterminism.getDataType();
+                determinism = expressionDeterminism.getDeterminism();
                 if (theType == PDecimal.INSTANCE) {
                   return new DecimalMultiplyExpression( children);
                 } else if (theType == PLong.INSTANCE) {
@@ -1095,26 +1015,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
                 PDataType theType = null;
                 Determinism determinism = Determinism.ALWAYS;
-                for(int i = 0; i < children.size(); i++) {
-                    Expression e = children.get(i);
-                    determinism = determinism.combine(e.getDeterminism());
-                    PDataType type = e.getDataType();
-                    if (type == null) {
-                        continue;
-                    } else if (type == PDecimal.INSTANCE) {
-                        theType = PDecimal.INSTANCE;
-                    } else if (type.isCoercibleTo(PLong.INSTANCE)) {
-                        if (theType == null) {
-                            theType = PLong.INSTANCE;
-                        }
-                    } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
-                        if (theType == null) {
-                            theType = PDouble.INSTANCE;
-                        }
-                    } else {
-                        throw TypeMismatchException.newException(type, node.toString());
-                    }
-                }
+                ExpressionDeterminism expressionDeterminism =
+                  new ExpressionDeterminism(node, children, theType, determinism).invoke();
+                theType = expressionDeterminism.getDataType();
+                determinism = expressionDeterminism.getDeterminism();
                 if (theType == PDecimal.INSTANCE) {
                   return new DecimalDivideExpression( children);
                 } else if (theType == PLong.INSTANCE) {
@@ -1331,4 +1235,99 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public int getTotalNodeCount() {
         return totalNodeCount;
     }
+
+  private PDatum getPDatumByExpression(Expression expression, PDataType pDataTypeInput) {
+    return new PDatumImpl(expression, pDataTypeInput);
+  }
+
+  private class PDatumImpl implements PDatum {
+
+    private final boolean isNullable;
+    private final PDataType dataType;
+    private final Integer maxLength;
+    private final Integer scale;
+    private final SortOrder sortOrder;
+
+    PDatumImpl(Expression expression, PDataType pDataTypeInput) {
+      this.isNullable = expression.isNullable();
+      this.dataType = pDataTypeInput;
+      this.maxLength = expression.getMaxLength();
+      this.scale = expression.getScale();
+      this.sortOrder = expression.getSortOrder();
+    }
+
+    @Override
+    public boolean isNullable() {
+      return isNullable;
+    }
+
+    @Override
+    public PDataType getDataType() {
+      return dataType;
+    }
+
+    @Override
+    public Integer getMaxLength() {
+      return maxLength;
+    }
+
+    @Override
+    public Integer getScale() {
+      return scale;
+    }
+
+    @Override
+    public SortOrder getSortOrder() {
+      return sortOrder;
+    }
+
+  }
+
+  private class ExpressionDeterminism {
+    private ArithmeticParseNode node;
+    private List<Expression> children;
+    private PDataType theType;
+    private Determinism determinism;
+
+    ExpressionDeterminism(ArithmeticParseNode node, List<Expression> children,
+      PDataType theType, Determinism determinism) {
+      this.node = node;
+      this.children = children;
+      this.theType = theType;
+      this.determinism = determinism;
+    }
+
+    PDataType getDataType() {
+      return theType;
+    }
+
+    Determinism getDeterminism() {
+      return determinism;
+    }
+
+    public ExpressionDeterminism invoke() throws TypeMismatchException {
+      for (Expression e : children) {
+        determinism = determinism.combine(e.getDeterminism());
+        PDataType type = e.getDataType();
+        if (type == null) {
+          continue;
+        }
+        if (type == PDecimal.INSTANCE) {
+          theType = PDecimal.INSTANCE;
+        } else if (type.isCoercibleTo(PLong.INSTANCE)) {
+          if (theType == null) {
+            theType = PLong.INSTANCE;
+          }
+        } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
+          if (theType == null) {
+            theType = PDouble.INSTANCE;
+          }
+        } else {
+          throw TypeMismatchException.newException(type, node.toString());
+        }
+      }
+      return this;
+    }
+  }
+
 }
