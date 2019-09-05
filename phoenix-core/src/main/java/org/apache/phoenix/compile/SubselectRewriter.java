@@ -19,6 +19,7 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,11 +27,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
+import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.OffsetNode;
@@ -42,6 +45,7 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -55,23 +59,67 @@ public class SubselectRewriter extends ParseNodeRewriter {
     private final String tableAlias;
     private final Map<String, ParseNode> aliasMap;
     private boolean removeAlias = false;
-    
-    public static SelectStatement applyPreFiltersForSubselect(SelectStatement statement, List<ParseNode> preFilterParseNodes, String subqueryAlias) throws SQLException {
-        if (preFilterParseNodes.isEmpty())
-            return statement;
+
+    /**
+     * Add the preFilterParseNodes to Where statement or Having statement of the subselectStatement,
+     * depending on whether having GroupBy statement.
+     * Note: the preFilterParseNodes parameter must have already been rewritten by {@link #rewritePreFilterForSubselect}.
+     * @param subselectStatement
+     * @param preFilterParseNodes
+     * @param subselectAlias
+     * @return
+     * @throws SQLException
+     */
+    public static SelectStatement applyPreFiltersForSubselect(
+            SelectStatement subselectStatement,
+            List<ParseNode> preFilterParseNodes,
+            String subselectAlias) throws SQLException {
+
+        if (preFilterParseNodes.isEmpty()) {
+            return subselectStatement;
+        }
+
+        assert(isFilterCanPushDownToSelect(subselectStatement));
+
+        List<ParseNode> newFilterParseNodes = Lists.<ParseNode> newArrayList(preFilterParseNodes);
+        if (subselectStatement.getGroupBy().isEmpty()) {
+            ParseNode where = subselectStatement.getWhere();
+            if (where != null) {
+                newFilterParseNodes.add(where);
+            }
+            return NODE_FACTORY.select(subselectStatement, combine(newFilterParseNodes));
+        }
         
-        assert(isPostFilterConvertible(statement));
-        
-        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyPreFilters(statement, preFilterParseNodes);
+        ParseNode having = subselectStatement.getHaving();
+        if (having != null) {
+            newFilterParseNodes.add(having);
+        }
+        return NODE_FACTORY.select(subselectStatement, subselectStatement.getWhere(), combine(newFilterParseNodes));
     }
-    
-    public static boolean isPostFilterConvertible(SelectStatement statement) throws SQLException {
+
+    public static ParseNode rewritePreFilterForSubselect(ParseNode preFilterParseNode, SelectStatement subselectStatement, String subselectAlias) throws SQLException {
+        SubselectRewriter subselectRewriter = new SubselectRewriter(
+            null,
+            subselectStatement.getSelect(),
+            subselectAlias);
+        return preFilterParseNode.accept(subselectRewriter);
+    }
+
+    /**
+     * Check if a filter can push down to the statement as a preFilter,
+     * if true, the filter can be rewritten by {@link #rewritePreFilterForSubselect} and
+     * added to the statement by {@link #applyPreFiltersForSubselect}.
+     * @param statement
+     * @return
+     * @throws SQLException
+     */
+    public static boolean isFilterCanPushDownToSelect(SelectStatement statement) throws SQLException {
         return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
     }
     
     /**
      * <pre>
-     * only append orderByNodes and postFilters, the optimization is left to {@link #flatten(SelectStatement, SelectStatement)}.
+     * Only append orderByNodes and postFilters, the optimization is left to {@link #flatten(SelectStatement, SelectStatement)}.
      * an example :
      * when the subselectStatment is : (SELECT reverse(loc_id), \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE + " LIMIT 5) AS supp
      * orderByNodes is  : supp.\"supplier_id\"
@@ -142,19 +190,24 @@ public class SubselectRewriter extends ParseNodeRewriter {
            subselectAliasFullNameToNewColumnParseNode.put(
                    SchemaUtil.getColumnName(subselectTableAliasName, SchemaUtil.normalizeIdentifier(aliasName)),
                    newColumnParseNode);
-           AliasedNode newOuterSelectAliasNode = NODE_FACTORY.aliasedNode(null, newColumnParseNode);
+           /**
+            * The alias of AliasedNode is set to the same as newColumnParseNode, so when the rewritten
+            * selectStatement is flattened by {@link SubselectRewriter#flatten} later,the {@link AliasedNode#getAlias}
+            * could remain the same even if the {@link AliasedNode#getNode} is rewritten by {@link SubselectRewriter#flatten}.
+            */
+           AliasedNode newOuterSelectAliasNode = NODE_FACTORY.aliasedNode(aliasName, newColumnParseNode);
            newOuterSelectAliasedNodes.add(newOuterSelectAliasNode);
            index++;
        }
 
-       SubselectRewriter rewriter = new SubselectRewriter(subselectAliasFullNameToNewColumnParseNode);
+       SubselectRewriter subselectRewriter = new SubselectRewriter(subselectAliasFullNameToNewColumnParseNode);
        List<OrderByNode> rewrittenOrderByNodes = null;
        if(orderByNodes.size() > 0) {
            rewrittenOrderByNodes = new ArrayList<OrderByNode>(orderByNodes.size());
            for (OrderByNode orderByNode : orderByNodes) {
                ParseNode parseNode = orderByNode.getNode();
                rewrittenOrderByNodes.add(NODE_FACTORY.orderBy(
-                       parseNode.accept(rewriter),
+                       parseNode.accept(subselectRewriter),
                        orderByNode.isNullsLast(),
                        orderByNode.isAscending()));
            }
@@ -165,7 +218,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
            List<ParseNode> rewrittenPostFilterParseNodes =
                    new ArrayList<ParseNode>(postFilterParseNodes.size());
            for(ParseNode postFilterParseNode : postFilterParseNodes) {
-               rewrittenPostFilterParseNodes.add(postFilterParseNode.accept(rewriter));
+               rewrittenPostFilterParseNodes.add(postFilterParseNode.accept(subselectRewriter));
            }
            newWhereParseNode = combine(rewrittenPostFilterParseNodes);
        }
@@ -191,26 +244,124 @@ public class SubselectRewriter extends ParseNodeRewriter {
                subselectStatementToUse.hasSequence(),
                Collections.<SelectStatement> emptyList(),
                subselectStatementToUse.getUdfParseNodes());
-   }
-    
+    }
+
+    /**
+     * If the selectStatement has a DerivedTableNode, pruning column of the
+     * {@link DerivedTableNode#getSelect()}.
+     * @param selectStatement
+     * @param pheonixConnection
+     * @return
+     * @throws SQLException
+     */
+    private static SelectStatement pruneInnerSubselectAliasedNodes(
+            SelectStatement selectStatement,
+            PhoenixConnection pheonixConnection) throws SQLException {
+        TableNode fromTableNode = selectStatement.getFrom();
+        if (fromTableNode == null || !(fromTableNode instanceof DerivedTableNode)) {
+            return selectStatement;
+        }
+
+        DerivedTableNode derivedTableNode = (DerivedTableNode) fromTableNode;
+        SelectStatement subSelectStatement = derivedTableNode.getSelect();
+        if (subSelectStatement.isUnion()) {
+            return selectStatement;
+        }
+        Set<String> referencedColumnNames =
+                ParseNodeUtil.collectReferencedColumnNamesForSingleTable(selectStatement);
+        SelectStatement newSubselectStatement = pruneSelectAliasedNodes(subSelectStatement, referencedColumnNames, pheonixConnection);
+        if(newSubselectStatement != subSelectStatement) {
+            return NODE_FACTORY.select(
+                    selectStatement,
+                    NODE_FACTORY.derivedTable(derivedTableNode.getAlias(), newSubselectStatement));
+        }
+        return selectStatement;
+    }
+
+    /**
+     * Pruning selectAliasedNodes according to referencedColumnNames,
+     * Note: the selectStatement is supposed to be a {@link DerivedTableNode} of an Outer SelectStatement,
+     * so according to {@link FromCompiler.MultiTableColumnResolver#visit(DerivedTableNode)},
+     * wildcard in selectAliasedNode is not supported.
+     * @param selectStatement
+     * @param referencedColumnNames
+     * @param phoenixConnection
+     * @return
+     * @throws SQLException
+     */
+    public static SelectStatement pruneSelectAliasedNodes(
+            SelectStatement selectStatement,
+            Set<String> referencedColumnNames,
+            PhoenixConnection phoenixConnection) throws SQLException {
+
+        if(referencedColumnNames == null || referencedColumnNames.isEmpty()) {
+            return selectStatement;
+        }
+        if(selectStatement.isDistinct()) {
+            return selectStatement;
+        }
+        /**
+         * We must resolve the inner alias at first before column pruning, because the resolve may fail
+         * if the column is pruned.
+         */
+        selectStatement = ParseNodeRewriter.resolveInternalAlias(selectStatement, phoenixConnection);
+        List<AliasedNode> selectAliasedNodes = selectStatement.getSelect();
+        List<AliasedNode> newSelectAliasedNodes = new ArrayList<AliasedNode>(selectAliasedNodes.size());
+        for (AliasedNode selectAliasedNode : selectAliasedNodes) {
+            String aliasName = selectAliasedNode.getAlias();
+            ParseNode aliasParseNode = selectAliasedNode.getNode();
+            if (aliasParseNode instanceof WildcardParseNode ||
+                aliasParseNode instanceof TableWildcardParseNode ||
+                aliasParseNode instanceof FamilyWildcardParseNode) {
+                /**
+                 * Wildcard in subselect is not supported.
+                 * See also {@link FromCompiler.MultiTableColumnResolver#visit(DerivedTableNode)}.
+                 */
+                throw new SQLFeatureNotSupportedException("Wildcard in subqueries not supported.");
+            }
+            if (aliasName == null) {
+                aliasName = aliasParseNode.getAlias();
+            }
+            if(aliasName != null) {
+                aliasName = SchemaUtil.normalizeIdentifier(aliasName);
+                if(referencedColumnNames.contains(aliasName)) {
+                    newSelectAliasedNodes.add(selectAliasedNode);
+                }
+            }
+        }
+
+        if(newSelectAliasedNodes.isEmpty() || newSelectAliasedNodes.equals(selectAliasedNodes)) {
+            //if the newSelectAliasedNodes.isEmpty(), the outer select may be wildcard or constant,
+            //so remain the same.
+            return selectStatement;
+        }
+        return NODE_FACTORY.select(
+                        selectStatement,
+                        selectStatement.isDistinct(),
+                        newSelectAliasedNodes);
+    }
+
     public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection) throws SQLException {
         TableNode from = select.getFrom();
         while (from != null && from instanceof DerivedTableNode) {
             DerivedTableNode derivedTable = (DerivedTableNode) from;
             SelectStatement subselect = derivedTable.getSelect();
-            if (subselect.isUnion())
+            if (subselect.isUnion()) {
                 break;
+            }
             ColumnResolver resolver = FromCompiler.getResolverForQuery(subselect, connection);
             SubselectRewriter rewriter = new SubselectRewriter(resolver, subselect.getSelect(), derivedTable.getAlias());
             SelectStatement ret = rewriter.flatten(select, subselect);
-            if (ret == select)
+            if (ret == select) {
                 break;
-            
+            }
             select = ret;
             from = select.getFrom();
         }
-        
-        return select;
+        /**
+         * Pruning column for subselect after flatten.
+         */
+        return pruneInnerSubselectAliasedNodes(select, connection);
     }
     
     private SubselectRewriter(ColumnResolver resolver, List<AliasedNode> aliasedNodes, String tableAlias) {
@@ -419,27 +570,6 @@ public class SubselectRewriter extends ParseNodeRewriter {
             stmt = ParseNodeRewriter.rewrite(stmt, this);
         }
         return stmt;
-    }
-
-    private SelectStatement applyPreFilters(SelectStatement statement, List<ParseNode> preFilterParseNodes) throws SQLException {
-        List<ParseNode> rewrittenPreFilterParseNodes = Lists.<ParseNode>newArrayListWithExpectedSize(preFilterParseNodes.size());
-        for (ParseNode preFilterParseNode : preFilterParseNodes) {
-            rewrittenPreFilterParseNodes.add(preFilterParseNode.accept(this));
-        }
-        
-        if (statement.getGroupBy().isEmpty()) {
-            ParseNode where = statement.getWhere();
-            if (where != null) {
-                rewrittenPreFilterParseNodes.add(where);
-            }
-            return NODE_FACTORY.select(statement, combine(rewrittenPreFilterParseNodes));
-        }
-        
-        ParseNode having = statement.getHaving();
-        if (having != null) {
-            rewrittenPreFilterParseNodes.add(having);
-        }
-        return NODE_FACTORY.select(statement, statement.getWhere(), combine(rewrittenPreFilterParseNodes));
     }
 
     @Override

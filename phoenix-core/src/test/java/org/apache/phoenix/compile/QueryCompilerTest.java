@@ -50,6 +50,8 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.JoinCompiler.JoinTable;
+import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -64,6 +66,7 @@ import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.execute.UnionPlan;
 import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -5330,7 +5333,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             ClientScanPlan rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
             String tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
-            String rewrittenSql = "SELECT "+tableAlias+".BID,"+tableAlias+".CODE FROM (SELECT BID,CODE FROM MERGE2  ORDER BY CODE LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODE > 50 ORDER BY "+tableAlias+".BID";
+            String rewrittenSql = "SELECT "+tableAlias+".BID BID,"+tableAlias+".CODE CODE FROM (SELECT BID,CODE FROM MERGE2  ORDER BY CODE LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODE > 50 ORDER BY "+tableAlias+".BID";
             assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
             orderBy=rhsOuterPlan.getOrderBy();
@@ -5362,7 +5365,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
             tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".BID,"+tableAlias+".CODESUM FROM (SELECT BID, SUM(CODE) CODESUM FROM MERGE2  GROUP BY BID ORDER BY CODESUM LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODESUM > 50 ORDER BY "+tableAlias+".BID";
+            rewrittenSql = "SELECT "+tableAlias+".BID BID,"+tableAlias+".CODESUM CODESUM FROM (SELECT BID, SUM(CODE) CODESUM FROM MERGE2  GROUP BY BID ORDER BY  SUM(CODE) LIMIT 1) "+tableAlias+" WHERE "+tableAlias+".CODESUM > 50 ORDER BY "+tableAlias+".BID";
             assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
             orderBy=rhsOuterPlan.getOrderBy();
@@ -5394,7 +5397,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
             tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODE FROM (SELECT A.AID,B.CODE FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) ORDER BY B.CODE LIMIT 3) "+
+            rewrittenSql = "SELECT "+tableAlias+".AID AID,"+tableAlias+".CODE CODE FROM (SELECT A.AID,B.CODE FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) ORDER BY B.CODE LIMIT 3) "+
                            tableAlias+" WHERE "+tableAlias+".CODE > 50 ORDER BY "+tableAlias+".AID";
             assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
@@ -5429,7 +5432,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
             tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY CODESUM LIMIT 3) "+tableAlias+
+            rewrittenSql = "SELECT "+tableAlias+".AID AID,"+tableAlias+".CODESUM CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY  SUM(B.CODE) LIMIT 3) "+tableAlias+
                            " WHERE "+tableAlias+".CODESUM >= 40 ORDER BY "+tableAlias+".AID";
             assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
@@ -5444,7 +5447,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
             tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY REGIONSUM DESC LIMIT 2) "+tableAlias+
+            rewrittenSql = "SELECT "+tableAlias+".AID AID,"+tableAlias+".REGIONSUM REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY  SUM(C.REGION) DESC LIMIT 2) "+tableAlias+
                            " WHERE "+tableAlias+".REGIONSUM >= 90 ORDER BY "+tableAlias+".AID";
             assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
@@ -5472,7 +5475,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             lhsOuterPlan = (ClientScanPlan)(((TupleProjectionPlan)sortMergeJoinPlan.getLhsPlan()).getDelegate());
             tableAlias = lhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY A.AID,CODESUM LIMIT 3) "+tableAlias+
+            rewrittenSql = "SELECT "+tableAlias+".AID AID,"+tableAlias+".CODESUM CODESUM FROM (SELECT A.AID, SUM(B.CODE) CODESUM FROM MERGE1 A  Inner JOIN MERGE2 B  ON (A.AID = B.BID) WHERE (B.CODE >= 44 AND B.CODE <= 66) GROUP BY A.AID ORDER BY A.AID, SUM(B.CODE) LIMIT 3) "+tableAlias+
                            " WHERE "+tableAlias+".CODESUM >= 40";
             assertTrue(lhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
@@ -5485,7 +5488,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
             tableAlias = rhsOuterPlan.getTableRef().getTableAlias();
-            rewrittenSql = "SELECT "+tableAlias+".AID,"+tableAlias+".REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY A.AID DESC,REGIONSUM DESC LIMIT 2) "+tableAlias+
+            rewrittenSql = "SELECT "+tableAlias+".AID AID,"+tableAlias+".REGIONSUM REGIONSUM FROM (SELECT A.AID, SUM(C.REGION) REGIONSUM FROM MERGE1 A  Inner JOIN MERGE3 C  ON (A.AID = C.CID) WHERE (C.REGION >= 77 AND C.REGION <= 99) GROUP BY A.AID ORDER BY A.AID DESC, SUM(C.REGION) DESC LIMIT 2) "+tableAlias+
                            " WHERE "+tableAlias+".REGIONSUM >= 90 ORDER BY "+tableAlias+".AID";
             assertTrue(rhsOuterPlan.getStatement().toString().equals(rewrittenSql));
 
@@ -6184,5 +6187,225 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
         lhsClientScanPlan = (ClientScanPlan)sortMergeJoinPlan.getLhsPlan();
         assertTrue(lhsClientScanPlan.getWhere() == null);
+    }
+
+    @Test
+    public void testSubselectColumnPruneForJoinBug5451() throws Exception {
+        PhoenixConnection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+            String sql = null;
+            QueryPlan queryPlan = null;
+            //testNestedDerivedTable require index with same name be created
+            String tableName = "testA";
+            sql = "create table " + tableName +
+            "   (organization_id char(15) not null, \n" +
+            "    entity_id char(15) not null,\n" +
+            "    a_string varchar(100),\n" +
+            "    b_string varchar(100),\n" +
+            "    a_integer integer,\n" +
+            "    a_date date,\n" +
+            "    a_time time,\n" +
+            "    a_timestamp timestamp,\n" +
+            "    x_decimal decimal(31,10),\n" +
+            "    x_long bigint,\n" +
+            "    x_integer integer,\n" +
+            "    y_integer integer,\n" +
+            "    a_byte tinyint,\n" +
+            "    a_short smallint,\n" +
+            "    a_float float,\n" +
+            "    a_double double,\n" +
+            "    a_unsigned_float unsigned_float,\n" +
+            "    a_unsigned_double unsigned_double\n" +
+            "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n" +
+            ") ";
+            conn.createStatement().execute(sql);
+
+            //test for subquery
+            sql = "SELECT q.id, q.x10 * 10 FROM " +
+                  "(SELECT t.eid id, t.x + 9 x10, t.astr a, t.bstr b, aint ai, adouble ad FROM "+
+                    "(SELECT entity_id eid, a_string astr, b_string bstr, a_integer aint, a_double adouble, a_byte + 1 x FROM " + tableName + " WHERE a_byte + 1 < 9 limit 2) AS t "+
+                  "ORDER BY b, id limit 3) AS q WHERE q.a = 'a' OR q.b = 'b' OR q.b = 'c'";
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            ClientScanPlan clientScanPlan = (ClientScanPlan)queryPlan;
+            TestUtil.assertSelectStatement(clientScanPlan.getStatement(),
+                    "SELECT Q.ID,(Q.X10 * 10) FROM "+
+                    "(SELECT T.EID ID,(T.X + 9) X10,T.ASTR A,T.BSTR B FROM "+
+                     "(SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,A_INTEGER AINT,A_DOUBLE ADOUBLE,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2) T "+
+                    "ORDER BY T.BSTR,T.EID LIMIT 3) Q WHERE (Q.A = 'a' OR Q.B = 'b' OR Q.B = 'c')");
+            clientScanPlan =
+                    (ClientScanPlan)((TupleProjectionPlan)clientScanPlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(clientScanPlan.getStatement(),
+                    "SELECT T.EID ID,(T.X + 9) X10,T.ASTR A,T.BSTR B FROM "+
+                    "(SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2) T "+
+                    "ORDER BY T.BSTR,T.EID LIMIT 3");
+            ScanPlan scanPlan =
+                    (ScanPlan)((TupleProjectionPlan)clientScanPlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(
+                    scanPlan.getStatement(),
+                    "SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2");
+
+            //test for subquery with wildcard
+            sql = "SELECT * FROM " +
+                  "(SELECT t.eid id, t.x + 9 x10, t.astr a, t.bstr b, aint ai, adouble ad FROM "+
+                    "(SELECT entity_id eid, a_string astr, b_string bstr, a_integer aint, a_double adouble, a_byte + 1 x FROM " + tableName + " WHERE a_byte + 1 < 9 limit 2) AS t "+
+                  "ORDER BY b, id limit 3) AS q WHERE q.a = 'a' OR q.b = 'b' OR q.b = 'c'";
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            clientScanPlan = (ClientScanPlan)queryPlan;
+            TestUtil.assertSelectStatement(clientScanPlan.getStatement(),
+                    "SELECT  *  FROM "+
+                    "(SELECT T.EID ID,(T.X + 9) X10,T.ASTR A,T.BSTR B,AINT AI,ADOUBLE AD FROM "+
+                     "(SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,A_INTEGER AINT,A_DOUBLE ADOUBLE,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2) T "+
+                    "ORDER BY B,ID LIMIT 3) Q WHERE (Q.A = 'a' OR Q.B = 'b' OR Q.B = 'c')");
+            clientScanPlan = (ClientScanPlan)((TupleProjectionPlan)clientScanPlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(clientScanPlan.getStatement(),
+                    "SELECT T.EID ID,(T.X + 9) X10,T.ASTR A,T.BSTR B,AINT AI,ADOUBLE AD FROM "+
+                    "(SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,A_INTEGER AINT,A_DOUBLE ADOUBLE,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2) T "+
+                    "ORDER BY T.BSTR,T.EID LIMIT 3");
+            scanPlan = (ScanPlan)((TupleProjectionPlan)clientScanPlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(
+                    scanPlan.getStatement(),
+                    "SELECT ENTITY_ID EID,A_STRING ASTR,B_STRING BSTR,A_INTEGER AINT,A_DOUBLE ADOUBLE,(A_BYTE + 1) X FROM TESTA  WHERE (A_BYTE + 1) < 9 LIMIT 2");
+
+            //test for some trival cases of subquery.
+            sql = "SELECT count(*) FROM (SELECT count(*) c FROM "+tableName+" ) AS t";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            ClientAggregatePlan clientAggregatePlan = (ClientAggregatePlan)queryPlan;
+            TestUtil.assertSelectStatement(clientAggregatePlan.getStatement(), "SELECT  COUNT(1) FROM (SELECT  COUNT(1) C FROM TESTA ) T");
+            AggregatePlan aggregatePlan =
+                    (AggregatePlan)((TupleProjectionPlan)clientAggregatePlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(aggregatePlan.getStatement(), "SELECT  COUNT(1) C FROM TESTA");
+
+            sql = "SELECT count(*) FROM (SELECT count(*) c FROM "+tableName+" GROUP BY a_string) AS t";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            clientAggregatePlan = (ClientAggregatePlan)queryPlan;
+            TestUtil.assertSelectStatement(
+                    clientAggregatePlan.getStatement(),
+                    "SELECT  COUNT(1) FROM (SELECT  COUNT(1) C FROM TESTA  GROUP BY A_STRING) T");
+            aggregatePlan =
+                    (AggregatePlan)((TupleProjectionPlan)clientAggregatePlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(
+                    aggregatePlan.getStatement(),
+                    "SELECT  COUNT(1) C FROM TESTA  GROUP BY A_STRING");
+
+            sql = "SELECT 1 FROM (SELECT count(*) c FROM "+tableName+" GROUP BY a_string) AS t";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            aggregatePlan = (AggregatePlan)queryPlan;
+            TestUtil.assertSelectStatement(aggregatePlan.getStatement(), "SELECT 1 FROM TESTA  GROUP BY A_STRING");
+
+            sql = "SELECT count(*) FROM (SELECT DISTINCT a_string FROM "+tableName+") AS t";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            clientAggregatePlan = (ClientAggregatePlan)queryPlan;
+            TestUtil.assertSelectStatement(clientAggregatePlan.getStatement(), "SELECT  COUNT(1) FROM (SELECT DISTINCT A_STRING FROM TESTA ) T");
+            aggregatePlan =
+                    (AggregatePlan)((TupleProjectionPlan)clientAggregatePlan.getDelegate()).getDelegate();
+            TestUtil.assertSelectStatement(aggregatePlan.getStatement(), "SELECT DISTINCT A_STRING FROM TESTA");
+
+            //test for hash join
+            sql = "SELECT q1.id, q2.id FROM (SELECT t.eid id, t.astr a, t.bstr b FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t WHERE t.abyte >= 8) AS q1"
+                    + " JOIN (SELECT t.eid id, t.astr a, t.bstr b, t.abyte x FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t) AS q2 ON q1.a = q2.b"
+                    + " WHERE q2.x != 5 ORDER BY q1.id, q2.id DESC";
+            JoinTable joinTablesContext = TestUtil.getJoinTable(sql, conn);
+            Table leftmostTableContext = joinTablesContext.getLeftTable();
+            TestUtil.assertSelectStatement(
+                    leftmostTableContext.getSubselect(),
+                    "SELECT ENTITY_ID ID,A_STRING A FROM TESTA  WHERE A_BYTE >= 8");
+            assertTrue(leftmostTableContext.getPreFilters().isEmpty());
+
+            Table rightTableContext = joinTablesContext.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable();
+            TestUtil.assertSelectStatement(rightTableContext.getSubselect(), "SELECT ENTITY_ID ID,B_STRING B FROM TESTA");
+            assertTrue(rightTableContext.getPreFilters().size() == 1);
+            assertTrue(rightTableContext.getPreFilters().get(0).toString().equals("A_BYTE != 5"));
+
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            HashJoinPlan hashJoinPlan = (HashJoinPlan)queryPlan;
+            Scan scan = hashJoinPlan.getContext().getScan();
+            TupleProjector tupleColumnProjector =
+                    TupleProjector.deserializeProjectorFromScan(scan);
+            Expression[] expressions = tupleColumnProjector.getExpressions();
+            assertTrue(expressions.length == 2);
+
+            TestUtil.assertSelectStatement(
+                    hashJoinPlan.getDelegate().getStatement(),
+                    "SELECT Q1.ID,Q2.ID FROM TESTA  WHERE A_BYTE >= 8 ORDER BY Q1.ID,Q2.ID DESC");
+            HashSubPlan[] hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+            assertTrue(hashSubPlans.length == 1);
+            scanPlan =(ScanPlan)((TupleProjectionPlan)(hashSubPlans[0].getInnerPlan())).getDelegate();
+            TestUtil.assertSelectStatement(
+                    scanPlan.getStatement(),
+                    "SELECT ENTITY_ID ID,B_STRING B FROM TESTA  WHERE A_BYTE != 5");
+
+            //test for hash join with wildcard
+            sql = "SELECT * FROM (SELECT t.eid id, t.astr a, t.bstr b FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t WHERE t.abyte >= 8) AS q1"
+                    + " JOIN (SELECT t.eid id, t.astr a, t.bstr b, t.abyte x FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t) AS q2 ON q1.a = q2.b"
+                    + " WHERE q2.x != 5 ORDER BY q1.id, q2.id DESC";
+            joinTablesContext = TestUtil.getJoinTable(sql, conn);
+            leftmostTableContext = joinTablesContext.getLeftTable();
+            TestUtil.assertSelectStatement(
+                    leftmostTableContext.getSubselect(),
+                    "SELECT ENTITY_ID ID,A_STRING A,B_STRING B FROM TESTA  WHERE A_BYTE >= 8");
+            assertTrue(leftmostTableContext.getPreFilters().isEmpty());
+
+            rightTableContext = joinTablesContext.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable();
+            TestUtil.assertSelectStatement(
+                    rightTableContext.getSubselect(),
+                    "SELECT ENTITY_ID ID,A_STRING A,B_STRING B,A_BYTE X FROM TESTA");
+            assertTrue(rightTableContext.getPreFilters().size() == 1);
+            assertTrue(rightTableContext.getPreFilters().get(0).toString().equals("A_BYTE != 5"));
+
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            hashJoinPlan = (HashJoinPlan)queryPlan;
+            scan = hashJoinPlan.getContext().getScan();
+            tupleColumnProjector =
+                    TupleProjector.deserializeProjectorFromScan(scan);
+            expressions = tupleColumnProjector.getExpressions();
+            assertTrue(expressions.length == 3);
+
+            TestUtil.assertSelectStatement(
+                    hashJoinPlan.getDelegate().getStatement(),
+                    "SELECT Q1.*,Q2.* FROM TESTA  WHERE A_BYTE >= 8 ORDER BY Q1.ID,Q2.ID DESC");
+            hashSubPlans = (HashSubPlan[])hashJoinPlan.getSubPlans();
+            assertTrue(hashSubPlans.length == 1);
+            scanPlan = (ScanPlan)((TupleProjectionPlan)(hashSubPlans[0].getInnerPlan())).getDelegate();
+            TestUtil.assertSelectStatement(
+                    scanPlan.getStatement(),
+                    "SELECT ENTITY_ID ID,A_STRING A,B_STRING B,A_BYTE X FROM TESTA  WHERE A_BYTE != 5");
+
+            //test for sortmergejoin
+            sql = "SELECT /*+ USE_SORT_MERGE_JOIN */ q1.id, q2.id FROM " +
+                  "(SELECT t.eid id, t.astr a, t.bstr b FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t WHERE t.abyte >= 8) AS q1 " +
+                  "JOIN (SELECT t.eid id, t.astr a, t.bstr b, t.abyte x FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t) AS q2 "+
+                  "ON q1.a = q2.b WHERE q2.x != 5 ORDER BY q1.id, q2.id DESC";
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            clientScanPlan = (ClientScanPlan)queryPlan;
+            SortMergeJoinPlan sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+            ScanPlan lhsPlan =
+                    (ScanPlan)((TupleProjectionPlan)sortMergeJoinPlan.getLhsPlan()).getDelegate();
+            TestUtil.assertSelectStatement(
+                    lhsPlan.getStatement(),
+                    "SELECT ENTITY_ID ID,A_STRING A FROM TESTA  WHERE A_BYTE >= 8 ORDER BY A_STRING");
+            ScanPlan rhsPlan =
+                    (ScanPlan)((TupleProjectionPlan)sortMergeJoinPlan.getRhsPlan()).getDelegate();
+            TestUtil.assertSelectStatement(
+                    rhsPlan.getStatement(),
+                    "SELECT ENTITY_ID ID,B_STRING B FROM TESTA  WHERE A_BYTE != 5 ORDER BY B_STRING");
+
+            //test for sortmergejoin with wildcard
+            sql = "SELECT /*+ USE_SORT_MERGE_JOIN */ * FROM "+
+                  "(SELECT t.eid id, t.astr a, t.bstr b FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t WHERE t.abyte >= 8) AS q1 "+
+                  "JOIN (SELECT t.eid id, t.astr a, t.bstr b, t.abyte x FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM "+tableName+") AS t) AS q2 "+
+                  "ON q1.a = q2.b WHERE q2.x != 5 ORDER BY q1.id, q2.id DESC";
+            queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            clientScanPlan = (ClientScanPlan)queryPlan;
+            sortMergeJoinPlan = (SortMergeJoinPlan)clientScanPlan.getDelegate();
+            lhsPlan = (ScanPlan)((TupleProjectionPlan)sortMergeJoinPlan.getLhsPlan()).getDelegate();
+            TestUtil.assertSelectStatement(lhsPlan.getStatement(),
+                    "SELECT ENTITY_ID ID,A_STRING A,B_STRING B FROM TESTA  WHERE A_BYTE >= 8 ORDER BY A_STRING");
+            rhsPlan = (ScanPlan)((TupleProjectionPlan)sortMergeJoinPlan.getRhsPlan()).getDelegate();
+            TestUtil.assertSelectStatement(rhsPlan.getStatement(),
+                   "SELECT ENTITY_ID ID,A_STRING A,B_STRING B,A_BYTE X FROM TESTA  WHERE A_BYTE != 5 ORDER BY B_STRING");
+        } finally {
+            conn.close();
+        }
     }
 }
