@@ -135,13 +135,12 @@ public class QueryOptimizer {
             return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
         }
 
-        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
         Map<TableRef, QueryPlan> dataPlans = null;
-
         // Find the optimal index plan for each join tables in a join query or a
         // non-correlated sub-query, then rewrite the query with found index tables.
         if (select.isJoin()
                 || (select.getWhere() != null && select.getWhere().hasSubquery())) {
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
             JoinCompiler.JoinTable join = JoinCompiler.compile(statement, select, resolver);
             Map<TableRef, TableRef> replacement = null;
             for (JoinCompiler.Table table : join.getAllTables()) {
@@ -179,15 +178,21 @@ public class QueryOptimizer {
             if (replacement != null) {
                 select = rewriteQueryWithIndexReplacement(
                         statement.getConnection(), resolver, select, replacement);
-                resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
             }
         }
 
         // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
         // sub-queries can be optimized recursively.
-        QueryCompiler compiler = new QueryCompiler(statement, select, resolver,
-                targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
-                true, true, dataPlans);
+        QueryCompiler compiler = new QueryCompiler(
+                statement,
+                select,
+                FromCompiler.getResolverForQuery(select, statement.getConnection()),
+                targetColumns,
+                parallelIteratorFactory,
+                dataPlan.getContext().getSequenceManager(),
+                true,
+                true,
+                dataPlans);
         return Collections.singletonList(compiler.compile());
     }
 
