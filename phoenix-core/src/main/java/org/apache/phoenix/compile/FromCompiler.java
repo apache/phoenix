@@ -231,6 +231,22 @@ public class FromCompiler {
         return visitor;
     }
 
+    /**
+     * Refresh the inner state of {@link MultiTableColumnResolver} for the derivedTableNode when
+     * the derivedTableNode is changed for some sql optimization.
+     * @param columnResolver
+     * @param derivedTableNode
+     * @return
+     * @throws SQLException
+     */
+    public static TableRef refreshDerivedTableNode(
+            ColumnResolver columnResolver, DerivedTableNode derivedTableNode) throws SQLException {
+        if(!(columnResolver instanceof MultiTableColumnResolver)) {
+            throw new UnsupportedOperationException();
+        }
+        return ((MultiTableColumnResolver)columnResolver).refreshDerivedTableNode(derivedTableNode);
+    }
+
     public static ColumnResolver getResolverForSchema(UseSchemaStatement statement, PhoenixConnection connection)
             throws SQLException {
         return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(statement.getSchemaName()), true);
@@ -897,6 +913,23 @@ public class FromCompiler {
             tableMap.put(alias, tableRef);
             tables.add(tableRef);
             return null;
+        }
+
+        /**
+         * Invoke the {@link #visit(DerivedTableNode)} again to refresh the inner state.
+         * @param derivedTableNode
+         * @return
+         * @throws SQLException
+         */
+        public TableRef refreshDerivedTableNode(DerivedTableNode derivedTableNode) throws SQLException {
+              String tableAlias = derivedTableNode.getAlias();
+              List<TableRef> removedTableRefs = this.tableMap.removeAll(tableAlias);
+              if(removedTableRefs == null || removedTableRefs.isEmpty()) {
+                  return null;
+              }
+              tables.removeAll(removedTableRefs);
+              this.visit(derivedTableNode);
+              return this.resolveTable(null, tableAlias);
         }
 
         private static class ColumnFamilyRef {

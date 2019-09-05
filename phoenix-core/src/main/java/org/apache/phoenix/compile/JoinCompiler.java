@@ -52,7 +52,6 @@ import org.apache.phoenix.parse.AndBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.BindTableNode;
-import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
@@ -99,6 +98,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -137,6 +137,16 @@ public class JoinCompiler {
         this.useSortMergeJoin = select.getHint().hasHint(Hint.USE_SORT_MERGE_JOIN);
     }
 
+    /**
+     * After this method is called, the inner state of the parameter resolver may be changed by
+     * {@link FromCompiler#refreshDerivedTableNode} because of some sql optimization,
+     * see also {@link Table#pruneSubselectAliasedNodes()}.
+     * @param statement
+     * @param select
+     * @param resolver
+     * @return
+     * @throws SQLException
+     */
     public static JoinTable compile(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
         JoinCompiler compiler = new JoinCompiler(statement, select, resolver);
         JoinTableConstructor constructor = compiler.new JoinTableConstructor();
@@ -148,26 +158,10 @@ public class JoinCompiler {
 
         ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
         ColumnRefParseNodeVisitor joinLocalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
-        ColumnRefParseNodeVisitor prefilterRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
 
-        joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor, prefilterRefVisitor);
+        joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor);
 
-        for (AliasedNode node : select.getSelect()) {
-            node.getNode().accept(generalRefVisitor);
-        }
-        if (select.getGroupBy() != null) {
-            for (ParseNode node : select.getGroupBy()) {
-                node.accept(generalRefVisitor);
-            }
-        }
-        if (select.getHaving() != null) {
-            select.getHaving().accept(generalRefVisitor);
-        }
-        if (select.getOrderBy() != null) {
-            for (OrderByNode node : select.getOrderBy()) {
-                node.getNode().accept(generalRefVisitor);
-            }
-        }
+        ParseNodeUtil.applyParseNodeVisitor(select, generalRefVisitor, false);
 
         compiler.columnNodes.putAll(joinLocalRefVisitor.getColumnRefMap());
         compiler.columnNodes.putAll(generalRefVisitor.getColumnRefMap());
@@ -180,6 +174,12 @@ public class JoinCompiler {
                 compiler.columnRefs.put(ref, ColumnRefType.JOINLOCAL);
         }
 
+        /**
+         * After {@link ColumnRefParseNodeVisitor} is pushed down,
+         * pruning columns for each {@link JoinCompiler.Table} if
+         * {@link @link JoinCompiler.Table#isSubselect()}.
+         */
+        joinTable.pruneSubselectAliasedNodes();
         return joinTable;
     }
 
@@ -334,7 +334,7 @@ public class JoinCompiler {
             this.postFilters.add(parseNode);
         }
 
-        public void addLeftTableFilter(ParseNode parseNode) {
+        public void addLeftTableFilter(ParseNode parseNode) throws SQLException {
             if (isPrefilterAccepted) {
                 leftTable.addFilter(parseNode);
             } else {
@@ -364,12 +364,9 @@ public class JoinCompiler {
             filter.accept(visitor);
         }
 
-        public void pushDownColumnRefVisitors(ColumnRefParseNodeVisitor generalRefVisitor,
-                ColumnRefParseNodeVisitor joinLocalRefVisitor,
-                ColumnRefParseNodeVisitor prefilterRefVisitor) throws SQLException {
-            for (ParseNode node : leftTable.getPreFilters()) {
-                node.accept(prefilterRefVisitor);
-            }
+        public void pushDownColumnRefVisitors(
+                ColumnRefParseNodeVisitor generalRefVisitor,
+                ColumnRefParseNodeVisitor joinLocalRefVisitor) throws SQLException {
             for (ParseNode node : leftTable.getPostFilters()) {
                 node.accept(generalRefVisitor);
             }
@@ -387,7 +384,20 @@ public class JoinCompiler {
                         node.getRHS().accept(joinLocalRefVisitor);
                     }
                 }
-                joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor, prefilterRefVisitor);
+                joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor);
+            }
+        }
+
+        /**
+         * Pruning columns for each {@link JoinCompiler.Table} if
+         * {@link @link JoinCompiler.Table#isSubselect()}.
+         * @throws SQLException
+         */
+        public void pruneSubselectAliasedNodes() throws SQLException {
+            this.leftTable.pruneSubselectAliasedNodes();
+            for (JoinSpec joinSpec : joinSpecs) {
+                JoinTable rhsJoinTablesContext = joinSpec.getRhsJoinTable();;
+                rhsJoinTablesContext.pruneSubselectAliasedNodes();
             }
         }
 
@@ -763,15 +773,15 @@ public class JoinCompiler {
     }
 
     public class Table {
-        private final TableNode tableNode;
+        private TableNode tableNode;
         private final boolean isWildcard;
         private final List<ColumnDef> dynamicColumns;
         private final Double tableSamplingRate;
-        private final SelectStatement subselect;
-        private final TableRef tableRef;
+        private SelectStatement subselect;
+        private TableRef tableRef;
         private final List<ParseNode> preFilters;
         private final List<ParseNode> postFilters;
-        private final boolean isPostFilterConvertible;
+        private final boolean filterCanPushDownToSubselect;
 
         private Table(TableNode tableNode, boolean isWildcard, List<ColumnDef> dynamicColumns,
                       Double tableSamplingRate, TableRef tableRef) {
@@ -783,7 +793,7 @@ public class JoinCompiler {
             this.tableRef = tableRef;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = Collections.<ParseNode>emptyList();
-            this.isPostFilterConvertible = false;
+            this.filterCanPushDownToSubselect = false;
         }
 
         private Table(DerivedTableNode tableNode, boolean isWildcard, TableRef tableRef) throws SQLException {
@@ -795,7 +805,7 @@ public class JoinCompiler {
             this.tableRef = tableRef;
             this.preFilters = new ArrayList<ParseNode>();
             this.postFilters = new ArrayList<ParseNode>();
-            this.isPostFilterConvertible = SubselectRewriter.isPostFilterConvertible(subselect);
+            this.filterCanPushDownToSubselect = SubselectRewriter.isFilterCanPushDownToSelect(subselect);
         }
 
         public TableNode getTableNode() {
@@ -812,6 +822,62 @@ public class JoinCompiler {
 
         public boolean isSubselect() {
             return subselect != null;
+        }
+
+        public SelectStatement getSubselect() {
+            return this.subselect;
+        }
+
+        /**
+         * Pruning columns if {@link #isSubselect()}.
+         * Note: If some columns are pruned, the {@link JoinCompiler#origResolver} should be refreshed.
+         * @throws SQLException
+         */
+        public void pruneSubselectAliasedNodes() throws SQLException {
+            if(!this.isSubselect()) {
+                return;
+            }
+            Set<String> referencedColumnNames = this.getReferencedColumnNames();
+            SelectStatement newSubselectStatement =
+                    SubselectRewriter.pruneSelectAliasedNodes(
+                            this.subselect,
+                            referencedColumnNames,
+                            statement.getConnection());
+            if(!newSubselectStatement.getSelect().equals(this.subselect.getSelect())) {
+                /**
+                 * The columns are pruned, so {@link ColumnResolver} should be refreshed.
+                 */
+                DerivedTableNode newDerivedTableNode =
+                        NODE_FACTORY.derivedTable(this.tableNode.getAlias(), newSubselectStatement);
+                TableRef newTableRef =
+                        FromCompiler.refreshDerivedTableNode(origResolver, newDerivedTableNode);
+                assert newTableRef != null;
+                this.subselect = newSubselectStatement;
+                this.tableRef = newTableRef;
+                this.tableNode = newDerivedTableNode;
+            }
+        }
+
+        /**
+         * Collect the referenced columns of this {@link Table}
+         * according to {@link JoinCompiler#columnNodes}.
+         * @return
+         * @throws SQLException
+         */
+        private Set<String> getReferencedColumnNames() throws SQLException {
+            assert(this.isSubselect());
+            if (isWildCardSelect()) {
+                return null;
+            }
+            Set<String> referencedColumnNames = new HashSet<String>();
+            for (Map.Entry<ColumnRef, ColumnParseNode> entry : columnNodes.entrySet()) {
+                if (tableRef.equals(entry.getKey().getTableRef())) {
+                    ColumnParseNode columnParseNode = entry.getValue();
+                    String normalizedColumnName = SchemaUtil.getNormalizedColumnName(columnParseNode);
+                    referencedColumnNames.add(normalizedColumnName);
+                }
+            }
+            return referencedColumnNames;
         }
 
         /**
@@ -846,12 +912,29 @@ public class JoinCompiler {
             return tableRef;
         }
 
-        public void addFilter(ParseNode filter) {
-            if (!isSubselect() || isPostFilterConvertible) {
-                preFilters.add(filter);
+        public void addFilter(ParseNode filter) throws SQLException {
+            if (!isSubselect() || filterCanPushDownToSubselect) {
+                this.addPreFilter(filter);
             } else {
                 postFilters.add(filter);
             }
+        }
+
+        /**
+         * If {@link #isSubselect()}, preFilterParseNode is at first rewritten by
+         * {@link SubselectRewriter#rewritePreFilterForSubselect}
+         * @param preFilterParseNode
+         * @throws SQLException
+         */
+        private void addPreFilter(ParseNode preFilterParseNode) throws SQLException {
+            if(this.isSubselect()) {
+                preFilterParseNode =
+                        SubselectRewriter.rewritePreFilterForSubselect(
+                                preFilterParseNode,
+                                this.subselect,
+                                tableNode.getAlias());
+            }
+            preFilters.add(preFilterParseNode);
         }
 
         public ParseNode getPreFiltersCombined() {
@@ -866,7 +949,7 @@ public class JoinCompiler {
                         tableNode.getAlias(),
                         postFilters);
             }
-            //for table, postFilters is empty , because it can safely pushed down as preFilters.
+            //for flat table, postFilters is empty , because it can safely pushed down as preFilters.
             assert postFilters == null || postFilters.isEmpty();
             return NODE_FACTORY.select(tableNode, select.getHint(), false, getSelectNodes(), getPreFiltersCombined(), null,
                     null, orderBy, null, null, 0, false, select.hasSequence(),

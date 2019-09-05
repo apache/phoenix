@@ -18,14 +18,19 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -49,6 +54,26 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         return where.accept(rewriter);
     }
 
+    /**
+     * <pre>
+     * Resolve the inner alias for the selectStament.
+     * For following sql:
+     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by agesum
+     * "agesum" is an alias of "sum(age)", so for this method, the above sql is rewritten to:
+     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by sum(age)
+     * </pre>
+     * @param selectStament
+     * @param phoenixConnection
+     * @return
+     * @throws SQLException
+     */
+    public static SelectStatement resolveInternalAlias(
+            SelectStatement selectStament, PhoenixConnection phoenixConnection) throws SQLException {
+         ColumnResolver columnResolver = FromCompiler.getResolverForQuery(selectStament, phoenixConnection);
+         ParseNodeRewriter parseNodeRewriter =
+                 new ParseNodeRewriter(columnResolver, selectStament.getSelect().size());
+         return ParseNodeRewriter.rewrite(selectStament, parseNodeRewriter);
+    }
     /**
      * Rewrite the select statement by switching any constants to the right hand side
      * of the expression.

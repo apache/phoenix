@@ -73,9 +73,16 @@ import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.compile.SubqueryRewriter;
+import org.apache.phoenix.compile.SubselectRewriter;
+import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -105,6 +112,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
@@ -1172,5 +1182,23 @@ public class TestUtil {
             }
         }
         return false;
+    }
+
+    public static JoinTable getJoinTable(String query, PhoenixConnection connection) throws SQLException {
+        SQLParser parser = new SQLParser(query);
+        SelectStatement select = SubselectRewriter.flatten(parser.parseQuery(), connection);
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
+        select = StatementNormalizer.normalize(select, resolver);
+        SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+        if (transformedSelect != select) {
+            resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
+            select = StatementNormalizer.normalize(transformedSelect, resolver);
+        }
+        PhoenixStatement stmt = connection.createStatement().unwrap(PhoenixStatement.class);
+        return JoinCompiler.compile(stmt, select, resolver);
+    }
+
+    public static void assertSelectStatement(FilterableStatement selectStatement , String sql) {
+        assertTrue(selectStatement.toString().trim().equals(sql));
     }
 }
