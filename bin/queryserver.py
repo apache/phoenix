@@ -203,4 +203,4 @@ else:
     # run in the foreground using defaults from log4j.properties
     cmd = java_cmd % {'java': java, 'root_logger': 'INFO,console', 'log_dir': '.', 'log_file': 'psql.log'}
     splitcmd = cmd.split()
-    os.execv(splitcmd[0], splitcmd)
+    os.execvp(splitcmd[0], splitcmd)
