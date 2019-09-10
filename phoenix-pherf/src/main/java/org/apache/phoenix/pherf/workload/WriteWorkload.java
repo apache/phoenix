@@ -266,6 +266,12 @@ public class WriteWorkload implements Workload {
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();
 
+                    int logPerNRows = PherfConstants.LOG_PER_NROWS;
+                    String customizedLogPerNRows = connection.getClientInfo().
+                            getProperty(PherfConstants.LOG_PER_NROWS_NAME);
+                    if (customizedLogPerNRows!= null) {
+                        logPerNRows = Integer.valueOf(customizedLogPerNRows);
+                    }
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
                     stmt = connection.prepareStatement(sql);
@@ -298,7 +304,7 @@ public class WriteWorkload implements Workload {
                                     + " rows for this thread (" + this.hashCode() + ") in ("
                                     + duration + ") Ms");
 
-                            if (i % PherfConstants.LOG_PER_NROWS == 0 && i != 0) {
+                            if (i % logPerNRows == 0 && i != 0) {
                                 dataLoadThreadTime.add(tableName,
                                     Thread.currentThread().getName(), i,
                                     System.currentTimeMillis() - logStartTime);
