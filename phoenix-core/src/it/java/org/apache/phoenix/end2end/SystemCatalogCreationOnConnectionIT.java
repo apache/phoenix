@@ -41,7 +41,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -55,6 +54,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
@@ -456,12 +456,7 @@ public class SystemCatalogCreationOnConnectionIT {
 
     // Check if the SYSTEM namespace has been created
     private boolean isSystemNamespaceCreated() throws IOException {
-        try {
-            testUtil.getAdmin().getNamespaceDescriptor(SYSTEM_CATALOG_SCHEMA);
-        } catch (NamespaceNotFoundException ex) {
-            return false;
-        }
-        return true;
+        return ServerUtil.isHbaseNamespaceAvailable(testUtil.getConnection().getAdmin(), SYSTEM_CATALOG_SCHEMA);
     }
 
     /**

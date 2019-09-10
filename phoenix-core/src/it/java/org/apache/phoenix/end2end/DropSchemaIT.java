@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -30,12 +30,12 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.NamespaceDescriptor;
-import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -92,22 +92,18 @@ public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
             } catch (SQLException e) {
                 assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
             }
-            assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
+            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
 
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
             conn.createStatement().execute(ddl);
-            try {
-                admin.getNamespaceDescriptor(normalizeSchemaIdentifier);
+            if(ServerUtil.isHbaseNamespaceAvailable(admin, normalizeSchemaIdentifier))
                 fail();
-            } catch (NamespaceNotFoundException ne) {
-                // expected
-            }
             
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
             
             admin.createNamespace(NamespaceDescriptor.create(normalizeSchemaIdentifier).build());
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
-            assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
+            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
             conn.createStatement().execute("CREATE SCHEMA " + schema);
             conn.createStatement().execute("DROP SCHEMA " + schema);
             try {
