@@ -1,4 +1,4 @@
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
