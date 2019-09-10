@@ -51,6 +51,7 @@ public class ResourceTest {
         PherfConstants constants = PherfConstants.create();
         assertNotNull(constants.getProperty("pherf.default.dataloader.threadpool"));
         assertNotNull(constants.getProperty("pherf.default.results.dir"));
+        assertNotNull(constants.getProperty(PherfConstants.LOG_PER_NROWS_NAME));
     }
 
     private Collection<Path> assertResources(String pattern, String rootDir, String assertStr) throws Exception {
