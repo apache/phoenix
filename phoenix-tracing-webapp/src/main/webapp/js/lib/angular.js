@@ -9078,7 +9078,7 @@ function $HttpProvider() {
      *
      * There are two kinds of interceptors (and two kinds of rejection interceptors):
      *
-     *   * `request`: interceptors get called with a http `config` object. The function is free to
+     *   * `request`: interceptors get called with an http `config` object. The function is free to
      *     modify the `config` object or create a new one. The function needs to return the `config`
      *     object directly, or a promise containing the `config` or a new `config` object.
      *   * `requestError`: interceptor gets called when a previous interceptor threw an error or
@@ -22666,7 +22666,7 @@ is set to `true`. The parse error is stored in `ngModel.$error.parse`.
  * ```
  *
  * @property {Object.<string, function>} $asyncValidators A collection of validations that are expected to
- *      perform an asynchronous validation (e.g. a HTTP request). The validation function that is provided
+ *      perform an asynchronous validation (e.g. an HTTP request). The validation function that is provided
  *      is expected to return a promise when it is run during the model validation process. Once the promise
  *      is delivered then the validation status will be set to true when fulfilled and false when rejected.
  *      When the asynchronous validators are triggered, each of the validators will run in parallel and the model
