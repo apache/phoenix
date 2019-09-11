@@ -4635,7 +4635,7 @@ public class MetaDataClient {
                         metaProperties.setUseStatsForParallelizationProp((Boolean)value);
                     }
                 }
-                // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
+                // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
                 if (!removeTableProps || (!TableProperty.isPhoenixTableProperty(propName) && !MetaDataUtil.isHTableProperty(propName))) {
                     propsList.add(prop);
                 }
