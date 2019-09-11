@@ -19,9 +19,10 @@ package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.FindViewCorruptionTool;
+import org.apache.phoenix.tool.FindViewCorruptionTool;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.io.FileReader;
 import java.io.IOException;
@@ -35,6 +36,7 @@ import java.util.Properties;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class FindViewCorruptionToolIT extends ParallelStatsEnabledIT {
 
     private static final String filePath = "/tmp/";
@@ -109,7 +111,14 @@ public class FindViewCorruptionToolIT extends ParallelStatsEnabledIT {
                 tenantId + "', '"+ schema2 + "', '"+ viewName5 + "','v', 0) ");
         conn.commit();
         assertEquals(1, runFindCorruptedViewTool(true, false, null, tenantId));
-        assertEquals(4, runFindCorruptedViewTool(true, false, null, null));
+
+        //Testing get all corrupted view string list and write to a customized path/filename APIs
+        FindViewCorruptionTool tool = getFindCorruptionTool();
+        assertEquals(4, tool.run(getArgValues(true,false,null, null)));
+        assertEquals(4, tool.getCorruptedViews().size());
+        String randomFilename = generateUniqueName();
+        tool.writeCorruptedViews(filePath, randomFilename);
+        verifyLineCount(filePath + randomFilename, 4);
     }
 
     private Connection tenantConnection(String url, String tenantId) throws SQLException {
@@ -130,7 +139,7 @@ public class FindViewCorruptionToolIT extends ParallelStatsEnabledIT {
     }
 
     public static String[] getArgValues(boolean getCorruptedViewCount, boolean outputPath,
-                                        String schemName, String tenantId) {
+                                        String schemaName, String tenantId) {
         final List<String> args = Lists.newArrayList();
         if (outputPath) {
             args.add("-op");
@@ -139,9 +148,9 @@ public class FindViewCorruptionToolIT extends ParallelStatsEnabledIT {
         if (getCorruptedViewCount) {
             args.add("-c");
         }
-        if (schemName != null) {
+        if (schemaName != null) {
             args.add("-s");
-            args.add(schemName);
+            args.add(schemaName);
         }
         if (tenantId != null) {
             args.add("-id");
@@ -151,13 +160,19 @@ public class FindViewCorruptionToolIT extends ParallelStatsEnabledIT {
     }
 
     public static int runFindCorruptedViewTool(boolean getCorruptedViewCount, boolean outputPath,
-                                               String schemName, String tenantId)
+                                               String schemaName, String tenantId)
             throws Exception {
+        FindViewCorruptionTool tool = getFindCorruptionTool();
+        final String[] cmdArgs =
+                getArgValues(getCorruptedViewCount, outputPath, schemaName, tenantId);
+        return tool.run(cmdArgs);
+    }
+
+    public static FindViewCorruptionTool getFindCorruptionTool() {
         FindViewCorruptionTool tool = new FindViewCorruptionTool();
         Configuration conf = new Configuration(getUtility().getConfiguration());
         tool.setConf(conf);
-        final String[] cmdArgs =
-                getArgValues(getCorruptedViewCount, outputPath, schemName, tenantId);
-        return tool.run(cmdArgs);
+        return tool;
     }
+
 }

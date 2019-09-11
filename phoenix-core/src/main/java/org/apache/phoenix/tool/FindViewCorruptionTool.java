@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.mapreduce;
+package org.apache.phoenix.tool;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -25,7 +25,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 
-import org.apache.commons.cli.*;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.PosixParser;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -41,6 +48,9 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -73,10 +83,10 @@ public class FindViewCorruptionTool extends Configured implements Tool {
     String outputPath;
     boolean getCorruptedViewCount = false;
     String tenantId;
-    String schemName;
+    String schemaName;
     String tableName;
-    public static final String fileName = "FindViewCorruptionTool.txt";
 
+    public static final String fileName = "FindViewCorruptionTool.txt";
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     private static final Option TENANT_ID_OPTION = new Option("id", "tenant id", true,
@@ -108,7 +118,7 @@ public class FindViewCorruptionTool extends Configured implements Tool {
         }
     }
 
-    private void findCorruptedViews(PhoenixConnection phoenixConnection) throws Exception {
+    public void findCorruptedViews(PhoenixConnection phoenixConnection) throws Exception {
         // get all views from syscat
         populateViewSetMetadata(phoenixConnection);
 
@@ -126,8 +136,8 @@ public class FindViewCorruptionTool extends Configured implements Tool {
 
     private String getViewQuery() {
         String query = VIEW_QUERY;
-        if (this.schemName != null) {
-            query += " AND " + TABLE_SCHEM + "='" + this.schemName + "'";
+        if (this.schemaName != null) {
+            query += " AND " + TABLE_SCHEM + "='" + this.schemaName + "'";
         }
         if (this.tableName != null) {
             query += " AND " + TABLE_NAME + "='" + this.tableName + "'";
@@ -181,7 +191,7 @@ public class FindViewCorruptionTool extends Configured implements Tool {
                 throw new IllegalStateException(SCHEMA_OPTION.getLongOpt() +
                         " requires an argument.");
             } else {
-                this.schemName = cmdLine.getOptionValue(SCHEMA_OPTION.getOpt());
+                this.schemaName = cmdLine.getOptionValue(SCHEMA_OPTION.getOpt());
             }
         }
         if (cmdLine.hasOption(TABLE_OPTION.getOpt())) {
@@ -271,18 +281,29 @@ public class FindViewCorruptionTool extends Configured implements Tool {
         }
     }
 
-    private void writeCorruptedViews() throws IOException {
-        if (outputPath == null) {
-            return;
+    /*
+     * @return return all corrupted view info in a string format as following:
+     * "TenantId,SchemaName,TableName,ColumnCountFromHeadRow,SelectCountColumnNumber"
+     */
+    public List<String> getCorruptedViews() {
+        List<String> corruptedView = new ArrayList<>();
+        for (View view : this.corruptedViewSet) {
+            corruptedView.add(view.getTenantId() + "," + view.getSchemaName() + "," +
+                    view.getTableName() + "," + view.getColumnCount() + "," +
+                    view.getSelectColumnCount());
         }
+        return corruptedView;
+    }
 
+    public void writeCorruptedViews(String outputPath, String fileName) throws IOException {
         FileWriter fw = null;
+        Path path = Paths.get(outputPath);
+        Path filePath = Paths.get(path.toString(), fileName);
+
         try {
-            fw = new FileWriter(new File(outputPath + fileName));
-            for (View view : this.corruptedViewSet) {
-                fw.write(view.getTenantId() + "," + view.getSchemaName() + "," +
-                        view.getTableName() + "," + view.getColumnCount() + "," +
-                        view.getSelectColumnCount());
+            fw = new FileWriter(new File(filePath.toString()));
+            for (String viewInfo : getCorruptedViews()) {
+                fw.write(viewInfo);
                 fw.write(System.lineSeparator());
             }
         } finally {
@@ -306,7 +327,9 @@ public class FindViewCorruptionTool extends Configured implements Tool {
             connection = ConnectionUtil.getInputConnection(configuration, props);
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             findCorruptedViews(phoenixConnection);
-            writeCorruptedViews();
+            if (outputPath != null) {
+                writeCorruptedViews(outputPath, fileName);
+            }
         } catch (Exception e) {
             LOGGER.error("Find View Corruption Tool : An exception occurred "
                     + ExceptionUtils.getMessage(e) + " at:\n" +
