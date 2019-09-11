@@ -316,6 +316,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return maintainers;
     }
+
+    public static IndexMaintainer getIndexMaintainer(List<IndexMaintainer> maintainers, byte[] indexTableName) {
+        Iterator<IndexMaintainer> maintainerIterator = maintainers.iterator();
+        while (maintainerIterator.hasNext()) {
+            IndexMaintainer maintainer = maintainerIterator.next();
+            if (Bytes.compareTo(indexTableName, maintainer.getIndexTableName()) == 0) {
+                return maintainer;
+            }
+        }
+        return null;
+    }
     
     private byte[] viewIndexId;
     private PDataType viewIndexIdType;
@@ -963,10 +974,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put = new Put(indexRowKey);
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
-                this.getEmptyKeyValueFamily(), dataEmptyKeyValueRef.getQualifierWritable(), ts,
+                    this.getEmptyKeyValueFamily(), dataEmptyKeyValueRef.getQualifierWritable(), ts,
                     QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
+
         ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
         if (immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
             // map from index column family to list of pair of index column and data column (for covered columns)

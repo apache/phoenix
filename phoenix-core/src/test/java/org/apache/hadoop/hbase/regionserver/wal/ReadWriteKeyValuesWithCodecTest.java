@@ -111,7 +111,8 @@ public class ReadWriteKeyValuesWithCodecTest {
     
     WALEdit justIndexUpdates = new WALEdit();
     byte[] table = Bytes.toBytes("targetTable");
-    IndexedKeyValue ikv = new IndexedKeyValue(table, p);
+
+    IndexedKeyValue ikv = IndexedKeyValue.newIndexedKeyValue(table, p);
     justIndexUpdates.add(ikv);
     edits.add(justIndexUpdates);
 

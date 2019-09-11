@@ -55,7 +55,7 @@ public abstract class SizeBoundQueue<T> extends AbstractQueue<T> implements Size
             return super.add(e);
         } catch (IllegalStateException ex) {
             throw new IllegalStateException(
-                    "Queue full. Consider increasing memory threshold or spooling to disk", ex);
+                    "Queue full. Consider increasing memory threshold or spooling to disk. Max size: " + maxSizeBytes + ", Current size: " + currentSize + ", Number of elements:" + size(), ex);
         }
     }
 

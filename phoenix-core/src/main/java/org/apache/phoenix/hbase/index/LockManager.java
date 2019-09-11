@@ -25,12 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -41,7 +41,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  *
  */
 public class LockManager {
-    private static final Log LOG = LogFactory.getLog(LockManager.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(LockManager.class);
 
     private final ConcurrentHashMap<ImmutableBytesPtr, RowLockContext> lockedRows =
             new ConcurrentHashMap<ImmutableBytesPtr, RowLockContext>();
@@ -51,16 +51,13 @@ public class LockManager {
 
     /**
      * Lock the row or throw otherwise
-     * @param row the row key
+     * @param rowKey the row key
      * @return RowLock used to eventually release the lock 
      * @throws TimeoutIOException if the lock could not be acquired within the
      * allowed rowLockWaitDuration and InterruptedException if interrupted while
      * waiting to acquire lock.
      */
-    public RowLock lockRow(byte[] row, int waitDuration) throws IOException {
-        // create an object to use a a key in the row lock map
-        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row);
-
+    public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
         RowLockContext rowLockContext = null;
         RowLockImpl result = null;
         TraceScope traceScope = null;
@@ -99,7 +96,7 @@ public class LockManager {
             success = true;
             return result;
         } catch (InterruptedException ie) {
-            LOG.warn("Thread interrupted waiting for lock on row: " + rowKey);
+            LOGGER.warn("Thread interrupted waiting for lock on row: " + rowKey);
             InterruptedIOException iie = new InterruptedIOException();
             iie.initCause(ie);
             if (traceScope != null) {
@@ -114,6 +111,12 @@ public class LockManager {
                 traceScope.close();
             }
         }
+    }
+
+    public RowLock lockRow(byte[] row, int waitDuration) throws IOException {
+        // create an object to use a a key in the row lock map
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row);
+        return lockRow(rowKey, waitDuration);
     }
 
     /**
@@ -226,6 +229,11 @@ public class LockManager {
         }
 
         @Override
+        public ImmutableBytesPtr getRowKey() {
+            return context.rowKey;
+        }
+
+        @Override
         public String toString() {
             return "RowLockImpl{" +
                     "context=" + context +
@@ -247,6 +255,8 @@ public class LockManager {
          *     thread
          */
         void release();
+
+        ImmutableBytesPtr getRowKey();
     }
 
 }

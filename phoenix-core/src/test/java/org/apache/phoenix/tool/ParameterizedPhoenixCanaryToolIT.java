@@ -19,9 +19,7 @@ package org.apache.phoenix.tool;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.phoenix.end2end.ChangePermissionsIT;
+
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -32,6 +30,8 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -58,7 +58,8 @@ import static org.junit.Assert.assertTrue;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedPhoenixCanaryToolIT extends BaseTest {
 
-	private static final Log logger = LogFactory.getLog(ParameterizedPhoenixCanaryToolIT.class);
+	private static final Logger LOGGER =
+			LoggerFactory.getLogger(ParameterizedPhoenixCanaryToolIT.class);
 	private static final String stdOutSink
 			= "org.apache.phoenix.tool.PhoenixCanaryTool$StdOutSink";
 	private static final String fileOutSink
@@ -108,7 +109,7 @@ public class ParameterizedPhoenixCanaryToolIT extends BaseTest {
 			tearDownMiniClusterAsync(1);
 			setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
 					new ReadOnlyProps(clientProps.entrySet().iterator()));
-			logger.info("New cluster is spinned up with test parameters " +
+			LOGGER.info("New cluster is spinned up with test parameters " +
 					"isPositiveTestType" + this.isPositiveTestType +
 					"isNamespaceEnabled" + this.isNamespaceEnabled +
 					"resultSinkOption" + this.resultSinkOption);

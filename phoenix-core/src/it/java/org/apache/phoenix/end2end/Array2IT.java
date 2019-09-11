@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -40,6 +41,9 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 
 public class Array2IT extends ArrayIT {
+
+    private static final String TEST_QUERY = "select ?[2] from \"SYSTEM\".\"CATALOG\" limit 1";
+
     @Test
     public void testFixedWidthCharArray() throws Exception {
         Connection conn;
@@ -670,26 +674,51 @@ public class Array2IT extends ArrayIT {
     }
 
     @Test
-    public void testArrayRefToLiteral() throws Exception {
-        Connection conn;
-
+    public void testArrayRefToLiteralCharArraySameLengths() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement stmt = conn.prepareStatement("select ?[2] from \"SYSTEM\".\"catalog\" limit 1");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement stmt = conn.prepareStatement(TEST_QUERY);
+            // Test with each element of the char array having same lengths
             Array array = conn.createArrayOf("CHAR", new String[] {"a","b","c"});
             stmt.setArray(1, array);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertFalse(rs.next());
-        } catch (SQLException e) {
-        } finally {
-            if (conn != null) {
-                conn.close();
-            }
         }
+    }
 
+    @Test
+    public void testArrayRefToLiteralCharArrayDiffLengths() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement stmt = conn.prepareStatement(TEST_QUERY);
+            // Test with each element of the char array having different lengths
+            Array array = conn.createArrayOf("CHAR", new String[] {"a","bb","ccc"});
+            stmt.setArray(1, array);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("bb", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testArrayRefToLiteralBinaryArray() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement stmt = conn.prepareStatement(TEST_QUERY);
+            // Test with each element of the binary array having different lengths
+            byte[][] bytes = {{0,0,1}, {0,0,2,0}, {0,0,0,3,4}};
+            Array array = conn.createArrayOf("BINARY", bytes);
+            stmt.setArray(1, array);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            // Note that all elements are padded to be of the same length
+            // as the longest element of the byte array
+            assertArrayEquals(new byte[] {0,0,2,0,0}, rs.getBytes(1));
+            assertFalse(rs.next());
+        }
     }
     
     @Test

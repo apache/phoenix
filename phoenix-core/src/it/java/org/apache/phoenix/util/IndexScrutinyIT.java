@@ -48,7 +48,7 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
                 IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
-                assertEquals(e.getMessage(),"Expected data table row count to match expected:<2> but was:<1>");
+                assertEquals("Expected data table row count to match expected:<2> but was:<1>", e.getMessage());
             }
         }
     }
@@ -72,7 +72,7 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
                 IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
-                assertEquals(e.getMessage(),"Expected to find PK in data table: ('x')");
+                assertEquals("Expected to find PK in data table: ('x')", e.getMessage());
             }
         }
     }
@@ -90,14 +90,15 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb','0')");
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc','1')");
             conn.commit();
-            
+
+            // Writing index directly will generate unverified rows with no corresponding data rows. These rows will not be visible to the applications
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('ccc','a','2')");
             conn.commit();
             try {
                 IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
                 fail();
             } catch (AssertionError e) {
-                assertEquals(e.getMessage(),"Expected equality for V2, but '2'!='1'");
+                assertEquals("Expected data table row count to match expected:<2> but was:<1>", e.getMessage());
             }
         }
     }

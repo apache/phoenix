@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,6 +31,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -38,7 +40,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.curator.shaded.com.google.common.collect.Sets;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
@@ -60,6 +63,9 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceAllocation;
+import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -67,7 +73,9 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
@@ -178,25 +186,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             }
             PName tenantId = phxConn.getTenantId();
             PName physicalName = PNameFactory.newName(hbaseTableName);
-            String oldSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(PNameFactory.newName(phoenixFullTableName),
-                    false);
             String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
             String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
-            ResultSet rs = phxConn.createStatement()
-                    .executeQuery("SELECT " + PhoenixDatabaseMetaData.CURRENT_VALUE + "  FROM "
-                            + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
-                            + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + newSchemaName
-                            + "' AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + "='" + newSequenceName + "'");
-            assertTrue(rs.next());
-            assertEquals("-9223372036854775805", rs.getString(1));
-            rs = phxConn.createStatement().executeQuery("SELECT " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
-                    + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," + PhoenixDatabaseMetaData.CURRENT_VALUE + "  FROM "
-                    + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
-                    + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'");
-            assertFalse(rs.next());
-            phxConn.close();
+            verifySequenceValue(null, newSequenceName, newSchemaName, -9223372036854775805L);
             admin.close();
-   
         }
     }
 
@@ -507,12 +500,20 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    private Connection getConnection(boolean tenantSpecific, String tenantId) throws SQLException {
+    private Connection getConnection(boolean tenantSpecific, String tenantId, boolean isNamespaceMappingEnabled)
+        throws SQLException {
         if (tenantSpecific) {
             checkNotNull(tenantId);
             return createTenantConnection(tenantId);
         }
-        return DriverManager.getConnection(getUrl());
+        Properties props = new Properties();
+        if (isNamespaceMappingEnabled){
+            props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        }
+        return DriverManager.getConnection(getUrl(), props);
+    }
+    private Connection getConnection(boolean tenantSpecific, String tenantId) throws SQLException {
+        return getConnection(tenantSpecific, tenantId, false);
     }
     
     @Test
@@ -586,6 +587,89 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             childLinkSet.add(key);
         }
         return childLinkSet;
+    }
+
+    @Test
+    public void testMergeViewIndexSequences() throws Exception {
+        testMergeViewIndexSequencesHelper(false);
+    }
+
+    @Test
+    public void testMergeViewIndexSequencesWithNamespaces() throws Exception {
+        testMergeViewIndexSequencesHelper(true);
+    }
+
+    private void testMergeViewIndexSequencesHelper(boolean isNamespaceMappingEnabled) throws Exception {
+        PhoenixConnection conn = getConnection(false, null, isNamespaceMappingEnabled).unwrap(PhoenixConnection.class);
+        ConnectionQueryServices cqs = conn.getQueryServices();
+        //First delete any sequences that may exist from previous tests
+        conn.createStatement().execute("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
+        conn.commit();
+        cqs.clearCache();
+        //Now make sure that running the merge logic doesn't cause a problem when there are no
+        //sequences
+        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        PName tenantOne = PNameFactory.newName("TENANT_ONE");
+        PName tenantTwo = PNameFactory.newName("TENANT_TWO");
+        String tableName =
+            SchemaUtil.getPhysicalHBaseTableName("TEST",
+                "T_" + generateUniqueName(), isNamespaceMappingEnabled).getString();
+        PName viewIndexTable = PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(tableName));
+        SequenceKey sequenceOne =
+            createViewIndexSequenceWithOldName(cqs, tenantOne, viewIndexTable, isNamespaceMappingEnabled);
+        SequenceKey sequenceTwo =
+            createViewIndexSequenceWithOldName(cqs, tenantTwo, viewIndexTable, isNamespaceMappingEnabled);
+        SequenceKey sequenceGlobal =
+            createViewIndexSequenceWithOldName(cqs, null, viewIndexTable, isNamespaceMappingEnabled);
+
+        List<SequenceAllocation> allocations = Lists.newArrayList();
+        long val1 = 10;
+        long val2 = 100;
+        long val3 = 1000;
+        allocations.add(new SequenceAllocation(sequenceOne, val1));
+        allocations.add(new SequenceAllocation(sequenceGlobal, val2));
+        allocations.add(new SequenceAllocation(sequenceTwo, val3));
+
+
+        long[] incrementedValues = new long[3];
+        SQLException[] exceptions = new SQLException[3];
+        //simulate incrementing the view indexes
+        cqs.incrementSequences(allocations, EnvironmentEdgeManager.currentTimeMillis(), incrementedValues,
+            exceptions);
+        for (SQLException e : exceptions) {
+            assertNull(e);
+        }
+
+        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        //now check that there exists a sequence using the new naming convention, whose value is the
+        //max of all the previous sequences for this table.
+
+        List<SequenceAllocation> afterUpgradeAllocations = Lists.newArrayList();
+        SequenceKey sequenceUpgrade = MetaDataUtil.getViewIndexSequenceKey(null, viewIndexTable, 0, isNamespaceMappingEnabled);
+        afterUpgradeAllocations.add(new SequenceAllocation(sequenceUpgrade, 1));
+        long[] afterUpgradeValues = new long[1];
+        SQLException[] afterUpgradeExceptions = new SQLException[1];
+        cqs.incrementSequences(afterUpgradeAllocations, EnvironmentEdgeManager.currentTimeMillis(), afterUpgradeValues, afterUpgradeExceptions);
+
+        assertNull(afterUpgradeExceptions[0]);
+        int safetyIncrement = 100;
+        if (isNamespaceMappingEnabled){
+            //since one sequence (the global one) will be reused as the "new" sequence,
+            // it's already in cache and will reflect the final increment immediately
+            assertEquals(Long.MIN_VALUE + val3 + safetyIncrement + 1, afterUpgradeValues[0]);
+        } else {
+            assertEquals(Long.MIN_VALUE + val3 + safetyIncrement, afterUpgradeValues[0]);
+        }
+    }
+
+    private SequenceKey createViewIndexSequenceWithOldName(ConnectionQueryServices cqs, PName tenant, PName viewIndexTable, boolean isNamespaceMapped) throws SQLException {
+        String tenantId = tenant == null ? null : tenant.getString();
+        SequenceKey key = MetaDataUtil.getOldViewIndexSequenceKey(tenantId, viewIndexTable, 0, isNamespaceMapped);
+        //Sequences are owned globally even if they contain a tenantId in the name
+        String sequenceTenantId = isNamespaceMapped ? tenantId : null;
+        cqs.createSequence(sequenceTenantId, key.getSchemaName(), key.getSequenceName(),
+            Long.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, EnvironmentEdgeManager.currentTimeMillis());
+        return key;
     }
 
 }

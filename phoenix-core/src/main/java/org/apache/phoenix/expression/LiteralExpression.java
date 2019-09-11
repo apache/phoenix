@@ -184,6 +184,7 @@ public class LiteralExpression extends BaseTerminalExpression {
             return getBooleanLiteralExpression((Boolean)value, determinism);
         }
         PDataType actualType = PDataType.fromLiteral(value);
+        type = type == null ? actualType : type;
         try {
             value = type.toObject(value, actualType);
         } catch (IllegalDataException e) {
@@ -208,7 +209,7 @@ public class LiteralExpression extends BaseTerminalExpression {
             return getTypedNullLiteralExpression(type, determinism);
         }
         if (maxLength == null) {
-            maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
+            maxLength = type.isFixedWidth() ? type.getMaxLength(value) : null;
         }
         return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, determinism);
     }
@@ -337,6 +338,17 @@ public class LiteralExpression extends BaseTerminalExpression {
 
     @Override
     public Integer getMaxLength() {
+        // For literals representing arrays of CHAR or BINARY, the byte size is null and the max
+        // length of the expression is also null, so we must get the max length of the
+        // actual underlying array
+        if (maxLength == null && getDataType() != null && getDataType().isArrayType() &&
+                PDataType.arrayBaseType(getDataType()).getByteSize() == null) {
+            Object value = getValue();
+            if (value instanceof PhoenixArray) {
+                // Return the max length of the underlying PhoenixArray data
+                return ((PhoenixArray) value).getMaxLength();
+            }
+        }
         return maxLength;
     }
 

@@ -58,7 +58,7 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, KeyValue> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportMapper.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexImportMapper.class);
     
     private final PhoenixIndexDBWritable indxWritable = new PhoenixIndexDBWritable();
     
@@ -140,13 +140,11 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
                         }
                         for (List<Cell> cellList : mutation.getFamilyCellMap().values()) {
                             List<Cell>keyValueList = preUpdateProcessor.preUpsert(mutation.getRow(), cellList);
-                            for (Cell keyValue : keyValueList) {
-                                keyValues.add(keyValue);
-                            }
+                            keyValues.addAll(keyValueList);
                         }
                     }
                 }
-                Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
+                keyValues.sort(pconn.getKeyValueBuilder().getKeyValueComparator());
                 for (Cell kv : keyValues) {
                     outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                     context.write(outputKey, PhoenixKeyValueUtil.maybeCopyCell(kv));
@@ -155,7 +153,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             }
             connection.rollback();
        } catch (SQLException e) {
-           LOG.error("Error {}  while read/write of a record ",e.getMessage());
+           LOGGER.error("Error {}  while read/write of a record ",e.getMessage());
            context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
            throw new RuntimeException(e);
         } 
@@ -172,7 +170,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             try {
                 connection.close();
             } catch (SQLException e) {
-                LOG.error("Error while closing connection in the PhoenixIndexMapper class ", e);
+                LOGGER.error("Error while closing connection in the PhoenixIndexMapper class ", e);
             }
         }
     }

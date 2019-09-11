@@ -29,14 +29,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Map;
 
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
@@ -53,7 +57,9 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps.entrySet().iterator()));
         zkQuorum = TestUtil.LOCALHOST + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + getUtility().getZkCluster().getClientPort();
         conn = DriverManager.getConnection(getUrl());
     }
@@ -529,5 +535,73 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 assertFalse(rs.next());
             }
         }
+    }
+
+    @Test
+    public void testImportWithUpperCaseSchemaNameAndLowerCaseTableName() throws Exception {
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE S.\"t\" (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, " +
+                              "T DATE) SPLIT ON (1,2)");
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.println("2,Name 2,1970/01/02");
+        printWriter.close();
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input1.csv",
+                "--table", "\"\"t\"\"",
+                "--schema", "S",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM S.\"t\" ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertFalse(rs.next());
+        rs.close();
+        stmt.close();
+    }
+
+    @Test
+    public void testImportWithLowerCaseSchemaNameAndUpperCaseTableName() throws Exception {
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE \"s\".T (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, " +
+                               "T DATE) SPLIT ON (1,2)");
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.println("2,Name 2,1970/01/02");
+        printWriter.close();
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input1.csv",
+                "--table", "T",
+                "--schema", "\"\"s\"\"",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM \"s\".T ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertFalse(rs.next());
+        rs.close();
+        stmt.close();
     }
 }

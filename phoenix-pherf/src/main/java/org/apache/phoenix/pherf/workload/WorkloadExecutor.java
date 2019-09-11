@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.pherf.workload;
 
+import com.google.common.annotations.VisibleForTesting;
+import jline.internal.TestAccessible;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,12 +31,13 @@ import java.util.Properties;
 import java.util.concurrent.*;
 
 public class WorkloadExecutor {
-    private static final Logger logger = LoggerFactory.getLogger(WorkloadExecutor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(WorkloadExecutor.class);
     private final int poolSize;
     private final boolean isPerformance;
 
     // Jobs can be accessed by multiple threads
-    private final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
+    @VisibleForTesting
+    public final Map<Workload, Future> jobs = new ConcurrentHashMap<>();
 
     private final ExecutorService pool;
 
@@ -84,7 +87,7 @@ public class WorkloadExecutor {
             future.get();
             jobs.remove(workload);
         } catch (InterruptedException | ExecutionException e) {
-            logger.error("", e);
+            LOGGER.error("", e);
         }
     }
 

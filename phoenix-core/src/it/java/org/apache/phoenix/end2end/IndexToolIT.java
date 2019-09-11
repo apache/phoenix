@@ -76,6 +76,7 @@ import com.google.common.collect.Maps;
 public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
+    private final boolean mutable;
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
@@ -85,6 +86,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     public IndexToolIT(String transactionProvider, boolean mutable, boolean localIndex,
             boolean directApi, boolean useSnapshot, boolean useTenantId) {
         this.localIndex = localIndex;
+        this.mutable = mutable;
         this.transactional = transactionProvider != null;
         this.directApi = directApi;
         this.useSnapshot = useSnapshot;
@@ -132,18 +134,23 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                             || !TransactionFactory.getTransactionProvider(
                                     TransactionFactory.Provider.valueOf(transactionProvider))
                                 .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
-                        for (boolean directApi : Booleans) {
-                            for (boolean useSnapshot : Booleans) {
-                                list.add(new Object[] { transactionProvider, mutable, localIndex,
-                                        directApi, useSnapshot, false});
+                        if (localIndex) {
+                            for (boolean directApi : Booleans) {
+                                list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                        directApi, false, false});
                             }
+                        }
+                        else {
+                            // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
+                            list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                    true, false, false});
                         }
                     }
                 }
             }
         }
         // Add the usetenantId
-        list.add(new Object[] { "", false, false, true, false, true});
+        list.add(new Object[] { null, false, false, true, false, true});
         return TestUtil.filterTxParamData(list,0);
     }
 
@@ -328,6 +335,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testSaltedVariableLengthPK() throws Exception {
+        if (!mutable) return;
+        if (transactional) return;
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -372,6 +381,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testSplitIndex() throws Exception {
         if (localIndex) return; // can't split local indexes
+        if (!mutable) return;
+        if (transactional) return;
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);

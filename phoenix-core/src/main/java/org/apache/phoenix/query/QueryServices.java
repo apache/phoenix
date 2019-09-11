@@ -346,6 +346,15 @@ public interface QueryServices extends SQLCloseable {
     public static final String TASK_HANDLING_MAX_INTERVAL_MS_ATTRIB = "phoenix.task.handling.maxInterval.ms";
     // The initial delay before the first task from table SYSTEM.TASK is handled
     public static final String TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB = "phoenix.task.handling.initial.delay.ms";
+    // The minimum age of an unverified global index row to be eligible for deletion
+    public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.global.index.row.age.threshold.to.delete.ms";
+    // The maximum number of global index rows to be rebuild at a time
+    public static final String GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB = "phoenix.global.index.row.repair.count.ms";
+    // Enable the IndexRegionObserver Coprocessor
+    public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+    // Enable support for long view index(default is false)
+    public static final String LONG_VIEW_INDEX_ENABLED_ATTRIB = "phoenix.index.longViewIndex.enabled";
+
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
@@ -366,6 +375,11 @@ public interface QueryServices extends SQLCloseable {
     // as from 4.15 onwards the PARENT->CHILD links are stored in a separate SYSTEM.CHILD_LINK table.
     public static final String ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK =
             "phoenix.allow.system.catalog.rollback";
+
+    // Phoenix parameter used to indicate what implementation is used for providing the client
+    // stats guide post cache.
+    // QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS is used if this is not provided
+    public static final String GUIDE_POSTS_CACHE_FACTORY_CLASS = "phoenix.guide.posts.cache.factory.class";
 
     /**
      * Get executor service used for parallel scans

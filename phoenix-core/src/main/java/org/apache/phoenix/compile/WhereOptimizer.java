@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -347,7 +348,9 @@ public class WhereOptimizer {
         byte[] lowerRange = KeyRange.UNBOUND;
         boolean lowerInclusive = false;
         // Lower range of trailing part of RVC must be true, so we can form a new range to intersect going forward
-        if (!range.lowerUnbound() && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
+        if (!range.lowerUnbound()
+                && range.getLowerRange().length > clippedResult.getLowerRange().length
+                && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
             lowerRange = range.getLowerRange();
             int offset = clippedResult.getLowerRange().length + separatorLength;
             ptr.set(lowerRange, offset, lowerRange.length - offset);
@@ -356,7 +359,9 @@ public class WhereOptimizer {
         }
         byte[] upperRange = KeyRange.UNBOUND;
         boolean upperInclusive = false;
-        if (!range.upperUnbound() && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
+        if (!range.upperUnbound()
+                && range.getUpperRange().length > clippedResult.getUpperRange().length
+                && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
             upperRange = range.getUpperRange();
             int offset = clippedResult.getUpperRange().length + separatorLength;
             ptr.set(upperRange, offset, upperRange.length - offset);
@@ -652,47 +657,8 @@ public class WhereOptimizer {
             final List<Expression> extractNodes = Collections.<Expression>singletonList(node);
             final KeyPart childPart = slot.getKeyPart();
             final ImmutableBytesWritable ptr = context.getTempPtr();
-            return new SingleKeySlot(new KeyPart() {
-
-                @Override
-                public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                    KeyRange range = childPart.getKeyRange(op, rhs);
-                    byte[] lower = range.getLowerRange();
-                    if (!range.lowerUnbound()) {
-                        ptr.set(lower);
-                        // Do the reverse translation so we can optimize out the coerce expression
-                        // For the actual type of the coerceBytes call, we use the node type instead of the rhs type, because
-                        // for IN, the rhs type will be VARBINARY and no coerce will be done in that case (and we need it to
-                        // be done).
-                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getSortOrder(), SortOrder.ASC);
-                        lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    }
-                    byte[] upper = range.getUpperRange();
-                    if (!range.upperUnbound()) {
-                        ptr.set(upper);
-                        // Do the reverse translation so we can optimize out the coerce expression
-                        node.getChild().getDataType().coerceBytes(ptr, node.getDataType(), rhs.getSortOrder(), SortOrder.ASC);
-                        upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    }
-                    range = KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper, range.isUpperInclusive());
-                    return range;
-                }
-
-                @Override
-                public List<Expression> getExtractNodes() {
-                    return extractNodes;
-                }
-
-                @Override
-                public PColumn getColumn() {
-                    return childPart.getColumn();
-                }
-
-                @Override
-                public PTable getTable() {
-                    return childPart.getTable();
-                }
-            }, slot.getPKPosition(), slot.getKeyRanges());
+            return new SingleKeySlot(new CoerceKeySlot(
+                    childPart, ptr, node, extractNodes), slot.getPKPosition(), slot.getKeyRanges());
         }
 
         /**
@@ -1925,7 +1891,67 @@ public class WhereOptimizer {
                 return table;
             }
         }
-        
+
+        private static class CoerceKeySlot implements KeyPart {
+
+            private final KeyPart childPart;
+            private final ImmutableBytesWritable ptr;
+            private final CoerceExpression node;
+            private final List<Expression> extractNodes;
+
+            public CoerceKeySlot(KeyPart childPart, ImmutableBytesWritable ptr,
+                                 CoerceExpression node, List<Expression> extractNodes) {
+                this.childPart = childPart;
+                this.ptr = ptr;
+                this.node = node;
+                this.extractNodes = extractNodes;
+            }
+
+            @Override
+            public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+                KeyRange range = childPart.getKeyRange(op, rhs);
+                byte[] lower = range.getLowerRange();
+                if (!range.lowerUnbound()) {
+                    ptr.set(lower);
+                    /***
+                    Do the reverse translation so we can optimize out the coerce expression
+                    For the actual type of the coerceBytes call, we use the node type instead of
+                     the rhs type, because for IN, the rhs type will be VARBINARY and no coerce
+                     will be done in that case (and we need it to be done).
+                     */
+                    node.getChild().getDataType().coerceBytes(ptr, node.getDataType(),
+                            rhs.getSortOrder(), SortOrder.ASC);
+                    lower = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                }
+                byte[] upper = range.getUpperRange();
+                if (!range.upperUnbound()) {
+                    ptr.set(upper);
+                    // Do the reverse translation so we can optimize out the coerce expression
+                    node.getChild().getDataType().coerceBytes(ptr, node.getDataType(),
+                            rhs.getSortOrder(), SortOrder.ASC);
+                    upper = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                }
+                range = KeyRange.getKeyRange(lower, range.isLowerInclusive(), upper,
+                        range.isUpperInclusive());
+                return range;
+            }
+
+            @Override
+            public List<Expression> getExtractNodes() {
+                return extractNodes;
+            }
+
+            @Override
+            public PColumn getColumn() {
+                return childPart.getColumn();
+            }
+
+            @Override
+            public PTable getTable() {
+                return childPart.getTable();
+            }
+        }
+
         private class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
@@ -2024,94 +2050,8 @@ public class WhereOptimizer {
                         public Expression wrap(final Expression lhs, final Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
                             final KeyPart childPart = keySlotsIterator.next().getSlots().get(0).getKeyPart();
                             // TODO: DelegateExpression
-                            return new BaseTerminalExpression() {
-                                @Override
-                                public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-                                    if (childPart == null) {
-                                        return rhs.evaluate(tuple, ptr);
-                                    }
-                                    if (!rhs.evaluate(tuple, ptr)) {
-                                        return false;
-                                    }
-                                    if (ptr.getLength() == 0) {
-                                        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-                                        return true;
-                                    }
-                                    // The op used to compute rvcElementOp did not take into account the sort order,
-                                    // and thus we need to transform it here before delegating to the child part
-                                    // which will do the required inversion.
-                                    KeyRange range = childPart.getKeyRange(rhs.getSortOrder().transform(rvcElementOp), rhs);
-                                    // Swap the upper and lower range if descending to compensate for the transform
-                                    // we did above of the rvcElementOp.
-                                    if (rhs.getSortOrder() == SortOrder.DESC) {
-                                        range = KeyRange.getKeyRange(range.getUpperRange(), range.isUpperInclusive(), range.getLowerRange(), range.isLowerInclusive());
-                                    }
-                                    // This can happen when an EQUAL operator is used and the expression cannot possibly match.
-                                    if (range == KeyRange.EMPTY_RANGE) {
-                                        return false;
-                                    }
-                                    // We have to take the range and condense it down to a single key. We use which ever
-                                    // part of the range is inclusive (which implies being bound as well). This works in all
-                                    // cases, including this substring one, which produces a lower inclusive range and an
-                                    // upper non inclusive range.
-                                    // (a, substr(b,1,1)) IN (('a','b'), ('c','d'))
-                                    byte[] key = range.isLowerInclusive() ? range.getLowerRange() : range.getUpperRange();
-                                    // FIXME: this is kind of a hack. The above call will fill a fixed width key, but
-                                    // we don't want to fill the key yet because it can throw off our the logic we
-                                    // use to compute the next key when we evaluate the RHS row value constructor
-                                    // below.  We could create a new childPart with a delegate column that returns
-                                    // null for getByteSize().
-                                    if (lhs.getDataType().isFixedWidth() && lhs.getMaxLength() != null && key.length > lhs.getMaxLength()) {
-                                        // Don't use PDataType.pad(), as this only grows the value, while this is shrinking it.
-                                        key = Arrays.copyOf(key, lhs.getMaxLength());
-                                    }
-                                    ptr.set(key);
-                                    return true;
-                                }
-
-                                @Override
-                                public PDataType getDataType() {
-                                    return childPart.getColumn().getDataType();
-                                }
-                                
-                                @Override
-                                public boolean isNullable() {
-                                    return childPart.getColumn().isNullable();
-                                }
-
-                                @Override
-                                public Integer getMaxLength() {
-                                    return lhs.getMaxLength();
-                                }
-
-                                @Override
-                                public Integer getScale() {
-                                    return childPart.getColumn().getScale();
-                                }
-
-                                @Override
-                                public SortOrder getSortOrder() {
-                                    //See PHOENIX-4969: Clean up and unify code paths for RVCs with
-                                    //  respect to Optimizations for SortOrder
-                                    //Handle the different paths for InList vs Normal Comparison
-                                    //The code paths in InList assume the sortOrder is ASC for
-                                    // their optimizations
-                                    //The code paths for Comparisons on RVC rewrite equality,
-                                    // for the non-equality cases return actual sort order
-                                    //This work around should work
-                                    // but a more general approach can be taken.
-                                    if(rvcElementOp == CompareOp.EQUAL ||
-                                            rvcElementOp == CompareOp.NOT_EQUAL){
-                                        return SortOrder.ASC;
-                                    }
-                                    return childPart.getColumn().getSortOrder();
-                                }
-
-                                @Override
-                                public <T> T accept(ExpressionVisitor<T> visitor) {
-                                    return null;
-                                }
-                            };
+                            return new BaseTerminalExpressionWrap(childPart, rhs, rvcElementOp,
+                                    lhs);
                         }
                         
                     }, table.rowKeyOrderOptimizable());
@@ -2125,6 +2065,120 @@ public class WhereOptimizer {
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 KeyRange range = ByteUtil.getKeyRange(key, /*rvc.getChildren().get(rhs.getChildren().size()-1).getSortOrder().transform(op)*/op, PVarbinary.INSTANCE);
                 return range;
+            }
+
+            private class BaseTerminalExpressionWrap extends BaseTerminalExpression {
+                private final KeyPart childPart;
+                private final Expression rhs;
+                private final CompareOp rvcElementOp;
+                private final Expression lhs;
+
+                public BaseTerminalExpressionWrap(KeyPart childPart, Expression rhs,
+                                                  CompareOp rvcElementOp, Expression lhs) {
+                    this.childPart = childPart;
+                    this.rhs = rhs;
+                    this.rvcElementOp = rvcElementOp;
+                    this.lhs = lhs;
+                }
+
+                @Override
+                public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+                    if (childPart == null) {
+                        return rhs.evaluate(tuple, ptr);
+                    }
+                    if (!rhs.evaluate(tuple, ptr)) {
+                        return false;
+                    }
+                    if (ptr.getLength() == 0) {
+                        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                        return true;
+                    }
+                    // The op used to compute rvcElementOp did not take into account the sort order,
+                    // and thus we need to transform it here before delegating to the child part
+                    // which will do the required inversion.
+                    KeyRange range = childPart.getKeyRange(
+                            rhs.getSortOrder().transform(rvcElementOp), rhs);
+                    // Swap the upper and lower range if descending to compensate for the transform
+                    // we did above of the rvcElementOp.
+                    if (rhs.getSortOrder() == SortOrder.DESC) {
+                        range = KeyRange.getKeyRange(range.getUpperRange(),
+                                range.isUpperInclusive(), range.getLowerRange(),
+                                range.isLowerInclusive());
+                    }
+                    // This can happen when an EQUAL operator is used and the expression cannot
+                    // possibly match.
+                    if (range == KeyRange.EMPTY_RANGE) {
+                        return false;
+                    }
+                    /**
+                     We have to take the range and condense it down to a single key. We use which
+                     ever part of the range is inclusive (which implies being bound as well). This
+                     works in all cases, including this substring one, which produces a lower
+                     inclusive range and an upper non inclusive range.
+                     (a, substr(b,1,1)) IN (('a','b'), ('c','d'))
+                     */
+                    byte[] key = range.isLowerInclusive() ?
+                            range.getLowerRange() : range.getUpperRange();
+                    /**
+                     FIXME:
+                     this is kind of a hack. The above call will fill a fixed width key,but
+                    we don't want to fill the key yet because it can throw off our the logic we
+                    use to compute the next key when we evaluate the RHS row value constructor
+                    below.  We could create a new childPart with a delegate column that returns
+                    null for getByteSize().
+                     */
+                    if (lhs.getDataType().isFixedWidth() &&
+                            lhs.getMaxLength() != null && key.length > lhs.getMaxLength()) {
+                        // Don't use PDataType.pad(), as this only grows the value,
+                        // while this is shrinking it.
+                        key = Arrays.copyOf(key, lhs.getMaxLength());
+                    }
+                    ptr.set(key);
+                    return true;
+                }
+
+                @Override
+                public PDataType getDataType() {
+                    return childPart.getColumn().getDataType();
+                }
+
+                @Override
+                public boolean isNullable() {
+                    return childPart.getColumn().isNullable();
+                }
+
+                @Override
+                public Integer getMaxLength() {
+                    return lhs.getMaxLength();
+                }
+
+                @Override
+                public Integer getScale() {
+                    return childPart.getColumn().getScale();
+                }
+
+                @Override
+                public SortOrder getSortOrder() {
+                    //See PHOENIX-4969: Clean up and unify code paths for RVCs with
+                    //  respect to Optimizations for SortOrder
+                    //Handle the different paths for InList vs Normal Comparison
+                    //The code paths in InList assume the sortOrder is ASC for
+                    // their optimizations
+                    //The code paths for Comparisons on RVC rewrite equality,
+                    // for the non-equality cases return actual sort order
+                    //This work around should work
+                    // but a more general approach can be taken.
+                    if(rvcElementOp == CompareOp.EQUAL ||
+                            rvcElementOp == CompareOp.NOT_EQUAL){
+                        return SortOrder.ASC;
+                    }
+                    return childPart.getColumn().getSortOrder();
+                }
+
+                @Override
+                public <T> T accept(ExpressionVisitor<T> visitor) {
+                    return null;
+                }
             }
         }
     }

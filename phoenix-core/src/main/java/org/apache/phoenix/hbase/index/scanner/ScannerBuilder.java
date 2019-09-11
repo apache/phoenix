@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -33,6 +34,7 @@ import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.FilterList.Operator;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
@@ -92,10 +94,13 @@ public class ScannerBuilder {
       Filter columnFilter =
           new FamilyFilter(CompareOp.EQUAL, new BinaryComparator(ref.getFamily()));
       // combine with a match for the qualifier, if the qualifier is a specific qualifier
+      // in that case we *must* let empty qualifiers through for family delete markers
       if (!Bytes.equals(ColumnReference.ALL_QUALIFIERS, ref.getQualifier())) {
         columnFilter =
-            new FilterList(columnFilter, new QualifierFilter(CompareOp.EQUAL, new BinaryComparator(
-                ref.getQualifier())));
+            new FilterList(columnFilter,
+                    new FilterList(Operator.MUST_PASS_ONE,
+                            new QualifierFilter(CompareOp.EQUAL, new BinaryComparator(ref.getQualifier())),
+                            new QualifierFilter(CompareOp.EQUAL, new BinaryComparator(HConstants.EMPTY_BYTE_ARRAY))));
       }
       columnFilters.addFilter(columnFilter);
     }

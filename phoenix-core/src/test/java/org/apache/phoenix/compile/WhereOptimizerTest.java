@@ -50,7 +50,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -921,14 +921,18 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testDegenerateLikeNoWildcard() throws SQLException {
+    public void testLikeNoWildcardExpression() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select * from atable where organization_id LIKE ? and entity_id  LIKE '" + keyPrefix + "'";
         List<Object> binds = Arrays.<Object>asList(tenantId);
         StatementContext context = compileStatement(query, binds);
         Scan scan = context.getScan();
-        assertDegenerate(scan);
+        byte[] startRow = ByteUtil.concat(
+                PVarchar.INSTANCE.toBytes(tenantId),StringUtil.padChar(PVarchar.INSTANCE.toBytes(keyPrefix),15));
+        assertArrayEquals(startRow, scan.getStartRow());
+        byte[] stopRow = ByteUtil.nextKey(startRow);
+        assertArrayEquals(stopRow, scan.getStopRow());
     }
 
     @Test

@@ -46,7 +46,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
-    private static final Logger logger = LoggerFactory.getLogger(OmidTransactionContext.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OmidTransactionContext.class);
 
     private HBaseTransactionManager tm;
     private HBaseTransaction tx;
@@ -153,12 +153,10 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public void checkpoint(boolean hasUncommittedData) throws SQLException {
-        if (hasUncommittedData) {
-            try {
-                tx.checkpoint();
-            } catch (TransactionException e) {
-                throw new SQLException(e);
-            }
+        try {
+            tx.checkpoint();
+        } catch (TransactionException e) {
+            throw new SQLException(e);
         }
         tx.setVisibilityLevel(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT);
     }
@@ -168,8 +166,8 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
         try {
             tx = (HBaseTransaction) tm.fence(dataTable.getName().getBytes());
-            if (logger.isInfoEnabled()) {
-                logger.info("Added write fence at ~"
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info("Added write fence at ~"
                         + tx.getReadTimestamp());
             }
         } catch (TransactionException e) {

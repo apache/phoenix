@@ -80,7 +80,7 @@ import com.google.common.collect.Maps;
 @SuppressWarnings("deprecation")
 @RunWith(RunUntilFailure.class)
 public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger LOG = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
     private static final Random RAND = new Random(5);
     private static final int WAIT_AFTER_DISABLED = 5000;
     private static final long REBUILD_PERIOD = 50000;
@@ -97,8 +97,9 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put(QueryServices.INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD, "50000000");
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, Long.toString(REBUILD_PERIOD)); // batch at 50 seconds
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
                getUtility()
@@ -138,7 +139,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                         Thread.interrupted();
                         throw new RuntimeException(e);
                     } catch (SQLException e) {
-                        LOG.error(e.getMessage(),e);
+                        LOGGER.error(e.getMessage(),e);
                     } finally {
                         runRebuildOnce = false;
                     }

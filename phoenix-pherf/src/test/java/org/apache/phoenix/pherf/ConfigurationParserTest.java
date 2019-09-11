@@ -38,7 +38,7 @@ import javax.xml.bind.Marshaller;
 import static org.junit.Assert.*;
 
 public class ConfigurationParserTest extends ResultBaseTest {
-    private static final Logger logger = LoggerFactory.getLogger(ConfigurationParserTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConfigurationParserTest.class);
 
     @Test
     public void testReadWriteWorkloadReader() throws Exception {
@@ -65,7 +65,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
     public void testConfigReader() {
         try {
 
-            logger.debug("DataModel: " + writeXML());
+            LOGGER.debug("DataModel: " + writeXML());
             List<Scenario> scenarioList = getScenarios();
             List<Column> dataMappingColumns = getDataModel().getDataMappingColumns();
             assertTrue("Could not load the data columns from xml.",
@@ -199,6 +199,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
             data.setDataMappingColumns(columnList);
 
             Scenario scenario = new Scenario();
+            scenario.setName("scenario1");
             scenario.setTenantId("00DXXXXXX");
         	List<Ddl> preScenarioDdls = new ArrayList<Ddl>();
         	preScenarioDdls.add(new Ddl("CREATE INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER) ASYNC", "FHAIDX_NEWVAL_NUMBER"));
@@ -219,6 +220,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
             querySet.setNumberOfExecutions(20);
             query.setStatement("select * from FHA");
             Scenario scenario2 = new Scenario();
+            scenario2.setName("scenario2");
             scenario2.setPhoenixProperties(new HashMap<String, String>());
             scenario2.setDataOverride(new DataOverride());
             scenario2.setTableName("tableName2");

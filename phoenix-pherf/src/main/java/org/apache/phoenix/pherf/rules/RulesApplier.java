@@ -35,10 +35,11 @@ import org.slf4j.LoggerFactory;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
-    private static final Logger logger = LoggerFactory.getLogger(RulesApplier.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
     private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
@@ -115,7 +116,7 @@ public class RulesApplier {
         List<Scenario> scenarios = parser.getScenarios();
         DataValue value = null;
         if (scenarios.contains(scenario)) {
-            logger.debug("We found a correct Scenario");
+            LOGGER.debug("We found a correct Scenario");
             
             Map<DataTypeMapping, List> overrideRuleMap = this.getCachedScenarioOverrides(scenario);
             
@@ -123,7 +124,7 @@ public class RulesApplier {
 	            List<Column> overrideRuleList = this.getCachedScenarioOverrides(scenario).get(phxMetaColumn.getType());
 	            
 				if (overrideRuleList != null && overrideRuleList.contains(phxMetaColumn)) {
-					logger.debug("We found a correct override column rule");
+					LOGGER.debug("We found a correct override column rule");
 					Column columnRule = getColumnForRuleOverride(overrideRuleList, phxMetaColumn);
 					if (columnRule != null) {
 						return getDataValue(columnRule);
@@ -138,12 +139,12 @@ public class RulesApplier {
             // Make sure Column from Phoenix Metadata matches a rule column
             if (ruleList.contains(phxMetaColumn)) {
                 // Generate some random data based on this rule
-                logger.debug("We found a correct column rule");
+                LOGGER.debug("We found a correct column rule");
                 Column columnRule = getColumnForRule(ruleList, phxMetaColumn);
 
                 value = getDataValue(columnRule);
             } else {
-                logger.warn("Attempted to apply rule to data, but could not find a rule to match type:"
+                LOGGER.warn("Attempted to apply rule to data, but could not find a rule to match type:"
                                 + phxMetaColumn.getType()
                 );
             }
@@ -176,7 +177,7 @@ public class RulesApplier {
         }
 
         if ((prefix.length() >= length) && (length > 0)) {
-            logger.warn("You are attempting to generate data with a prefix (" + prefix + ") "
+            LOGGER.warn("You are attempting to generate data with a prefix (" + prefix + ") "
                     + "That is longer than expected overall field length (" + length + "). "
                     + "This will certainly lead to unexpected data values.");
         }
@@ -228,24 +229,30 @@ public class RulesApplier {
                     data = new DataValue(column.getType(), String.valueOf(dbl));
                 }
                 break;
+            case TINYINT:
             case INTEGER:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     int minInt = (int) column.getMinValue();
                     int maxInt = (int) column.getMaxValue();
-                    Preconditions.checkArgument((minInt > 0) && (maxInt > 0), "min and max values need to be set in configuration for integers " + column.getName());
-                    int intVal = RandomUtils.nextInt(minInt, maxInt);
+                    if (column.getType() == DataTypeMapping.TINYINT) {
+                        Preconditions.checkArgument((minInt >= -128) && (minInt <= 128), "min value need to be set in configuration for tinyints " + column.getName());
+                        Preconditions.checkArgument((maxInt >= -128) && (maxInt <= 128), "max value need to be set in configuration for tinyints " + column.getName());
+                    }
+                    int intVal = ThreadLocalRandom.current().nextInt(minInt, maxInt + 1);
                     data = new DataValue(column.getType(), String.valueOf(intVal));
                 }
                 break;
+            case BIGINT:
             case UNSIGNED_LONG:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     long minLong = column.getMinValue();
                     long maxLong = column.getMaxValue();
-                    Preconditions.checkArgument((minLong > 0) && (maxLong > 0), "min and max values need to be set in configuration for unsigned_longs " + column.getName());
+                    if (column.getType() == DataTypeMapping.UNSIGNED_LONG)
+                        Preconditions.checkArgument((minLong > 0) && (maxLong > 0), "min and max values need to be set in configuration for unsigned_longs " + column.getName());
                     long longVal = RandomUtils.nextLong(minLong, maxLong);
                     data = new DataValue(column.getType(), String.valueOf(longVal));
                 }
@@ -345,7 +352,7 @@ public class RulesApplier {
             // While it's possible to get here if you have a bunch of really small distributions,
             // It's just really unlikely. This is just a safety just so we actually pick a value.
             if(count++ == OH_SHIT_LIMIT){
-                logger.info("We generated a value from hitting our OH_SHIT_LIMIT: " + OH_SHIT_LIMIT);
+                LOGGER.info("We generated a value from hitting our OH_SHIT_LIMIT: " + OH_SHIT_LIMIT);
                 generatedDataValue = valueRule;
             }
 

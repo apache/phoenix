@@ -152,6 +152,9 @@ public interface QueryConstants {
     public static final ImmutableBytesPtr DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
                DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
 
+    public static final String GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER = EMPTY_COLUMN_NAME;
+    public static final byte[] GLOBAL_INDEX_VERIFIED_COLUMN_NAME_BYTES = Bytes.toBytes(GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER);
+            ;
     public static final String ALL_FAMILY_PROPERTIES_KEY = "";
     public static final String SYSTEM_TABLE_PK_NAME = "pk";
 
@@ -162,7 +165,9 @@ public interface QueryConstants {
     public static final int NANOS_IN_SECOND = BigDecimal.valueOf(Math.pow(10, 9)).intValue();
     public static final int DIVERGED_VIEW_BASE_COLUMN_COUNT = -100;
     public static final int BASE_TABLE_BASE_COLUMN_COUNT = -1;
-    
+
+    // custom TagType
+    public static final byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
      * are reserved for special column qualifiers returned by Phoenix co-processors.
@@ -384,9 +389,15 @@ public interface QueryConstants {
             TENANT_ID + " VARCHAR NULL," +
             TABLE_SCHEM + " VARCHAR NULL," +
             TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            // Non-PK columns
+            TASK_STATUS + " VARCHAR NULL," +
+            TASK_END_TS + " TIMESTAMP NULL," +
+            TASK_PRIORITY + " UNSIGNED_TINYINT NULL," +
+            TASK_DATA + " VARCHAR NULL,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
             TABLE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
 }

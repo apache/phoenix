@@ -96,6 +96,7 @@ public class QueryCompiler {
     private final Scan scan;
     private final Scan originalScan;
     private final ColumnResolver resolver;
+    private final BindManager bindManager;
     private final SelectStatement select;
     private final List<? extends PDatum> targetColumns;
     private final ParallelIteratorFactory parallelIteratorFactory;
@@ -111,10 +112,19 @@ public class QueryCompiler {
         this(statement, select, resolver, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), projectTuples, optimizeSubquery, dataPlans);
     }
 
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, BindManager bindManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans) throws SQLException {
+        this(statement, select, resolver, bindManager, Collections.<PDatum>emptyList(), null, new SequenceManager(statement), projectTuples, optimizeSubquery, dataPlans);
+    }
+
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans) throws SQLException {
+        this(statement, select, resolver, new BindManager(statement.getParameters()), targetColumns, parallelIteratorFactory, sequenceManager, projectTuples, optimizeSubquery, dataPlans);
+    }
+
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, BindManager bindManager, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans) throws SQLException {
         this.statement = statement;
         this.select = select;
         this.resolver = resolver;
+        this.bindManager = bindManager;
         this.scan = new Scan();
         this.targetColumns = targetColumns;
         this.parallelIteratorFactory = parallelIteratorFactory;
@@ -179,7 +189,7 @@ public class QueryCompiler {
         TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans,
             select.hasWildcard() ? null : select.getSelect());
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
-        StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
+        StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
         QueryPlan plan = compileSingleFlatQuery(
                 context,
                 select,
@@ -195,7 +205,7 @@ public class QueryCompiler {
 
     public QueryPlan compileSelect(SelectStatement select) throws SQLException{
         List<Object> binds = statement.getParameters();
-        StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
+        StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
         if (select.isJoin()) {
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, binds, joinTable, false, false, null);
@@ -215,7 +225,7 @@ public class QueryCompiler {
      */
     protected QueryPlan compileJoinQuery(StatementContext context, List<Object> binds, JoinTable joinTable, boolean asSubquery, boolean projectPKColumns, List<OrderByNode> orderBy) throws SQLException {
         if (joinTable.getJoinSpecs().isEmpty()) {
-            Table table = joinTable.getTable();
+            Table table = joinTable.getLeftTable();
             SelectStatement subquery = table.getAsSubquery(orderBy);
             if (!table.isSubselect()) {
                 context.setCurrentTable(table.getTableRef());
@@ -257,7 +267,7 @@ public class QueryCompiler {
         Cost bestCost = null;
         for (JoinCompiler.Strategy strategy : strategies) {
             StatementContext newContext = new StatementContext(
-                    context.getStatement(), context.getResolver(), new Scan(), context.getSequenceManager());
+                    context.getStatement(), context.getResolver(), context.getBindManager(), new Scan(), context.getSequenceManager());
             QueryPlan plan = compileJoinQuery(
                     strategy, newContext, binds, joinTable, asSubquery, projectPKColumns, orderBy);
             Cost cost = plan.getCost();
@@ -280,7 +290,7 @@ public class QueryCompiler {
         switch (strategy) {
             case HASH_BUILD_RIGHT: {
                 boolean[] starJoinVector = joinTable.getStarJoinVector();
-                Table table = joinTable.getTable();
+                Table table = joinTable.getLeftTable();
                 PTable initialProjectedTable;
                 TableRef tableRef;
                 SelectStatement query;
@@ -316,9 +326,15 @@ public class QueryCompiler {
                 for (int i = 0; i < count; i++) {
                     JoinSpec joinSpec = joinSpecs.get(i);
                     Scan subScan = ScanUtil.newScan(originalScan);
-                    subContexts[i] = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
-                    subPlans[i] = compileJoinQuery(subContexts[i], binds, joinSpec.getJoinTable(), true, true, null);
-                    boolean hasPostReference = joinSpec.getJoinTable().hasPostReference();
+                    subContexts[i] = new StatementContext(statement, context.getResolver(), context.getBindManager(), subScan, new SequenceManager(statement));
+                    subPlans[i] = compileJoinQuery(
+                            subContexts[i],
+                            binds,
+                            joinSpec.getRhsJoinTable(),
+                            true,
+                            true,
+                            null);
+                    boolean hasPostReference = joinSpec.getRhsJoinTable().hasPostReference();
                     if (hasPostReference) {
                         tables[i] = subContexts[i].getResolver().getTables().get(0).getTable();
                         projectedTable = JoinCompiler.joinProjectedTables(projectedTable, tables[i], joinSpec.getType());
@@ -366,11 +382,11 @@ public class QueryCompiler {
             case HASH_BUILD_LEFT: {
                 JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
                 JoinType type = lastJoinSpec.getType();
-                JoinTable rhsJoinTable = lastJoinSpec.getJoinTable();
-                Table rhsTable = rhsJoinTable.getTable();
-                JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
+                JoinTable rhsJoinTable = lastJoinSpec.getRhsJoinTable();
+                Table rhsTable = rhsJoinTable.getLeftTable();
+                JoinTable lhsJoin = joinTable.createSubJoinTable(statement.getConnection());
                 Scan subScan = ScanUtil.newScan(originalScan);
-                StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
+                StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), context.getBindManager(), subScan, new SequenceManager(statement));
                 QueryPlan lhsPlan = compileJoinQuery(lhsCtx, binds, lhsJoin, true, true, null);
                 PTable rhsProjTable;
                 TableRef rhsTableRef;
@@ -428,10 +444,10 @@ public class QueryCompiler {
                 return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[]{new HashSubPlan(0, lhsPlan, hashExpressions, false, usePersistentCache, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
             }
             case SORT_MERGE: {
-                JoinTable lhsJoin = joinTable.getSubJoinTableWithoutPostFilters();
+                JoinTable lhsJoin =  joinTable.createSubJoinTable(statement.getConnection());
                 JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
                 JoinType type = lastJoinSpec.getType();
-                JoinTable rhsJoin = lastJoinSpec.getJoinTable();
+                JoinTable rhsJoin = lastJoinSpec.getRhsJoinTable();
                 if (type == JoinType.Right) {
                     JoinTable temp = lhsJoin;
                     lhsJoin = rhsJoin;
@@ -447,13 +463,13 @@ public class QueryCompiler {
                 }
 
                 Scan lhsScan = ScanUtil.newScan(originalScan);
-                StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), lhsScan, new SequenceManager(statement));
+                StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), context.getBindManager(), lhsScan, new SequenceManager(statement));
                 boolean preserveRowkey = !projectPKColumns && type != JoinType.Full;
                 QueryPlan lhsPlan = compileJoinQuery(lhsCtx, binds, lhsJoin, true, !preserveRowkey, lhsOrderBy);
                 PTable lhsProjTable = lhsCtx.getResolver().getTables().get(0).getTable();
 
                 Scan rhsScan = ScanUtil.newScan(originalScan);
-                StatementContext rhsCtx = new StatementContext(statement, context.getResolver(), rhsScan, new SequenceManager(statement));
+                StatementContext rhsCtx = new StatementContext(statement, context.getResolver(), context.getBindManager(), rhsScan, new SequenceManager(statement));
                 QueryPlan rhsPlan = compileJoinQuery(rhsCtx, binds, rhsJoin, true, true, rhsOrderBy);
                 PTable rhsProjTable = rhsCtx.getResolver().getTables().get(0).getTable();
 
@@ -467,7 +483,7 @@ public class QueryCompiler {
 
                 ColumnResolver resolver = FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), joinTable.getStatement().getUdfParseNodes());
                 TableRef tableRef = resolver.getTables().get(0);
-                StatementContext subCtx = new StatementContext(statement, resolver, ScanUtil.newScan(originalScan), new SequenceManager(statement));
+                StatementContext subCtx = new StatementContext(statement, resolver, context.getBindManager(), ScanUtil.newScan(originalScan), new SequenceManager(statement));
                 subCtx.setCurrentTable(tableRef);
                 QueryPlan innerPlan = new SortMergeJoinPlan(
                         subCtx,
@@ -513,7 +529,7 @@ public class QueryCompiler {
             return false;
 
         Scan scanCopy = ScanUtil.newScan(context.getScan());
-        StatementContext contextCopy = new StatementContext(statement, context.getResolver(), scanCopy, new SequenceManager(statement));
+        StatementContext contextCopy = new StatementContext(statement, context.getResolver(), context.getBindManager(), scanCopy, new SequenceManager(statement));
         contextCopy.setCurrentTable(table);
         List<Expression> lhsCombination = Lists.<Expression> newArrayList();
         boolean complete = WhereOptimizer.getKeyExpressionCombination(lhsCombination, contextCopy, select, joinExpressions);
@@ -554,7 +570,7 @@ public class QueryCompiler {
         }
         int maxRows = this.statement.getMaxRows();
         this.statement.setMaxRows(pushDownMaxRows ? maxRows : 0); // overwrite maxRows to avoid its impact on inner queries.
-        QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver, false, optimizeSubquery, null).compile();
+        QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver, bindManager, false, optimizeSubquery, null).compile();
         if (optimizeSubquery) {
             plan = statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
         }

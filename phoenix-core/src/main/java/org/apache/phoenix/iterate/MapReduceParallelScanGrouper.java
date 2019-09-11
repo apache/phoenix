@@ -18,9 +18,9 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 
@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
@@ -53,7 +52,8 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 		return INSTANCE;
 	}
 
-   private MapReduceParallelScanGrouper() {}
+    @VisibleForTesting
+    MapReduceParallelScanGrouper() {}
 
 	@Override
 	public boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans,

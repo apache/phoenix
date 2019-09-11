@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -71,6 +69,8 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
@@ -85,7 +85,7 @@ import com.google.common.collect.Multimap;
  *
  */
 public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
-    private static final Log LOG = LogFactory.getLog(PhoenixIndexFailurePolicy.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexFailurePolicy.class);
     public static final String THROW_INDEX_WRITE_FAILURE = "THROW_INDEX_WRITE_FAILURE";
     public static final String DISABLE_INDEX_ON_WRITE_FAILURE = "DISABLE_INDEX_ON_WRITE_FAILURE";
     public static final String REBUILD_INDEX_ON_WRITE_FAILURE = "REBUILD_INDEX_ON_WRITE_FAILURE";
@@ -174,7 +174,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             timestamp = handleFailureWithExceptions(attempted, cause);
             throwing = false;
         } catch (Throwable t) {
-            LOG.warn("handleFailure failed", t);
+            LOGGER.warn("handleFailure failed", t);
             super.handleFailure(attempted, cause);
             throwing = false;
         } finally {
@@ -188,7 +188,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 if (throwIndexWriteFailure) {
             		throw ioException;
             	} else {
-                    LOG.warn("Swallowing index write failure", ioException);
+                    LOGGER.warn("Swallowing index write failure", ioException);
             	}
             }
         }
@@ -282,25 +282,29 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                         MetaDataMutationResult result = IndexUtil.updateIndexState(indexTableName, minTimeStamp,
                                 systemTable, newState);
                         if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
-                            LOG.info("Index " + indexTableName + " has been dropped. Ignore uncommitted mutations");
+                            LOGGER.info("Index " + indexTableName +
+                                    " has been dropped. Ignore uncommitted mutations");
                             continue;
                         }
                         if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                             if (leaveIndexActive) {
-                                LOG.warn("Attempt to update INDEX_DISABLE_TIMESTAMP " + " failed with code = "
+                                LOGGER.warn("Attempt to update INDEX_DISABLE_TIMESTAMP "
+                                        + " failed with code = "
                                         + result.getMutationCode());
                                 // If we're not disabling the index, then we don't want to throw as throwing
                                 // will lead to the RS being shutdown.
                                 if (blockDataTableWritesOnFailure) { throw new DoNotRetryIOException(
                                         "Attempt to update INDEX_DISABLE_TIMESTAMP failed."); }
                             } else {
-                                LOG.warn("Attempt to disable index " + indexTableName + " failed with code = "
-                                        + result.getMutationCode() + ". Will use default failure policy instead.");
+                                LOGGER.warn("Attempt to disable index " + indexTableName +
+                                        " failed with code = " + result.getMutationCode() +
+                                        ". Will use default failure policy instead.");
                                 throw new DoNotRetryIOException("Attempt to disable " + indexTableName + " failed.");
                             }
                         }
-                        LOG.info("Successfully update INDEX_DISABLE_TIMESTAMP for " + indexTableName
-                            + " due to an exception while writing updates. indexState=" + newState,
+                        LOGGER.info("Successfully update INDEX_DISABLE_TIMESTAMP for " +
+                                        indexTableName + " due to an exception while" +
+                                        " writing updates. indexState=" + newState,
                         cause);
                     } catch (Throwable t) {
                         if (t instanceof Exception) {
@@ -351,7 +355,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                         mutation.getRow().length - offset));
                 String indexTableName = localIndexNames.get(new ImmutableBytesWritable(viewId));
                 if (indexTableName == null) {
-                    LOG.error("Unable to find local index on " + ref.getTableName() + " with viewID of " + Bytes.toStringBinary(viewId));
+                    LOGGER.error("Unable to find local index on " + ref.getTableName() +
+                            " with viewID of " + Bytes.toStringBinary(viewId));
                 } else {
                     indexTableNames.add(indexTableName);
                 }
@@ -437,7 +442,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 }
             }
         } catch (Exception handleE) {
-            LOG.warn("Error while trying to handle index write exception", indexWriteException);
+            LOGGER.warn("Error while trying to handle index write exception", indexWriteException);
         }
     }
 
@@ -488,8 +493,14 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             } catch (IOException e) {
                 SQLException inferredE = ServerUtil.parseLocalOrRemoteServerException(e);
                 if (inferredE == null || inferredE.getErrorCode() != SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
-                    // if it's not an index write exception, throw exception, to be handled normally in caller's try-catch
-                    throw e;
+                    // If this call is from phoenix client, we also need to check if SQLException
+                    // error is INDEX_METADATA_NOT_FOUND or not
+                    // if it's not an INDEX_METADATA_NOT_FOUND, throw exception,
+                    // to be handled normally in caller's try-catch
+                    if (inferredE.getErrorCode() != SQLExceptionCode.INDEX_METADATA_NOT_FOUND
+                            .getErrorCode()) {
+                        throw e;
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -526,7 +537,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 }
             }
         } catch (Exception handleE) {
-            LOG.warn("Error while trying to handle index write exception", indexWriteException);
+            LOGGER.warn("Error while trying to handle index write exception", indexWriteException);
         }
     }
 
@@ -565,11 +576,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         decrementCounterForIndex(conn,indexFullName);
         Long indexDisableTimestamp = null;
         if (PIndexState.DISABLE.equals(indexState)) {
-            LOG.info("Disabling index after hitting max number of index write retries: "
+            LOGGER.info("Disabling index after hitting max number of index write retries: "
                     + indexFullName);
             IndexUtil.updateIndexState(conn, indexFullName, indexState, indexDisableTimestamp);
         } else if (PIndexState.ACTIVE.equals(indexState)) {
-            LOG.debug("Resetting index to active after subsequent success " + indexFullName);
+            LOGGER.debug("Resetting index to active after subsequent success " + indexFullName);
             //At server disabled timestamp will be reset only if there is no other client is in PENDING_DISABLE state
             indexDisableTimestamp = 0L;
             try {

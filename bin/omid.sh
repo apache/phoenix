@@ -67,18 +67,12 @@ usage() {
     echo "  create-hbase-timestamp-table  Creates the hbase timestamp table."
 }
 
-# if no args specified, show usage
-if [ $# = 0 ]; then
-    usage;
-    exit 1
-fi
 
 COMMAND=$1
 shift
 
 if [ "$COMMAND" = "tso" ]; then
-    createHBaseTimestampTable $@;
-    createHBaseCommitTable $@;
+    echo "Running Omid TSO."
     tso $@;
 elif [ "$COMMAND" = "tso-relauncher" ]; then
     tsoRelauncher $@;
@@ -87,7 +81,10 @@ elif [ "$COMMAND" = "create-hbase-commit-table" ]; then
 elif [ "$COMMAND" = "create-hbase-timestamp-table" ]; then
     createHBaseTimestampTable $@;
 else
-    exec java -cp $CLASSPATH $COMMAND $@
+    createHBaseTimestampTable $@;
+    createHBaseCommitTable $@;
+    echo "Running Omid TSO."
+    tso $@;
 fi
 
 

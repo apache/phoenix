@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -318,6 +319,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         String localIndexTableName1 = "LOCAL_" + indexTableName + "_1";
         String localIndexTableName2 = "LOCAL_" + indexTableName + "_2";
         try (Connection conn = getConnection()) {
+
             conn.setAutoCommit(false);
             conn.createStatement().execute(
                 "CREATE TABLE " + dataTableFullName
@@ -342,9 +344,8 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
             PTable dataTable = pconn.getTable(new PTableKey(null, dataTableFullName));
             assertEquals("Unexpected number of indexes ", 3, dataTable.getIndexes().size());
-            PTable indexTable = dataTable.getIndexes().get(0);
-            byte[] indexTablePhysicalName = indexTable.getPhysicalName().getBytes();
-            PName localIndexTablePhysicalName = dataTable.getIndexes().get(1).getPhysicalName();
+            byte[] indexTablePhysicalName = indexTableName.getBytes();
+            byte[] localIndexTablePhysicalName = dataTableFullName.getBytes();
             
             // drop v2 which causes the regular index and first local index to be dropped
             conn.createStatement().execute(
@@ -373,19 +374,22 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             
             // verify that the regular index physical table was dropped
             try {
-                conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(indexTablePhysicalName);
+                conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin().getDescriptor(
+                        TableName.valueOf(indexTableName));
                 fail("Index table should have been dropped");
-            } catch (TableNotFoundException e) {
+            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             }
             
             // verify that the local index physical table was *not* dropped
-            conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(localIndexTablePhysicalName.getBytes());
+            conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTableDescriptor(localIndexTablePhysicalName);
             PTable localIndex2 = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, localIndexTableName2));
             
             // there should be a single row belonging to localIndexTableName2 
             Scan scan = new Scan();
             scan.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(localIndexTablePhysicalName.getBytes());
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(localIndexTablePhysicalName);
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);

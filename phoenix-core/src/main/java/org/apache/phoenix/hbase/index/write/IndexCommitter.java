@@ -30,7 +30,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
  */
 public interface IndexCommitter extends Stoppable {
 
-  void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name);
+  void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure);
 
   public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
       throws IndexWriteException;

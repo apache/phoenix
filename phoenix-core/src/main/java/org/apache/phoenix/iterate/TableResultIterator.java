@@ -55,6 +55,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -79,7 +80,7 @@ public class TableResultIterator implements ResultIterator {
     private final long renewLeaseThreshold;
     private final QueryPlan plan;
     private final ParallelScanGrouper scanGrouper;
-    private static final Logger logger = LoggerFactory.getLogger(TableResultIterator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TableResultIterator.class);
     private Tuple lastTuple = null;
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     @GuardedBy("renewLeaseLock")
@@ -132,6 +133,7 @@ public class TableResultIterator implements ResultIterator {
         this.caches = caches;
         this.retry=plan.getContext().getConnection().getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
+        IndexUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
     }
 
     @Override
@@ -187,7 +189,7 @@ public class TableResultIterator implements ResultIterator {
                             }
                         }
                         plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName());
-                        logger.debug(
+                        LOGGER.debug(
                                 "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                         if (retry <= 0) {
                             throw e1;

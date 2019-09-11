@@ -23,8 +23,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -34,20 +32,21 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
 /**
- * Do the actual work of writing to the index tables. Ensures that if we do fail to write to the
- * index table that we cleanly kill the region/server to ensure that the region's WAL gets replayed.
+ * Do the actual work of writing to the index tables.
  * <p>
  * We attempt to do the index updates in parallel using a backing threadpool. All threads are daemon
  * threads, so it will not block the region from shutting down.
  */
 public class IndexWriter implements Stoppable {
 
-  private static final Log LOG = LogFactory.getLog(IndexWriter.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(IndexWriter.class);
   public static final String INDEX_COMMITTER_CONF_KEY = "index.writer.commiter.class";
   public static final String INDEX_FAILURE_POLICY_CONF_KEY = "index.writer.failurepolicy.class";
   private AtomicBoolean stopped = new AtomicBoolean(false);
@@ -59,12 +58,15 @@ public class IndexWriter implements Stoppable {
    *           instantiated
    */
   public IndexWriter(RegionCoprocessorEnvironment env, String name) throws IOException {
-    this(getCommitter(env), getFailurePolicy(env), env, name);
+    this(getCommitter(env), getFailurePolicy(env), env, name, true);
   }
 
-  public IndexWriter(IndexFailurePolicy failurePolicy, RegionCoprocessorEnvironment env, String name) throws IOException {
-      this(getCommitter(env), failurePolicy, env, name);
-    }
+  public IndexWriter(RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) throws IOException {
+    this(getCommitter(env), getFailurePolicy(env), env, name, disableIndexOnFailure);
+  }
+  public IndexWriter(RegionCoprocessorEnvironment env, IndexCommitter indexCommitter, String name, boolean disableIndexOnFailure) throws IOException {
+    this(indexCommitter, getFailurePolicy(env), env, name, disableIndexOnFailure);
+  }
 
   public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env) throws IOException {
       return getCommitter(env,TrackingParallelWriterIndexCommitter.class);
@@ -99,6 +101,12 @@ public class IndexWriter implements Stoppable {
     }
   }
 
+  public IndexWriter(IndexCommitter committer, IndexFailurePolicy policy,
+                     RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) {
+    this(committer, policy);
+    this.writer.setup(this, env, name, disableIndexOnFailure);
+    this.failurePolicy.setup(this, env);
+  }
   /**
    * Directly specify the {@link IndexCommitter} and {@link IndexFailurePolicy}. Both are expected
    * to be fully setup before calling.
@@ -109,7 +117,7 @@ public class IndexWriter implements Stoppable {
   public IndexWriter(IndexCommitter committer, IndexFailurePolicy policy,
       RegionCoprocessorEnvironment env, String name) {
     this(committer, policy);
-    this.writer.setup(this, env, name);
+    this.writer.setup(this, env, name, true);
     this.failurePolicy.setup(this, env);
   }
 
@@ -131,31 +139,68 @@ public class IndexWriter implements Stoppable {
    * write the index updates. When we return depends on the specified {@link IndexCommitter}.
    * <p>
    * If update fails, we pass along the failure to the installed {@link IndexFailurePolicy}, which
-   * then decides how to handle the failure. By default, we use a {@link KillServerOnFailurePolicy},
-   * which ensures that the server crashes when an index write fails, ensuring that we get WAL
-   * replay of the index edits.
+   * then decides how to handle the failure.
    * @param indexUpdates Updates to write
  * @param clientVersion version of the client
  * @throws IOException 
    */
-    public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-            boolean allowLocalUpdates, int clientVersion) throws IOException {
+    public void writeAndHandleFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
+                                      boolean allowLocalUpdates, int clientVersion) throws IOException {
     // convert the strings to htableinterfaces to which we can talk and group by TABLE
     Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-    writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates, clientVersion);
+    writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
+  }
+
+  /**
+   * see {@link #writeAndHandleFailure(Collection)}.
+   * @param toWrite
+   * @throws IOException
+   */
+    public void writeAndHandleFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
+                                      boolean allowLocalUpdates, int clientVersion) throws IOException {
+    try {
+      write(toWrite, allowLocalUpdates, clientVersion);
+      if (LOGGER.isTraceEnabled()) {
+        LOGGER.trace("Done writing all index updates!\n\t" + toWrite);
+      }
+    } catch (Exception e) {
+      this.failurePolicy.handleFailure(toWrite, e);
+    }
+  }
+
+  /**
+   * Write the mutations to their respective table.
+   * <p>
+   * This method is blocking and could potentially cause the writer to block for a long time as we
+   * write the index updates. When we return depends on the specified {@link IndexCommitter}.
+   * <p>
+   * If update fails, we pass along the failure to the installed {@link IndexFailurePolicy}, which
+   * then decides how to handle the failure. By default, we use a {@link KillServerOnFailurePolicy},
+   * which ensures that the server crashes when an index write fails, ensuring that we get WAL
+   * replay of the index edits.
+   * @param indexUpdates Updates to write
+   * @param clientVersion version of the client
+   * @throws IOException
+   */
+  public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
+                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
+      // convert the strings to htableinterfaces to which we can talk and group by TABLE
+      Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
+      writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates, clientVersion);
+      writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
   }
 
   /**
    * see {@link #writeAndKillYourselfOnFailure(Collection)}.
    * @param toWrite
- * @throws IOException 
+   * @throws IOException
    */
-    public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-            boolean allowLocalUpdates, int clientVersion) throws IOException {
+  public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
+                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
     try {
       write(toWrite, allowLocalUpdates, clientVersion);
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("Done writing all index updates!\n\t" + toWrite);
+      if (LOGGER.isTraceEnabled()) {
+        LOGGER.trace("Done writing all index updates!\n\t" + toWrite);
       }
     } catch (Exception e) {
       this.failurePolicy.handleFailure(toWrite, e);
@@ -227,7 +272,7 @@ public class IndexWriter implements Stoppable {
       // already stopped
       return;
     }
-    LOG.debug("Stopping because " + why);
+    LOGGER.debug("Stopping because " + why);
     this.writer.stop(why);
     this.failurePolicy.stop(why);
   }

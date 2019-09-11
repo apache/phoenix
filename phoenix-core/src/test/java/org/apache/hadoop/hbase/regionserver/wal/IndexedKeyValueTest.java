@@ -17,6 +17,7 @@
 
 package org.apache.hadoop.hbase.regionserver.wal;
 
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -30,16 +31,44 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 
 public class IndexedKeyValueTest {
 
+    private static final byte[] ROW_KEY = Bytes.toBytes("foo");
+    private static final byte[] FAMILY = Bytes.toBytes("family");
+    private static final byte[] QUALIFIER = Bytes.toBytes("qualifier");
+    private static final byte[] VALUE = Bytes.toBytes("value");
+    private static final byte[] TABLE_NAME = Bytes.toBytes("MyTableName");
+
+    @Test
+    public void testIndexedKeyValueExceptionWhenMutationEmpty() throws IOException {
+        boolean caughtNullMutation = false, caughtNullEntry = false;
+        try {
+            IndexedKeyValue ikv = IndexedKeyValue.newIndexedKeyValue(TABLE_NAME, null);
+        } catch (IllegalArgumentException iae){
+            caughtNullMutation = true;
+        }
+        try {
+            Mutation m = new Put(ROW_KEY);
+            IndexedKeyValue ikv = IndexedKeyValue.newIndexedKeyValue(TABLE_NAME, m);
+        } catch (IllegalArgumentException iae){
+            caughtNullEntry = true;
+        }
+        //no need to test adding a mutation with a Cell with just a row key; HBase will put in
+        //a default cell with family byte[0], qualifier and value of "", and LATEST_TIMESTAMP
+
+        Assert.assertTrue(caughtNullMutation & caughtNullEntry);
+
+    }
+
     @Test
     public void testIndexedKeyValuePopulatesKVFields() throws Exception {
-        byte[] row = Bytes.toBytes("foo");
-        byte[] tableNameBytes = Bytes.toBytes("MyTableName");
-        Mutation mutation = new Put(row);
-        IndexedKeyValue indexedKeyValue = new IndexedKeyValue(tableNameBytes, mutation);
-        testIndexedKeyValueHelper(indexedKeyValue, row, tableNameBytes, mutation);
+        byte[] row = (ROW_KEY);
+        Put mutation = new Put(row);
+        mutation.addColumn(FAMILY, QUALIFIER, VALUE);
+        IndexedKeyValue indexedKeyValue = IndexedKeyValue.newIndexedKeyValue(TABLE_NAME, mutation);
+        testIndexedKeyValueHelper(indexedKeyValue, row, TABLE_NAME, mutation);
 
         //now serialize the IndexedKeyValue and make sure the deserialized copy also
         //has all the right fields
@@ -50,17 +79,16 @@ public class IndexedKeyValueTest {
         IndexedKeyValue deSerializedKV = (IndexedKeyValue)
             KeyValueCodec.readKeyValue(new DataInputStream(
                 new ByteArrayInputStream(baos.toByteArray())));
-        testIndexedKeyValueHelper(deSerializedKV, row, tableNameBytes, mutation);
+        testIndexedKeyValueHelper(deSerializedKV, row, TABLE_NAME, mutation);
 
     }
 
-    private void testIndexedKeyValueHelper(IndexedKeyValue indexedKeyValue, byte[] row, byte[] tableNameBytes, Mutation mutation) {
-        Assert.assertArrayEquals(row, indexedKeyValue.getRowArray());
-        Assert.assertEquals(0, indexedKeyValue.getRowOffset());
-        Assert.assertEquals(row.length, indexedKeyValue.getRowLength());
+    private void testIndexedKeyValueHelper(IndexedKeyValue indexedKeyValue, byte[] row,
+                                           byte[] tableNameBytes, Mutation mutation) {
+        Assert.assertArrayEquals(row, CellUtil.cloneRow(indexedKeyValue));
         Assert.assertArrayEquals(tableNameBytes, indexedKeyValue.getIndexTable());
         Assert.assertEquals(mutation.toString(), indexedKeyValue.getMutation().toString());
-        Assert.assertArrayEquals(WALEdit.METAFAMILY, indexedKeyValue.getFamilyArray());
+        Assert.assertArrayEquals(WALEdit.METAFAMILY, CellUtil.cloneFamily(indexedKeyValue));
     }
 
 }

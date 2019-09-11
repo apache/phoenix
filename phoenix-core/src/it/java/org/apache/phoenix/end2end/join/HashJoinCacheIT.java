@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryServices;
@@ -45,7 +46,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class HashJoinCacheIT extends BaseJoinIT {
     
     @Override

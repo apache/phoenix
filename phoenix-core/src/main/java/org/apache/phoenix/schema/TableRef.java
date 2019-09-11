@@ -80,9 +80,9 @@ public class TableRef {
         boolean hasDynamicCols) {
         this.alias = alias;
         this.table = table;
-        this.currentTime = upperBoundTimeStamp;
         // if UPDATE_CACHE_FREQUENCY is set, always let the server set timestamps
         this.upperBoundTimeStamp = table.getUpdateCacheFrequency()!=0 ? QueryConstants.UNSET_TIMESTAMP : upperBoundTimeStamp;
+        this.currentTime = this.upperBoundTimeStamp;
         this.lowerBoundTimeStamp = lowerBoundTimeStamp;
         this.hasDynamicCols = hasDynamicCols;
     }

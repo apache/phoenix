@@ -27,6 +27,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
 
+import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
@@ -55,6 +56,9 @@ public class Scenario {
      */
     @Override
     public boolean equals(Object object) {
+        if (!(object instanceof Scenario)) {
+            return false;
+        }
         Scenario scenario = (Scenario) object;
         return (this.tableName.equals(scenario.getTableName()));
     }
@@ -161,6 +165,7 @@ public class Scenario {
      */
     @XmlAttribute()
     public String getName() {
+        Preconditions.checkNotNull(name);
         return name;
     }
 

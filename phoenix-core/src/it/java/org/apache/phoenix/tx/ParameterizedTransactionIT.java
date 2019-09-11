@@ -144,7 +144,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         }
     }
     
-    @Test
+    // @Test - disabled, doesn't test anything new. TODO: Fix or remove.
     public void testTxnClosedCorrecty() throws Exception {
         String transTableName = generateUniqueName();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
@@ -180,27 +180,18 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testAutoCommitQuerySingleTable() throws Exception {
+    public void testAutoCommitQuery() throws Exception {
         String transTableName = generateUniqueName();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true");
             conn.setAutoCommit(true);
-            // verify no rows returned
+            // verify no rows returned with single table
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName);
             assertFalse(rs.next());
-        }
-    }
-    
-    @Test
-    public void testAutoCommitQueryMultiTables() throws Exception {
-        String transTableName = generateUniqueName();
-        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true");
-            conn.setAutoCommit(true);
-            // verify no rows returned
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName + " x JOIN " + fullTableName + " y ON (x.long_pk = y.int_pk)");
+
+            // verify no rows returned with multiple tables
+            rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName + " x JOIN " + fullTableName + " y ON (x.long_pk = y.int_pk)");
             assertFalse(rs.next());
         } 
     }
@@ -267,12 +258,14 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNoConflictDetectionForImmutableRows() throws Exception {
-        String transTableName = generateUniqueName();
-        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true");
-        conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET IMMUTABLE_ROWS=true");
-        testRowConflicts(fullTableName);
+        if (tableDDLOptions.contains("IMMUTABLE_ROWS=true")) {
+            // only need to test this for immutable rows
+            String transTableName = generateUniqueName();
+            String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+            Connection conn = DriverManager.getConnection(getUrl());
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + (tableDDLOptions.length() > 0 ? "," : "") + "TRANSACTIONAL=true");
+            testRowConflicts(fullTableName);
+        }
     }
     
     @Test
@@ -353,6 +346,11 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testNonTxToTxTableFailure() throws Exception {
+        if (tableDDLOptions.contains("COLUMN_ENCODED_BYTES")) {
+            // no need to test this with all variations of column encoding
+            return;
+        }
+
         String nonTxTableName = generateUniqueName();
 
         Connection conn = DriverManager.getConnection(getUrl());
@@ -400,6 +398,11 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCreateTableToBeTransactional() throws Exception {
+        if (tableDDLOptions.contains("COLUMN_ENCODED_BYTES")) {
+            // no need to test this with all variations of column encoding
+            return;
+        }
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String t1 = generateUniqueName();

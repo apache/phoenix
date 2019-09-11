@@ -51,6 +51,7 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -1688,6 +1689,37 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
             assertFalse(
                 "Query should return no results as IN clause and RVC clause are disjoint sets",
                 rs.next());
+        }
+    }
+
+    @Test
+    public void testTrailingSeparator() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            conn.createStatement().execute("CREATE TABLE test2961 (\n"
+                    + "ACCOUNT_ID VARCHAR NOT NULL,\n" + "BUCKET_ID VARCHAR NOT NULL,\n"
+                    + "OBJECT_ID VARCHAR NOT NULL,\n" + "OBJECT_VERSION VARCHAR NOT NULL,\n"
+                    + "LOC VARCHAR,\n"
+                    + "CONSTRAINT PK PRIMARY KEY (ACCOUNT_ID, BUCKET_ID, OBJECT_ID, OBJECT_VERSION DESC))");
+
+            String sql = "SELECT  OBJ.ACCOUNT_ID from  test2961 as OBJ where "
+                    + "(OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) IN "
+                    + "((?,?,?,?),(?,?,?,?))";
+
+            PhoenixPreparedStatement statement = conn.prepareStatement(sql)
+                    .unwrap(PhoenixPreparedStatement.class);
+            statement.setString(1, new String(new char[] { (char) 3 }));
+            statement.setString(2, new String(new char[] { (char) 55 }));
+            statement.setString(3, new String(new char[] { (char) 39 }));
+            statement.setString(4, new String(new char[] { (char) 0 }));
+            statement.setString(5, new String(new char[] { (char) 83 }));
+            statement.setString(6, new String(new char[] { (char) 15 }));
+            statement.setString(7, new String(new char[] { (char) 55 }));
+            statement.setString(8, new String(new char[] { (char) 147 }));
+            statement.optimizeQuery(sql);
+        } finally {
+            conn.close();
         }
     }
 

@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
@@ -65,7 +67,10 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -91,7 +96,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 public class MetaDataUtil {
-    private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
   
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
     public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
@@ -385,16 +390,6 @@ public class MetaDataUtil {
         return false;
     }
 
-    
-    public static ViewType getViewType(List<Mutation> tableMetaData, KeyValueBuilder builder,
-    	      ImmutableBytesWritable value) {
-    	        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
-    	            PhoenixDatabaseMetaData.VIEW_TYPE_BYTES, builder, value)) {
-    	            return ViewType.fromSerializedValue(value.get()[value.getOffset()]);
-    	        }
-    	        return null;
-    	    }
-    
     public static int getSaltBuckets(List<Mutation> tableMetaData, KeyValueBuilder builder,
       ImmutableBytesWritable value) {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
@@ -618,13 +613,39 @@ public class MetaDataUtil {
         }
     }
 
-    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+    public static String getOldViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString(); }
         return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
     }
 
+    public static String getOldViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId); }
+        return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
+    }
+
+    public static SequenceKey getOldViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets,
+                                                      boolean isNamespaceMapped) {
+        // Create global sequence of the form: <prefixed base table name><tenant id>
+        // rather than tenant-specific sequence, as it makes it much easier
+        // to cleanup when the physical table is dropped, as we can delete
+        // all global sequences leading with <prefix> + physical name.
+        String schemaName = getOldViewIndexSequenceSchemaName(physicalName, isNamespaceMapped);
+        String tableName = getOldViewIndexSequenceName(physicalName, PNameFactory.newName(tenantId), isNamespaceMapped);
+        return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
+    }
+
+    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) {
+            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(physicalName.getString(),
+                MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
+            return SchemaUtil.getSchemaNameFromFullName(baseTableName);
+        } else {
+            return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
+        }
+
+    }
+
     public static String getViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
-        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX; }
         return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
     }
 
@@ -757,12 +778,12 @@ public class MetaDataUtil {
                     org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.getRegionInfo(controller,
                         admin, loc.getRegion().getRegionName());
                 } catch (RemoteException e) {
-                    logger.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
+                    LOGGER.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
                     return false;
                 }
             }
         } catch (IOException ex) {
-            logger.warn("tableRegionsOnline failed due to:" + ex);
+            LOGGER.warn("tableRegionsOnline failed due to:" + ex);
             return false;
         } finally {
             if (hcon != null) {
@@ -910,5 +931,20 @@ public class MetaDataUtil {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
                 value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
         return null;
+    }
+
+    public static PColumn getColumn(int pkCount, byte[][] rowKeyMetaData, PTable table) throws ColumnFamilyNotFoundException, ColumnNotFoundException {
+        PColumn col = null;
+        if (pkCount > FAMILY_NAME_INDEX
+            && rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX].length > 0) {
+            PColumnFamily family =
+                table.getColumnFamily(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+            col =
+                family.getPColumnForColumnNameBytes(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
+        } else if (pkCount > COLUMN_NAME_INDEX
+            && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length > 0) {
+            col = table.getPKColumn(new String(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
+        }
+        return col;
     }
 }

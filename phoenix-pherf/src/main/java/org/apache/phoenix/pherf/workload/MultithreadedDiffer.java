@@ -20,6 +20,7 @@ package org.apache.phoenix.pherf.workload;
 
 import java.util.Calendar;
 import java.util.Date;
+import java.util.concurrent.Callable;
 
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Query;
@@ -29,8 +30,8 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class MultithreadedDiffer implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+class MultithreadedDiffer implements Callable<Void> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultithreadedDiffer.class);
     private Thread t;
     private Query query;
     private ThreadTime threadTime;
@@ -80,8 +81,8 @@ class MultithreadedDiffer implements Runnable {
     /**
      * Executes verification runs for a minimum of number of execution or execution duration
      */
-    public void run() {
-        logger.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
+    public Void call() throws Exception {
+        LOGGER.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
         Long start = System.currentTimeMillis();
         for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
@@ -92,6 +93,7 @@ class MultithreadedDiffer implements Runnable {
                 e.printStackTrace();
             }
         }
-        logger.info("\n\nThread exiting." + t.getName() + "\n\n");
+            LOGGER.info("\n\nThread exiting." + t.getName() + "\n\n");
+        return null;
     }
 }

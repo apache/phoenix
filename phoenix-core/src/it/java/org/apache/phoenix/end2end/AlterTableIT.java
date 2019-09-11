@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -600,7 +602,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDropColumnsWithImutability() throws Exception {
-
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -853,6 +854,36 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         conn1.close();
     }
 
+    @Test
+    public void testAlterTableOnGlobalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            String tableName = generateUniqueName();
+            String globalIndexTableName = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + tableName +
+                " (ID INTEGER PRIMARY KEY, COL1 VARCHAR(10), COL2 BOOLEAN)");
+
+            stmt.execute("CREATE INDEX " + globalIndexTableName + " on " + tableName + " (COL2)");
+            TableDescriptor originalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
+            int expectedErrorCode = 0;
+            try {
+                stmt.execute("ALTER TABLE " + globalIndexTableName + " ADD CF1.AGE INTEGER ");
+                conn.commit();
+                fail("The alter table did not fail as expected");
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), CANNOT_MUTATE_TABLE.getErrorCode());
+            }
+
+            TableDescriptor finalDesc = admin.getDescriptor(TableName.valueOf(globalIndexTableName));
+            assertTrue(finalDesc.equals(originalDesc));
+
+            // drop the table
+            stmt.execute("DROP TABLE " + tableName);
+        }
+    }
 
     @Test
     public void testAlterStoreNulls() throws SQLException {
@@ -1387,5 +1418,27 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 		}
 	}
 
+    @Test
+    public void testAddNonPKColumnWhenlastPKIsVARBINARYOrARRAY() throws Exception {
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+          Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+
+            String ddl = "CREATE TABLE " + tableName1 + " (id VARBINARY PRIMARY KEY, col1 INTEGER)";
+            stmt.execute(ddl);
+
+            String alterDdl = "ALTER TABLE " + tableName1 + " ADD col2 INTEGER";
+            stmt.execute(alterDdl);
+
+            String ddl2 = "CREATE TABLE " + tableName2 + " (id INTEGER ARRAY PRIMARY KEY, col1 INTEGER)";
+            stmt.execute(ddl2);
+
+            String alterDdl2 = "ALTER TABLE " + tableName2 + " ADD col2 INTEGER";
+            stmt.execute(alterDdl2);
+        }
+    }
 }
  

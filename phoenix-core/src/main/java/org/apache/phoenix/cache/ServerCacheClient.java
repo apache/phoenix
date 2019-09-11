@@ -22,9 +22,10 @@ import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,9 +40,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Table;
@@ -77,8 +75,8 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-
-import com.google.protobuf.ByteString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -90,7 +88,7 @@ import com.google.protobuf.ByteString;
 public class ServerCacheClient {
     public static final int UUID_LENGTH = Bytes.SIZEOF_LONG;
     public static final byte[] KEY_IN_FIRST_REGION = new byte[]{0};
-    private static final Log LOG = LogFactory.getLog(ServerCacheClient.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerCacheClient.class);
     private static final Random RANDOM = new Random();
 	public static final String HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER = "hash.join.server.cache.resend.per.server";
     private final PhoenixConnection connection;
@@ -148,7 +146,7 @@ public class ServerCacheClient {
                 } catch (InsufficientMemoryException e) {
                     this.outputFile = File.createTempFile("HashJoinCacheSpooler", ".bin", new File(services.getProps()
                             .get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY)));
-                    try (FileOutputStream fio = new FileOutputStream(outputFile)) {
+                    try (OutputStream fio = Files.newOutputStream(outputFile.toPath())) {
                         fio.write(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength());
                     }
                 }
@@ -158,7 +156,7 @@ public class ServerCacheClient {
 
         public ImmutableBytesWritable getCachePtr() throws IOException {
             if(this.outputFile!=null){
-                try (FileInputStream fio = new FileInputStream(outputFile)) {
+                try (InputStream fio = Files.newInputStream(outputFile.toPath())) {
                     byte[] b = new byte[this.size];
                     fio.read(b);
                     cachePtr = new ImmutableBytesWritable(b);
@@ -283,7 +281,10 @@ public class ServerCacheClient {
                                 cacheUsingTable.getIndexType() == IndexType.LOCAL)) {
                     // Call RPC once per server
                     servers.add(entry);
-                    if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(addCustomAnnotations(
+                                "Adding cache entry to be sent for " + entry, connection));
+                    }
                     final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
                     final Table htable = services.getTable(cacheUsingTable.getPhysicalName().getBytes());
                     closeables.add(htable);
@@ -310,10 +311,14 @@ public class ServerCacheClient {
                         }
                     }));
                 } else {
-                    if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("NOT adding cache entry to be sent for " + entry + " since one already exists for that entry", connection));}
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(addCustomAnnotations(
+                                "NOT adding cache entry to be sent for " + entry +
+                                        " since one already exists for that entry", connection));
+                    }
                 }
             }
-            
+
             hashCacheSpec = new ServerCache(cacheId,servers,cachePtr, services, storeCacheOnClient);
             // Execute in parallel
             int timeoutMs = services.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
@@ -349,7 +354,10 @@ public class ServerCacheClient {
                 }
             }
         }
-        if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Cache " + cacheId + " successfully added to servers.", connection));}
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(addCustomAnnotations("Cache " + cacheId +
+                    " successfully added to servers.", connection));
+        }
         return hashCacheSpec;
     }
     
@@ -375,8 +383,9 @@ public class ServerCacheClient {
              * through the current metadata boundaries and remove the cache once for each server that we originally sent
              * to.
              */
-            if (LOG.isDebugEnabled()) {
-                LOG.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection));
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(addCustomAnnotations(
+                        "Removing Cache " + cacheId + " from servers.", connection));
             }
             for (HRegionLocation entry : locations) {
              // Call once per server
@@ -419,13 +428,15 @@ public class ServerCacheClient {
                         remainingOnServers.remove(entry);
                     } catch (Throwable t) {
                         lastThrowable = t;
-                        LOG.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, connection),
-                                t);
+                        LOGGER.error(addCustomAnnotations(
+                                "Error trying to remove hash cache for " + entry,
+                                connection), t);
                     }
                 }
             }
             if (!remainingOnServers.isEmpty()) {
-                LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, connection),
+                LOGGER.warn(addCustomAnnotations("Unable to remove hash cache for "
+                                + remainingOnServers, connection),
                         lastThrowable);
             }
         } finally {

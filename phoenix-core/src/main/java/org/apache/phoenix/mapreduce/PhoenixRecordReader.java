@@ -19,11 +19,8 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
@@ -39,7 +36,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
-import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
@@ -51,6 +48,8 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -61,21 +60,25 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<NullWritable,T> {
     
-    private static final Log LOG = LogFactory.getLog(PhoenixRecordReader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRecordReader.class);
     protected final Configuration  configuration;
     protected final QueryPlan queryPlan;
+    private final ParallelScanGrouper scanGrouper;
     private NullWritable key =  NullWritable.get();
     private T value = null;
     private Class<T> inputClass;
     private ResultIterator resultIterator = null;
     private PhoenixResultSet resultSet;
-    
-    public PhoenixRecordReader(Class<T> inputClass,final Configuration configuration,final QueryPlan queryPlan) {
+
+    PhoenixRecordReader(Class<T> inputClass, final Configuration configuration,
+            final QueryPlan queryPlan, final ParallelScanGrouper scanGrouper) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(queryPlan);
+        Preconditions.checkNotNull(scanGrouper);
         this.inputClass = inputClass;
         this.configuration = configuration;
         this.queryPlan = queryPlan;
+        this.scanGrouper = scanGrouper;
     }
 
     @Override
@@ -84,7 +87,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
            try {
                resultIterator.close();
         } catch (SQLException e) {
-           LOG.error(" Error closing resultset.");
+           LOGGER.error(" Error closing resultset.");
            throw new RuntimeException(e);
         }
        }
@@ -110,7 +113,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         final PhoenixInputSplit pSplit = (PhoenixInputSplit)split;
         final List<Scan> scans = pSplit.getScans();
         try {
-            LOG.info("Generating iterators for " + scans.size() + " scans in keyrange: " + pSplit.getKeyRange());
+            LOGGER.info("Generating iterators for " + scans.size() + " scans in keyrange: "
+                    + pSplit.getKeyRange());
             List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
             StatementContext ctx = queryPlan.getContext();
             ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
@@ -136,15 +140,15 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                   final TableSnapshotResultIterator tableSnapshotResultIterator = new TableSnapshotResultIterator(configuration, scan,
                       scanMetricsHolder);
                     peekingResultIterator = LookAheadResultIterator.wrap(tableSnapshotResultIterator);
-                    LOG.info("Adding TableSnapshotResultIterator for scan: " + scan);
+                    LOGGER.info("Adding TableSnapshotResultIterator for scan: " + scan);
                 } else {
                   final TableResultIterator tableResultIterator =
                       new TableResultIterator(
                           queryPlan.getContext().getConnection().getMutationState(), scan,
                           scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
-                          MapReduceParallelScanGrouper.getInstance());
+                          this.scanGrouper);
                   peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
-                  LOG.info("Adding TableResultIterator for scan: " + scan);
+                  LOGGER.info("Adding TableResultIterator for scan: " + scan);
                 }
                 iterators.add(peekingResultIterator);
             }
@@ -158,7 +162,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
 
             this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(), queryPlan.getContext());
         } catch (SQLException e) {
-            LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",
+                    e.getMessage()));
             Throwables.propagate(e);
         }
    }
@@ -179,7 +184,8 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             value.readFields(resultSet);
             return true;
         } catch (SQLException e) {
-            LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
+            LOGGER.error(String.format(" Error [%s] occurred while iterating over the resultset. ",
+                    e.getMessage()));
             throw new RuntimeException(e);
         }
     }

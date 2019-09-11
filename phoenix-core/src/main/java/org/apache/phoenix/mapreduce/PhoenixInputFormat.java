@@ -19,8 +19,6 @@ package org.apache.phoenix.mapreduce;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -38,6 +36,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -46,6 +45,8 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -61,7 +62,7 @@ import java.util.Properties;
  */
 public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWritable,T> {
 
-    private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixInputFormat.class);
        
     /**
      * instantiated by framework
@@ -76,20 +77,20 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
         @SuppressWarnings("unchecked")
         final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
-        return new PhoenixRecordReader<T>(inputClass , configuration, queryPlan);
+        return getPhoenixRecordReader(inputClass, configuration, queryPlan);
     }
 
     @Override
     public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {  
         final Configuration configuration = context.getConfiguration();
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
-        final List<KeyRange> allSplits = queryPlan.getSplits();
-        final List<InputSplit> splits = generateSplits(queryPlan, allSplits, configuration);
-        return splits;
+        return generateSplits(queryPlan, configuration);
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, final List<KeyRange> splits, Configuration config) throws IOException {
-        Preconditions.checkNotNull(qplan);
+    private List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
+        // We must call this in order to initialize the scans and splits from the query plan
+        setupParallelScansFromQueryPlan(qplan);
+        final List<KeyRange> splits = qplan.getSplits();
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
@@ -120,8 +121,8 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
             if(splitByStats) {
                 for(Scan aScan: scans) {
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
                                 .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
                                 aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
                                 .getBatch() + "] and  regionLocation : " + regionLocation);
@@ -130,18 +131,18 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
                     psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
                 }
                 } else {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
                             .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
                             .size() - 1).getStopRow()));
-                    LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
+                    LOGGER.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
                             .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
                             "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
                             + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
                             regionLocation);
 
                     for (int i = 0, limit = scans.size(); i < limit; i++) {
-                        LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
+                        LOGGER.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
                                 .toStringBinary(scans.get(i).getAttribute
                                         (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
                     }
@@ -212,14 +213,38 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
                       getQueryServices().getConfiguration(), snapshotName);
               }
 
-              // Initialize the query plan so it sets up the parallel scans
-              queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
               return queryPlan;
             }
         } catch (Exception exception) {
-            LOG.error(String.format("Failed to get the query plan with error [%s]",
+            LOGGER.error(String.format("Failed to get the query plan with error [%s]",
                 exception.getMessage()));
             throw new RuntimeException(exception);
+        }
+    }
+
+    void setupParallelScansFromQueryPlan(QueryPlan queryPlan) {
+        setupParallelScansWithScanGrouper(queryPlan, MapReduceParallelScanGrouper.getInstance());
+    }
+
+    RecordReader<NullWritable,T> getPhoenixRecordReader(Class<T> inputClass,
+            Configuration configuration, QueryPlan queryPlan) {
+        return new PhoenixRecordReader<>(inputClass , configuration, queryPlan,
+                MapReduceParallelScanGrouper.getInstance());
+    }
+
+    /**
+     * Initialize the query plan so it sets up the parallel scans
+     * @param queryPlan Query plan corresponding to the select query
+     * @param scanGrouper Parallel scan grouper
+     */
+    void setupParallelScansWithScanGrouper(QueryPlan queryPlan, ParallelScanGrouper scanGrouper) {
+        Preconditions.checkNotNull(queryPlan);
+        try {
+            queryPlan.iterator(scanGrouper);
+        } catch (SQLException e) {
+            LOGGER.error(String.format("Setting up parallel scans for the query plan failed "
+                    + "with error [%s]", e.getMessage()));
+            throw new RuntimeException(e);
         }
     }
 

@@ -21,8 +21,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.metrics.Counter;
 import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.Histogram;
@@ -40,6 +38,8 @@ import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Contents mostly copied from GlobalMetricRegistriesAdapter class from hbase-hadoop2-compat
@@ -48,7 +48,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
  */
 public class GlobalMetricRegistriesAdapter {
 
-    private static final Log LOG = LogFactory.getLog(GlobalMetricRegistriesAdapter.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(GlobalMetricRegistriesAdapter.class);
     private static GlobalMetricRegistriesAdapter INSTANCE = new GlobalMetricRegistriesAdapter();
 
     private GlobalMetricRegistriesAdapter() {
@@ -62,7 +63,7 @@ public class GlobalMetricRegistriesAdapter {
 
     public void registerMetricRegistry(MetricRegistry registry) {
         if (registry == null) {
-            LOG.warn("Registry cannot be registered with Hadoop Metrics 2 since it is null.");
+            LOGGER.warn("Registry cannot be registered with Hadoop Metrics 2 since it is null.");
             return;
         }
 
@@ -74,7 +75,8 @@ public class GlobalMetricRegistriesAdapter {
      * Class to convert HBase Metric Objects to Hadoop Metrics2 Metric Objects
      */
     private static class HBaseMetrics2HadoopMetricsAdapter implements MetricsSource {
-        private static final Log LOG = LogFactory.getLog(HBaseMetrics2HadoopMetricsAdapter.class);
+        private static final Logger LOGGER =
+                LoggerFactory.getLogger(HBaseMetrics2HadoopMetricsAdapter.class);
         private final MetricRegistry registry;
         private final String metricTag;
 
@@ -85,7 +87,8 @@ public class GlobalMetricRegistriesAdapter {
 
         private void registerToDefaultMetricsSystem() {
             MetricRegistryInfo info = registry.getMetricRegistryInfo();
-            LOG.info("Registering " + info.getMetricsJmxContext() + " " + info.getMetricsDescription() + " into DefaultMetricsSystem");
+            LOGGER.info("Registering " + info.getMetricsJmxContext() +
+                    " " + info.getMetricsDescription() + " into DefaultMetricsSystem");
             DefaultMetricsSystem.instance().register(info.getMetricsJmxContext(), info.getMetricsDescription(), this);
         }
 
@@ -117,7 +120,7 @@ public class GlobalMetricRegistriesAdapter {
                 } else if (metric instanceof Timer) {
                     this.addTimer(name, (Timer)metric, builder);
                 } else {
-                    LOG.info("Ignoring unknown Metric class " + metric.getClass().getName());
+                    LOGGER.info("Ignoring unknown Metric class " + metric.getClass().getName());
                 }
             }
         }
@@ -134,7 +137,7 @@ public class GlobalMetricRegistriesAdapter {
             } else if (o instanceof Double) {
                 builder.addGauge(info, (Double)o);
             } else {
-                LOG.warn("Ignoring Gauge (" + name + ") with unhandled type: " + o.getClass());
+                LOGGER.warn("Ignoring Gauge (" + name + ") with unhandled type: " + o.getClass());
             }
 
         }

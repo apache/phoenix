@@ -194,7 +194,8 @@ public interface PTable extends PMetaDataEntity {
     }
 
     public enum TaskType {
-        DROP_CHILD_VIEWS((byte)1);
+        DROP_CHILD_VIEWS((byte)1),
+        INDEX_REBUILD((byte)2);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -220,6 +221,29 @@ public interface PTable extends PMetaDataEntity {
             }
             return TaskType.values()[serializedValue-1];
         }
+    }
+
+    public enum TaskStatus {
+        CREATED {
+            public String toString() {
+                return  "CREATED";
+            }
+        },
+        STARTED {
+            public String toString() {
+                return  "STARTED";
+            }
+        },
+        COMPLETED {
+            public String toString() {
+                return  "COMPLETED";
+            }
+        },
+        FAILED {
+            public String toString() {
+                return  "FAILED";
+            }
+        },
     }
 
     public enum ImmutableStorageScheme implements ColumnValueEncoderDecoderSupplier {

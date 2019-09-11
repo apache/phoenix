@@ -22,8 +22,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -38,6 +36,8 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
@@ -50,7 +50,8 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getInde
 public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends PhoenixInputFormat {
     QueryPlan queryPlan = null;
 
-    private static final Log LOG = LogFactory.getLog(PhoenixServerBuildIndexInputFormat.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(PhoenixServerBuildIndexInputFormat.class);
 
     /**
      * instantiated by framework
@@ -71,7 +72,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         final Properties overridingProps = new Properties();
         if(txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
-            overridingProps.put(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, currentScnValue);
         }
         if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
             overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -98,12 +98,9 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             if (txnScnValue != null) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
             }
-
-            // Initialize the query plan so it sets up the parallel scans
-            queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
             return queryPlan;
         } catch (Exception exception) {
-            LOG.error(String.format("Failed to get the query plan with error [%s]",
+            LOGGER.error(String.format("Failed to get the query plan with error [%s]",
                     exception.getMessage()));
             throw new RuntimeException(exception);
         }

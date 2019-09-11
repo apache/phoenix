@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
@@ -101,6 +102,34 @@ public class KeyRange implements Writable {
                 return result;
             }
             result = Bytes.BYTES_COMPARATOR.compare(o1.getUpperRange(), o2.getUpperRange());
+            if (result != 0) {
+                return result;
+            }
+            return Boolean.compare(o2.isUpperInclusive(), o1.isUpperInclusive());
+        }
+    };
+
+    public static final Comparator<KeyRange> DESC_COMPARATOR = new Comparator<KeyRange>() {
+        @Override public int compare(KeyRange o1, KeyRange o2) {
+            int result = Boolean.compare(o2.lowerUnbound(), o1.lowerUnbound());
+            if (result != 0) {
+                return result;
+            }
+            result = DescVarLengthFastByteComparisons.compareTo(o1.getLowerRange(), 0, o1.getLowerRange().length,
+                    o2.getLowerRange(), 0, o2.getLowerRange().length);
+            if (result != 0) {
+                return result;
+            }
+            result = Boolean.compare(o2.isLowerInclusive(), o1.isLowerInclusive());
+            if (result != 0) {
+                return result;
+            }
+            result = Boolean.compare(o1.upperUnbound(), o2.upperUnbound());
+            if (result != 0) {
+                return result;
+            }
+            result = DescVarLengthFastByteComparisons.compareTo(o1.getUpperRange(), 0, o1.getUpperRange().length,
+                    o2.getUpperRange(), 0, o2.getUpperRange().length);
             if (result != 0) {
                 return result;
             }
@@ -519,7 +548,7 @@ public class KeyRange implements Writable {
         return Lists.transform(keys, POINT);
     }
 
-    private static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
+    public static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
         int result = Boolean.compare(rowKeyRange1.upperUnbound(), rowKeyRange2.upperUnbound());
         if (result != 0) {
             return result;
@@ -528,7 +557,7 @@ public class KeyRange implements Writable {
         if (result != 0) {
             return result;
         }
-        return Boolean.compare(rowKeyRange2.isUpperInclusive(), rowKeyRange1.isUpperInclusive());
+        return Boolean.compare(rowKeyRange1.isUpperInclusive(), rowKeyRange2.isUpperInclusive());
     }
 
     public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {

@@ -214,7 +214,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private int scansReferenceCount = 0;
     @GuardedBy("lock")
     private boolean isRegionClosingOrSplitting = false;
-    private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
     private Configuration compactionConfig;
@@ -293,7 +293,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           }
       }
       // TODO: should we use the one that is all or none?
-      logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+      LOGGER.debug("Committing batch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray));
     }
 
@@ -321,7 +321,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
           return;
       }
 
-        logger.debug("Committing batch of " + mutations.size() + " mutations for " + table);
+        LOGGER.debug("Committing batch of " + mutations.size() + " mutations for " + table);
         try {
             table.batch(mutations, null);
         } catch (InterruptedException e) {
@@ -392,7 +392,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             super.clear();
         }
     }
-    
+
+    private long getBlockingMemstoreSize(Region region, Configuration conf) {
+        long flushSize = region.getTableDescriptor().getMemStoreFlushSize();
+
+        if (flushSize <= 0) {
+            flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
+                    TableDescriptorBuilder.DEFAULT_MEMSTORE_FLUSH_SIZE);
+        }
+        return flushSize * (conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
+                        HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1) ;
+    }
+
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException, SQLException {
         RegionCoprocessorEnvironment env = c.getEnvironment();
@@ -437,7 +448,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
         if (isDescRowKeyOrderUpgrade) {
-            logger.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
+            LOGGER.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
             projectedTable = deserializeTable(descRowKeyTableBytes);
             try {
                 writeToTable = PTableImpl.builderWithColumns(projectedTable,
@@ -524,12 +535,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         MutationList mutations = new MutationList();
         boolean needToWrite = false;
         Configuration conf = env.getConfiguration();
-        long flushSize = region.getTableDescriptor().getMemStoreFlushSize();
-
-        if (flushSize <= 0) {
-            flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
-                    TableDescriptorBuilder.DEFAULT_MEMSTORE_FLUSH_SIZE);
-        }
 
         /**
          * Slow down the writes if the memstore size more than
@@ -537,9 +542,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
          * bytes. This avoids flush storm to hdfs for cases like index building where reads and
          * write happen to all the table regions in the server.
          */
-        final long blockingMemStoreSize = flushSize * (
-                conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
-                        HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1) ;
+        final long blockingMemStoreSize = getBlockingMemstoreSize(region, conf);
 
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if(buildLocalIndex) {
@@ -567,8 +570,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             rowAggregators = aggregators.getAggregators();
             Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
             Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-            if (logger.isDebugEnabled()) {
-                logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
             }
             boolean useIndexProto = true;
             byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
@@ -847,7 +850,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 synchronized (lock) {
                     scansReferenceCount--;
                     if (scansReferenceCount < 0) {
-                        logger.warn(
+                        LOGGER.warn(
                             "Scan reference count went below zero. Something isn't correct. Resetting it back to zero");
                         scansReferenceCount = 0;
                     }
@@ -865,8 +868,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         }
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
         }
 
         final boolean hadAny = hasAny;
@@ -907,7 +910,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             try {
                 res.close();
             } catch (IOException e) {
-                logger.error("Closing resource: " + res + " failed: ", e);
+                LOGGER.error("Closing resource: " + res + " failed: ", e);
             }
         }
     }
@@ -1065,8 +1068,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
               } catch (Exception e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.
-                if (logger.isWarnEnabled()) {
-                  logger.warn("Unable to collect stats for " + table, e);
+                if (LOGGER.isWarnEnabled()) {
+                  LOGGER.warn("Unable to collect stats for " + table, e);
                 }
               }
               return internalScanner;
@@ -1095,12 +1098,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
         byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        byte[] scanLimitBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_LIMIT);
+        int scanLimit = (scanLimitBytes != null) ? Bytes.toInt(scanLimitBytes) : 0;
         boolean hasMore;
         int rowCount = 0;
         try {
             int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
             long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+            final long blockingMemstoreSize = getBlockingMemstoreSize(region, config);
             MutationList mutations = new MutationList(maxBatchSize);
             region.startRegionOperation();
             byte[] uuidValue = ServerCacheClient.generateId();
@@ -1142,20 +1148,24 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            commitBatchWithRetries(region, mutations, -1);
+                            checkForRegionClosing();
+                            commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                             uuidValue = ServerCacheClient.generateId();
                             mutations.clear();
                         }
                         rowCount++;
+                        if (rowCount == scanLimit)
+                            break;
                     }
                     
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    commitBatchWithRetries(region, mutations, -1);
+                    checkForRegionClosing();
+                    commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                 }
             }
         } catch (IOException e) {
-            logger.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
+            LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
             throw e;
         } finally {
             region.closeRegionOperation();
@@ -1206,7 +1216,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long rowCount = 0; // in case of async, we report 0 as number of rows updated
         StatisticsCollectionRunTracker statsRunTracker =
                 StatisticsCollectionRunTracker.getInstance(config);
-        boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
+        final boolean runUpdateStats = statsRunTracker.addUpdateStatsCommandRegion(region.getRegionInfo(),scan.getFamilyMap().keySet());
         if (runUpdateStats) {
             if (!async) {
                 rowCount = callable.call();
@@ -1215,7 +1225,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         } else {
             rowCount = CONCURRENT_UPDATE_STATS_ROW_COUNT;
-            logger.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
+            LOGGER.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
                     + region.getRegionInfo().getRegionNameAsString());
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
@@ -1235,8 +1245,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
             @Override
             public void close() throws IOException {
-                // No-op because we want to manage closing of the inner scanner ourselves.
-                // This happens inside StatsCollectionCallable.
+                // If we ran/scheduled StatsCollectionCallable the delegate
+                // scanner is closed there. Otherwise close it here.
+                if (!runUpdateStats) {
+                    super.close();
+                }
             }
 
             @Override
@@ -1309,18 +1322,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
                 return compactionRunning ? COMPACTION_UPDATE_STATS_ROW_COUNT : rowCount;
             } catch (IOException e) {
-                logger.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
+                LOGGER.error("IOException in update stats: " + Throwables.getStackTraceAsString(e));
                 throw e;
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
                         statsCollector.updateStatistics(region, scan);
-                        logger.info("UPDATE STATISTICS finished successfully for scanner: "
+                        LOGGER.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));
                     }
                     if (compactionRunning) {
-                        logger.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
+                        LOGGER.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
                                 + region.getRegionInfo().getRegionNameAsString());
                     }
                 } finally {
@@ -1445,7 +1458,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         // FIXME need to handle views and indexes on views as well
                         for (PTable index : indexes) {
                             if (index.getIndexDisableTimestamp() != 0) {
-                                logger.info(
+                                LOGGER.info(
                                     "Modifying major compaction scanner to retain deleted cells for a table with disabled index: "
                                             + fullTableName);
                                 options.setKeepDeletedCells(KeepDeletedCells.TRUE);
@@ -1455,10 +1468,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                     } catch (Exception e) {
                         if (e instanceof TableNotFoundException) {
-                            logger.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
+                            LOGGER.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
                             // non-Phoenix HBase tables won't be found, do nothing
                         } else {
-                            logger.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
+                            LOGGER.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
                                     + fullTableName,
                                     e);
                         }

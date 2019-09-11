@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AndParseNode;
+import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -135,16 +136,15 @@ public class QueryOptimizer {
             return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns, parallelIteratorFactory, stopAtBestPlan);
         }
 
-        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
         Map<TableRef, QueryPlan> dataPlans = null;
-
         // Find the optimal index plan for each join tables in a join query or a
         // non-correlated sub-query, then rewrite the query with found index tables.
         if (select.isJoin()
                 || (select.getWhere() != null && select.getWhere().hasSubquery())) {
+            ColumnResolver resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
             JoinCompiler.JoinTable join = JoinCompiler.compile(statement, select, resolver);
             Map<TableRef, TableRef> replacement = null;
-            for (JoinCompiler.Table table : join.getTables()) {
+            for (JoinCompiler.Table table : join.getAllTables()) {
                 if (table.isSubselect())
                     continue;
                 TableRef tableRef = table.getTableRef();
@@ -179,15 +179,21 @@ public class QueryOptimizer {
             if (replacement != null) {
                 select = rewriteQueryWithIndexReplacement(
                         statement.getConnection(), resolver, select, replacement);
-                resolver = FromCompiler.getResolverForQuery(select, statement.getConnection());
             }
         }
 
         // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
         // sub-queries can be optimized recursively.
-        QueryCompiler compiler = new QueryCompiler(statement, select, resolver,
-                targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
-                true, true, dataPlans);
+        QueryCompiler compiler = new QueryCompiler(
+                statement,
+                select,
+                FromCompiler.getResolverForQuery(select, statement.getConnection()),
+                targetColumns,
+                parallelIteratorFactory,
+                dataPlan.getContext().getSequenceManager(),
+                true,
+                true,
+                dataPlans);
         return Collections.singletonList(compiler.compile());
     }
 
@@ -325,24 +331,6 @@ public class QueryOptimizer {
 
                 QueryPlan plan = compiler.compile();
 
-                boolean optimizedSort =
-                        plan.getOrderBy().getOrderByExpressions().isEmpty()
-                                && !dataPlan.getOrderBy().getOrderByExpressions().isEmpty()
-                                || plan.getGroupBy().isOrderPreserving()
-                                        && !dataPlan.getGroupBy().isOrderPreserving();
-
-                // If query doesn't have where clause, or the planner didn't add any (bound) scan ranges, and some of
-                // columns to project/filter are missing in the index then we need to get missing columns from main table
-                // for each row in local index. It's like full scan of both local index and data table which is inefficient.
-                // Then we don't use the index. If all the columns to project are present in the index 
-                // then we can use the index even the query doesn't have where clause.
-                // We'll use the index anyway if it allowed us to avoid a sort operation.
-                if (index.getIndexType() == IndexType.LOCAL
-                        && (indexSelect.getWhere() == null
-                                || plan.getContext().getScanRanges().getBoundRanges().size() == 1)
-                        && !plan.getContext().getDataColumns().isEmpty() && !optimizedSort) {
-                    return null;
-                }
                 indexTableRef = plan.getTableRef();
                 indexTable = indexTableRef.getTable();
                 indexState = indexTable.getIndexState();
@@ -566,12 +554,13 @@ public class QueryOptimizer {
     }
 
     
-    private static class WhereConditionRewriter extends BooleanParseNodeVisitor<ParseNode> {
+    private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {
         private final ColumnResolver dataResolver;
         private final ExpressionCompiler expressionCompiler;
         private List<ParseNode> extractedConditions;
         
         public WhereConditionRewriter(ColumnResolver dataResolver, StatementContext context) throws SQLException {
+            super(FACTORY);
             this.dataResolver = dataResolver;
             this.expressionCompiler = new ExpressionCompiler(context);
             this.extractedConditions = Lists.<ParseNode> newArrayList();
@@ -585,43 +574,6 @@ public class QueryOptimizer {
                 return this.extractedConditions.get(0);
             
             return FACTORY.and(this.extractedConditions);            
-        }
-        
-        @Override
-        public List<ParseNode> newElementList(int size) {
-            return Lists.<ParseNode> newArrayListWithExpectedSize(size);
-        }
-
-        @Override
-        public void addElement(List<ParseNode> l, ParseNode element) {
-            if (element != null) {
-                l.add(element);
-            }
-        }
-
-        @Override
-        public boolean visitEnter(AndParseNode node) throws SQLException {
-            return true;
-        }
-
-        @Override
-        public ParseNode visitLeave(AndParseNode node, List<ParseNode> l)
-                throws SQLException {
-            if (l.equals(node.getChildren()))
-                return node;
-
-            if (l.isEmpty())
-                return null;
-            
-            if (l.size() == 1)
-                return l.get(0);
-            
-            return FACTORY.and(l);
-        }
-
-        @Override
-        protected boolean enterBooleanNode(ParseNode node) throws SQLException {
-            return false;
         }
 
         @Override
@@ -638,79 +590,13 @@ public class QueryOptimizer {
             
             return translatedNode;
         }
-
-        @Override
-        protected boolean enterNonBooleanNode(ParseNode node)
-                throws SQLException {
-            return false;
-        }
-
-        @Override
-        protected ParseNode leaveNonBooleanNode(ParseNode node,
-                List<ParseNode> l) throws SQLException {
-            return node;
-        }
     }
 
     private static SelectStatement rewriteQueryWithIndexReplacement(
             final PhoenixConnection connection, final ColumnResolver resolver,
             final SelectStatement select, final Map<TableRef, TableRef> replacement) throws SQLException {
         TableNode from = select.getFrom();
-        TableNode newFrom = from.accept(new TableNodeVisitor<TableNode>() {
-            private TableRef resolveTable(String alias, TableName name) throws SQLException {
-                if (alias != null)
-                    return resolver.resolveTable(null, alias);
-
-                return resolver.resolveTable(name.getSchemaName(), name.getTableName());
-            }
-
-            private TableName getReplacedTableName(TableRef tableRef) {
-                String schemaName = tableRef.getTable().getSchemaName().getString();
-                return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
-            }
-
-            @Override
-            public TableNode visit(BindTableNode boundTableNode) throws SQLException {
-                TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return boundTableNode;
-
-                String alias = boundTableNode.getAlias();
-                return FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
-            }
-
-            @Override
-            public TableNode visit(JoinTableNode joinNode) throws SQLException {
-                TableNode lhs = joinNode.getLHS();
-                TableNode rhs = joinNode.getRHS();
-                TableNode lhsReplace = lhs.accept(this);
-                TableNode rhsReplace = rhs.accept(this);
-                if (lhs == lhsReplace && rhs == rhsReplace)
-                    return joinNode;
-
-                return FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
-            }
-
-            @Override
-            public TableNode visit(NamedTableNode namedTableNode)
-                    throws SQLException {
-                TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
-                TableRef replaceRef = replacement.get(tableRef);
-                if (replaceRef == null)
-                    return namedTableNode;
-
-                String alias = namedTableNode.getAlias();
-                return FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
-            }
-
-            @Override
-            public TableNode visit(DerivedTableNode subselectNode)
-                    throws SQLException {
-                return subselectNode;
-            }
-        });
-
+        TableNode newFrom = from.accept(new QueryOptimizerTableNode(resolver, replacement));
         if (from == newFrom) {
             return select;
         }
@@ -722,5 +608,67 @@ public class QueryOptimizer {
         }
 
         return indexSelect;
+    }
+    private static class QueryOptimizerTableNode implements TableNodeVisitor<TableNode> {
+        private final ColumnResolver resolver;
+        private final Map<TableRef, TableRef> replacement;
+
+        QueryOptimizerTableNode (ColumnResolver resolver, final Map<TableRef, TableRef> replacement){
+            this.resolver = resolver;
+            this.replacement = replacement;
+        }
+
+        private TableRef resolveTable(String alias, TableName name) throws SQLException {
+            if (alias != null)
+                return resolver.resolveTable(null, alias);
+
+            return resolver.resolveTable(name.getSchemaName(), name.getTableName());
+        }
+
+        private TableName getReplacedTableName(TableRef tableRef) {
+            String schemaName = tableRef.getTable().getSchemaName().getString();
+            return TableName.create(schemaName.length() == 0 ? null : schemaName, tableRef.getTable().getTableName().getString());
+        }
+
+        @Override
+        public TableNode visit(BindTableNode boundTableNode) throws SQLException {
+            TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
+            TableRef replaceRef = replacement.get(tableRef);
+            if (replaceRef == null)
+                return boundTableNode;
+
+            String alias = boundTableNode.getAlias();
+            return FACTORY.bindTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef));
+        }
+
+        @Override
+        public TableNode visit(JoinTableNode joinNode) throws SQLException {
+            TableNode lhs = joinNode.getLHS();
+            TableNode rhs = joinNode.getRHS();
+            TableNode lhsReplace = lhs.accept(this);
+            TableNode rhsReplace = rhs.accept(this);
+            if (lhs == lhsReplace && rhs == rhsReplace)
+                return joinNode;
+
+            return FACTORY.join(joinNode.getType(), lhsReplace, rhsReplace, joinNode.getOnNode(), joinNode.isSingleValueOnly());
+        }
+
+        @Override
+        public TableNode visit(NamedTableNode namedTableNode)
+                    throws SQLException {
+            TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
+            TableRef replaceRef = replacement.get(tableRef);
+            if (replaceRef == null)
+                return namedTableNode;
+
+            String alias = namedTableNode.getAlias();
+            return FACTORY.namedTable(alias == null ? null : '"' + alias + '"', getReplacedTableName(replaceRef), namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate());
+        }
+
+        @Override
+        public TableNode visit(DerivedTableNode subselectNode)
+                    throws SQLException {
+            return subselectNode;
+        }
     }
 }

@@ -22,15 +22,25 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 
+import java.util.concurrent.Future;
+
 public class PherfMainIT extends ResultBaseTestIT {
+
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
     @Test
-    public void testPherfMain() {
-        String[] args = { "-q",
-                "--scenarioFile", ".*prod_test_unsalted_scenario.*",
+    public void testPherfMain() throws Exception {
+        String[] args = { "-q", "-l",
+                "--schemaFile", ".*create_prod_test_unsalted.sql",
+                "--scenarioFile", ".*prod_test_unsalted_scenario.xml",
                 "-m", "--monitorFrequency", "10" };
-        Pherf.main(args);
+        Pherf pherf = new Pherf(args);
+        pherf.run();
+
+        // verify that none of the scenarios threw any exceptions
+        for (Future<Void> future : pherf.workloadExecutor.jobs.values()) {
+            future.get();
+        }
     }
 }

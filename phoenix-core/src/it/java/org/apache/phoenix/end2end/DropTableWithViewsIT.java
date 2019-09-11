@@ -17,22 +17,26 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.coprocessor.TableViewFinderResult;
+import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.coprocessor.ViewFinder;
+import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -103,6 +107,9 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+            // Empty the task table first.
+            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
                             + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -126,20 +133,19 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             // Run DropChildViewsTask to complete the tasks for dropping child views. The depth of the view tree is 2,
             // so we expect that this will be done in two task handling runs as each non-root level will be processed
             // in one run
-            TaskRegionObserver.DropChildViewsTask task =
-                    new TaskRegionObserver.DropChildViewsTask(
+            TaskRegionObserver.SelfHealingTask task =
+                    new TaskRegionObserver.SelfHealingTask(
                             TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
             task.run();
             task.run();
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
-                    " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
-                    PTable.TaskType.DROP_CHILD_VIEWS.getSerializedValue());
-            assertFalse(rs.next());
+
+            assertTaskColumns(conn, PTable.TaskStatus.COMPLETED.toString(), PTable.TaskType.DROP_CHILD_VIEWS,
+                    null, null, null, null, null);
+
             // Views should be dropped by now
             TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            ViewFinder.findAllRelatives(getUtility().getConnection().getTable(linkTable),
+            ViewUtil.findAllRelatives(getUtility().getConnection().getTable(linkTable),
                     HConstants.EMPTY_BYTE_ARRAY,
                     SchemaUtil.getSchemaNameFromFullName(baseTable).getBytes(),
                     SchemaUtil.getTableNameFromFullName(baseTable).getBytes(),
@@ -147,9 +153,47 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
                     childViewsResult);
             assertTrue(childViewsResult.getLinks().size() == 0);
             // There should not be any orphan views
-            rs = conn.createStatement().executeQuery("SELECT * FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME +
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME +
                     " WHERE " + PhoenixDatabaseMetaData.TABLE_SCHEM + " = '" + SCHEMA2 +"'");
             assertFalse(rs.next());
+        }
+    }
+
+    public static void assertTaskColumns(Connection conn, String expectedStatus, PTable.TaskType taskType,
+            String expectedTableName, String expectedTenantId, String expectedSchema, Timestamp expectedTs,
+            String expectedIndexName)
+            throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
+                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                taskType.getSerializedValue());
+        assertTrue(rs.next());
+        String taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
+        assertEquals(expectedStatus, taskStatus);
+
+        if (expectedTableName != null) {
+            String tableName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+            assertEquals(expectedTableName, tableName);
+        }
+
+        if (expectedTenantId != null) {
+            String tenantId = rs.getString(PhoenixDatabaseMetaData.TENANT_ID);
+            assertEquals(expectedTenantId, tenantId);
+        }
+
+        if (expectedSchema != null) {
+            String schema = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+            assertEquals(expectedSchema, schema);
+        }
+
+        if (expectedTs != null) {
+            Timestamp ts = rs.getTimestamp(PhoenixDatabaseMetaData.TASK_TS);
+            assertEquals(expectedTs, ts);
+        }
+
+        if (expectedIndexName != null) {
+            String data = rs.getString(PhoenixDatabaseMetaData.TASK_DATA);
+            assertEquals(true, data.contains("\"IndexName\":\"" + expectedIndexName));
         }
     }
 }

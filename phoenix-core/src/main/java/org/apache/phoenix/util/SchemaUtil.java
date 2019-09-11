@@ -63,7 +63,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -278,7 +280,8 @@ public class SchemaUtil {
      * @param tableName
      */
     public static byte[] getTableKey(byte[] tenantId, byte[] schemaName, byte[] tableName) {
-        return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, SEPARATOR_BYTE_ARRAY, schemaName, SEPARATOR_BYTE_ARRAY, tableName);
+        return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, SEPARATOR_BYTE_ARRAY,
+                schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName, SEPARATOR_BYTE_ARRAY, tableName);
     }
 
     /**
@@ -1197,6 +1200,15 @@ public class SchemaUtil {
     public static boolean isLogTable(String schemaName, String tableName) {
         return PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName) && PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE.equals(tableName);
     }
-    
 
+    /**
+     * Return the normalized columnName for {@link ColumnParseNode},
+     * because {@link ColumnParseNode} ctor have already called {SchemaUtil#normalizeIdentifier}
+     * for {@link ColumnParseNode#getName},so just return {@link ColumnParseNode#getName}.
+     * @param columnParseNode
+     * @return
+     */
+    public static String getNormalizedColumnName(ColumnParseNode columnParseNode) {
+        return columnParseNode.getName();
+    }
 }

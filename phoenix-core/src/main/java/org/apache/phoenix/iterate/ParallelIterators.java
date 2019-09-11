@@ -52,7 +52,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ParallelIterators extends BaseResultIterators {
-	private static final Logger logger = LoggerFactory.getLogger(ParallelIterators.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(ParallelIterators.class);
 	private static final String NAME = "PARALLEL";
     private final ParallelIteratorFactory iteratorFactory;
     private final boolean initFirstScanOnly;
@@ -122,8 +122,8 @@ public class ParallelIterators extends BaseResultIterators {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     long startTime = System.currentTimeMillis();
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
                     PeekingResultIterator iterator = iteratorFactory.newIterator(context, tableResultItr, scan, physicalTableName, ParallelIterators.this.plan);
                     if (initFirstScanOnly) {

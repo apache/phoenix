@@ -161,10 +161,13 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         String sql = "SELECT * FROM " + tableA + " where (c1.a > c2.b) limit 1";
         List<Object> binds = Lists.newArrayList();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            assertFalse(rs.next());
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 691L, info.estimatedBytes);
+            assertEquals((Long) 390L, info.estimatedBytes);
             assertEquals((Long) 10L, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
+
         }
     }
 
@@ -187,8 +190,20 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         List<Object> binds = Lists.newArrayList();
         binds.add(0);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (PreparedStatement statement = conn.prepareStatement(sql)) {
+                int paramIdx = 1;
+                for (Object bind : binds) {
+                    statement.setObject(paramIdx++, bind);
+                }
+                ResultSet rs = statement.executeQuery(sql);
+                assertTrue(rs.next());
+                assertEquals(100, rs.getInt(1));
+                assertEquals(1, rs.getInt(2));
+                assertEquals(3, rs.getInt(3));
+                assertTrue(rs.next());
+            }
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 691L, info.estimatedBytes);
+            assertEquals((Long) 390L, info.estimatedBytes);
             assertEquals((Long) 10L, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
         }

@@ -23,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.concurrent.Callable;
 
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ResultManager;
@@ -38,8 +39,8 @@ import org.apache.phoenix.pherf.configuration.WriteParams;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 
-class MultiThreadedRunner implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger(MultiThreadedRunner.class);
+class MultiThreadedRunner implements Callable<Void> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultiThreadedRunner.class);
     private Query query;
     private ThreadTime threadTime;
     private PhoenixUtil pUtil = PhoenixUtil.create();
@@ -85,29 +86,28 @@ class MultiThreadedRunner implements Runnable {
      * Executes run for a minimum of number of execution or execution duration
      */
     @Override
-    public void run() {
-        logger.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
+    public Void call() throws Exception {
+        LOGGER.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
         Long start = System.currentTimeMillis();
         for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
                 < executionDurationInMs)); i--) {
-            try {
-                synchronized (resultManager) {
-                    timedQuery();
-                    if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
-                        resultManager.write(dataModelResult, ruleApplier);
-                        lastResultWritten = System.currentTimeMillis();
-                    }
+            synchronized (workloadExecutor) {
+                timedQuery();
+                if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
+                    resultManager.write(dataModelResult, ruleApplier);
+                    lastResultWritten = System.currentTimeMillis();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
         }
 
         // Make sure all result have been dumped before exiting
-        resultManager.flush();
+        synchronized (workloadExecutor) {
+            resultManager.flush();
+        }
 
-        logger.info("\n\nThread exiting." + threadName + "\n\n");
+        LOGGER.info("\n\nThread exiting." + threadName + "\n\n");
+        return null;
     }
 
     private synchronized ThreadTime getThreadTime() {
@@ -137,7 +137,7 @@ class MultiThreadedRunner implements Runnable {
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
-            logger.info("Executing: " + statementString);
+            LOGGER.info("Executing: " + statementString);
             
             if (scenario.getWriteParams() != null) {
             	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);
@@ -165,8 +165,9 @@ class MultiThreadedRunner implements Runnable {
                 conn.commit();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("Exception while executing query", e);
             exception = e.getMessage();
+            throw e;
         } finally {
             getThreadTime().getRunTimesInMs().add(new RunTime(exception, startDate, resultRowCount,
                     (int) (System.currentTimeMillis() - start)));

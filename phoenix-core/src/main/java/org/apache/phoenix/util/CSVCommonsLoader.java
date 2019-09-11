@@ -42,7 +42,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class CSVCommonsLoader {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CSVCommonsLoader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CSVCommonsLoader.class);
 
     public static final String DEFAULT_ARRAY_ELEMENT_SEPARATOR = ":";
 
@@ -158,11 +158,7 @@ public class CSVCommonsLoader {
      * @return
      */
     public static char asControlCharacter(char delimiter) {
-        if(CTRL_CHARACTER_TABLE.containsKey(delimiter)) {
-            return CTRL_CHARACTER_TABLE.get(delimiter);
-        } else {
-            return delimiter;
-        }
+        return CTRL_CHARACTER_TABLE.getOrDefault(delimiter, delimiter);
     }
 
     /**
@@ -242,10 +238,7 @@ public class CSVCommonsLoader {
             System.out.println(String.format("csv columns from database."));
             break;
         case IN_LINE:
-            columns = new ArrayList<String>();
-            for (String colName : parser.getHeaderMap().keySet()) {
-                columns.add(colName); // iterates in column order
-            }
+            columns = new ArrayList<>(parser.getHeaderMap().keySet());
             System.out.println(String.format("csv columns from header line. length=%s, %s",
                     columns.size(), buildStringFromList(columns)));
             break;
@@ -277,10 +270,10 @@ public class CSVCommonsLoader {
             totalUpserts = upsertCount;
             if (upsertCount % upsertBatchSize == 0) {
                 if (upsertCount % 1000 == 0) {
-                    LOG.info("Processed upsert #{}", upsertCount);
+                    LOGGER.info("Processed upsert #{}", upsertCount);
                 }
                 try {
-                    LOG.info("Committing after {} records", upsertCount);
+                    LOGGER.info("Committing after {} records", upsertCount);
                     conn.commit();
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -290,7 +283,7 @@ public class CSVCommonsLoader {
 
         @Override
         public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
-            LOG.error("Error upserting record " + csvRecord, throwable.getMessage());
+            LOGGER.error("Error upserting record " + csvRecord, throwable.getMessage());
             if (strict) {
                 Throwables.propagate(throwable);
             }

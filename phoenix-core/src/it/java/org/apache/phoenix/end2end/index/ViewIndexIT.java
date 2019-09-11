@@ -153,15 +153,9 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName).next();
         String sequenceName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, isNamespaceMapped);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), isNamespaceMapped);
-        String seqName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, !isNamespaceMapped);
-        String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), !isNamespaceMapped);
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775807L);
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775807L);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, Long.MIN_VALUE + 1);
         conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + fullViewName + " (v1)");
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, -9223372036854775806L);
-        // Check other format of sequence is not there as Sequences format is different for views/indexes created on
-        // table which are namespace mapped and which are not.
-        verifySequenceNotExists(null, seqName, seqSchemaName);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, Long.MIN_VALUE + 2);
         conn1.createStatement().execute("DROP VIEW " + fullViewName);
         conn1.createStatement().execute("DROP TABLE "+ fullTableName);
         

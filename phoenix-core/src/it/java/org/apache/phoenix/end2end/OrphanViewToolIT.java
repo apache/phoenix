@@ -54,10 +54,9 @@ import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends ParallelStatsDisabledIT {
-    private static final Logger LOG = LoggerFactory.getLogger(OrphanViewToolIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);
 
     private final boolean isMultiTenant;
-    private final boolean columnEncoded;
 
     private static final long fanout = 2;
     private static final long childCount = fanout;
@@ -80,6 +79,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
     private static final String createBaseTableFirstPartDDL = "CREATE TABLE IF NOT EXISTS %s";
     private static final String createBaseTableSecondPartDDL = "(%s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR " +
             " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)) %s";
+    private static final String createBaseTableIndexDDL = "CREATE INDEX %s ON %s (V1)";
     private static final String deleteTableRows = "DELETE FROM " + SYSTEM_CATALOG_NAME +
             " WHERE " + TABLE_SCHEM + " %s AND " +
             TABLE_TYPE + " = '" + PTableType.TABLE.getSerializedValue() + "'";
@@ -117,16 +117,13 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
 
     private static final String deleteSchemaRows = "DELETE FROM %s WHERE " + TABLE_SCHEM + " %s";
 
-    public OrphanViewToolIT(boolean isMultiTenant, boolean columnEncoded) {
+    public OrphanViewToolIT(boolean isMultiTenant) {
         this.isMultiTenant = isMultiTenant;
-        this.columnEncoded = columnEncoded;
     }
 
-    @Parameters(name="OrphanViewToolIT_multiTenant={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, false }, { false, true },
-                { true, false }, { true, true } });
+    @Parameters(name="OrphanViewToolIT_multiTenant={0}") // name is used by failsafe as file name in reports
+    public static Collection<Boolean> data() {
+        return Arrays.asList(false, true);
     }
 
     @AfterClass
@@ -145,11 +142,6 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
 
     private String generateDDL(String options, String format) {
         StringBuilder optionsBuilder = new StringBuilder(options);
-        if (!columnEncoded) {
-            if (optionsBuilder.length()!=0)
-                optionsBuilder.append(",");
-            optionsBuilder.append("COLUMN_ENCODED_BYTES=0");
-        }
         if (isMultiTenant) {
             if (optionsBuilder.length()!=0)
                 optionsBuilder.append(",");
@@ -183,12 +175,14 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         connection.commit();
     }
 
-    private void createBaseTableAndViews(Connection baseTableConnection, String baseTableFullName,
-                                         Connection viewConnection, String childViewSchemaName,
-                                         String grandchildViewSchemaName, String grandGrandChildViewSchemaName)
+    private void createBaseTableIndexAndViews(Connection baseTableConnection, String baseTableFullName,
+                                              Connection viewConnection, String childViewSchemaName,
+                                              String grandchildViewSchemaName, String grandGrandChildViewSchemaName)
             throws SQLException {
         baseTableConnection.createStatement().execute(generateDDL(String.format(createBaseTableFirstPartDDL,
                 baseTableFullName) + createBaseTableSecondPartDDL));
+        baseTableConnection.createStatement().execute(String.format(createBaseTableIndexDDL,
+                generateUniqueName(), baseTableFullName));
         // Create a view tree (i.e., tree of views) with depth of 3
         for (int i = 0; i < fanout; i++) {
             String childView = SchemaUtil.getTableName(childViewSchemaName, generateUniqueName());
@@ -211,8 +205,9 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         }
         int count = reader.getLineNumber();
         if (count != lineCount)
-            LOG.debug(count + " != " + lineCount);
+            LOGGER.debug(count + " != " + lineCount);
         assertTrue(count == lineCount);
+        reader.close();
     }
 
     private void verifyCountQuery(Connection connection, String query, String schemaName, long count)
@@ -230,7 +225,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Run the orphan view tool to drop orphan views but no view should be dropped
             runOrphanViewTool(true, false, true, false);
             verifyOrphanFileLineCounts(0, 0, 0, 0);
@@ -275,7 +270,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA2, SCHEMA2);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA2, SCHEMA2);
             // Delete the base table row from the system catalog
             executeDeleteQuery(connection, deleteTableRows, SCHEMA1);
             // Verify that the views we have created are still in the system catalog table
@@ -309,7 +304,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, null, SCHEMA3, SCHEMA3);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, null, SCHEMA3, SCHEMA3);
             // Delete the rows of the immediate child views of the base table from the system catalog
             executeDeleteQuery(connection, deleteViewRows, null);
             // Verify that the other views we have created are still in the system catalog table
@@ -338,7 +333,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, null);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, null);
             // Delete the grand child view rows from the system catalog
             executeDeleteQuery(connection, deleteViewRows, SCHEMA3);
             // Verify that grand grand child views are still in the system catalog table
@@ -368,7 +363,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Delete the CHILD_TABLE links to grand child views
             executeDeleteQuery(connection, deleteChildLinks, SCHEMA2);
             // Verify that grand grand child views are still in the system catalog table
@@ -396,7 +391,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA4);
             // Delete the PARENT_TABLE links from  grand grand child views
             executeDeleteQuery(connection, deleteParentLinks, SCHEMA4);
             // Verify that grand grand child views are still in the system catalog table
@@ -422,7 +417,7 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl());
              Connection viewConnection =
                      isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : connection) {
-            createBaseTableAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA3);
+            createBaseTableIndexAndViews(connection, baseTableFullName, viewConnection, SCHEMA2, SCHEMA3, SCHEMA3);
             // Delete the physical table link rows from the system catalog
             executeDeleteQuery(connection, deletePhysicalLinks, SCHEMA2);
             // Verify that the views we have created are still in the system catalog table

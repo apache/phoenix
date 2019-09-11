@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobPriority;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
@@ -70,7 +71,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IS_NAMESPACE
  */
 public class UpdateStatisticsTool extends Configured implements Tool {
 
-    private static final Logger LOG = LoggerFactory.getLogger(UpdateStatisticsTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UpdateStatisticsTool.class);
 
     private static final Option TABLE_NAME_OPTION = new Option("t", "table", true,
             "Phoenix Table Name");
@@ -78,6 +79,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             "HBase Snapshot Name");
     private static final Option RESTORE_DIR_OPTION = new Option("d", "restore-dir", true,
             "Restore Directory for HBase snapshot");
+    private static final Option JOB_PRIORITY_OPTION = new Option("p", "job-priority", true,
+            "Define job priority from 0(highest) to 4");
     private static final Option RUN_FOREGROUND_OPTION =
             new Option("runfg", "run-foreground", false,
                     "If specified, runs UpdateStatisticsTool in Foreground. Default - Runs the build in background");
@@ -90,6 +93,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     private String tableName;
     private String snapshotName;
     private Path restoreDir;
+    private JobPriority jobPriority;
     private boolean manageSnapshot;
     private boolean isForeground;
 
@@ -122,7 +126,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             String physicalTableName =  SchemaUtil.getPhysicalTableName(tableName.getBytes(),
                     namespaceMapping).getNameAsString();
             admin.snapshot(snapshotName, TableName.valueOf(physicalTableName));
-            LOG.info("Successfully created snapshot " + snapshotName + " for " + physicalTableName);
+            LOGGER.info("Successfully created snapshot " + snapshotName + " for " + physicalTableName);
         }
     }
 
@@ -138,7 +142,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         try (final Connection conn = ConnectionUtil.getInputConnection(getConf())) {
             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             admin.deleteSnapshot(snapshotName);
-            LOG.info("Successfully deleted snapshot " + snapshotName);
+            LOGGER.info("Successfully deleted snapshot " + snapshotName);
         }
     }
 
@@ -164,10 +168,33 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         if (restoreDirOptionValue == null) {
             restoreDirOptionValue = getConf().get(FS_DEFAULT_NAME_KEY) + "/tmp";
         }
-        
+
+        jobPriority = getJobPriority(cmdLine);
+
         restoreDir = new Path(restoreDirOptionValue);
         manageSnapshot = cmdLine.hasOption(MANAGE_SNAPSHOT_OPTION.getOpt());
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
+    }
+
+    public String getJobPriority() {
+        return this.jobPriority.toString();
+    }
+
+    private JobPriority getJobPriority(CommandLine cmdLine) {
+        String jobPriorityOption = cmdLine.getOptionValue(JOB_PRIORITY_OPTION.getOpt());
+         if (jobPriorityOption == null) {
+             return JobPriority.NORMAL;
+         }
+
+         switch (jobPriorityOption) {
+             case "0" : return JobPriority.VERY_HIGH;
+             case "1" : return JobPriority.HIGH;
+             case "2" : return JobPriority.NORMAL;
+             case "3" : return JobPriority.LOW;
+             case "4" : return JobPriority.VERY_LOW;
+             default:
+                 return JobPriority.NORMAL;
+         }
     }
 
     private void configureJob() throws Exception {
@@ -187,28 +214,30 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         job.setMapOutputValueClass(NullWritable.class);
         job.setOutputFormatClass(NullOutputFormat.class);
         job.setNumReduceTasks(0);
+        job.setPriority(this.jobPriority);
+
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
                 CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
                 ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
                 Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
-        LOG.info("UpdateStatisticsTool running for: " + tableName
+        LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }
 
     private int runJob() {
         try {
             if (isForeground) {
-                LOG.info("Running UpdateStatisticsTool in Foreground. " +
+                LOGGER.info("Running UpdateStatisticsTool in Foreground. " +
                         "Runs full table scans. This may take a long time!");
                 return (job.waitForCompletion(true)) ? 0 : 1;
             } else {
-                LOG.info("Running UpdateStatisticsTool in Background - Submit async and exit");
+                LOGGER.info("Running UpdateStatisticsTool in Background - Submit async and exit");
                 job.submit();
                 return 0;
             }
         } catch (Exception e) {
-            LOG.error("Caught exception " + e + " trying to update statistics.");
+            LOGGER.error("Caught exception " + e + " trying to update statistics.");
             return 1;
         }
     }
@@ -265,6 +294,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         options.addOption(SNAPSHOT_NAME_OPTION);
         options.addOption(HELP_OPTION);
         options.addOption(RESTORE_DIR_OPTION);
+        options.addOption(JOB_PRIORITY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(MANAGE_SNAPSHOT_OPTION);
         return options;

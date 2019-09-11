@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -142,7 +143,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public abstract class BaseResultIterators extends ExplainTable implements ResultIterators {
-	public static final Logger logger = LoggerFactory.getLogger(BaseResultIterators.class);
+	public static final Logger LOGGER = LoggerFactory.getLogger(BaseResultIterators.class);
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
     private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
     private final List<List<Scan>> scans;
@@ -262,19 +263,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
             }
-            int cols = plan.getGroupBy().getOrderPreservingColumnCount();
+            GroupBy groupBy = plan.getGroupBy();
+            int cols = groupBy.getOrderPreservingColumnCount();
             if (cols > 0 && keyOnlyFilter &&
                 !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
                 cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
-                plan.getGroupBy().isOrderPreserving() &&
-                (context.getAggregationManager().isEmpty() || plan.getGroupBy().isUngroupedAggregate())) {
-                
-                ScanUtil.andFilterAtEnd(scan,
-                        new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),
-                                cols));
-                if (plan.getLimit() != null) { // We can push the limit to the server
-                    ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
-                }
+                groupBy.isOrderPreserving() &&
+                (context.getAggregationManager().isEmpty() || groupBy.isUngroupedAggregate())) {
+
+                    ScanUtil.andFilterAtEnd(scan,
+                            new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),cols));
+                    if (!groupBy.isUngroupedAggregate() && plan.getLimit() != null) {
+                        // We can push the limit to the server,but for UngroupedAggregate
+                        // we can not push the limit.
+                        ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
+                    }
             }
             scan.setAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME, new byte[]{table.getEncodingScheme().getSerializedMetadataValue()});
             scan.setAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME, new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()});
@@ -1223,8 +1226,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      */
     @Override
     public List<PeekingResultIterator> getIterators() throws SQLException {
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
                     ScanUtil.getCustomAnnotations(scan)));
         }
         boolean isReverse = ScanUtil.isReversed(scan);
@@ -1310,7 +1313,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
                             if(e2 instanceof HashJoinCacheNotFoundException){
-                                logger.debug(
+                                LOGGER.debug(
                                         "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                                 if(retryCount<=0){
                                     throw e2;
@@ -1451,7 +1454,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 } catch (ExecutionException e) {
-                    logger.info("Failed to execute task during cancel", e);
+                    LOGGER.info("Failed to execute task during cancel", e);
                     continue;
                 }
             }

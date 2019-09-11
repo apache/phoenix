@@ -107,7 +107,7 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class FromCompiler {
-    private static final Logger logger = LoggerFactory.getLogger(FromCompiler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FromCompiler.class);
 
     public static final ColumnResolver EMPTY_TABLE_RESOLVER = new ColumnResolver() {
 
@@ -174,11 +174,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            // We need to always get the latest meta data for the parent table of a create view call to ensure that
-            // that we're copying the current table meta data as of when the view is created. Once we no longer
-            // copy the parent meta data, but store only the local diffs (PHOENIX-3534), we will no longer need
-            // to do this.
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true, true);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -233,6 +229,22 @@ public class FromCompiler {
         MultiTableColumnResolver visitor = new MultiTableColumnResolver(connection, 1, statement.getUdfParseNodes(), mutatingTableName);
         fromNode.accept(visitor);
         return visitor;
+    }
+
+    /**
+     * Refresh the inner state of {@link MultiTableColumnResolver} for the derivedTableNode when
+     * the derivedTableNode is changed for some sql optimization.
+     * @param columnResolver
+     * @param derivedTableNode
+     * @return
+     * @throws SQLException
+     */
+    public static TableRef refreshDerivedTableNode(
+            ColumnResolver columnResolver, DerivedTableNode derivedTableNode) throws SQLException {
+        if(!(columnResolver instanceof MultiTableColumnResolver)) {
+            throw new UnsupportedOperationException();
+        }
+        return ((MultiTableColumnResolver)columnResolver).refreshDerivedTableNode(derivedTableNode);
     }
 
     public static ColumnResolver getResolverForSchema(UseSchemaStatement statement, PhoenixConnection connection)
@@ -646,8 +658,13 @@ public class FromCompiler {
                 timeStamp += tsAddition;
             }
             TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
-            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale table " + fullTableName + " with seqNum " + tableRef.getTable().getSequenceNumber() + " at timestamp " + tableRef.getTable().getTimeStamp() + " with " + tableRef.getTable().getColumns().size() + " columns: " + tableRef.getTable().getColumns(), connection));
+            if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Re-resolved stale table " + fullTableName + " with seqNum "
+                                + tableRef.getTable().getSequenceNumber() + " at timestamp "
+                                + tableRef.getTable().getTimeStamp() + " with "
+                                + tableRef.getTable().getColumns().size() + " columns: "
+                                + tableRef.getTable().getColumns(), connection));
             }
             return tableRef;
         }
@@ -695,8 +712,10 @@ public class FromCompiler {
                 timeStamp += tsAddition;
             }
             
-            if (logger.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                logger.debug(LogUtil.addCustomAnnotations("Re-resolved stale function " + functionNames.toString() + "at timestamp " + timeStamp, connection));
+            if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Re-resolved stale function " + functionNames.toString() +
+                                "at timestamp " + timeStamp, connection));
             }
             return functionsFound;
         }
@@ -734,10 +753,11 @@ public class FromCompiler {
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)
                 throws SQLException {
             if (!dynColumns.isEmpty()) {
-                List<PColumn> allcolumns = new ArrayList<PColumn>();
                 List<PColumn> existingColumns = theTable.getColumns();
                 // Need to skip the salting column, as it's handled in the PTable builder call below
-                allcolumns.addAll(theTable.getBucketNum() == null ? existingColumns : existingColumns.subList(1, existingColumns.size()));
+                List<PColumn> allcolumns = new ArrayList<>(
+                        theTable.getBucketNum() == null ? existingColumns :
+                                existingColumns.subList(1, existingColumns.size()));
                 // Position still based on with the salting columns
                 int position = existingColumns.size();
                 PName defaultFamilyName = PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(theTable));
@@ -893,6 +913,23 @@ public class FromCompiler {
             tableMap.put(alias, tableRef);
             tables.add(tableRef);
             return null;
+        }
+
+        /**
+         * Invoke the {@link #visit(DerivedTableNode)} again to refresh the inner state.
+         * @param derivedTableNode
+         * @return
+         * @throws SQLException
+         */
+        public TableRef refreshDerivedTableNode(DerivedTableNode derivedTableNode) throws SQLException {
+              String tableAlias = derivedTableNode.getAlias();
+              List<TableRef> removedTableRefs = this.tableMap.removeAll(tableAlias);
+              if(removedTableRefs == null || removedTableRefs.isEmpty()) {
+                  return null;
+              }
+              tables.removeAll(removedTableRefs);
+              this.visit(derivedTableNode);
+              return this.resolveTable(null, tableAlias);
         }
 
         private static class ColumnFamilyRef {

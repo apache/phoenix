@@ -19,8 +19,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
@@ -42,6 +40,8 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
 
@@ -67,7 +67,8 @@ import com.google.common.collect.Multimap;
  * client.
  */
 public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
-    private static final Log LOG = LogFactory.getLog(TrackingParallelWriterIndexCommitter.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(TrackingParallelWriterIndexCommitter.class);
 
     public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
@@ -79,6 +80,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private Stoppable stopped;
     private RegionCoprocessorEnvironment env;
     private KeyValueBuilder kvBuilder;
+    protected boolean disableIndexOnFailure = false;
 
     // for testing
     public TrackingParallelWriterIndexCommitter(String hbaseVersion) {
@@ -89,8 +91,9 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name) {
+    public void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure) {
         this.env = env;
+        this.disableIndexOnFailure = disableIndexOnFailure;
         Configuration conf = env.getConfiguration();
         setup(IndexWriterUtils.getDefaultDelegateHTableFactory(env),
                 ThreadPoolManager.getExecutor(
@@ -165,18 +168,25 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                 return Boolean.TRUE;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isTraceEnabled()) {
-                                    LOG.trace("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
-                                            + ignord);
+                                if (LOGGER.isTraceEnabled()) {
+                                    LOGGER.trace("indexRegion.batchMutate failed and fall " +
+                                            "back to HTable.batch(). Got error=" + ignord);
                                 }
                             }
                         }
 
-                        if (LOG.isTraceEnabled()) {
-                            LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
+                        if (LOGGER.isTraceEnabled()) {
+                            LOGGER.trace("Writing index update:" + mutations + " to table: "
+                                    + tableReference);
                         }
                         // if the client can retry index writes, then we don't need to retry here
-                        HTableFactory factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
+                        HTableFactory factory;
+                        if (disableIndexOnFailure) {
+                            factory = clientVersion < MetaDataProtocol.MIN_CLIENT_RETRY_INDEX_WRITES ? retryingFactory : noRetriesFactory;
+                        }
+                        else {
+                            factory = retryingFactory;
+                        }
                         table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations, null);
@@ -207,7 +217,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
         List<Boolean> results = null;
         try {
-            LOG.debug("Waiting on index update tasks to complete...");
+            LOGGER.debug("Waiting on index update tasks to complete...");
             results = this.pool.submitUninterruptible(tasks);
         } catch (ExecutionException e) {
             throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
@@ -233,14 +243,14 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         if (failures.size() > 0) {
             // make the list unmodifiable to avoid any more synchronization concerns
             throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
-                    PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
+                    disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
         }
         return;
     }
 
     @Override
     public void stop(String why) {
-        LOG.info("Shutting down " + this.getClass().getSimpleName());
+        LOGGER.info("Shutting down " + this.getClass().getSimpleName());
         this.pool.stop(why);
         this.retryingFactory.shutdown();
         this.noRetriesFactory.shutdown();

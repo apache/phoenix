@@ -38,6 +38,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -70,6 +71,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PLong;
@@ -80,6 +82,7 @@ import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -183,7 +186,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testSingleVariableFullPkSalted() throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        pconn.createStatement().execute("CREATE TABLE t (k varchar primary key, v varchar) SALT_BUCKETS=20");
+        pconn.createStatement().execute("CREATE TABLE t (k varchar(10) primary key, v varchar) SALT_BUCKETS=20");
         String query = "select * from t where k='a'";
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
@@ -194,7 +197,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PVarchar.INSTANCE.toBytes("a", key, 1);
         key[0] = SaltingUtil.getSaltingByte(key, 1, 1, 20);
         byte[] expectedStartKey = key;
-        byte[] expectedEndKey = ByteUtil.nextKey(ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY));
+        //lexicographically this is the next PK
+        byte[] expectedEndKey = ByteUtil.concat(key,new byte[]{0});
         byte[] startKey = scan.getStartRow();
         byte[] stopKey = scan.getStopRow();
         assertTrue(Bytes.compareTo(expectedStartKey, startKey) == 0);
@@ -1021,5 +1025,62 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         assertEquals(FETCH_SIZE, pstmt.getFetchSize());
         assertEquals(FETCH_SIZE, scan.getCaching());
+    }
+
+    @Test
+    public void testLastPkColumnIsVariableLengthAndDescBug5307() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String sql =  "CREATE TABLE t1 (\n" +
+                    "OBJECT_VERSION VARCHAR NOT NULL,\n" +
+                    "LOC VARCHAR,\n" +
+                    "CONSTRAINT PK PRIMARY KEY (OBJECT_VERSION DESC))";
+            conn.createStatement().execute(sql);
+
+            byte[] startKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            byte[] endKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            ByteUtil.nextKey(endKey, endKey.length);
+            sql = "SELECT /*+ RANGE_SCAN */ OBJ.OBJECT_VERSION, OBJ.LOC from t1 AS OBJ "+
+                    "where OBJ.OBJECT_VERSION in ('1111','2222')";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = queryPlan.getContext().getScan();
+            assertArrayEquals(startKey, scan.getStartRow());
+            assertArrayEquals(endKey, scan.getStopRow());
+
+            sql =  "CREATE TABLE t2 (\n" +
+                    "OBJECT_ID VARCHAR NOT NULL,\n" +
+                    "OBJECT_VERSION VARCHAR NOT NULL,\n" +
+                    "LOC VARCHAR,\n" +
+                    "CONSTRAINT PK PRIMARY KEY (OBJECT_ID, OBJECT_VERSION DESC))";
+            conn.createStatement().execute(sql);
+
+            startKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj1", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            endKey =  ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj3", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            ByteUtil.nextKey(endKey, endKey.length);
+            sql = "SELECT OBJ.OBJECT_ID, OBJ.OBJECT_VERSION, OBJ.LOC from t2 AS OBJ "+
+                    "where (OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) in (('obj1', '2222'),('obj2', '1111'),('obj3', '1111'))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertArrayEquals(startKey, scan.getStartRow());
+            assertArrayEquals(endKey, scan.getStopRow());
+        }
+        finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
     }
 }

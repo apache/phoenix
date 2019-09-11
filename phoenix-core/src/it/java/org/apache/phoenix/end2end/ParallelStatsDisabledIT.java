@@ -21,7 +21,6 @@ package org.apache.phoenix.end2end;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -62,8 +61,8 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     }
 
     @AfterClass
-    public static void tearDownMiniCluster() throws Exception {
-        BaseTest.tearDownMiniClusterIfBeyondThreshold();
+    public static void freeResources() throws Exception {
+        BaseTest.freeResourcesIfBeyondThreshold();
     }
 
     protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {

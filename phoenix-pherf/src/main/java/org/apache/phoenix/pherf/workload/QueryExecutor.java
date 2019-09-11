@@ -20,9 +20,18 @@ package org.apache.phoenix.pherf.workload;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
-import org.apache.phoenix.pherf.configuration.*;
-import org.apache.phoenix.pherf.result.*;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.ExecutionType;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.pherf.result.DataModelResult;
+import org.apache.phoenix.pherf.result.QueryResult;
+import org.apache.phoenix.pherf.result.QuerySetResult;
+import org.apache.phoenix.pherf.result.ResultManager;
+import org.apache.phoenix.pherf.result.ScenarioResult;
+import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.slf4j.Logger;
@@ -31,11 +40,12 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class QueryExecutor implements Workload {
-    private static final Logger logger = LoggerFactory.getLogger(QueryExecutor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryExecutor.class);
     private List<DataModel> dataModels;
     private String queryHint;
     private final boolean exportCSV;
@@ -78,17 +88,18 @@ public class QueryExecutor implements Workload {
      * @throws Exception
      */
     @Override
-    public Runnable execute() throws Exception {
-        Runnable runnable = null;
+    public Callable<Void> execute() throws Exception {
+        Callable<Void> callable = null;
         for (DataModel dataModel : dataModels) {
             if (exportCSV) {
-                runnable = exportAllScenarios(dataModel);
+                callable = exportAllScenarios(dataModel);
             } else {
-                runnable = executeAllScenarios(dataModel);
+                callable = executeAllScenarios(dataModel);
             }
         }
-        return runnable;
+        return callable;
     }
+
 
     /**
      * Export all queries results to CSV
@@ -96,12 +107,11 @@ public class QueryExecutor implements Workload {
      * @param dataModel
      * @throws Exception
      */
-    protected Runnable exportAllScenarios(final DataModel dataModel) throws Exception {
-        return new Runnable() {
+    protected Callable<Void> exportAllScenarios(final DataModel dataModel) throws Exception {
+        return new Callable<Void>() {
             @Override
-            public void run() {
+            public Void call() throws Exception {
                 try {
-
                     List<Scenario> scenarios = dataModel.getScenarios();
                     QueryVerifier exportRunner = new QueryVerifier(false);
                     for (Scenario scenario : scenarios) {
@@ -113,8 +123,10 @@ public class QueryExecutor implements Workload {
                         }
                     }
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    LOGGER.error("Scenario throws exception", e);
+                    throw e;
                 }
+                return null;
             }
         };
     }
@@ -125,9 +137,9 @@ public class QueryExecutor implements Workload {
      * @param dataModel
      * @throws Exception
      */
-    protected Runnable executeAllScenarios(final DataModel dataModel) throws Exception {
-        return new Runnable() {
-            @Override public void run() {
+    protected Callable<Void> executeAllScenarios(final DataModel dataModel) throws Exception {
+        return new Callable<Void>() {
+            @Override public Void call() throws Exception {
                 List<DataModelResult> dataModelResults = new ArrayList<>();
                 DataModelResult
                         dataModelResult =
@@ -163,8 +175,10 @@ public class QueryExecutor implements Workload {
                     resultManager.write(dataModelResults, ruleApplier);
                     resultManager.flush();
                 } catch (Exception e) {
-                    logger.warn("", e);
+                    LOGGER.error("Scenario throws exception", e);
+                    throw e;
                 }
+                return null;
             }
         };
     }
@@ -179,7 +193,7 @@ public class QueryExecutor implements Workload {
      * @throws InterruptedException
      */
     protected void executeQuerySetSerial(DataModelResult dataModelResult, QuerySet querySet,
-            QuerySetResult querySetResult, Scenario scenario) throws InterruptedException {
+            QuerySetResult querySetResult, Scenario scenario) throws ExecutionException, InterruptedException {
         for (Query query : querySet.getQuery()) {
             QueryResult queryResult = new QueryResult(query);
             querySetResult.getQueryResults().add(queryResult);
@@ -190,7 +204,7 @@ public class QueryExecutor implements Workload {
 
                 for (int i = 0; i < cr; i++) {
 
-                    Runnable
+                    Callable
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
                                     querySetResult, scenario);
@@ -198,11 +212,7 @@ public class QueryExecutor implements Workload {
                 }
 
                 for (Future thread : threads) {
-                    try {
-                        thread.get();
-                    } catch (ExecutionException e) {
-                        logger.error("", e);
-                    }
+                    thread.get();
                 }
             }
         }
@@ -217,7 +227,7 @@ public class QueryExecutor implements Workload {
      * @throws InterruptedException
      */
     protected void executeQuerySetParallel(DataModelResult dataModelResult, QuerySet querySet,
-            QuerySetResult querySetResult, Scenario scenario) throws InterruptedException {
+            QuerySetResult querySetResult, Scenario scenario) throws ExecutionException, InterruptedException {
         for (int cr = querySet.getMinConcurrency(); cr <= querySet.getMaxConcurrency(); cr++) {
             List<Future> threads = new ArrayList<>();
             for (int i = 0; i < cr; i++) {
@@ -225,7 +235,7 @@ public class QueryExecutor implements Workload {
                     QueryResult queryResult = new QueryResult(query);
                     querySetResult.getQueryResults().add(queryResult);
 
-                    Runnable
+                    Callable<Void>
                             thread =
                             executeRunner((i + 1) + "," + cr, dataModelResult, queryResult,
                                     querySetResult, scenario);
@@ -233,11 +243,7 @@ public class QueryExecutor implements Workload {
                 }
 
                 for (Future thread : threads) {
-                    try {
-                        thread.get();
-                    } catch (ExecutionException e) {
-                        logger.error("", e);
-                    }
+                    thread.get();
                 }
             }
         }
@@ -253,14 +259,14 @@ public class QueryExecutor implements Workload {
      * @param scenario 
      * @return
      */
-    protected Runnable executeRunner(String name, DataModelResult dataModelResult,
+    protected Callable<Void> executeRunner(String name, DataModelResult dataModelResult,
             QueryResult queryResult, QuerySet querySet, Scenario scenario) {
         ThreadTime threadTime = new ThreadTime();
         queryResult.getThreadTimes().add(threadTime);
         threadTime.setThreadName(name);
         queryResult.setHint(this.queryHint);
-        logger.info("\nExecuting query " + queryResult.getStatement());
-        Runnable thread;
+        LOGGER.info("\nExecuting query " + queryResult.getStatement());
+        Callable<Void> thread;
         if (workloadExecutor.isPerformance()) {
             thread =
                     new MultiThreadedRunner(threadTime.getThreadName(), queryResult,

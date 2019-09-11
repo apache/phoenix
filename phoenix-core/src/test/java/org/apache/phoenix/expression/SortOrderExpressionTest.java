@@ -146,7 +146,16 @@ public class SortOrderExpressionTest {
     @Test
     public void toChar() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE));
-        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")), "12/11/01 12:00 AM");
+        // We may get AM or am depending on Java version, see JDK-8211985
+        // This is just a hack to accept any case, without completely rewriting the test logic
+        Object caseInsensitiveExpected = new Object() {
+            @Override
+            public boolean equals(Object other) {
+                return (other instanceof String) && "12/11/01 12:00 AM".equalsIgnoreCase((String) other);
+            }
+        };
+        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")),
+            caseInsensitiveExpected);
     }
     
     @Test

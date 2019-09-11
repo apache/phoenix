@@ -36,13 +36,14 @@ import javax.xml.transform.stream.StreamSource;
 
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.exception.FileLoaderException;
+import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.util.ResourceList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class XMLConfigParser {
 
-    private static final Logger logger = LoggerFactory.getLogger(XMLConfigParser.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(XMLConfigParser.class);
     private String filePattern;
     private List<DataModel> dataModels;
     private List<Scenario> scenarios = null;
@@ -96,7 +97,8 @@ public class XMLConfigParser {
                     scenarios.add(scenario);
                 }
             } catch (JAXBException e) {
-                e.printStackTrace();
+                LOGGER.error("Unable to parse scenario file "+path, e);
+                throw e;
             }
         }
         return scenarios;
@@ -121,7 +123,7 @@ public class XMLConfigParser {
         JAXBContext jaxbContext = JAXBContext.newInstance(DataModel.class);
         Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
         String fName = PherfConstants.RESOURCE_SCENARIO + "/" + file.getFileName().toString();
-        logger.info("Open config file: " + fName);
+        LOGGER.info("Open config file: " + fName);
         XMLStreamReader xmlReader = xif.createXMLStreamReader(
             new StreamSource(XMLConfigParser.class.getResourceAsStream(fName)));
         return (DataModel) jaxbUnmarshaller.unmarshal(xmlReader);
@@ -175,7 +177,20 @@ public class XMLConfigParser {
         }
         for (Path path : this.paths) {
             System.out.println("Adding model for path:" + path.toString());
-            this.dataModels.add(XMLConfigParser.readDataModel(path));
+            DataModel dataModel = XMLConfigParser.readDataModel(path);
+            updateDataValueType(dataModel);
+            this.dataModels.add(dataModel);
+        }
+    }
+    
+    private void updateDataValueType(DataModel dataModel) {
+        for (Column column : dataModel.getDataMappingColumns()) {
+            if (column.getDataValues() != null) {
+                // DataValue type is inherited from the column
+                for (DataValue value : column.getDataValues()) {
+                    value.setType(column.getType());
+                }
+            }
         }
     }
 

@@ -280,8 +280,6 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 				"upsert into " + fullTableName + " select max(id)+1, 'a4', 'b4' from " + fullTableName + "");
 		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
-		assertEquals(wp, state.getWritePointer()); // Make sure write ptr
-													// didn't move
 		rs = conn.createStatement().executeQuery("select max(id) from " + fullTableName + "");
 
 		assertTrue(rs.next());

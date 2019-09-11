@@ -28,10 +28,12 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
@@ -87,6 +89,9 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -96,6 +101,7 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EquiDepthStreamHistogram;
 import org.apache.phoenix.util.EquiDepthStreamHistogram.Bucket;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -111,7 +117,7 @@ import com.google.common.collect.Lists;
  */
 public class IndexTool extends Configured implements Tool {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IndexTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
     private String schemaName;
     private String dataTable;
@@ -122,6 +128,7 @@ public class IndexTool extends Configured implements Tool {
     private boolean useDirectApi;
     private boolean useSnapshot;
     private boolean isLocalIndexBuild;
+    private boolean shouldDeleteBeforeRebuild;
     private PTable pIndexTable;
     private PTable pDataTable;
     private String tenantId;
@@ -172,6 +179,11 @@ public class IndexTool extends Configured implements Tool {
         "If specified, uses Snapshots for async index building (optional)");
     private static final Option TENANT_ID_OPTION = new Option("tenant", "tenant-id", true,
         "If specified, uses Tenant connection for tenant view index building (optional)");
+
+    private static final Option DELETE_ALL_AND_REBUILD_OPTION = new Option("deleteall", "delete-all-and-rebuild", false,
+            "Applicable only to global indexes on tables, not to local or view indexes. "
+            + "If specified, truncates the index table and rebuilds (optional)");
+
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -186,6 +198,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
         options.addOption(TENANT_ID_OPTION);
+        options.addOption(DELETE_ALL_AND_REBUILD_OPTION);
         options.addOption(HELP_OPTION);
         AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
@@ -229,6 +242,11 @@ public class IndexTool extends Configured implements Tool {
 		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())) {
 			throw new IllegalStateException("Index name should not be passed with " + PARTIAL_REBUILD_OPTION.getLongOpt());
 		}
+
+		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt())) {
+            throw new IllegalStateException(DELETE_ALL_AND_REBUILD_OPTION.getLongOpt() + " is not compatible with "
+                    + PARTIAL_REBUILD_OPTION.getLongOpt());
+        }
         		
         if (!(cmdLine.hasOption(DIRECT_API_OPTION.getOpt())) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())
                 && cmdLine.hasOption(RUN_FOREGROUND_OPTION
@@ -482,6 +500,17 @@ public class IndexTool extends Configured implements Tool {
         private Job configureJobForServerBuildIndex()
                 throws Exception {
 
+            long indexRebuildQueryTimeoutMs =
+                    configuration.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+            // Set various phoenix and hbase level timeouts and rpc retries
+            configuration.set(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                    Long.toString(indexRebuildQueryTimeoutMs));
+            configuration.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                    Long.toString(indexRebuildQueryTimeoutMs));
+            configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY,
+                    Long.toString(indexRebuildQueryTimeoutMs));
+
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
 
@@ -493,14 +522,18 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
 
-            fs = outputPath.getFileSystem(configuration);
-            fs.delete(outputPath, true);
-
+            if (outputPath != null) {
+                fs = outputPath.getFileSystem(configuration);
+                fs.delete(outputPath, true);
+            }
+            configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
-            FileOutputFormat.setOutputPath(job, outputPath);
+            if (outputPath != null) {
+                FileOutputFormat.setOutputPath(job, outputPath);
+            }
 
             PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
                             qDataTable, "");
@@ -590,6 +623,7 @@ public class IndexTool extends Configured implements Tool {
                 tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
                 configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             }
+
             schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
@@ -602,13 +636,14 @@ public class IndexTool extends Configured implements Tool {
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
             useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
+            shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
 
             byte[][] splitKeysBeforeJob = null;
             isLocalIndexBuild = false;
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
-
+            
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
@@ -630,6 +665,11 @@ public class IndexTool extends Configured implements Tool {
                     isLocalIndexBuild = true;
                     splitKeysBeforeJob = regionLocator.getStartKeys();
                 }
+
+                if (shouldDeleteBeforeRebuild) {
+                   deleteBeforeRebuild(connection);
+                }
+
                 // presplit the index table
                 boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
                 boolean isSalted = pIndexTable.getBucketNum() != null; // no need to split salted tables
@@ -639,7 +679,9 @@ public class IndexTool extends Configured implements Tool {
                     int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
                     String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
                     double samplingRate = rateOpt == null ? DEFAULT_SPLIT_SAMPLING_RATE : Double.parseDouble(rateOpt);
-                    LOG.info(String.format("Will split index %s , autosplit=%s , autoSplitNumRegions=%s , samplingRate=%s", indexTable, autosplit, autosplitNumRegions, samplingRate));
+                    LOGGER.info(String.format("Will split index %s , autosplit=%s ," +
+                            " autoSplitNumRegions=%s , samplingRate=%s", indexTable,
+                            autosplit, autosplitNumRegions, samplingRate));
                     splitIndexTable(connection.unwrap(PhoenixConnection.class), autosplit, autosplitNumRegions, samplingRate, configuration);
                 }
             }
@@ -656,11 +698,12 @@ public class IndexTool extends Configured implements Tool {
             job = jobFactory.getJob();
 
             if (!isForeground && useDirectApi) {
-                LOG.info("Running Index Build in Background - Submit async and exit");
+                LOGGER.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
                 return 0;
             }
-            LOG.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
+            LOGGER.info("Running Index Build in Foreground. Waits for the build to complete." +
+                    " This may take a long time!.");
             boolean result = job.waitForCompletion(true);
             
             if (result) {
@@ -668,7 +711,7 @@ public class IndexTool extends Configured implements Tool {
                     if (isLocalIndexBuild) {
                         validateSplitForLocalIndex(splitKeysBeforeJob, regionLocator);
                     }
-                    LOG.info("Loading HFiles from {}", outputPath);
+                    LOGGER.info("Loading HFiles from {}", outputPath);
                     LoadIncrementalHFiles loader = new LoadIncrementalHFiles(configuration);
                     loader.doBulkLoad(outputPath, connection.unwrap(PhoenixConnection.class)
                             .getQueryServices().getAdmin(), htable, regionLocator);
@@ -679,11 +722,11 @@ public class IndexTool extends Configured implements Tool {
                 }
                 return 0;
             } else {
-                LOG.error("IndexTool job failed! Check logs for errors..");
+                LOGGER.error("IndexTool job failed! Check logs for errors..");
                 return -1;
             }
         } catch (Exception ex) {
-            LOG.error("An exception occurred while performing the indexing job: "
+            LOGGER.error("An exception occurred while performing the indexing job: "
                     + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
@@ -693,7 +736,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         connection.close();
                     } catch (SQLException e) {
-                        LOG.error("Failed to close connection ", e);
+                        LOGGER.error("Failed to close connection ", e);
                         rethrowException = true;
                     }
                 }
@@ -701,7 +744,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         htable.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close htable ", e);
+                        LOGGER.error("Failed to close htable ", e);
                         rethrowException = true;
                     }
                 }
@@ -709,7 +752,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         hConn.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close hconnection ", e);
+                        LOGGER.error("Failed to close hconnection ", e);
                         rethrowException = true;
                     }
                 }
@@ -717,7 +760,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         regionLocator.close();
                     } catch (IOException e) {
-                        LOG.error("Failed to close regionLocator ", e);
+                        LOGGER.error("Failed to close regionLocator ", e);
                         rethrowException = true;
                     }
                 }
@@ -725,7 +768,7 @@ public class IndexTool extends Configured implements Tool {
                     try {
                         jobFactory.closeConnection();
                     } catch (SQLException e) {
-                        LOG.error("Failed to close jobFactory ", e);
+                        LOGGER.error("Failed to close jobFactory ", e);
                         rethrowException = true;
                     }
                 }
@@ -733,6 +776,26 @@ public class IndexTool extends Configured implements Tool {
                 if (rethrowException) {
                     throw new RuntimeException("Failed to close resource");
                 }
+            }
+        }
+    }
+
+    private void deleteBeforeRebuild(Connection conn) throws SQLException, IOException {
+        if (MetaDataUtil.isViewIndex(pIndexTable.getPhysicalName().getString())) {
+            throw new IllegalArgumentException(String.format(
+                    "%s is a view index. delete-all-and-rebuild is not supported for view indexes",
+                    indexTable));
+        }
+
+        if (isLocalIndexBuild) {
+            throw new IllegalArgumentException(String.format(
+                    "%s is a local index.  delete-all-and-rebuild is not supported for local indexes", indexTable));
+        } else {
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (Admin admin = queryServices.getAdmin()){
+                TableName tableName = TableName.valueOf(qIndexTable);
+                admin.disableTable(tableName);
+                admin.truncateTable(tableName, true);
             }
         }
     }
@@ -747,7 +810,7 @@ public class IndexTool extends Configured implements Tool {
                         tempHConn.getRegionLocator(TableName.valueOf(qDataTable))) {
             numRegions = regionLocator.getStartKeys().length;
             if (autosplit && !(numRegions > autosplitNumRegions)) {
-                LOG.info(String.format(
+                LOGGER.info(String.format(
                     "Will not split index %s because the data table only has %s regions, autoSplitNumRegions=%s",
                     pIndexTable.getPhysicalName(), numRegions, autosplitNumRegions));
                 return; // do nothing if # of regions is too low
@@ -833,7 +896,7 @@ public class IndexTool extends Configured implements Tool {
             String errMsg = "The index to build is local index and the split keys are not matching"
                     + " before and after running the job. Please rerun the job otherwise"
                     + " there may be inconsistencies between actual data and index data";
-            LOG.error(errMsg);
+            LOGGER.error(errMsg);
             throw new Exception(errMsg);
         }
         return true;
@@ -873,6 +936,52 @@ public class IndexTool extends Configured implements Tool {
             }
         }
         return false;
+    }
+
+    public static Map.Entry<Integer, Job> run(Configuration conf, String schemaName, String dataTable, String indexTable,
+            boolean directApi, boolean useSnapshot, String tenantId, boolean disableBefore, boolean shouldDeleteBeforeRebuild, boolean runForeground) throws Exception {
+        final List<String> args = Lists.newArrayList();
+        if (schemaName != null) {
+            args.add("-s");
+            args.add(schemaName);
+        }
+        args.add("-dt");
+        args.add(dataTable);
+        args.add("-it");
+        args.add(indexTable);
+        if (directApi) {
+            args.add("-direct");
+        }
+
+        if (runForeground) {
+            args.add("-runfg");
+        }
+
+        if (useSnapshot) {
+            args.add("-snap");
+        }
+
+        if (tenantId != null) {
+            args.add("-tenant");
+            args.add(tenantId);
+        }
+
+        if (shouldDeleteBeforeRebuild) {
+            args.add("-deleteall");
+        }
+
+        args.add("-op");
+        args.add("/tmp/" + UUID.randomUUID().toString());
+
+        if (disableBefore) {
+            PhoenixConfigurationUtil.setDisableIndexes(conf, indexTable);
+        }
+
+        IndexTool indexingTool = new IndexTool();
+        indexingTool.setConf(conf);
+        int status = indexingTool.run(args.toArray(new String[0]));
+        Job job = indexingTool.getJob();
+        return new AbstractMap.SimpleEntry<Integer, Job>(status, job);
     }
 
     public static void main(final String[] args) throws Exception {

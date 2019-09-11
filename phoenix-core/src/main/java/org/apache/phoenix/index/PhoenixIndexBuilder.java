@@ -109,7 +109,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     }
     
     @Override
-    public boolean isAtomicOp(Mutation m) throws IOException {
+    public boolean isAtomicOp(Mutation m) {
         return m.getAttribute(ATOMIC_OP_ATTRIB) != null;
     }
 

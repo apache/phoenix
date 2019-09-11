@@ -19,6 +19,8 @@ package org.apache.phoenix.query;
 
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -139,6 +141,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -181,7 +184,7 @@ public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
     private static final double ZERO = 1e-9;
     private static final Map<String,String> tableDDLMap;
-    private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
@@ -444,7 +447,7 @@ public abstract class BaseTest {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
             return initMiniCluster(conf, overrideProps);
-       } else {
+        } else {
             return initClusterDistributedMode(conf, overrideProps);
         }
     }
@@ -454,7 +457,7 @@ public abstract class BaseTest {
             try {
                 assertTrue(destroyDriver(driver));
             } catch (Throwable t) {
-                logger.error("Exception caught when destroying phoenix test driver", t);
+                LOGGER.error("Exception caught when destroying phoenix test driver", t);
             } finally {
                 driver = null;
             }
@@ -484,18 +487,18 @@ public abstract class BaseTest {
                         try {
                             u.shutdownMiniMapReduceCluster();
                         } catch (Throwable t) {
-                            logger.error(
+                            LOGGER.error(
                                 "Exception caught when shutting down mini map reduce cluster", t);
                         } finally {
                             try {
                                 u.shutdownMiniCluster();
                             } catch (Throwable t) {
-                                logger.error("Exception caught when shutting down mini cluster", t);
+                                LOGGER.error("Exception caught when shutting down mini cluster", t);
                             } finally {
                                 try {
                                     ConnectionFactory.shutdown();
                                 } finally {
-                                    logger.info(
+                                    LOGGER.info(
                                         "Time in seconds spent in shutting down mini cluster with "
                                                 + numTables + " tables: "
                                                 + (System.currentTimeMillis() - startTime) / 1000);
@@ -620,15 +623,21 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
-        conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 1000);
+        conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
+        conf.setInt(GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB, 5);
         return conf;
     }
 
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);
+        if(isDistributedClusterModeEnabled(config)) {
+            HashMap<String, String> distPropMap = new HashMap<>(1);
+            distPropMap.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+            props = new ReadOnlyProps(props, distPropMap.entrySet().iterator());
+        }
         if (driverClassName == null) {
             newDriver = new PhoenixTestDriver(props);
         } else {
@@ -668,7 +677,7 @@ public abstract class BaseTest {
                     DriverManager.deregisterDriver(driver);
                 }
             } catch (Exception e) {
-                logger.warn("Unable to close registered driver: " + driver, e);
+                LOGGER.warn("Unable to close registered driver: " + driver, e);
             }
         }
         return false;
@@ -767,14 +776,22 @@ public abstract class BaseTest {
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
     }
 
-    public static void tearDownMiniClusterIfBeyondThreshold() throws Exception {
+    public static void freeResourcesIfBeyondThreshold() throws Exception {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
-            logger.info(
-                "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
-                        + TEARDOWN_THRESHOLD);
-            tearDownMiniClusterAsync(numTables);
+            if(isDistributedClusterModeEnabled(config)) {
+                LOGGER.info(
+                        "Deleting old tables on distributed cluster because number of tables is likely greater than "
+                                + TEARDOWN_THRESHOLD);
+                deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
+            } else {
+                LOGGER.info(
+                    "Shutting down mini cluster because number of tables on this mini cluster is likely greater than "
+                            + TEARDOWN_THRESHOLD);
+                tearDownMiniClusterAsync(numTables);
+            }
+
         }
     }
 
@@ -949,9 +966,9 @@ public abstract class BaseTest {
                 try {
                     conn.createStatement().executeUpdate(ddl);
                 } catch (NewerTableAlreadyExistsException ex) {
-                    logger.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                    LOGGER.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
                 } catch (TableNotFoundException ex) {
-                    logger.info("Table " + fullTableName + " is already deleted.");
+                    LOGGER.info("Table " + fullTableName + " is already deleted.");
                 }
             }
             rs.close();
@@ -1001,7 +1018,7 @@ public abstract class BaseTest {
                 lastTenantId = tenantId;
             }
 
-            logger.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
+            LOGGER.info("DROP SEQUENCE STATEMENT: DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(2), rs.getString(3)));
         }
         rs.close();

@@ -134,7 +134,9 @@ public class DeleteCompiler {
         if (tenantId != null) {
             tenantIdBytes = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId, table.getViewIndexId() != null);
         }
-        final boolean isAutoCommit = connection.getAutoCommit();
+        // we automatically flush the mutations when either auto commit is enabled, or
+        // the target table is transactional (in that case changes are not visible until we commit)
+        final boolean autoFlush = connection.getAutoCommit() || tableRef.getTable().isTransactional();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
@@ -246,8 +248,8 @@ public class DeleteCompiler {
                     throw new IllegalArgumentException("MutationState size of " + mutations.size() + " is bigger than max allowed size of " + maxSize);
                 }
                 rowCount++;
-                // Commit a batch if auto commit is true and we're at our batch size
-                if (isAutoCommit && rowCount % batchSize == 0) {
+                // Commit a batch if we are flushing automatically and we're at our batch size
+                if (autoFlush && rowCount % batchSize == 0) {
                     MutationState state = new MutationState(tableRef, mutations, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     for (int i = 0; i < otherTableRefs.size(); i++) {
@@ -264,8 +266,8 @@ public class DeleteCompiler {
                 }
             }
 
-            // If auto commit is true, this last batch will be committed upon return
-            int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
+            // If auto flush is true, this last batch will be committed upon return
+            int nCommittedRows = autoFlush ? (rowCount / batchSize * batchSize) : 0;
             MutationState state = new MutationState(tableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
             for (int i = 0; i < otherTableRefs.size(); i++) {
                 MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
