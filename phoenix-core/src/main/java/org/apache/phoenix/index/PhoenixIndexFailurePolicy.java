@@ -507,8 +507,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 throw new IOException(e);
             }
         }
-        // max retries hit - disable the index
-        handleIndexWriteFailureFromClient(iwe, connection);
+        if (!PhoenixIndexMetaData.isIndexRebuild(
+                mutateCommand.getMutationList().get(0).getAttributesMap())) {
+            // max retries hit - disable the index
+            handleIndexWriteFailureFromClient(iwe, connection);
+        }
         throw new DoNotRetryIOException(iwe); // send failure back to client
     }
 
