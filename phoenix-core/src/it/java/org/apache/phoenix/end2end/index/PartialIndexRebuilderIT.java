@@ -69,6 +69,7 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -1042,9 +1043,9 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     //Tests that when we're updating an index from within the RS (e.g. UngruopedAggregateRegionObserver),
-    // if the index write fails the index gets disabled
+    // if the index write fails the index does not get disabled
     @Test
-    public void testIndexFailureWithinRSDisablesIndex() throws Throwable {
+    public void testIndexFailureWithinRSDoesnotDisablesIndex() throws Throwable {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String indexName = generateUniqueName();
@@ -1065,7 +1066,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                 } catch (SQLException e) {
                     // expected
                 }
-                assertTrue(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.DISABLE, null));
+                assertFalse(TestUtil.checkIndexState(conn, fullIndexName, PIndexState.PENDING_ACTIVE, null));
             } finally {
                 TestUtil.removeCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
             }
