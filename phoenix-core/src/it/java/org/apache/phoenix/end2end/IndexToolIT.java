@@ -57,6 +57,7 @@ import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -335,6 +336,59 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testSecondaryGlobalIndexFailure() throws Exception {
+        // This test is for building non-transactional global indexes with direct api
+        if (localIndex || transactional || !directApi || useSnapshot) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String stmString1 =
+                    "CREATE TABLE " + dataTableFullName
+                            + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                            + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // Insert two rows
+            upsertRow(stmt1, 1);
+            upsertRow(stmt1, 2);
+            conn.commit();
+
+            String stmtString2 =
+                    String.format(
+                            "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
+                            (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+
+            // Run the index MR job.
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+
+            String qIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
+
+            // Verify that the index table is in the ACTIVE state
+            assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, qIndexTableName));
+
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Admin admin = queryServices.getAdmin();
+            TableName tableName = TableName.valueOf(qIndexTableName);
+            admin.disableTable(tableName);
+
+            // Run the index MR job and it should fail (return -1)
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, -1, new String[0]);
+
+            // Verify that the index table should be still in the ACTIVE state
+            assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, qIndexTableName));
+        }
+    }
+    
     @Test
     public void testSaltedVariableLengthPK() throws Exception {
         if (!mutable) return;
