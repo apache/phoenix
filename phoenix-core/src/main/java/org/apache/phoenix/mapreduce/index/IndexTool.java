@@ -512,7 +512,7 @@ public class IndexTool extends Configured implements Tool {
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
             FileOutputFormat.setOutputPath(job, outputPath);
 
-            PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
+            PhoenixMapReduceUtil.setInput(job, PhoenixServerBuildIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
                             qDataTable, "");
 
             TableMapReduceUtil.initCredentials(job);
