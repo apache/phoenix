@@ -260,6 +260,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         try {
             commitBatch(region, localRegionMutations, blockingMemstoreSize);
         } catch (IOException e) {
+            if (e instanceof DoNotRetryIOException) {
+                throw(e);
+            }
             handleIndexWriteException(localRegionMutations, e, new MutateCommand() {
                 @Override
                 public void doMutation() throws IOException {

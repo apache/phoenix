@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
@@ -74,7 +75,7 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
      */
     @Test
     public void testRebuildRetriesSuccessful() throws Throwable {
-        int numberOfRetries = 5;
+        int numberOfRetries = 3;
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, Boolean.TRUE.toString());
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, Long.toString(REBUILD_INTERVAL));
@@ -83,6 +84,8 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
         serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, numberOfRetries + "");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        // Index rebuilds are not needed with IndexRegionObserver
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "false");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
                 getUtility()
@@ -154,7 +157,7 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         @Override
         public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
             attempts.incrementAndGet();
-            throw new DoNotRetryIOException("Simulating write failure on " + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
+            throw new TimeoutIOException("Simulating write failure on " + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
         }
     }
 }
