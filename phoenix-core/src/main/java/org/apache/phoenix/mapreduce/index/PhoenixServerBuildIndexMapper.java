@@ -18,37 +18,19 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
 import java.util.UUID;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
-import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.PhoenixRuntime;
 
 /**
  * Mapper that does not do much as regions servers actually build the index from the data table regions directly
  */
 public class PhoenixServerBuildIndexMapper extends
-        Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, IntWritable> {
+        Mapper<NullWritable, PhoenixServerBuildIndexDBWritable, ImmutableBytesWritable, IntWritable> {
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
@@ -56,9 +38,9 @@ public class PhoenixServerBuildIndexMapper extends
     }
 
     @Override
-    protected void map(NullWritable key, PhoenixIndexDBWritable record, Context context)
+    protected void map(NullWritable key, PhoenixServerBuildIndexDBWritable record, Context context)
             throws IOException, InterruptedException {
-        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
+        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(record.getRowCount());
         // Make sure progress is reported to Application Master.
         context.progress();
     }
