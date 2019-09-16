@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -33,7 +33,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -55,9 +54,9 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl1);
-            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, schemaName1));
+            assertNotNull(admin.getNamespaceDescriptor(schemaName1));
             conn.createStatement().execute(ddl2);
-            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, schemaName2.toUpperCase()));
+            assertNotNull(admin.getNamespaceDescriptor(schemaName2.toUpperCase()));
         }
         // Try creating it again and verify that it throws SchemaAlreadyExistsException
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -96,8 +95,8 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE SCHEMA \""
                     + SchemaUtil.HBASE_NAMESPACE.toUpperCase() + "\"");
 
-            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
-            assertTrue(ServerUtil.isHbaseNamespaceAvailable(admin, SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
+            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
+            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
 
         }
     }
