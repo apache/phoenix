@@ -76,7 +76,7 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
      */
     @Test
     public void testRebuildRetriesSuccessful() throws Throwable {
-        int numberOfRetries = 3;
+        int numberOfRetries = 5;
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB, Boolean.TRUE.toString());
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, Long.toString(REBUILD_INTERVAL));
@@ -158,7 +158,7 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         @Override
         public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
             attempts.incrementAndGet();
-            throw new TimeoutIOException("Simulating write failure on " + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
+            throw new DoNotRetryIOException("Simulating write failure on " + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
         }
     }
 }
