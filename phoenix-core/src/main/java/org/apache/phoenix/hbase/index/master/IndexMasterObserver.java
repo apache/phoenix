@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.hbase.index.master;
 
+import org.apache.hadoop.hbase.coprocessor.MasterCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 
 /**
  * Defines of coprocessor hooks(to support secondary indexing) of operations on
  * {@link org.apache.hadoop.hbase.master.HMaster} process.
  */
-public class IndexMasterObserver implements MasterObserver {
+public class IndexMasterObserver implements MasterCoprocessor, MasterObserver {
 
 }
