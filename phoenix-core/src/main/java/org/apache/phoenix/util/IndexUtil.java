@@ -699,6 +699,16 @@ public class IndexUtil {
                 public Type getType() {
                     return cell.getType();
                 }
+
+                @Override
+                public long heapSize() {
+                    return cell.heapSize();
+                }
+
+                @Override
+                public int getSerializedSize() {
+                    return cell.getSerializedSize() - offset;
+                }
             };
             itr.set(newCell);
         }

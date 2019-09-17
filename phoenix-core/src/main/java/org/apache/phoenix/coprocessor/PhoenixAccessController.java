@@ -61,7 +61,6 @@ import org.apache.hadoop.hbase.security.access.AccessControlUtil;
 import org.apache.hadoop.hbase.security.access.AuthResult;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.apache.hadoop.hbase.security.access.TableAuthManager;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
@@ -150,16 +149,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         accessChecker = new AccessChecker(env.getConfiguration(), zk);
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
-        // init superusers and add the server principal (if using security)
-        // or process owner as default super user.
-        Superusers.initialize(env.getConfiguration());
     }
 
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
-        if(accessChecker.getAuthManager() != null) {
-            TableAuthManager.release(accessChecker.getAuthManager());
-        }
+        accessChecker.stop();
     }
 
     @Override
@@ -198,20 +192,20 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
                 User user = getActiveUser();
                 List<UserPermission> permissionForUser = getPermissionForUser(
-                        getUserPermissions(index), Bytes.toBytes(user.getShortName()));
+                        getUserPermissions(index), user.getShortName());
                 Set<Action> requireAccess = new HashSet<>();
                 Set<Action> accessExists = new HashSet<>();
                 if (permissionForUser != null) {
                     for (UserPermission userPermission : permissionForUser) {
                         for (Action action : Arrays.asList(requiredActions)) {
-                            if (!userPermission.implies(action)) {
+                            if (!userPermission.getPermission().implies(action)) {
                                 requireAccess.add(action);
                             }
                         }
                     }
                     if (!requireAccess.isEmpty()) {
                         for (UserPermission userPermission : permissionForUser) {
-                            accessExists.addAll(Arrays.asList(userPermission.getActions()));
+                            accessExists.addAll(Arrays.asList(userPermission.getPermission().getActions()));
                         }
 
                     }
@@ -289,12 +283,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                                     userPermission.getUser());
                             for (Action action : requiredActionsOnTable) {
                                 boolean haveAccess=false;
-                                if (userPermission.implies(action)) {
+                                if (userPermission.getPermission().implies(action)) {
                                     if (permsToTable == null) {
                                         requireAccess.add(action);
                                     } else {
                                         for (UserPermission permToTable : permsToTable) {
-                                            if (permToTable.implies(action)) {
+                                            if (userPermission.getPermission().implies(action)) {
                                                 haveAccess=true;
                                             }
                                         }
@@ -307,18 +301,18 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             if (permsToTable != null) {
                                 // Append access to already existing access for the user
                                 for (UserPermission permToTable : permsToTable) {
-                                    accessExists.addAll(Arrays.asList(permToTable.getActions()));
+                                    accessExists.addAll(Arrays.asList(permToTable.getPermission().getActions()));
                                 }
                             }
                             if (!requireAccess.isEmpty()) {
-                                if(AuthUtil.isGroupPrincipal(Bytes.toString(userPermission.getUser()))){
-                                    AUDITLOG.warn("Users of GROUP:" + Bytes.toString(userPermission.getUser())
+                                if(AuthUtil.isGroupPrincipal(userPermission.getUser())){
+                                    AUDITLOG.warn("Users of GROUP:" + userPermission.getUser()
                                             + " will not have following access " + requireAccess
                                             + " to the newly created index " + toTable
                                             + ", Automatic grant is not yet allowed on Groups");
                                     continue;
                                 }
-                                handleRequireAccessOnDependentTable(request, Bytes.toString(userPermission.getUser()),
+                                handleRequireAccessOnDependentTable(request, userPermission.getUser(),
                                         toTable, toTable.getNameAsString(), requireAccess, accessExists);
                             }
                         }
@@ -329,13 +323,13 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         });
     }
 
-    private List<UserPermission> getPermissionForUser(List<UserPermission> perms, byte[] user) {
+    private List<UserPermission> getPermissionForUser(List<UserPermission> perms, String user) {
         if (perms != null) {
             // get list of permissions for the user as multiple implementation of AccessControl coprocessors can give
             // permissions for same users
             List<UserPermission> permissions = new ArrayList<>();
             for (UserPermission p : perms) {
-                if (Bytes.equals(p.getUser(),user)){
+                if (p.getUser().equals(user)){
                      permissions.add(p);
                 }
             }
@@ -535,77 +529,40 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
     /**
      * Authorizes that the current user has all the given permissions for the
-     * given table and for the hbase namespace of the table
+     * given table and for the hbase namespace of the table (It is similar to 
+     * AccessChecker#requireAccess, but requires ALL permissions instead of ANY)
      * @param tableName Table requested
      * @throws IOException if obtaining the current user fails
      * @throws AccessDeniedException if user has no authorization
      */
     private void requireAccess(String request, TableName tableName, Action... permissions) throws IOException {
         User user = getActiveUser();
-        AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
-        List<UserPermission> userPermissions = new ArrayList<>();
-        if(permissions.length > 0) {
-           getUserDefinedPermissions(tableName, userPermissions);
-        }
-        for (Action permission : permissions) {
-             if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
-                result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
-            } else {
-                result = AuthResult.deny(request, "Insufficient permissions", user, permission, tableName, null, null);
-                requiredAccess.add(permission);
-            }
-            logResult(result);
-        }
-        if (!requiredAccess.isEmpty()) {
-            result = AuthResult.deny(request, "Insufficient permissions", user, requiredAccess.get(0), tableName, null,
-                    null);
-        }
-        if (!result.isAllowed()) { throw new AccessDeniedException("Insufficient permissions "
-                + authString(user.getName(), tableName, new HashSet<Permission.Action>(Arrays.asList(permissions)))); }
-    }
 
-    /**
-     * Checks if the user has access to the table for the specified action.
-     * @param perms All table and table's namespace permissions
-     * @param table tablename
-     * @param action action for access is required
-     * @return true if the user has access to the table for specified action, false otherwise
-     */
-    private boolean hasAccess(List<UserPermission> perms, TableName table, Permission.Action action, User user) {
-        if (Superusers.isSuperUser(user)){
-            return true;
-        }
-        if (perms != null) {
-            if (hbaseAccessControllerEnabled
-                    && accessChecker.getAuthManager().userHasAccess(user, table, action)) {
-                return true;
+        if (!hbaseAccessControllerEnabled) {
+            return;
+          }
+          AuthResult result = null;
+
+          for (Action permission : permissions) {
+            if (accessChecker.getAuthManager().accessUserTable(user, tableName, permission)) {
+              result = AuthResult.allow(request, "Table permission granted",
+                  user, permission, tableName, null, null);
+            } else {
+              // rest of the world
+              result = AuthResult.deny(request, "Insufficient permissions",
+                  user, permission, tableName, null, null);
+              requiredAccess.add(permission);
             }
-            List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName().getBytes());
-            if (permissionsForUser != null) {
-                for (UserPermission permissionForUser : permissionsForUser) {
-                    if (permissionForUser.implies(action)) { return true; }
-                }
-            }
-            String[] groupNames = user.getGroupNames();
-            if (groupNames != null) {
-              for (String group : groupNames) {
-                    List<UserPermission> groupPerms =
-                            getPermissionForUser(perms, (AuthUtil.toGroupEntry(group)).getBytes());
-                    if (hbaseAccessControllerEnabled && accessChecker.getAuthManager()
-                            .groupHasAccess(group, table, action)) {
-                        return true;
-                    }
-                if (groupPerms != null) for (UserPermission permissionForUser : groupPerms) {
-                    if (permissionForUser.implies(action)) { return true; }
-                }
-              }
-            }
-        } else if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("No permissions found for table=" +
-                    table + " or namespace=" + table.getNamespaceAsString());
-        }
-        return false;
+          }
+          logResult(result);
+          if (!requiredAccess.isEmpty()) {
+              result = AuthResult.deny(request, "Insufficient permissions", user, requiredAccess.get(0), tableName, null,
+                      null);
+          }
+          if (!result.isAllowed()) { throw new AccessDeniedException("Insufficient permissions "
+                  + authString(user.getName(), tableName, new HashSet<Permission.Action>(Arrays.asList(permissions)))); 
+          }
     }
 
     private User getActiveUser() throws IOException {
@@ -627,83 +584,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
     }
 
-    private static final class Superusers {
-        private static final Logger LOGGER = LoggerFactory.getLogger(Superusers.class);
-
-        /** Configuration key for superusers */
-        public static final String SUPERUSER_CONF_KEY = org.apache.hadoop.hbase.security.Superusers.SUPERUSER_CONF_KEY; // Not getting a name
-
-        private static List<String> superUsers;
-        private static List<String> superGroups;
-        private static User systemUser;
-
-        private Superusers(){}
-
-        /**
-         * Should be called only once to pre-load list of super users and super
-         * groups from Configuration. This operation is idempotent.
-         * @param conf configuration to load users from
-         * @throws IOException if unable to initialize lists of superusers or super groups
-         * @throws IllegalStateException if current user is null
-         */
-        public static void initialize(Configuration conf) throws IOException {
-            superUsers = new ArrayList<>();
-            superGroups = new ArrayList<>();
-            systemUser = User.getCurrent();
-
-            if (systemUser == null) {
-                throw new IllegalStateException("Unable to obtain the current user, "
-                    + "authorization checks for internal operations will not work correctly!");
-            }
-
-            if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("Current user name is " + systemUser.getShortName());
-            }
-            String currentUser = systemUser.getShortName();
-            String[] superUserList = conf.getStrings(SUPERUSER_CONF_KEY, new String[0]);
-            for (String name : superUserList) {
-                if (AuthUtil.isGroupPrincipal(name)) {
-                    superGroups.add(AuthUtil.getGroupName(name));
-                } else {
-                    superUsers.add(name);
-                }
-            }
-            superUsers.add(currentUser);
-        }
-
-        /**
-         * @return true if current user is a super user (whether as user running process,
-         * declared as individual superuser or member of supergroup), false otherwise.
-         * @param user to check
-         * @throws IllegalStateException if lists of superusers/super groups
-         *   haven't been initialized properly
-         */
-        public static boolean isSuperUser(User user) {
-            if (superUsers == null) {
-                throw new IllegalStateException("Super users/super groups lists"
-                    + " haven't been initialized properly.");
-            }
-            if (superUsers.contains(user.getShortName())) {
-                return true;
-            }
-
-            for (String group : user.getGroupNames()) {
-                if (superGroups.contains(group)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public static List<String> getSuperUsers() {
-            return superUsers;
-        }
-
-        public static User getSystemUser() {
-            return systemUser;
-        }
-    }
-    
     public String authString(String user, TableName table, Set<Action> actions) {
         StringBuilder sb = new StringBuilder();
         sb.append(" (user=").append(user != null ? user : "UNKNOWN").append(", ");

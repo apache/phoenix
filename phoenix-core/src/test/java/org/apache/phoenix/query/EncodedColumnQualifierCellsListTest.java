@@ -582,5 +582,15 @@ public class EncodedColumnQualifierCellsListTest {
         public Type getType() {
             return delegate.getType();
         }
+
+        @Override
+        public long heapSize() {
+            return delegate.heapSize();
+        }
+
+        @Override
+        public int getSerializedSize() {
+            return delegate.getSerializedSize();
+        }
     }
 }
