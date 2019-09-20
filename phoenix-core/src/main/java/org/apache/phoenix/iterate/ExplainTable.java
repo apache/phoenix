@@ -215,7 +215,7 @@ public abstract class ExplainTable {
     private Long getViewIndexValue(PDataType type, byte[] range) {
         boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(type);
         Object s = type.toObject(range);
-        return (useLongViewIndex ? (Long) s : (Short) s) - (useLongViewIndex ? Long.MAX_VALUE : Short.MAX_VALUE);
+        return (useLongViewIndex ? (Long) s : (Short) s) + (useLongViewIndex ? Long.MAX_VALUE : Short.MAX_VALUE) + 2;
     }
 
     private static class RowKeyValueIterator implements Iterator<byte[]> {
