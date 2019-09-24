@@ -41,9 +41,9 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
 
 /*
  * Implementation of a SQL foo IN (a,b,c) expression. Other than the first
@@ -59,17 +59,20 @@ public class InListExpression extends BaseSingleExpression {
     private List<Expression> keyExpressions; // client side only
     private boolean rowKeyOrderOptimizable; // client side only
 
+    // reduce hashCode() complexity
+    private int hashCode = -1;
+    private boolean hashCodeSet = false;
 
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression firstChild = children.get(0);
-        
+
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
         }
         if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
         }
-        
+
         boolean addedNull = false;
         SQLException sqlE = null;
         List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(children.size());
@@ -93,7 +96,7 @@ public class InListExpression extends BaseSingleExpression {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
         }
         Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);
-        if (isNegate) { 
+        if (isNegate) {
             expression = NotExpression.create(expression, ptr);
         }
         if (ExpressionUtil.isConstant(expression)) {
@@ -101,8 +104,14 @@ public class InListExpression extends BaseSingleExpression {
         }
         return expression;
     }
-    
+
     public InListExpression() {
+    }
+
+    @VisibleForTesting
+    protected InListExpression(List<ImmutableBytesPtr> values) {
+        this.children = Collections.emptyList();
+        this.values = Sets.newHashSet(values);
     }
 
     public InListExpression(List<Expression> keyExpressions, boolean rowKeyOrderOptimizable) {
@@ -132,7 +141,7 @@ public class InListExpression extends BaseSingleExpression {
                     } else {
                         isFixedLength &= fixedWidth == length;
                     }
-                    
+
                     valuesByteLength += ptr.getLength();
                 }
             }
@@ -152,6 +161,7 @@ public class InListExpression extends BaseSingleExpression {
             // minValue and maxValue but can infer them based on the first and last position.
             this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
         }
+        this.hashCodeSet = false;
     }
 
     @Override
@@ -173,10 +183,14 @@ public class InListExpression extends BaseSingleExpression {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + children.hashCode() + values.hashCode();
-        return result;
+        if (!hashCodeSet) {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + children.hashCode() + values.hashCode();
+            hashCode = result;
+            hashCodeSet = true;
+        }
+        return hashCode;
     }
 
     @Override
@@ -199,7 +213,7 @@ public class InListExpression extends BaseSingleExpression {
         values.add(new ImmutableBytesPtr(valuesBytes,offset,valueLen));
         return offset + valueLen;
     }
-    
+
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
@@ -210,6 +224,7 @@ public class InListExpression extends BaseSingleExpression {
         int len = fixedWidth == -1 ? WritableUtils.readVInt(input) : valuesByteLength / fixedWidth;
         // TODO: consider using a regular HashSet as we never serialize from the server-side
         values = Sets.newLinkedHashSetWithExpectedSize(len);
+        hashCodeSet = false;
         int offset = 0;
         int i  = 0;
         if (i < len) {
