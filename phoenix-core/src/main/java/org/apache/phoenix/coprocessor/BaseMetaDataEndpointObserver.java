@@ -108,4 +108,9 @@ public class BaseMetaDataEndpointObserver implements MetaDataEndpointObserver, P
             throws IOException {
 
     }
+
+    @Override
+    public void preCreateViewAddChildLink(
+            final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+            final String tableName) throws IOException {}
 }

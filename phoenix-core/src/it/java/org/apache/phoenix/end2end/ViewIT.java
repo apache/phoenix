@@ -83,6 +83,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -102,6 +103,8 @@ public class ViewIT extends SplitSystemCatalogIT {
 
     private static volatile CountDownLatch latch1 = null;
     private static volatile CountDownLatch latch2 = null;
+    private static volatile boolean throwExceptionInChildLinkPreHook = false;
+    private static volatile boolean slowDownAddingChildLink = false;
 
     public ViewIT(String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
@@ -142,7 +145,15 @@ public class ViewIT extends SplitSystemCatalogIT {
             splitSystemCatalog();
         }
     }
-    
+
+    @After
+    public void cleanup() {
+        latch1 = null;
+        latch2 = null;
+        throwExceptionInChildLinkPreHook = false;
+        slowDownAddingChildLink = false;
+    }
+
     public static class TestMetaDataRegionObserver extends BaseMetaDataEndpointObserver {
         
         @Override
@@ -166,6 +177,16 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
 
         @Override
+        public void preCreateViewAddChildLink(
+                final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+                final String tableName) throws IOException {
+            if (throwExceptionInChildLinkPreHook) {
+                throw new IOException();
+            }
+            processTable(tableName);
+        }
+
+        @Override
         public void preDropTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
                 String tenantId, String tableName, TableName physicalTableName,
                 TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes)
@@ -180,8 +201,8 @@ public class ViewIT extends SplitSystemCatalogIT {
                 // DoNotRetryIOException tells HBase not to retry this mutation
                 // multiple times
                 throw new DoNotRetryIOException();
-            } else if (tableName.startsWith(SLOW_VIEWNAME_PREFIX)) {
-                // simulate a slow write to SYSTEM.CATALOG
+            } else if (tableName.startsWith(SLOW_VIEWNAME_PREFIX) || slowDownAddingChildLink) {
+                // simulate a slow write to SYSTEM.CATALOG or SYSTEM.CHILD_LINK
                 if (latch1 != null) {
                     latch1.countDown();
                 }
@@ -811,6 +832,12 @@ public class ViewIT extends SplitSystemCatalogIT {
                 }
             });
 
+            // When dropping a table, we check the parent->child links in the SYSTEM.CHILD_LINK
+            // table and check that cascade is set, if it isn't, we throw an exception (see
+            // ViewUtil.hasChildViews). After PHOENIX-4810, we first send a client-server RPC to add
+            // parent->child links to SYSTEM.CHILD_LINK and then add metadata for the view in
+            // SYSTEM.CATALOG, so we must delay link creation so that the drop table does not fail
+            slowDownAddingChildLink = true;
             // create the view in a separate thread (which will take some time
             // to complete)
             Future<Exception> future =
@@ -818,6 +845,9 @@ public class ViewIT extends SplitSystemCatalogIT {
             // wait till the thread makes the rpc to create the view
             latch1.await();
             tableDdl = "DROP TABLE " + fullTableName;
+
+            // Revert this flag since we don't want to wait in preDropTable
+            slowDownAddingChildLink = false;
             // drop table goes through first and so the view creation should fail
             conn.createStatement().execute(tableDdl);
             latch2.countDown();
@@ -831,10 +861,35 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Test
+    public void testChildLinkCreationFailThrowsException() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String fullViewName1 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+            // create base table
+            String tableDdl = "CREATE TABLE " + fullTableName
+                    + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+            conn.createStatement().execute(tableDdl);
+
+            // Throw an exception in ChildLinkMetaDataEndpoint while adding parent->child links
+            // to simulate a failure
+            throwExceptionInChildLinkPreHook = true;
+            // create a view
+            String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
+                    + fullTableName + " WHERE k = 6";
+            try {
+                conn.createStatement().execute(ddl);
+                fail("Should have thrown an exception");
+            } catch(SQLException sqlE) {
+                assertEquals("Expected a different Error code",
+                        SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK.getErrorCode(),
+                        sqlE.getErrorCode());
+            }
+        }
+    }
+
+    @Test
     public void testConcurrentAddSameColumnDifferentType() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            latch1 = null;
-            latch2 = null;
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
             String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -894,8 +949,6 @@ public class ViewIT extends SplitSystemCatalogIT {
     @Test
     public void testConcurrentAddDifferentColumn() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            latch1 = null;
-            latch2 = null;
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
             String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());

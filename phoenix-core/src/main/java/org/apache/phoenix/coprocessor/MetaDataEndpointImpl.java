@@ -1931,22 +1931,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // The mutations to create a table are written in the following order:
                 // 1. Write the child link as if the next two steps fail we
                 // ignore missing children while processing a parent
+                // (this is already done at this point, as a separate client-server RPC
+                // to the ChildLinkMetaDataEndpoint coprocessor)
                 // 2. Update the encoded column qualifier for the parent table if its on a
                 // different region server (for tables that use column qualifier encoding)
                 // if the next step fails we end up wasting a few col qualifiers
                 // 3. Finally write the mutations to create the table
-
-                // From 4.15 the parent->child links are stored in a separate table SYSTEM.CHILD_LINK
-                // TODO remove this after PHOENIX-4810 is implemented
-                List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinks(tableMetadata);
-                MetaDataResponse response =
-                        processRemoteRegionMutations(
-                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                                childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
-                if (response != null) {
-                    done.run(response);
-                    return;
-                }
 
                 if (tableType == PTableType.VIEW) {
                     // Pass in the parent's PTable so that we only tag cells corresponding to the
@@ -1967,7 +1957,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     // column qualifier counter on the parent table)
                     if (parentTable != null && tableType == PTableType.VIEW && parentTable
                             .getEncodingScheme() != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
-                        response =
+                        // TODO: Avoid doing server-server RPC when we have held row locks
+                        MetaDataResponse response =
                                 processRemoteRegionMutations(
                                         PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
                                         remoteMutations, MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
@@ -1997,7 +1988,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // primary and then index table locks are held, in that order). For now, we just don't support
                 // indexing on the system table. This is an issue because of the way we manage batch mutation
                 // in the Indexer.
-                mutateRowsWithLocks(region, localMutations, Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getTable call will add it
                 // TODO: consider loading the table that was just created here, patching up the parent table, and updating the cache
@@ -2205,8 +2197,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
 
                 // drop rows from catalog on this region
-                mutateRowsWithLocks(region, localMutations, Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                        HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
@@ -2217,18 +2209,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     metaDataCache.invalidate(parentCacheKey);
                 }
 
-                // after the view metadata is dropped drop parent->child link
+                // after the view metadata is dropped, drop parent->child link
                 MetaDataResponse response =
                         processRemoteRegionMutations(
                                 PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                                childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK);
+                                childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_DELETE_CHILD_LINK);
                 if (response != null) {
                     done.run(response);
                     return;
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -2363,7 +2354,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     if (rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0 && linkType == LinkType.INDEX_TABLE) {
                         indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
                     } else if (tableType == PTableType.VIEW && (linkType == LinkType.PARENT_TABLE || linkType == LinkType.PHYSICAL_TABLE)) {
-                        // delete parent->child link for views
+                        // Populate the delete mutations for parent->child link for the child view in question,
+                        // which we issue to SYSTEM.CHILD_LINK later
                         Cell parentTenantIdCell = MetaDataUtil.getCell(results, PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES);
                         PName parentTenantId = parentTenantIdCell != null ? PNameFactory.newName(parentTenantIdCell.getValueArray(), parentTenantIdCell.getValueOffset(), parentTenantIdCell.getValueLength()) : null;
                         byte[] linkKey = MetaDataUtil.getChildLinkKey(parentTenantId, table.getParentSchemaName(), table.getParentTableName(), table.getTenantId(), table.getName());
@@ -2621,7 +2613,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         throw new IllegalStateException(msg);
                     }
                 }
-                mutateRowsWithLocks(region, localMutations, Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
                 // Invalidate from cache
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
@@ -3299,8 +3292,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     if (setRowKeyOrderOptimizableCell) {
                         UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, timeStamp);
                     }
-                    mutateRowsWithLocks(region, tableMetadata, Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                            HConstants.NO_NONCE);
+                    mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata, Collections.<byte[]>emptySet(),
+                        HConstants.NO_NONCE, HConstants.NO_NONCE);
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                             GlobalCache.getInstance(this.env).getMetaDataCache();
@@ -3550,7 +3543,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
                 // Don't store function info for temporary functions.
                 if (!temporaryFunction) {
-                    mutateRowsWithLocks(region, functionMetaData, Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                    mutateRowsWithLocks(this.accessCheckEnabled, region, functionMetaData,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
                 }
 
                 // Invalidate the cache - the next getFunction call will add it
@@ -3603,7 +3597,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
-                mutateRowsWithLocks(region, functionMetaData, Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, functionMetaData, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 long currentTime = MetaDataUtil.getClientTimeStamp(functionMetaData);
@@ -3713,8 +3708,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         return;
                     }
                 }
-                mutateRowsWithLocks(region, schemaMutations, Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                        HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, schemaMutations, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getSchema call will add it
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
@@ -3763,8 +3758,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
                 }
-                mutateRowsWithLocks(region, schemaMetaData, Collections.<byte[]>emptySet(), HConstants.NO_NONCE,
-                        HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, schemaMetaData, Collections.<byte[]>emptySet(),
+                    HConstants.NO_NONCE, HConstants.NO_NONCE);
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env)
                         .getMetaDataCache();
                 long currentTime = MetaDataUtil.getClientTimeStamp(schemaMetaData);
@@ -3826,10 +3821,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
     }
 
-    private void mutateRowsWithLocks(final Region region, final List<Mutation> mutations, final Set<byte[]> rowsToLock,
-                                     final long nonceGroup, final long nonce) throws IOException {
-        // we need to mutate SYSTEM.CATALOG with HBase/login user if access is enabled.
-        if (this.accessCheckEnabled) {
+    /**
+     * Perform atomic mutations on rows within a region
+     *
+     * @param accessCheckEnabled Use the login user to mutate rows if enabled
+     * @param region Region containing rows to be mutated
+     * @param mutations List of mutations for rows that must be contained within the region
+     * @param rowsToLock Rows to lock
+     * @param nonceGroup Optional nonce group of the operation
+     * @param nonce Optional nonce of the operation
+     * @throws IOException
+     */
+    static void mutateRowsWithLocks(final boolean accessCheckEnabled, final Region region,
+            final List<Mutation> mutations, final Set<byte[]> rowsToLock, final long nonceGroup,
+            final long nonce) throws IOException {
+        // We need to mutate SYSTEM.CATALOG or SYSTEM.CHILD_LINK with HBase/login user
+        // if access is enabled.
+        if (accessCheckEnabled) {
             User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
