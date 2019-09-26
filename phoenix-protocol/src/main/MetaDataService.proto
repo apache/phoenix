@@ -52,6 +52,7 @@ enum MutationCode {
   TOO_MANY_INDEXES = 22;
   UNABLE_TO_CREATE_CHILD_LINK = 23;
   UNABLE_TO_UPDATE_PARENT_TABLE = 24;
+  UNABLE_TO_DELETE_CHILD_LINK = 25;
 };
 
 message SharedTableState {

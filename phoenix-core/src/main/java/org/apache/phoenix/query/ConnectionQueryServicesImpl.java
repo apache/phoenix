@@ -151,6 +151,7 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -162,6 +163,8 @@ import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
+import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -1029,8 +1032,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else if (SchemaUtil.isTaskTable(tableName)) {
                 if(!newDesc.hasCoprocessor(TaskRegionObserver.class.getName())) {
                     builder.addCoprocessor(TaskRegionObserver.class.getName(), null, priority, null);
+                }
+            } else if (SchemaUtil.isChildLinkTable(tableName)) {
+                if (!newDesc.hasCoprocessor(ChildLinkMetaDataEndpoint.class.getName())) {
+                    builder.addCoprocessor(ChildLinkMetaDataEndpoint.class.getName(), null, priority, null);
+                }
             }
-        }
 
             if (isTransactional) {
                 Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
@@ -1535,6 +1542,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     /**
+     * Invoke the SYSTEM.CHILD_LINK metadata coprocessor endpoint
+     * @param parentTableKey key corresponding to the parent of the view
+     * @param callable used to invoke the coprocessor endpoint to write links from a parent to its child view
+     * @return result of invoking the coprocessor endpoint
+     * @throws SQLException
+     */
+    private MetaDataMutationResult childLinkMetaDataCoprocessorExec(byte[] parentTableKey,
+            Batch.Call<ChildLinkMetaDataService, MetaDataResponse> callable) throws SQLException {
+        try (Table htable = this.getTable(SchemaUtil.getPhysicalName(
+                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, this.getProps()).getName()))
+        {
+            final Map<byte[], MetaDataResponse> results =
+                    htable.coprocessorService(ChildLinkMetaDataService.class, parentTableKey, parentTableKey, callable);
+            assert(results.size() == 1);
+            MetaDataResponse result = results.values().iterator().next();
+            return MetaDataMutationResult.constructFromProto(result);
+        } catch (IOException e) {
+            throw ServerUtil.parseServerException(e);
+        } catch (Throwable t) {
+            throw new SQLException(t);
+        }
+    }
+
+    /**
      * Invoke meta data coprocessor with one retry if the key was found to not be in the regions
      * (due to a table split)
      */
@@ -1673,6 +1704,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                               byte[][] splits, boolean isNamespaceMapped,
                                               final boolean allocateIndexId, final boolean isDoNotUpgradePropSet,
                                               final PTable parentTable) throws SQLException {
+        List<Mutation> childLinkMutations = MetaDataUtil.removeChildLinkMutations(tableMetaData);
         byte[][] rowKeyMetadata = new byte[3][];
         Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetaData);
         byte[] key = m.getRow();
@@ -1680,7 +1712,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-        byte[] tableName = physicalTableName != null ? physicalTableName :
+        byte[] physicalTableNameBytes = physicalTableName != null ? physicalTableName :
             SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes, isNamespaceMapped).getBytes();
         boolean localIndexTable = false;
         for(Pair<byte[], Map<String, Object>> family: families) {
@@ -1689,10 +1721,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 break;
             }
         }
-        if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
+        if ((tableType == PTableType.VIEW && physicalTableName != null) ||
+                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
-            ensureTableCreated(tableName, tableType, tableProps, families, splits, true, isNamespaceMapped, isDoNotUpgradePropSet);
+            ensureTableCreated(physicalTableNameBytes, tableType, tableProps, families, splits, true,
+                    isNamespaceMapped, isDoNotUpgradePropSet);
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (tableType == PTableType.INDEX) { // Index on view
@@ -1724,18 +1758,56 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(
-                tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null,
+                physicalTableNameBytes, tableProps, familiesPlusDefault,
+                    MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null,
                 MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped);
         }
 
+        // Avoid the client-server RPC if this is not a view creation
+        if (!childLinkMutations.isEmpty()) {
+            // Send mutations for parent-child links to SYSTEM.CHILD_LINK
+            // We invoke this using the parent table's key since child links are keyed by parent
+            final MetaDataMutationResult result = childLinkMetaDataCoprocessorExec(SchemaUtil.getTableKey(parentTable),
+                    new Batch.Call<ChildLinkMetaDataService, MetaDataResponse>() {
+                        @Override
+                        public MetaDataResponse call(ChildLinkMetaDataService instance) throws IOException {
+                            ServerRpcController controller = new ServerRpcController();
+                            BlockingRpcCallback<MetaDataResponse> rpcCallback =
+                                    new BlockingRpcCallback<>();
+                            CreateViewAddChildLinkRequest.Builder builder =
+                                    CreateViewAddChildLinkRequest.newBuilder();
+                            for (Mutation m: childLinkMutations) {
+                                MutationProto mp = ProtobufUtil.toProto(m);
+                                builder.addTableMetadataMutations(mp.toByteString());
+                            }
+                            CreateViewAddChildLinkRequest build = builder.build();
+                            instance.createViewAddChildLink(controller, build, rpcCallback);
+                            if (controller.getFailedOn() != null) {
+                                throw controller.getFailedOn();
+                            }
+                            return rpcCallback.get();
+                        }
+                    } );
+
+            switch (result.getMutationCode()) {
+                case UNABLE_TO_CREATE_CHILD_LINK:
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK)
+                            .setSchemaName(Bytes.toString(schemaBytes))
+                            .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
+                default:
+                    break;
+            }
+        }
+
+        // Send the remaining metadata mutations to SYSTEM.CATALOG
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        MetaDataMutationResult result = metaDataCoprocessorExec(tableKey,
+        return metaDataCoprocessorExec(tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
                 ServerRpcController controller = new ServerRpcController();
                 BlockingRpcCallback<MetaDataResponse> rpcCallback =
-                        new BlockingRpcCallback<MetaDataResponse>();
+                        new BlockingRpcCallback<>();
                 CreateTableRequest.Builder builder = CreateTableRequest.newBuilder();
                 for (Mutation m : tableMetaData) {
                     MutationProto mp = ProtobufUtil.toProto(m);
@@ -1756,7 +1828,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return rpcCallback.get();
             }
         });
-        return result;
     }
 
     @Override

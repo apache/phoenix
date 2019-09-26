@@ -77,26 +77,26 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BasePermissionsIT.class);
 
-    static String SUPER_USER = System.getProperty("user.name");
+    private static String SUPER_USER = System.getProperty("user.name");
 
-    static HBaseTestingUtility testUtil;
-    static final Set<String> PHOENIX_SYSTEM_TABLES =
+    private static HBaseTestingUtility testUtil;
+    private static final Set<String> PHOENIX_SYSTEM_TABLES =
             new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
-                "SYSTEM.FUNCTION", "SYSTEM.MUTEX"));
+                "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK"));
 
-    static final Set<String> PHOENIX_SYSTEM_TABLES_IDENTIFIERS =
+    private static final Set<String> PHOENIX_SYSTEM_TABLES_IDENTIFIERS =
             new HashSet<>(Arrays.asList("SYSTEM.\"CATALOG\"", "SYSTEM.\"SEQUENCE\"",
-                "SYSTEM.\"STATS\"", "SYSTEM.\"FUNCTION\"", "SYSTEM.\"MUTEX\""));
+                "SYSTEM.\"STATS\"", "SYSTEM.\"FUNCTION\"", "SYSTEM.\"MUTEX\"", "SYSTEM.\"CHILD_LINK\""));
 
-    static final String SYSTEM_SEQUENCE_IDENTIFIER =
+    private static final String SYSTEM_SEQUENCE_IDENTIFIER =
             QueryConstants.SYSTEM_SCHEMA_NAME + "." + "\"" + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE+ "\"";
 
-    static final String SYSTEM_MUTEX_IDENTIFIER =
+    private static final String SYSTEM_MUTEX_IDENTIFIER =
             QueryConstants.SYSTEM_SCHEMA_NAME + "." + "\""
                     + PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME + "\"";
 
     static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
-            "SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION", "SYSTEM:MUTEX"));
+            "SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION", "SYSTEM:MUTEX", "SYSTEM:CHILD_LINK"));
 
     // Create Multiple users so that we can use Hadoop UGI to run tasks as various users
     // Permissions can be granted or revoke by superusers and admins only
@@ -105,23 +105,23 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     // Super User has all the access
     static User superUser1 = null;
-    static User superUser2 = null;
+    private static User superUser2 = null;
 
     // Regular users are granted and revoked permissions as needed
     User regularUser1 = null;
-    User regularUser2 = null;
-    User regularUser3 = null;
-    User regularUser4 = null;
+    private User regularUser2 = null;
+    private User regularUser3 = null;
+    private User regularUser4 = null;
 
     // Group User is equivalent of regular user but inside a group
     // Permissions can be granted to group should affect this user
     static final String GROUP_SYSTEM_ACCESS = "group_system_access";
-    User groupUser = null;
+    private User groupUser = null;
 
     // Unpriviledged User doesn't have any access and is denied for every action
     User unprivilegedUser = null;
 
-    static final int NUM_RECORDS = 5;
+    private static final int NUM_RECORDS = 5;
 
     boolean isNamespaceMapped;
 
@@ -135,12 +135,12 @@ public abstract class BasePermissionsIT extends BaseTest {
     private String view1TableName;
     private String view2TableName;
 
-    public BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
+    BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
     }
 
-    public static void initCluster(boolean isNamespaceMapped) throws Exception {
+    static void initCluster(boolean isNamespaceMapped) throws Exception {
         if (null != testUtil) {
             testUtil.shutdownMiniCluster();
             testUtil = null;
@@ -235,7 +235,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         AccessControlClient.revoke(getUtility().getConnection(), unprivilegedUser.getShortName(), Permission.Action.values() );
     }
 
-    Properties getClientProperties(String tenantId) {
+    private Properties getClientProperties(String tenantId) {
         Properties props = new Properties();
         if(tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -256,7 +256,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
     }
 
-    static Set<String> getHBaseTables() throws IOException {
+    private static Set<String> getHBaseTables() throws IOException {
         Set<String> tables = new HashSet<>();
         for (TableName tn : testUtil.getHBaseAdmin().listTableNames()) {
             tables.add(tn.getNameAsString());
@@ -267,12 +267,12 @@ public abstract class BasePermissionsIT extends BaseTest {
     // UG Object
     // 1. Instance of String --> represents GROUP name
     // 2. Instance of User --> represents HBase user
-    AccessTestAction grantPermissions(final String actions, final Object ug,
+    private AccessTestAction grantPermissions(final String actions, final Object ug,
                                       final String tableOrSchemaList, final boolean isSchema) throws SQLException {
         return grantPermissions(actions, ug, Collections.singleton(tableOrSchemaList), isSchema);
     }
 
-    AccessTestAction grantPermissions(final String actions, final Object ug,
+    private AccessTestAction grantPermissions(final String actions, final Object ug,
                                       final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
         return new AccessTestAction() {
             @Override
@@ -290,7 +290,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction grantPermissions(final String actions, final User user) throws SQLException {
+    private AccessTestAction grantPermissions(final String actions, final User user) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -304,12 +304,12 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction revokePermissions(final Object ug,
+    private AccessTestAction revokePermissions(final Object ug,
                                        final String tableOrSchemaList, final boolean isSchema) throws SQLException {
         return revokePermissions(ug, Collections.singleton(tableOrSchemaList), isSchema);
     }
 
-    AccessTestAction revokePermissions(final Object ug,
+    private AccessTestAction revokePermissions(final Object ug,
                                        final Set<String> tableOrSchemaList, final boolean isSchema) throws SQLException {
         return new AccessTestAction() {
             @Override
@@ -327,7 +327,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction revokePermissions(final Object ug) throws SQLException {
+    private AccessTestAction revokePermissions(final Object ug) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -344,7 +344,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     // Attempts to get a Phoenix Connection
     // New connections could create SYSTEM tables if appropriate perms are granted
-    AccessTestAction getConnectionAction() throws SQLException {
+    private AccessTestAction getConnectionAction() throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -404,7 +404,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction createMultiTenantTable(final String tableName) throws SQLException {
+    private AccessTestAction createMultiTenantTable(final String tableName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -427,7 +427,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction dropTable(final String tableName) throws SQLException {
+    private AccessTestAction dropTable(final String tableName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -444,7 +444,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     // AccessDeniedException is only triggered when ResultSet#next() method is called
     // The first call triggers HBase Scan object
     // The Statement#executeQuery() method returns an iterator and doesn't interact with HBase API at all
-    AccessTestAction readTableWithoutVerification(final String tableName) throws SQLException {
+    private AccessTestAction readTableWithoutVerification(final String tableName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -459,11 +459,11 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction readTable(final String tableName) throws SQLException {
+    private AccessTestAction readTable(final String tableName) throws SQLException {
         return readTable(tableName,null);
     }
 
-    AccessTestAction readTable(final String tableName, final String indexName) throws SQLException {
+    private AccessTestAction readTable(final String tableName, final String indexName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -485,11 +485,11 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction readMultiTenantTableWithoutIndex(final String tableName) throws SQLException {
+    private AccessTestAction readMultiTenantTableWithoutIndex(final String tableName) throws SQLException {
         return readMultiTenantTableWithoutIndex(tableName, null);
     }
 
-    AccessTestAction readMultiTenantTableWithoutIndex(final String tableName, final String tenantId) throws SQLException {
+    private AccessTestAction readMultiTenantTableWithoutIndex(final String tableName, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -523,11 +523,11 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction readMultiTenantTableWithIndex(final String tableName) throws SQLException {
+    private AccessTestAction readMultiTenantTableWithIndex(final String tableName) throws SQLException {
         return readMultiTenantTableWithIndex(tableName, null);
     }
 
-    AccessTestAction readMultiTenantTableWithIndex(final String tableName, final String tenantId) throws SQLException {
+    private AccessTestAction readMultiTenantTableWithIndex(final String tableName, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -560,7 +560,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction addProperties(final String tableName, final String property, final String value)
+    private AccessTestAction addProperties(final String tableName, final String property, final String value)
             throws SQLException {
         return new AccessTestAction() {
             @Override
@@ -585,7 +585,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction dropColumn(final String tableName, final String columnName) throws SQLException {
+    private AccessTestAction dropColumn(final String tableName, final String columnName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -597,11 +597,11 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction createIndex(final String indexName, final String dataTable) throws SQLException {
+    private AccessTestAction createIndex(final String indexName, final String dataTable) throws SQLException {
         return createIndex(indexName, dataTable, null);
     }
 
-    AccessTestAction createIndex(final String indexName, final String dataTable, final String tenantId) throws SQLException {
+    private AccessTestAction createIndex(final String indexName, final String dataTable, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -614,7 +614,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction createLocalIndex(final String indexName, final String dataTable) throws SQLException {
+    private AccessTestAction createLocalIndex(final String indexName, final String dataTable) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -627,7 +627,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction dropIndex(final String indexName, final String dataTable) throws SQLException {
+    private AccessTestAction dropIndex(final String indexName, final String dataTable) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -639,7 +639,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction rebuildIndex(final String indexName, final String dataTable) throws SQLException {
+    private AccessTestAction rebuildIndex(final String indexName, final String dataTable) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -652,7 +652,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    AccessTestAction dropView(final String viewName) throws SQLException {
+    private AccessTestAction dropView(final String viewName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -668,7 +668,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         return createView(viewName, dataTable, null);
     }
 
-    AccessTestAction createView(final String viewName, final String dataTable, final String tenantId) throws SQLException {
+    private AccessTestAction createView(final String viewName, final String dataTable, final String tenantId) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -681,7 +681,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
-    static interface AccessTestAction extends PrivilegedExceptionAction<Object> { }
+    interface AccessTestAction extends PrivilegedExceptionAction<Object> { }
 
     /** This fails only in case of ADE or empty list for any of the users. */
     void verifyAllowed(AccessTestAction action, User... users) throws Exception {
@@ -693,13 +693,13 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
     }
 
-    void verifyAllowed(User user, AccessTestAction... actions) throws Exception {
+    private void verifyAllowed(User user, AccessTestAction... actions) throws Exception {
         for (AccessTestAction action : actions) {
             try {
                 Object obj = user.runAs(action);
                 if (obj != null && obj instanceof List<?>) {
                     List<?> results = (List<?>) obj;
-                    if (results != null && results.isEmpty()) {
+                    if (results.isEmpty()) {
                         fail("Empty non null results from action for user '" + user.getShortName() + "'");
                     }
                 }
@@ -720,7 +720,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     /** This passes only if desired exception is caught for all users. */
-    <T> void verifyDenied(User user, Class<T> exception, AccessTestAction... actions) throws Exception {
+    private <T> void verifyDenied(User user, Class<T> exception, AccessTestAction... actions) throws Exception {
         for (AccessTestAction action : actions) {
             try {
                 user.runAs(action);
@@ -756,11 +756,11 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
     }
 
-    String surroundWithDoubleQuotes(String input) {
+    private String surroundWithDoubleQuotes(String input) {
         return "\"" + input + "\"";
     }
 
-    void validateAccessDeniedException(AccessDeniedException ade) {
+    private void validateAccessDeniedException(AccessDeniedException ade) {
         String msg = ade.getMessage();
         assertTrue("Exception contained unexpected message: '" + msg + "'",
                 !msg.contains("is not the scanner owner"));
