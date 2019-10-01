@@ -293,6 +293,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
+
+            // Add more rows and make sure that these rows will be visible to IndexTool
+            for (int i = NROWS; i < 2 * NROWS; i++) {
+                upsertRow(stmt1, i);
+            }
+            conn.commit();
+            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(2 * NROWS, actualRowCount);
         }
     }
 
