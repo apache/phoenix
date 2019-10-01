@@ -906,10 +906,16 @@ public class MetaDataUtil {
         byte[] physicalTableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(view.getPhysicalName().getString()));
         return SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, physicalTableSchemaName, physicalTableName);
     }
-    
-	public static List<Mutation> removeChildLinks(List<Mutation> catalogMutations) {
-		List<Mutation> childLinks = Lists.newArrayList();
-		Iterator<Mutation> iter = catalogMutations.iterator();
+
+    /**
+     * Extract mutations of link type {@link PTable.LinkType#CHILD_TABLE} from the list of mutations.
+     * The child link mutations will be sent to SYSTEM.CHILD_LINK and other mutations to SYSTEM.CATALOG
+     * @param metadataMutations total list of mutations
+     * @return list of mutations pertaining to parent-child links
+     */
+	public static List<Mutation> removeChildLinkMutations(List<Mutation> metadataMutations) {
+		List<Mutation> childLinkMutations = Lists.newArrayList();
+		Iterator<Mutation> iter = metadataMutations.iterator();
 		while (iter.hasNext()) {
 			Mutation m = iter.next();
 			for (KeyValue kv : m.getFamilyMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES)) {
@@ -920,12 +926,12 @@ public class MetaDataUtil {
 						&& ((Bytes.compareTo(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength(),
 								LinkType.CHILD_TABLE.getSerializedValueAsByteArray(), 0,
 								LinkType.CHILD_TABLE.getSerializedValueAsByteArray().length) == 0))) {
-					childLinks.add(m);
+					childLinkMutations.add(m);
 					iter.remove();
 				}
 			}
 		}
-		return childLinks;
+		return childLinkMutations;
 	}
 
 	public static IndexType getIndexType(List<Mutation> tableMetaData, KeyValueBuilder builder,

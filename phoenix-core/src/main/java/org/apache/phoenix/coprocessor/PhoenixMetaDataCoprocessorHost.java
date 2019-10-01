@@ -50,9 +50,10 @@ public class PhoenixMetaDataCoprocessorHost
     private UserProvider userProvider;
     public static final String PHOENIX_META_DATA_COPROCESSOR_CONF_KEY =
             "hbase.coprocessor.phoenix.classes";
-    public static final String DEFAULT_PHOENIX_META_DATA_COPROCESSOR_CONF_KEY="org.apache.phoenix.coprocessor.PhoenixAccessController";
+    private static final String DEFAULT_PHOENIX_META_DATA_COPROCESSOR_CONF_KEY =
+            "org.apache.phoenix.coprocessor.PhoenixAccessController";
 
-    public PhoenixMetaDataCoprocessorHost(RegionCoprocessorEnvironment env) {
+    PhoenixMetaDataCoprocessorHost(RegionCoprocessorEnvironment env) throws IOException {
         super(null);
         this.env = env;
         this.conf = env.getConfiguration();
@@ -72,7 +73,7 @@ public class PhoenixMetaDataCoprocessorHost
             super(user);
         }
 
-        public void postEnvCall(T env) {}
+        void postEnvCall(T env) {}
     }
 
     private boolean execOperation(
@@ -119,7 +120,7 @@ public class PhoenixMetaDataCoprocessorHost
 
         private RegionCoprocessorEnvironment env;
 
-        public PhoenixMetaDataControllerEnvironment(RegionCoprocessorEnvironment env, Coprocessor instance,
+        PhoenixMetaDataControllerEnvironment(RegionCoprocessorEnvironment env, Coprocessor instance,
                 int priority, int sequence, Configuration conf) {
             super(instance, priority, sequence, conf);
             this.env = env;
@@ -161,7 +162,7 @@ public class PhoenixMetaDataCoprocessorHost
         return new PhoenixMetaDataControllerEnvironment(env, instance, priority, sequence, conf);
     }
 
-    public void preGetTable(final String tenantId, final String tableName, final TableName physicalTableName)
+    void preGetTable(final String tenantId, final String tableName, final TableName physicalTableName)
             throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
@@ -172,7 +173,7 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preCreateTable(final String tenantId, final String tableName, final TableName physicalTableName,
+    void preCreateTable(final String tenantId, final String tableName, final TableName physicalTableName,
             final TableName parentPhysicalTableName, final PTableType tableType, final Set<byte[]> familySet, final Set<TableName> indexes)
             throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
@@ -185,7 +186,17 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preDropTable(final String tenantId, final String tableName, final TableName physicalTableName,
+    void preCreateViewAddChildLink(final String tableName) throws IOException {
+        execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
+            @Override
+            public void call(MetaDataEndpointObserver observer,
+                    ObserverContext<PhoenixMetaDataControllerEnvironment> ctx) throws IOException {
+                observer.preCreateViewAddChildLink(this, tableName);
+            }
+        });
+    }
+
+    void preDropTable(final String tenantId, final String tableName, final TableName physicalTableName,
             final TableName parentPhysicalTableName, final PTableType tableType, final List<PTable> indexes) throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
@@ -196,7 +207,7 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preAlterTable(final String tenantId, final String tableName, final TableName physicalTableName,
+    void preAlterTable(final String tenantId, final String tableName, final TableName physicalTableName,
             final TableName parentPhysicalTableName, final PTableType type) throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
@@ -207,7 +218,7 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preGetSchema(final String schemaName) throws IOException {
+    void preGetSchema(final String schemaName) throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
             public void call(MetaDataEndpointObserver observer,
@@ -228,7 +239,7 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preDropSchema(final String schemaName) throws IOException {
+    void preDropSchema(final String schemaName) throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
             public void call(MetaDataEndpointObserver observer,
@@ -238,7 +249,7 @@ public class PhoenixMetaDataCoprocessorHost
         });
     }
 
-    public void preIndexUpdate(final String tenantId, final String indexName, final TableName physicalTableName,
+    void preIndexUpdate(final String tenantId, final String indexName, final TableName physicalTableName,
             final TableName parentPhysicalTableName, final PIndexState newState) throws IOException {
         execOperation(new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(getActiveUser()) {
             @Override
