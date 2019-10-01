@@ -297,10 +297,9 @@ public class IndexTool extends Configured implements Tool {
         public Job getJob() throws Exception {
             if (isPartialBuild) {
                 return configureJobForPartialBuild();
-            } else {
+            } else if (useSnapshot || !useDirectApi || (!isLocalIndexBuild && pDataTable.isTransactional())) {
                 long maxTimeRange = pIndexTable.getTimeStamp() + 1;
                 // this is set to ensure index tables remains consistent post population.
-
                 if (pDataTable.isTransactional()) {
                     configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
                             Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
@@ -308,13 +307,14 @@ public class IndexTool extends Configured implements Tool {
                 }
                 configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
                         Long.toString(maxTimeRange));
-                if (useSnapshot || !useDirectApi || (!isLocalIndexBuild && pDataTable.isTransactional())) {
-                    return configureJobForAysncIndex();
-                }
-                else {
-                    //Local and non-transactional global indexes to be built on the server side
-                    return configureJobForServerBuildIndex();
-                }
+                return configureJobForAysncIndex();
+            }
+            else {
+                // Local and non-transactional global indexes to be built on the server side
+                // It is safe not to set CURRENT_SCN_VALUE for server side rebuilds, in order to make sure that
+                // all the rows that exist so far will be rebuilt. The current time of the servers will
+                // be used to set the time range for server side scans.
+                return configureJobForServerBuildIndex();
             }
         }
 
