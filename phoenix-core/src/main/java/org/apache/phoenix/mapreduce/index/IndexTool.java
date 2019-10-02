@@ -297,7 +297,7 @@ public class IndexTool extends Configured implements Tool {
         public Job getJob() throws Exception {
             if (isPartialBuild) {
                 return configureJobForPartialBuild();
-            } else if (useSnapshot || !useDirectApi || (!isLocalIndexBuild && pDataTable.isTransactional())) {
+            } else {
                 long maxTimeRange = pIndexTable.getTimeStamp() + 1;
                 // this is set to ensure index tables remains consistent post population.
                 if (pDataTable.isTransactional()) {
@@ -305,16 +305,17 @@ public class IndexTool extends Configured implements Tool {
                             Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
                     configuration.set(PhoenixConfigurationUtil.TX_PROVIDER, pDataTable.getTransactionProvider().name());
                 }
-                configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
-                        Long.toString(maxTimeRange));
-                return configureJobForAysncIndex();
-            }
-            else {
-                // Local and non-transactional global indexes to be built on the server side
-                // It is safe not to set CURRENT_SCN_VALUE for server side rebuilds, in order to make sure that
-                // all the rows that exist so far will be rebuilt. The current time of the servers will
-                // be used to set the time range for server side scans.
-                return configureJobForServerBuildIndex();
+                if (useSnapshot || !useDirectApi || (!isLocalIndexBuild && pDataTable.isTransactional())) {
+                    configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
+                            Long.toString(maxTimeRange));
+                    return configureJobForAysncIndex();
+                } else {
+                    // Local and non-transactional global indexes to be built on the server side
+                    // It is safe not to set CURRENT_SCN_VALUE for server side rebuilds, in order to make sure that
+                    // all the rows that exist so far will be rebuilt. The current time of the servers will
+                    // be used to set the time range for server side scans.
+                    return configureJobForServerBuildIndex();
+                }
             }
         }
 
