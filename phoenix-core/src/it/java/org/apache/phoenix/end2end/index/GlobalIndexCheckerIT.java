@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.Maps;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -44,6 +46,7 @@ import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
+    private static final Log LOG = LogFactory.getLog(GlobalIndexCheckerIT.class);
     private final boolean async;
     private final String tableDDLOptions;
 
@@ -96,7 +99,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testSkipPostIndexDeleteUpdate() throws Exception {
         String dataTableName = generateUniqueName();
-        populateTable(dataTableName);
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
         String indexName = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
@@ -139,7 +142,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testPartialRowUpdate() throws Exception {
         String dataTableName = generateUniqueName();
-        populateTable(dataTableName);
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
         String indexName = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
@@ -180,7 +183,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testSkipPostIndexPartialRowUpdate() throws Exception {
         String dataTableName = generateUniqueName();
-        populateTable(dataTableName);
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
         String indexName = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
@@ -208,9 +211,119 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
+    public void testOnePhaseOverwiteFollowingTwoPhaseWrite() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
+                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+            }
+            // Two Phase write. This write is recoverable
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('c', 'cd', 'cde', 'cdef')");
+            conn.commit();
+            // One Phase write. This write is not recoverable
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('c', 'cd', 'cdee', 'cdfg')");
+            conn.commit();
+            // Let three phase writes happen as in the normal case
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'cd'";
+            // Verify that we will read from the first index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
+            // Verify the first write is visible but the second one is not
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("cde", rs.getString(1));
+            assertEquals("cdef", rs.getString(2));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testOnePhaseOverwrite() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
+                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+            }
+            // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
+            // update phase) and check that this does not impact the correctness (one overwrite)
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            conn.commit();
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            String selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the first index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
+            // Verify that one phase write has no effect
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abcd", rs.getString(2));
+            assertFalse(rs.next());
+            selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abcc'";
+            // Verify that we will read from the second index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "2");
+            rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that one phase writes have no effect
+            assertFalse(rs.next());
+            // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
+            // update phase) and check that this does not impact the correctness  (two overwrites)
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abccc')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcccc')");
+            conn.commit();
+            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the first index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
+            // Verify that one phase writes have no effect
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abcd", rs.getString(2));
+            assertFalse(rs.next());
+            selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abccc'";
+            // Verify that we will read from the second index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "2");
+            rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that one phase writes have no effect
+            assertFalse(rs.next());
+            selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abcccc'";
+            // Verify that we will read from the second index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "2");
+            rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that one phase writes have no effect
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testSkipDataTableAndPostIndexPartialRowUpdate() throws Exception {
         String dataTableName = generateUniqueName();
-        populateTable(dataTableName);
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
         String indexName = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + "1 on " +
