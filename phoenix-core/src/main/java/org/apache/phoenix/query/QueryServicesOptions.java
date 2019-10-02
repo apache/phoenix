@@ -357,7 +357,6 @@ public class QueryServicesOptions {
     public static final long DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS = 10*1000; // 10 sec
 
     public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 10*60*1000; /* 10 min */
-    public static final int DEFAULT_GLOBAL_INDEX_REPAIR_COUNT = 1;
     public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
 
     public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
