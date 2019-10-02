@@ -32,6 +32,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -80,9 +81,9 @@ public class GlobalIndexChecker extends BaseRegionObserver {
     private class GlobalIndexScanner implements RegionScanner {
         RegionScanner scanner;
         private long ageThreshold;
-        private int repairCount;
         private Scan scan;
         private Scan indexScan;
+        private Scan singleRowIndexScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
         private byte[] emptyCF;
@@ -110,9 +111,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             ageThreshold = env.getConfiguration().getLong(
                     QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
                     QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
-            repairCount = env.getConfiguration().getInt(
-                    QueryServices.GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB,
-                    QueryServicesOptions.DEFAULT_GLOBAL_INDEX_REPAIR_COUNT);
             minTimestamp = scan.getTimeRange().getMin();
             maxTimestamp = scan.getTimeRange().getMax();
         }
@@ -209,9 +207,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
         }
 
-        private void deleteRowIfAgedEnough(byte[] indexRowKey, long ts) throws IOException {
+        private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(indexRowKey, ts);
+                // We are deleting a specific version of a row so the flowing loop is for that
+                for (Cell cell : row) {
+                    del.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp());
+                }
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
             }
@@ -222,6 +224,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             if (buildIndexScan == null) {
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
+                singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
                 byte[] indexTableName = region.getRegionInfo().getTable().getName();
                 dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
@@ -243,13 +246,16 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
                 buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.SCAN_LIMIT, Bytes.toBytes(repairCount));
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
             }
-            // Rebuild the index rows from the corresponding the rows in the the data table
+            // Rebuild the index row from the corresponding the row in the the data table
+            // Get the data row key from the index row key
             byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
             buildIndexScan.setStartRow(dataRowKey);
-            buildIndexScan.setTimeRange(ts, maxTimestamp);
+            buildIndexScan.setStopRow(dataRowKey);
+            buildIndexScan.setTimeRange(0, maxTimestamp);
+            // If the data table row has been deleted then we want to delete the corresponding index row too.
+            // Thus, we are using a raw scan
             buildIndexScan.setRaw(true);
             try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScan)){
                 resultScanner.next();
@@ -261,27 +267,57 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             // Open a new scanner starting from the current row
             indexScan.setStartRow(indexRowKey);
             scanner = region.getScanner(indexScan);
-            // Scan the newly build index rows
+            // Scan the newly build index row
             scanner.next(row);
             if (row.isEmpty()) {
                 return;
             }
-            // Check if the corresponding data table row exist
-            if (Bytes.compareTo(row.get(0).getRowArray(), row.get(0).getRowOffset(), row.get(0).getRowLength(),
+            boolean indexRowExists = false;
+            // Check if the index row still exist after rebuild
+            while (Bytes.compareTo(row.get(0).getRowArray(), row.get(0).getRowOffset(), row.get(0).getRowLength(),
                     indexRowKey, 0, indexRowKey.length) == 0) {
-                if (!verifyRowAndRemoveEmptyColumn(row)) {
-                    // The corresponding row does not exist in the data table.
-                    // Need to delete the row from index if it is old enough
-                    deleteRowIfAgedEnough(indexRowKey, ts);
-                    row.clear();
+                indexRowExists = true;
+                if (verifyRowAndRemoveEmptyColumn(row)) {
+                    // The index row status is "verified". This row is good to return to the client. We are done here.
+                    return;
                 }
-                return;
+                // The index row is still "unverified" after rebuild. This means either that the data table row timestamp is
+                // lower than than the timestamp of the unverified index row (ts) and the index row that is built from
+                // the data table row is masked by this unverified row, or that the corresponding data table row does
+                // exist
+                // First delete the unverified row from index if it is old enough
+                deleteRowIfAgedEnough(indexRowKey, row, ts);
+                // Now we will do a single row scan to retrieve the verified index row build from the data table row
+                // if such an index row exists. Note we cannot read all versions in one scan as the max number of row
+                // versions for an index table can be 1. In that case, we will get only one (i.e., the most recent
+                // version instead of all versions
+                singleRowIndexScan.setStartRow(indexRowKey);
+                singleRowIndexScan.setStopRow(indexRowKey);
+                singleRowIndexScan.setTimeRange(minTimestamp, ts);
+                RegionScanner singleRowScanner = region.getScanner(singleRowIndexScan);
+                row.clear();
+                singleRowScanner.next(row);
+                singleRowScanner.close();
+                if (row.isEmpty()) {
+                    // This means that the data row did not exist, so we need to skip this unverified row (i.e., do not
+                    // return it to the client). Just retuning empty row is sufficient to do that
+                    return;
+                }
+                ts = getMaxTimestamp(row);
             }
-            // This means the current index row is deleted by the rebuild process and we got the next row.
-            // If it is verified then we are good to go. If not, then we need to repair the new row
-            if (!verifyRowAndRemoveEmptyColumn(row)) {
-                // Rewind the scanner and let the row be scanned again so that it can be repaired
-                scanner.close();
+            if (indexRowExists) {
+                // This means there does not exist a data row for the unverified index row. Skip this row. To do that
+                // just return empty row.
+                row.clear();
+                return;
+            } else {
+                // This means the index row has been deleted. We got the next row
+                // If the next row is "verified" (or empty) then we are good to go.
+                if (verifyRowAndRemoveEmptyColumn(row)) {
+                    return;
+                }
+                // The next row is "unverified". Rewind the scanner and let the row be scanned again
+                // so that it can be repaired
                 scanner = region.getScanner(indexScan);
                 row.clear();
             }
