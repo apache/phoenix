@@ -133,6 +133,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -4008,11 +4009,31 @@ public class MetaDataClient {
             if (newIndexState == PIndexState.BUILDING && !isAsync) {
                 PTable index = indexRef.getTable();
                 // First delete any existing rows of the index
-                Long scn = connection.getSCN();
-                long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
-                connection.getQueryServices().updateData(plan);
-                NamedTableNode dataTableNode = NamedTableNode.create(null, TableName.create(schemaName, dataTableName), Collections.<ColumnDef>emptyList());
+                if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null){
+                    //for a global index of a normal base table, it's safe to just truncate and
+                    //rebuild. We preserve splits to reduce the amount of splitting we need to do
+                    //during rebuild
+                    org.apache.hadoop.hbase.TableName physicalTableName =
+                        org.apache.hadoop.hbase.TableName.valueOf(index.getPhysicalName().getBytes());
+                    try (Admin admin = connection.getQueryServices().getAdmin()) {
+                        admin.disableTable(physicalTableName);
+                        admin.truncateTable(physicalTableName, true);
+                        //trunateTable automatically re-enables when it's done
+                    } catch(IOException ie) {
+                        String failedTable = physicalTableName.getNameAsString();
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_ERROR_CODE).
+                            setMessage("Error when truncating index table [" + failedTable +
+                                "] before rebuilding: " + ie.getMessage()).
+                            setTableName(failedTable).build().buildException();
+                    }
+                } else {
+                    Long scn = connection.getSCN();
+                    long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+                    MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                    connection.getQueryServices().updateData(plan);
+                }
+                NamedTableNode dataTableNode = NamedTableNode.create(null,
+                    TableName.create(schemaName, dataTableName), Collections.<ColumnDef>emptyList());
                 // Next rebuild the index
                 connection.setAutoCommit(true);
                 if (connection.getSCN() != null) {
@@ -4021,6 +4042,7 @@ public class MetaDataClient {
                 TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
                 return buildIndex(index, dataTableRef);
             }
+
             return new MutationState(1, 1000, connection);
         } catch (TableNotFoundException e) {
             if (!statement.ifExists()) {
