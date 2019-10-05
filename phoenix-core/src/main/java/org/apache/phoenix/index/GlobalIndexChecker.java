@@ -55,6 +55,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.query.QueryServices;
@@ -83,6 +85,7 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
         private Scan scan;
         private Scan indexScan;
         private Scan singleRowIndexScan;
+        private Scan singleRowDataScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
         private byte[] emptyCF;
@@ -206,22 +209,71 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             }
         }
 
-        private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts) throws IOException {
+        private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts, boolean specific) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(indexRowKey, ts);
-                // We are deleting a specific version of a row so the flowing loop is for that
-                for (Cell cell : row) {
-                    del.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp());
+                if (specific) {
+                    // We are deleting a specific version of a row so the flowing loop is for that
+                    for (Cell cell : row) {
+                        del.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp());
+                    }
                 }
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations);
             }
         }
 
+        private boolean doesDataRowExist(byte[] indexRowKey, byte[] dataRowKey) throws IOException {
+            singleRowDataScan.withStartRow(dataRowKey, true);
+            singleRowDataScan.withStopRow(dataRowKey, true);
+            singleRowDataScan.setTimeRange(0, maxTimestamp);
+            try (ResultScanner resultScanner = dataHTable.getScanner(singleRowDataScan)) {
+                final Result result = resultScanner.next();
+                if (result == null) {
+                    // There is no data table row for this index unverified index row. We need to skip it.
+                    return false;
+                }
+                else {
+                    ValueGetter getter = new ValueGetter() {
+                        final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
+
+                        @Override
+                        public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
+                            Cell cell = result.getColumnLatestCell(ref.getFamily(), ref.getQualifier());
+                            if (cell == null) {
+                                return null;
+                            }
+                            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                            return valuePtr;
+                        }
+
+                        @Override
+                        public byte[] getRowKey() {
+                            return result.getRow();
+                        }
+                    };
+                    for (Cell cell : result.rawCells()) {
+                        String cellString = cell.toString();
+                        LOG.debug("Rebuilt row :" + cellString + " value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    }
+                    byte[] builtIndexRowKey = indexMaintainer.buildRowKey(getter, new ImmutableBytesWritable(dataRowKey), null, null, maxTimestamp);
+                    if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
+                            indexRowKey, 0, indexRowKey.length) != 0) {
+                        // The row key of the index row that has been built is different than the row key of the unverified
+                        // index row
+                        return false;
+                    }
+                }
+            } catch (Throwable t) {
+                ServerUtil.throwIOException(dataHTable.getName().toString(), t);
+            }
+            return true;
+        }
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
             // Build the data table row key from the index table row key
             if (buildIndexScan == null) {
                 buildIndexScan = new Scan();
+                singleRowDataScan = new Scan();
                 indexScan = new Scan(scan);
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
@@ -262,6 +314,14 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             } catch (Throwable t) {
                 ServerUtil.throwIOException(dataHTable.getName().toString(), t);
             }
+            if (!doesDataRowExist(indexRowKey, dataRowKey)) {
+                // Delete the unverified row from index if it is old enough
+                deleteRowIfAgedEnough(indexRowKey, row, ts, false);
+                // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
+                // sufficient to do that
+                row.clear();
+                return;
+            }
             // Close the current scanner as the newly build row will not be visible to it
             scanner.close();
             // Open a new scanner starting from the current row
@@ -286,7 +346,7 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 // the data table row is masked by this unverified row, or that the corresponding data table row does
                 // exist
                 // First delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, row, ts);
+                deleteRowIfAgedEnough(indexRowKey, row, ts, true);
                 // Now we will do a single row scan to retrieve the verified index row build from the data table row
                 // if such an index row exists. Note we cannot read all versions in one scan as the max number of row
                 // versions for an index table can be 1. In that case, we will get only one (i.e., the most recent
