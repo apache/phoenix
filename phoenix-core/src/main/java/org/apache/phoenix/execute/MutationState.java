@@ -161,7 +161,11 @@ public class MutationState implements SQLCloseable {
     }
 
     public MutationState(MutationState mutationState) {
-        this(mutationState.maxSize, mutationState.maxSizeBytes, mutationState.connection, true, mutationState
+        this(mutationState, mutationState.connection);
+    }
+
+    public MutationState(MutationState mutationState, PhoenixConnection connection) {
+        this(mutationState.maxSize, mutationState.maxSizeBytes, connection, true, mutationState
                 .getPhoenixTransactionContext());
     }
 
