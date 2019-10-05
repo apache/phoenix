@@ -27,7 +27,6 @@ public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
 
     public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded, boolean skipPostIndexUpdates) {
         super(localIndex, mutable, transactionProvider, columnEncoded);
-        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(skipPostIndexUpdates);
     }
 
     @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3},skipPostIndexUpdates={4}") // name is used by failsafe as file name in reports
