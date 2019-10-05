@@ -159,6 +159,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
       // batch with a timestamp earlier than the timestamp of this batch and the earlier batch has a mutation on the
       // row (i.e., concurrent updates).
       private HashSet<ImmutableBytesPtr> pendingRows = new HashSet<>();
+      private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
 
       private BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
@@ -374,15 +375,24 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
   }
 
-  private void lockRows(MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context) throws IOException {
+  private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           if (miniBatchOp.getOperationStatus(i) == IGNORE) {
               continue;
           }
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isEnabled(m)) {
-              context.rowLocks.add(lockManager.lockRow(m.getRow(), rowLockWaitDuration));
+              ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+              if (!context.rowsToLock.contains(row)) {
+                  context.rowsToLock.add(row);
+              }
           }
+      }
+  }
+
+  private void lockRows(BatchMutateContext context) throws IOException {
+      for (ImmutableBytesPtr rowKey : context.rowsToLock) {
+          context.rowLocks.add(lockManager.lockRow(rowKey, rowLockWaitDuration));
       }
   }
 
@@ -598,7 +608,8 @@ public class IndexRegionObserver extends BaseRegionObserver {
        * while determining the index updates
        */
       if (replayWrite == null) {
-          lockRows(miniBatchOp, context);
+          populateRowsToLock(miniBatchOp, context);
+          lockRows(context);
       }
       long now = EnvironmentEdgeManager.currentTimeMillis();
       // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
