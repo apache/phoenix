@@ -372,7 +372,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
                 this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
-                maxSizeBytes) : new MutationState(mutationState);
+                maxSizeBytes) : new MutationState(mutationState, this);
         this.metaData = metaData;
         this.metaData.pruneTables(pruner);
         this.metaData.pruneFunctions(pruner);
