@@ -23,7 +23,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
 import java.io.StringReader;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -35,6 +37,7 @@ import java.util.Properties;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.FileUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -43,7 +46,9 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
@@ -97,6 +102,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
             + ENCAPSULATED_CHARS_COLUMNS[1]
             + "\n"
             + CSV_VALUES_BAD_ENCAPSULATED_CONTROL_CHARS;
+
+    @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
 
     @Test
     public void testCSVCommonsUpsert() throws Exception {
@@ -764,6 +771,34 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
                 conn.close();
             }
         }
+
+    }
+
+    @Test public void testLowerCaseTable() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.setAutoCommit(true);
+        String tableName = generateUniqueName().toLowerCase();
+        String t1 = generateUniqueName();
+        String t2 = t1 + generateUniqueName();
+        String csvFileName = "test.csv";
+        conn.createStatement().execute("CREATE TABLE \"" + tableName
+            + "\" (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2))");
+        File tempFile = tempFolder.newFile(csvFileName);
+        FileUtils.writeStringToFile(tempFile, "'" + t1 + "','x'");
+        try {
+            CSVCommonsLoader csvLoader =
+                new CSVCommonsLoader(conn.unwrap(PhoenixConnection.class), "" + tableName + "",
+                    null, false, ',', '"', '\\', null);
+            csvLoader.upsert(tempFile.getAbsolutePath());
+        } catch (Exception e) {
+            fail("Failed with Exception:" + e.getMessage());
+        }
+        ResultSet rs =
+            conn.createStatement().executeQuery("SELECT * FROM \"" + tableName + "\" order by k2");
+        assertTrue(rs.next());
+        assertEquals("'"+t1+"'",rs.getString(1));
+        assertEquals("'"+"x"+"'",rs.getString(2));
+        assertFalse(rs.next());
 
     }
 }
