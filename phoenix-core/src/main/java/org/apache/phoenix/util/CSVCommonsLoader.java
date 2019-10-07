@@ -211,7 +211,8 @@ public class CSVCommonsLoader {
             long start = System.currentTimeMillis();
             CsvUpsertListener upsertListener = new CsvUpsertListener(conn,
                     conn.getMutateBatchSize(), isStrict);
-            CsvUpsertExecutor csvUpsertExecutor = new CsvUpsertExecutor(conn, tableName,
+            CsvUpsertExecutor csvUpsertExecutor = new CsvUpsertExecutor(conn,
+                SchemaUtil.getEscapedFullTableName(tableName),
                     columnInfoList, upsertListener, arrayElementSeparator);
 
             csvUpsertExecutor.execute(csvParser);
