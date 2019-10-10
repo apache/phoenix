@@ -52,7 +52,8 @@ public class PhoenixIndexImportDirectReducer extends
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
         try {
-            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
+            // if the index is disabled, we need to make it inactive first
+            IndexToolUtil.setIndexToActive(context.getConfiguration());
 
             updateTasksTable(context);
         } catch (SQLException e) {

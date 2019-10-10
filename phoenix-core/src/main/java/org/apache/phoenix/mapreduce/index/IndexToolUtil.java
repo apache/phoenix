@@ -22,9 +22,11 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +63,26 @@ public class IndexToolUtil {
 			}
 		}
 	}
+
+	public static void setIndexToActive(Configuration configuration) throws SQLException {
+        final String masterTable = PhoenixConfigurationUtil.getInputTableName(configuration);
+        final String[] indexTables = PhoenixConfigurationUtil.getDisableIndexes(configuration).split(",");
+        final Properties overrideProps = new Properties();
+        final Connection connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
+        try {
+            for (String indexTable : indexTables) {
+                indexTable = PhoenixConfigurationUtil.getIndexToolIndexTableName(configuration);
+
+                IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class)
+                        , indexTable, PIndexState.INACTIVE, null);
+                IndexToolUtil.updateIndexState(configuration, PIndexState.ACTIVE);
+            }
+        } finally {
+            if(connection != null) {
+                connection.close();
+            }
+        }
+    }
 	
 	/**
      * Updates the index state.

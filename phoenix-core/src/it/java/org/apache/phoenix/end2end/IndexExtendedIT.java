@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.checkIndexState;
+import static org.apache.phoenix.util.TestUtil.getRowCount;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -36,6 +38,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -234,5 +237,58 @@ public class IndexExtendedIT extends BaseTest {
             assertFalse(rs.next());
         }
     }
-    
+
+    @Test
+    public void testBuildDisabledIndex() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Statement stmt = conn.createStatement();
+        try {
+            stmt.execute(String.format(
+                    "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s",
+                    dataTableFullName, tableDDLOptions));
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            int id = 1;
+            // insert two rows
+            IndexToolIT.upsertRow(stmt1, id++);
+            IndexToolIT.upsertRow(stmt1, id++);
+            conn.commit();
+
+            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ", indexTableName,
+                    dataTableFullName));
+
+            long dataCnt = getRowCount(conn, dataTableFullName);
+            long indexCnt = getRowCount(conn, indexTableFullName);
+            assertEquals(dataCnt, indexCnt);
+
+            stmt.execute(String.format("ALTER INDEX  %s ON %s DISABLE", indexTableName,
+                    dataTableFullName));
+
+            // insert 3rd row
+            IndexToolIT.upsertRow(stmt1, id++);
+            conn.commit();
+
+            dataCnt = getRowCount(conn, dataTableFullName);
+            indexCnt = getRowCount(conn, indexTableFullName);
+            assertEquals(dataCnt, indexCnt+1);
+
+            //run the index MR job.
+            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+
+            dataCnt = getRowCount(conn, dataTableName);
+            indexCnt = getRowCount(conn, indexTableName);
+            assertEquals(dataCnt, indexCnt);
+
+            checkIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L);
+        } finally {
+            conn.close();
+        }
+    }
 }
