@@ -495,7 +495,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
-        this.hTableFactory = ServerUtil.getDelegateHTableFactory(e, ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION);
+        this.hTableFactory = ServerUtil.getDelegateHTableFactory(e, ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION);
         this.metricsSource = MetricsIndexerSourceFactory.getInstance().getGlobalIndexCheckerSource();
     }
 
