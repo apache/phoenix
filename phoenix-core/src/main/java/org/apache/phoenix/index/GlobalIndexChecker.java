@@ -278,7 +278,7 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
                 byte[] indexTableName = region.getRegionInfo().getTable().getName();
-                dataHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                dataHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
                         env).getTable(TableName.valueOf(dataTableName));
                 if (indexMaintainer == null) {
                     byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
