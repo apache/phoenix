@@ -21,12 +21,16 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,20 +68,41 @@ public class IndexToolUtil {
 		}
 	}
 
-	public static void setIndexToActive(Configuration configuration) throws SQLException {
-        final String masterTable = PhoenixConfigurationUtil.getInputTableName(configuration);
-        final String[] indexTables = PhoenixConfigurationUtil.getDisableIndexes(configuration).split(",");
-        final Properties overrideProps = new Properties();
+	/**
+	 * Sets index state to Active.
+	 * @param configuration
+	 * @throws SQLException
+	 */
+	public static void setIndexToActive(Configuration configuration, String indexTable, String dataTable) throws SQLException {
+		final Properties overrideProps = new Properties();
         final Connection connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
         try {
-            for (String indexTable : indexTables) {
-                indexTable = PhoenixConfigurationUtil.getIndexToolIndexTableName(configuration);
+        	if (Strings.isNullOrEmpty(indexTable)) {
+				indexTable = PhoenixConfigurationUtil.getIndexToolIndexTableName(configuration);
+				if (Strings.isNullOrEmpty(indexTable)) {
+					String schemaName = SchemaUtil.getSchemaNameFromFullName(
+							PhoenixConfigurationUtil.getPhysicalTableName(configuration));
+					indexTable = SchemaUtil.getTableName(schemaName, PhoenixConfigurationUtil.getDisableIndexes(configuration));
+					// This one doesn't return schema name
+				}
+			}
+			PTable indexPTable = PhoenixRuntime.getTable(connection, indexTable);
+        	if (indexPTable != null) {
+				// We have to mark it Building before we can set it to Active. Otherwise it errors out with
+				// index state transition error
+				if (indexPTable.getIndexState() == PIndexState.DISABLE) {
+					IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
+							indexTable, PIndexState.BUILDING, null);
+				}
+			}
 
-                IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class)
-                        , indexTable, PIndexState.INACTIVE, null);
-                IndexToolUtil.updateIndexState(configuration, PIndexState.ACTIVE);
-            }
-        } finally {
+			if (Strings.isNullOrEmpty(dataTable)) {
+				IndexToolUtil.updateIndexState(configuration, PIndexState.ACTIVE);
+			} else {
+				String justIndexName = SchemaUtil.getTableNameFromFullName(indexTable);
+				IndexToolUtil.updateIndexState(connection, dataTable, justIndexName, PIndexState.ACTIVE);
+			}
+		} finally {
             if(connection != null) {
                 connection.close();
             }

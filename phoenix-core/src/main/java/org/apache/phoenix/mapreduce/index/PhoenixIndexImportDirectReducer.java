@@ -53,7 +53,7 @@ public class PhoenixIndexImportDirectReducer extends
     protected void cleanup(Context context) throws IOException, InterruptedException{
         try {
             // if the index is disabled, we need to make it inactive first
-            IndexToolUtil.setIndexToActive(context.getConfiguration());
+            IndexToolUtil.setIndexToActive(context.getConfiguration(), null, null);
 
             updateTasksTable(context);
         } catch (SQLException e) {

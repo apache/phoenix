@@ -718,7 +718,8 @@ public class IndexTool extends Configured implements Tool {
                             .getQueryServices().getAdmin(), htable, regionLocator);
                     htable.close();
                     // Without direct API, we need to update the index state to ACTIVE from client.
-                    IndexToolUtil.updateIndexState(connection, qDataTable, indexTable, PIndexState.ACTIVE);
+                    IndexToolUtil.setIndexToActive(configuration, pIndexTable.getName().toString(),
+                            pDataTable.getName().getString());
                     fs.delete(outputPath, true);
                 }
                 return 0;

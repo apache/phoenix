@@ -240,6 +240,9 @@ public class IndexExtendedIT extends BaseTest {
 
     @Test
     public void testBuildDisabledIndex() throws Exception {
+        if (localIndex == true) {
+            return;
+        }
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -282,8 +285,8 @@ public class IndexExtendedIT extends BaseTest {
             //run the index MR job.
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
 
-            dataCnt = getRowCount(conn, dataTableName);
-            indexCnt = getRowCount(conn, indexTableName);
+            dataCnt = getRowCount(conn, dataTableFullName);
+            indexCnt = getRowCount(conn, indexTableFullName);
             assertEquals(dataCnt, indexCnt);
 
             checkIndexState(conn, indexTableFullName, PIndexState.ACTIVE, 0L);
