@@ -53,7 +53,6 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
@@ -785,6 +784,12 @@ public class IndexTool extends Configured implements Tool {
 				fs.delete(outputPath, true);
 			}
 
+            // We have to mark Disable index to Building before we can set it to Active in the reducer. Otherwise it errors out with
+            // index state transition error
+			if (pIndexTable != null && pIndexTable.getIndexState() == PIndexState.DISABLE) {
+                IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
+                        pIndexTable.getName().getString(), PIndexState.BUILDING, null);
+            }
             jobFactory = new JobFactory(connection, configuration, outputPath);
             job = jobFactory.getJob();
 
