@@ -777,6 +777,12 @@ public class IndexTool extends Configured implements Tool {
 				fs.delete(outputPath, true);
 			}
 
+            // We have to mark Disable index to Building before we can set it to Active in the reducer. Otherwise it errors out with
+            // index state transition error
+			if (pIndexTable != null && pIndexTable.getIndexState() == PIndexState.DISABLE) {
+                IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
+                        pIndexTable.getName().getString(), PIndexState.BUILDING, null);
+            }
             jobFactory = new JobFactory(connection, configuration, outputPath);
             job = jobFactory.getJob();
 
