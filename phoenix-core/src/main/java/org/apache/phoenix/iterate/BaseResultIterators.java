@@ -777,6 +777,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             for (KeyRange range : ranges) {
                 if (!range.isSingleKey()) {
                     hasRange = true;
+                    break;
                 }
             }
             slotSpan[offset] = rangeSpan - 1;
