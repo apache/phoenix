@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.checkIndexState;
+import static org.apache.phoenix.util.TestUtil.getRowCount;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,10 +34,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -57,14 +63,14 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
-    private final boolean directApi;
+    private final boolean useViewIndex;
     private final String tableDDLOptions;
     private final boolean mutable;
     private final boolean useSnapshot;
     
-    public IndexExtendedIT( boolean mutable, boolean localIndex, boolean directApi, boolean useSnapshot) {
+    public IndexExtendedIT( boolean mutable, boolean localIndex, boolean useViewIndex, boolean useSnapshot) {
         this.localIndex = localIndex;
-        this.directApi = directApi;
+        this.useViewIndex = useViewIndex;
         this.mutable = mutable;
         this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
@@ -86,18 +92,18 @@ public class IndexExtendedIT extends BaseTest {
                 .iterator()));
     }
     
-    @Parameters(name="mutable = {0} , localIndex = {1}, directApi = {2}, useSnapshot = {3}")
+    @Parameters(name="mutable = {0} , localIndex = {1}, useViewIndex = {2}, useSnapshot = {3}")
     public static synchronized Collection<Boolean[]> data() {
         List<Boolean[]> list = Lists.newArrayListWithExpectedSize(10);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans ) {
-            for (boolean directApi : Booleans ) {
-                for (boolean useSnapshot : Booleans) {
-                    list.add(new Boolean[]{mutable, true, directApi, useSnapshot});
+            for (boolean localIndex : Booleans) {
+                for (boolean useViewIndex : Booleans) {
+                    for (boolean useSnapshot : Booleans) {
+                        list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot });
+                    }
                 }
             }
-            // Due to PHOENIX-5375 and PHOENIX-5376, the useSnapshot and bulk load options are ignored for global indexes
-            list.add(new Boolean[]{ mutable, false, true, false});
         }
         return list;
     }
@@ -155,7 +161,7 @@ public class IndexExtendedIT extends BaseTest {
             assertFalse(rs.next());
            
             //run the index MR job.
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, dataTableName, indexTableName);
             
             //assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
@@ -207,7 +213,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.commit();
 
             //run the index MR job.
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, dataTableName, indexTableName);
 
             // upsert two more rows
             conn.createStatement().execute(
@@ -234,5 +240,78 @@ public class IndexExtendedIT extends BaseTest {
             assertFalse(rs.next());
         }
     }
-    
+
+    @Test
+    public void testBuildDisabledIndex() throws Exception {
+        if (localIndex  || useSnapshot) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexName = "I_" + generateUniqueName();
+        String indexFullName = SchemaUtil.getTableName(schemaName, indexName);
+        String viewName = "V_" + generateUniqueName();
+        String viewFullName =  SchemaUtil.getTableName(schemaName, viewName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Statement stmt = conn.createStatement();
+        try {
+            stmt.execute(String.format(
+                    "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s",
+                    dataTableFullName, tableDDLOptions));
+            if (useViewIndex) {
+                stmt.execute(String.format(
+                        "CREATE VIEW %s AS SELECT * FROM %s",
+                        viewFullName, dataTableFullName));
+            }
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            int id = 1;
+            // insert two rows
+            IndexToolIT.upsertRow(stmt1, id++);
+            IndexToolIT.upsertRow(stmt1, id++);
+            conn.commit();
+
+            String baseTableNameOfIndex = dataTableName;
+            String baseTableFullNameOfIndex = dataTableFullName;
+            String physicalTableNameOfIndex = indexFullName;
+            if (useViewIndex) {
+                baseTableFullNameOfIndex = viewFullName;
+                baseTableNameOfIndex = viewName;
+                physicalTableNameOfIndex = "_IDX_" + dataTableFullName;
+            }
+            Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
+
+            stmt.execute(
+                    String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) ", indexName,
+                            baseTableFullNameOfIndex));
+            long dataCnt = getRowCount(conn, dataTableFullName);
+            long indexCnt = getUtility().countRows(hIndexTable);
+            assertEquals(dataCnt, indexCnt);
+
+            stmt.execute(String.format("ALTER INDEX  %s ON %s DISABLE", indexName,
+                    baseTableFullNameOfIndex));
+
+            // insert 3rd row
+            IndexToolIT.upsertRow(stmt1, id++);
+            conn.commit();
+
+            dataCnt = getRowCount(conn, baseTableFullNameOfIndex);
+            indexCnt = getUtility().countRows(hIndexTable);
+            assertEquals(dataCnt, indexCnt+1);
+
+            //run the index MR job.
+            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, baseTableNameOfIndex, indexName);
+
+            dataCnt = getRowCount(conn, baseTableFullNameOfIndex);
+            indexCnt = getUtility().countRows(hIndexTable);
+            assertEquals(dataCnt, indexCnt);
+
+            checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L);
+        } finally {
+            conn.close();
+        }
+    }
 }
