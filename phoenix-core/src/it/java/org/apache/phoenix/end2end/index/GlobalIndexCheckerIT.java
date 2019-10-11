@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end.index;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -37,6 +38,7 @@ import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -78,6 +80,13 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         return list;
     }
 
+    @After
+    public void unsetFailForTesting() {
+        IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+        IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+    }
+
     public static void assertExplainPlan(Connection conn, String selectSql,
                                          String dataTableFullName, String indexTableFullName) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
@@ -97,46 +106,48 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testSkipPostIndexDeleteUpdate() throws Exception {
+    public void testFailPostIndexDeleteUpdate() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        Connection conn = DriverManager.getConnection(getUrl());
-        String indexName = generateUniqueName();
-        conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
-                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-        if (async) {
-            // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            String selectSql = "SELECT id from " + dataTableName + " WHERE val1  = 'ab'";
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+
+            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the verify flag is set
+            // to true and/or index rows are deleted and check that this does not impact the correctness
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
+            conn.commit();
+
+            // The index rows are actually not deleted yet because IndexRegionObserver failed delete operation. However, they are
+            // made unverified in the pre index update phase (i.e., the first write phase)
+            dml = "DELETE from " + dataTableName + " WHERE val1  = 'ab'";
+            // This DML will scan the Index table and detect unverified index rows. This will trigger read repair which
+            // result in deleting these rows since the corresponding data table rows are deleted already. So, the number of
+            // rows to be deleted by the "DELETE" DML will be zero since the rows deleted by read repair will not be visible
+            // to the DML
+            assertEquals(0, conn.createStatement().executeUpdate(dml));
+
+            // Count the number of index rows
+            String query = "SELECT COUNT(*) from " + indexTableName;
+            // There should be one row in the index table
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
         }
-        String selectSql =  "SELECT id from " + dataTableName + " WHERE val1  = 'ab'";
-        ResultSet rs = conn.createStatement().executeQuery(selectSql);
-        assertTrue(rs.next());
-        assertEquals("a", rs.getString(1));
-        assertFalse(rs.next());
-
-        // Configure Indexer to skip the last write phase (i.e., the post index update phase) where the verify flag is set
-        // to true and/or index rows are deleted and check that this does not impact the correctness
-        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
-        String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
-        assertEquals(1, conn.createStatement().executeUpdate(dml));
-        conn.commit();
-
-        // The index rows are actually not deleted yet because Indexer skipped delete operation. However, they are
-        // made unverified in the pre index update phase (i.e., the first write phase)
-        dml = "DELETE from " + dataTableName + " WHERE val1  = 'ab'";
-        // This DML will scan the Index table and detect unverified index rows. This will trigger read repair which
-        // result in deleting these rows since the corresponding data table rows are deleted already. So, the number of
-        // rows to be deleted by the "DELETE" DML will be zero since the rows deleted by read repair will not be visible
-        // to the DML
-        assertEquals(0,conn.createStatement().executeUpdate(dml));
-
-        // Count the number of index rows
-        String query = "SELECT COUNT(*) from " + indexName;
-        // There should be one row in the index table
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        conn.close();
     }
 
     @Test
@@ -144,12 +155,12 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
-        String indexName = generateUniqueName();
-        conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+        String indexTableName = generateUniqueName();
+        conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                 dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
         if (async) {
             // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName);
+            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
         }
         conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
         conn.commit();
@@ -157,7 +168,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         String selectSql =  "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
         // Verify that we will read from the index table
-        assertExplainPlan(conn, selectSql, dataTableName, indexName);
+        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
         ResultSet rs = conn.createStatement().executeQuery(selectSql);
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
@@ -169,7 +180,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab', 'abcdd')");
         conn.commit();
         // Verify that we will read from the index table
-        assertExplainPlan(conn, selectSql, dataTableName, indexName);
+        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
         rs = conn.createStatement().executeQuery(selectSql);
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
@@ -181,33 +192,69 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testSkipPostIndexPartialRowUpdate() throws Exception {
+    public void testFailPreIndexRowUpdate() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        Connection conn = DriverManager.getConnection(getUrl());
-        String indexName = generateUniqueName();
-        conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
-                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-        if (async) {
-            // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            // Configure IndexRegionObserver to fail the first write phase (i.e., the pre index update phase). This should not
+            // lead to any change on index or data table rows
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            commitWithException(conn);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
+            commitWithException(conn);
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abcd", rs.getString(2));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
         }
-        // Configure Indexer to skip the last write phase (i.e., the post index update phase) where the verify flag is set
-        // to true and/or index rows are deleted and check that this does not impact the correctness
-        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
-        conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
-        conn.commit();
-        conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
-        conn.commit();
-        String selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
-        // Verify that we will read from the index table
-        assertExplainPlan(conn, selectSql, dataTableName, indexName);
-        ResultSet rs = conn.createStatement().executeQuery(selectSql);
-        assertTrue(rs.next());
-        assertEquals("abcc", rs.getString(1));
-        assertEquals("abcd", rs.getString(2));
-        assertFalse(rs.next());
-        conn.close();
+    }
+
+    @Test
+    public void testFailPostIndexRowUpdate() throws Exception {
+        String dataTableName = generateUniqueName();
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the verify flag is set
+            // to true and/or index rows are deleted and check that this does not impact the correctness
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
+            conn.commit();
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abcc", rs.getString(1));
+            assertEquals("abcd", rs.getString(2));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
+        }
     }
 
     @Test
@@ -226,16 +273,16 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
             }
             // Two Phase write. This write is recoverable
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
             conn.createStatement().execute("upsert into " + dataTableName + " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
             // One Phase write. This write is not recoverable
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
             conn.createStatement().execute("upsert into " + dataTableName + " values ('c', 'cd', 'cdee', 'cdfg')");
-            conn.commit();
+            commitWithException(conn);
             // Let three phase writes happen as in the normal case
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'cd'";
             // Verify that we will read from the first index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
@@ -245,6 +292,8 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("cde", rs.getString(1));
             assertEquals("cdef", rs.getString(2));
             assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
         }
     }
 
@@ -265,12 +314,12 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             }
             // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
             // update phase) and check that this does not impact the correctness (one overwrite)
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
-            conn.commit();
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            commitWithException(conn);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             String selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
             // Verify that we will read from the first index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
@@ -288,14 +337,14 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
             // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
             // update phase) and check that this does not impact the correctness  (two overwrites)
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abccc')");
-            conn.commit();
+            commitWithException(conn);
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcccc')");
-            conn.commit();
-            IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
-            IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
+            commitWithException(conn);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
             // Verify that we will read from the first index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
@@ -317,50 +366,94 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             rs = conn.createStatement().executeQuery(selectSql);
             // Verify that one phase writes have no effect
             assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
         }
     }
 
     @Test
-    public void testSkipDataTableAndPostIndexPartialRowUpdate() throws Exception {
+    public void testFailDataTableAndPostIndexRowUpdate() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        Connection conn = DriverManager.getConnection(getUrl());
-        String indexName = generateUniqueName();
-        conn.createStatement().execute("CREATE INDEX " + indexName + "1 on " +
-                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-        conn.createStatement().execute("CREATE INDEX " + indexName + "2 on " +
-                dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
-        if (async) {
-            // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "1");
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "2");
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexName + "1 on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            conn.createStatement().execute("CREATE INDEX " + indexName + "2 on " +
+                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "1");
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "2");
+            }
+            // Configure IndexRegionObserver to fail the last two write phase (i.e., the data table update and post index update phase)
+            // and check that this does not impact the correctness
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            commitWithException(conn);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val3) values ('a', 'abcdd')");
+            conn.commit();
+            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the first index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexName + "1");
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abcdd", rs.getString(2));
+            assertFalse(rs.next());
+            selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abc'";
+            // Verify that we will read from the second index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexName + "2");
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abcdd", rs.getString(2));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexName);
         }
-        // Configure Indexer to skip the last two write phase (i.e., the data table update and post index update phase)
-        // and check that this does not impact the correctness
-        IndexRegionObserver.setSkipDataTableUpdatesForTesting(true);
-        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(true);
-        conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+    }
+
+    static private void commitWithException(Connection conn) {
+        try {
+            conn.commit();
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            fail();
+        } catch (Exception e) {
+            // this is expected
+        }
+    }
+
+    static private void verifyTableHealth(Connection conn, String dataTableName, String indexTableName) throws Exception {
+        // Add two rows and check everything is still okay
+        conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+        conn.createStatement().execute("upsert into " + dataTableName + " values ('z', 'za', 'zab', 'zabc')");
         conn.commit();
-        IndexRegionObserver.setSkipDataTableUpdatesForTesting(false);
-        IndexRegionObserver.setSkipPostIndexUpdatesForTesting(false);
-        conn.createStatement().execute("upsert into " + dataTableName + " (id, val3) values ('a', 'abcdd')");
-        conn.commit();
-        String selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
-        // Verify that we will read from the first index table
-        assertExplainPlan(conn, selectSql, dataTableName, indexName + "1");
+        String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
+        ///Verify that we will read from the index table
+        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
         ResultSet rs = conn.createStatement().executeQuery(selectSql);
         assertTrue(rs.next());
-        assertEquals("abc", rs.getString(1));
-        assertEquals("abcdd", rs.getString(2));
+        assertEquals("a", rs.getString(1));
+        assertEquals("ab", rs.getString(2));
+        assertEquals("abc", rs.getString(3));
+        assertEquals("abcd", rs.getString(4));
         assertFalse(rs.next());
-        selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abc'";
-        // Verify that we will read from the second index table
-        assertExplainPlan(conn, selectSql, dataTableName, indexName + "2");
+        selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'za'";
+        ///Verify that we will read from the index table
+        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
         rs = conn.createStatement().executeQuery(selectSql);
+        conn.commit();
         assertTrue(rs.next());
-        assertEquals("abc", rs.getString(1));
-        assertEquals("abcdd", rs.getString(2));
+        assertEquals("z", rs.getString(1));
+        assertEquals("za", rs.getString(2));
+        assertEquals("zab", rs.getString(3));
+        assertEquals("zabc", rs.getString(4));
         assertFalse(rs.next());
-        conn.close();
     }
 }
