@@ -135,15 +135,18 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-  private static boolean skipPostIndexUpdatesForTesting = false;
-  private static boolean skipDataTableUpdatesForTesting = false;
+    private static boolean failPreIndexUpdatesForTesting = false;
+    private static boolean failPostIndexUpdatesForTesting = false;
+    private static boolean failDataTableUpdatesForTesting = false;
 
-  public static void setSkipPostIndexUpdatesForTesting(boolean skip) {
-      skipPostIndexUpdatesForTesting = skip;
-  }
+  public static void setFailPreIndexUpdatesForTesting(boolean fail) {
+        failPreIndexUpdatesForTesting = fail;
+    }
 
-  public static void setSkipDataTableUpdatesForTesting(boolean skip) {
-      skipDataTableUpdatesForTesting = skip;
+  public static void setFailPostIndexUpdatesForTesting(boolean fail) { failPostIndexUpdatesForTesting = fail; }
+
+  public static void setFailDataTableUpdatesForTesting(boolean fail) {
+      failDataTableUpdatesForTesting = fail;
   }
 
   // Hack to get around not being able to save any state between
@@ -472,7 +475,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
               // No need to write the table mutations when we're rebuilding
               // the index as they're already written and just being replayed.
               if (replayWrite == ReplayWrite.INDEX_ONLY
-                      || replayWrite == ReplayWrite.REBUILD_INDEX_ONLY || skipDataTableUpdatesForTesting) {
+                      || replayWrite == ReplayWrite.REBUILD_INDEX_ONLY) {
                   miniBatchOp.setOperationStatus(i, NOWRITE);
               }
 
@@ -679,6 +682,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       for (Pair<Pair<Mutation, byte[]>, byte[]> update : context.intermediatePostIndexUpdates) {
           context.postIndexUpdates.add(update.getFirst());
       }
+      if (failDataTableUpdatesForTesting) {
+          throw new DoNotRetryIOException("Simulating the data table write failure");
+      }
   }
 
   private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
@@ -710,9 +716,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           this.builder.batchCompleted(miniBatchOp);
 
           if (success) { // The pre-index and data table updates are successful, and now, do post index updates
-              if (!skipPostIndexUpdatesForTesting) {
-                  doPost(c, context);
-              }
+              doPost(c, context);
           }
        } finally {
            removeBatchMutateContext(c);
@@ -723,16 +727,17 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       long start = EnvironmentEdgeManager.currentTimeMillis();
 
       try {
+          if (failPostIndexUpdatesForTesting) {
+              throw new DoNotRetryIOException("Simulating the last (i.e., post) index table write failure");
+          }
           doIndexWritesWithExceptions(context, true);
           metricSource.updatePostIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
       } catch (Throwable e) {
           metricSource.updatePostIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           metricSource.incrementPostIndexUpdateFailures();
-          rethrowIndexingException(e);
+          // Ignore the failures in the third write phase
       }
-      throw new RuntimeException(
-              "Somehow didn't complete the index update, but didn't return succesfully either!");
   }
 
   private void doIndexWritesWithExceptions(BatchMutateContext context, boolean post)
@@ -752,9 +757,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           }
           current.addTimelineAnnotation("Actually doing " + (post ? "post" : "pre") + " index update for first time");
           if (post) {
-              postWriter.writeAndHandleFailure(indexUpdates, false, context.clientVersion);
+              postWriter.write(indexUpdates, false, context.clientVersion);
           } else {
-              preWriter.writeAndHandleFailure(indexUpdates, false, context.clientVersion);
+              preWriter.write(indexUpdates, false, context.clientVersion);
           }
       }
   }
@@ -777,6 +782,12 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       long start = EnvironmentEdgeManager.currentTimeMillis();
 
       try {
+          if (failPreIndexUpdatesForTesting) {
+              // Remove all locks as they are already unlocked. There is no need to unlock them again later when
+              // postBatchMutateIndispensably() is called
+              context.rowLocks.clear();
+              throw new DoNotRetryIOException("Simulating the first (i.e., pre) index table write failure");
+          }
           doIndexWritesWithExceptions(context, false);
           metricSource.updatePreIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
