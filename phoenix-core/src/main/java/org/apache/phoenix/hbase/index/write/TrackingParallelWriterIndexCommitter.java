@@ -40,11 +40,14 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
+
+import static org.apache.phoenix.util.ServerUtil.wrapInDoNotRetryIOException;
 
 /**
  * Like the {@link ParallelWriterIndexCommitter}, but blocks until all writes have attempted to allow the caller to
@@ -120,7 +123,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates, final int clientVersion) throws IOException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
@@ -241,8 +244,14 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         // if any of the tasks failed, then we need to propagate the failure
         if (failures.size() > 0) {
             // make the list unmodifiable to avoid any more synchronization concerns
-            throw new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
+            MultiIndexWriteFailureException exception = new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
                     disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
+            if (disableIndexOnFailure)
+                throw exception;
+            else {
+                throw wrapInDoNotRetryIOException("At least one index write failed after retries", exception,
+                        EnvironmentEdgeManager.currentTimeMillis());
+            }
         }
         return;
     }
