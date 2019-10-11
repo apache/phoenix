@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.index;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -45,6 +46,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -415,7 +417,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 indexingTool = new IndexTool();
             }
             indexingTool.setConf(conf);
-            rebuildIndexes(dataTableFullName, indexingTool);
+            rebuildIndexes(conn, dataTableFullName, indexingTool);
         }
     }
 
@@ -475,7 +477,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             }
         }
     }
-    private int rebuildIndexes(String dataTable, IndexTool indexingTool) {
+    private int rebuildIndexes(Connection conn, String dataTable, IndexTool indexingTool) {
         for(Map.Entry<String, IndexInfo> indexMap : rebuildMap.get(dataTable).entrySet()) {
             String index = indexMap.getKey();
             IndexInfo indexInfo = indexMap.getValue();
@@ -487,16 +489,48 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
                     + UUID.randomUUID().toString();
             String[] args = getIndexToolArgValues(schema, baseTable, indexName, outFile, tenantId);
-
+            Connection newConnection = conn;
+            Connection tenantConnection = null;
             try {
                 LOGGER.info("Rebuilding index: " + String.join(",", args));
                 if (!dryRun) {
+                    // If the index is in DISABLED state, indexTool will fail. First to ALTER REBUILD ASYNC.
+                    // ALTER REBUILD ASYNC will set the index state to BUILDING which is safe to make ACTIVE later.
+                    if (!Strings.isNullOrEmpty(tenantId) && !GLOBAL_INDEX_ID.equals(tenantId)) {
+                        Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
+                        conf.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                        newConnection = ConnectionUtil.getInputConnection(conf);
+                        tenantConnection = newConnection;
+                    }
+
+                    PTable indexPTable = PhoenixRuntime.getTable(newConnection, indexInfo.getPhysicalIndexTableName());
+                    if (indexPTable.getIndexState() == PIndexState.DISABLE) {
+                        String dataTableFullName = dataTable;
+                        if (!dataTableFullName.contains(":") && !dataTableFullName.contains(".")) {
+                            dataTableFullName = SchemaUtil.getTableName(schema, dataTable);
+                        }
+                        String
+                                stmt =
+                                String.format("ALTER INDEX %s ON %s REBUILD ASYNC", indexName,
+                                        dataTableFullName);
+                        newConnection.createStatement().execute(stmt);
+                    }
+
                     indexingTool.run(args);
                 }
             } catch (Exception e) {
                 LOGGER.severe("Something went wrong while building the index "
                         + index + " " + e);
                 return -1;
+            } finally {
+                try {
+                    // Close tenant connection
+                    if (tenantConnection != null) {
+                        tenantConnection.close();
+                    }
+                } catch (SQLException e) {
+                    LOGGER.warning("Couldn't close tenant connection. Ignoring");
+                }
             }
         }
         return 0;
@@ -573,7 +607,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 String indexTableName = SchemaUtil.getTableNameFromFullName(physicalIndexName);
                 String pIndexName = SchemaUtil.getTableName(schemaName, indexTableName);
                 IndexInfo indexInfo = new IndexInfo(schemaName, tableName,
-                        GLOBAL_INDEX_ID, pIndexName);
+                        GLOBAL_INDEX_ID, pIndexName, pIndexName);
                 rebuildIndexes.put(physicalIndexName, indexInfo);
             }
 
@@ -595,7 +629,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                            tenantId);
                     for (String viewIndex : viewIndexes) {
                         IndexInfo indexInfo = new IndexInfo(schemaName, viewName,
-                               tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
+                               tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex, viewIndexPhysicalName);
                         rebuildIndexes.put(viewIndex, indexInfo);
                     }
                 }
@@ -641,12 +675,15 @@ public class IndexUpgradeTool extends Configured implements Tool {
         final private String baseTable;
         final private String tenantId;
         final private String indexName;
+        final private String physicalIndexTableName;
 
-        public IndexInfo(String schemaName, String baseTable, String tenantId, String indexName) {
+        public IndexInfo(String schemaName, String baseTable, String tenantId, String indexName,
+                String physicalIndexTableName) {
             this.schemaName = schemaName;
             this.baseTable = baseTable;
             this.tenantId = tenantId;
             this.indexName = indexName;
+            this.physicalIndexTableName = physicalIndexTableName;
         }
 
         public String getSchemaName() {
@@ -663,6 +700,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
         public String getIndexName() {
             return indexName;
+        }
+
+        public String getPhysicalIndexTableName() {
+            return physicalIndexTableName;
         }
     }
 
