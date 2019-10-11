@@ -214,6 +214,8 @@ public class TestIndexWriter {
           writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
           failedWrite[0] = true;
+        } catch (IOException e) {
+          failedWrite[0] = true;
         }
       }
     };
