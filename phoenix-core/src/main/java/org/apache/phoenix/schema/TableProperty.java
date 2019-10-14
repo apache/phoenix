@@ -24,11 +24,13 @@ import static org.apache.phoenix.exception.SQLExceptionCode.DEFAULT_COLUMN_FAMIL
 import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -221,6 +223,37 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.useStatsForParallelization();
+        }
+    },
+
+    VIEW_TTL(PhoenixDatabaseMetaData.VIEW_TTL, true, true, true) {
+        /**
+         * VIEW_TTL can take any values ranging between 0 < VIEW_TTL <= HConstants.LATEST_TIMESTAMP.
+         * special values :-
+         * NONE or 0L => Not Defined.
+         * FOREVER => HConstants.LATEST_TIMESTAMP
+         *
+         * @param value
+         * @return
+         */
+        @Override
+        public Object getValue(Object value) {
+            if (value instanceof String) {
+                String strValue = (String) value;
+                if ("FOREVER".equalsIgnoreCase(strValue)) {
+                    return HConstants.LATEST_TIMESTAMP;
+                } else if ("NONE".equalsIgnoreCase(strValue)) {
+                    return VIEW_TTL_NOT_DEFINED;
+                }
+            } else {
+                return value == null ? null : ((Number) value).longValue();
+            }
+            return value;
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getViewTTL();
         }
     }
     ;

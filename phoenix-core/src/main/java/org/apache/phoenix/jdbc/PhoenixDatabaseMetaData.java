@@ -366,7 +366,17 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] COLUMN_QUALIFIER_COUNTER_BYTES = Bytes.toBytes(COLUMN_QUALIFIER_COUNTER);
     public static final String USE_STATS_FOR_PARALLELIZATION = "USE_STATS_FOR_PARALLELIZATION";
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
-    
+
+    // The view ttl property will hold the duration after which rows will be marked as expired.
+    public static final long VIEW_TTL_NOT_DEFINED = 0L;
+    public static final String VIEW_TTL = "VIEW_TTL";
+    public static final byte[] VIEW_TTL_BYTES = Bytes.toBytes(VIEW_TTL);
+    // The view ttl high watermark if set indicates the timestamp used for determining the expired rows.
+    // otherwise the now() - ttl-duration is the timestamp used.
+    public static final long MIN_VIEW_TTL_HWM = 0L;
+    public static final String VIEW_TTL_HWM = "VIEW_TTL_HWM";
+    public static final byte[] VIEW_TTL_HWM_BYTES = Bytes.toBytes(VIEW_TTL_HWM);
+
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
