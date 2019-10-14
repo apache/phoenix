@@ -79,6 +79,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
@@ -597,6 +598,7 @@ public class ViewUtil {
             PTable parent, ExtendedCellBuilder extendedCellBuilder) {
         byte[] parentUpdateCacheFreqBytes = null;
         byte[] parentUseStatsForParallelizationBytes = null;
+        byte[] parentViewTTLBytes = null;
         if (parent != null) {
             parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
@@ -605,6 +607,9 @@ public class ViewUtil {
                 parentUseStatsForParallelizationBytes =
                         PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
             }
+            parentViewTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
+            PLong.INSTANCE.getCodec().encodeLong(parent.getViewTTL(),
+                    parentViewTTLBytes, 0);
         }
         for (Mutation m: tableMetaData) {
             if (m instanceof Put) {
@@ -619,6 +624,12 @@ public class ViewUtil {
                         PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES,
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
+                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.VIEW_TTL_BYTES,
+                        extendedCellBuilder,
+                        parentViewTTLBytes,
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 

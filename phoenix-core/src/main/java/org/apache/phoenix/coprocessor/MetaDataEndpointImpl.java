@@ -71,6 +71,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_HWM_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VIEW_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
@@ -324,7 +328,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final Cell STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
     private static final Cell ENCODING_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODING_SCHEME_BYTES);
     private static final Cell USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
-    
+    private static final KeyValue VIEW_TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_TTL_BYTES);
+    private static final KeyValue VIEW_TTL_HWM_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VIEW_TTL_HWM_BYTES);
+
     private static final List<Cell> TABLE_KV_COLUMNS = Arrays.<Cell>asList(
             EMPTY_KEYVALUE_KV,
             TABLE_TYPE_KV,
@@ -355,7 +361,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             APPEND_ONLY_SCHEMA_KV,
             STORAGE_SCHEME_KV,
             ENCODING_SCHEME_KV,
-            USE_STATS_FOR_PARALLELIZATION_KV
+            USE_STATS_FOR_PARALLELIZATION_KV,
+            VIEW_TTL_KV,
+            VIEW_TTL_HWM_KV
     );
 
     static {
@@ -391,6 +399,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final int STORAGE_SCHEME_INDEX = TABLE_KV_COLUMNS.indexOf(STORAGE_SCHEME_KV);
     private static final int QUALIFIER_ENCODING_SCHEME_INDEX = TABLE_KV_COLUMNS.indexOf(ENCODING_SCHEME_KV);
     private static final int USE_STATS_FOR_PARALLELIZATION_INDEX = TABLE_KV_COLUMNS.indexOf(USE_STATS_FOR_PARALLELIZATION_KV);
+    private static final int VIEW_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(VIEW_TTL_KV);
+    private static final int VIEW_TTL_HWM_INDEX = TABLE_KV_COLUMNS.indexOf(VIEW_TTL_HWM_KV);
 
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1125,6 +1135,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         encodingSchemeKv.getValueOffset(), encodingSchemeKv.getValueLength()));
         Cell useStatsForParallelizationKv = tableKeyValues[USE_STATS_FOR_PARALLELIZATION_INDEX];
         Boolean useStatsForParallelization = useStatsForParallelizationKv == null ? null : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
+        Cell viewTTLKv = tableKeyValues[VIEW_TTL_INDEX];
+        long viewTTL = viewTTLKv == null ? VIEW_TTL_NOT_DEFINED :
+                PLong.INSTANCE.getCodec().decodeLong(viewTTLKv.getValueArray(),
+                        viewTTLKv.getValueOffset(), SortOrder.getDefault());
+
+        Cell viewTTLHWMKv = tableKeyValues[VIEW_TTL_HWM_INDEX];
+        long viewTTLHWM = viewTTLHWMKv == null ? MIN_VIEW_TTL_HWM :
+                PLong.INSTANCE.getCodec().decodeLong(viewTTLHWMKv.getValueArray(),
+                        viewTTLHWMKv.getValueOffset(), SortOrder.getDefault());
+
+        // Check the cell tag to see whether the view has modified this property
+        final byte[] tagViewTTL = (viewTTLKv == null) ?
+                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(viewTTLKv);
+        boolean viewModifiedViewTTL = (PTableType.VIEW.equals(tableType)) &&
+                Bytes.contains(tagViewTTL, VIEW_MODIFIED_PROPERTY_BYTES);
 
         // Check the cell tag to see whether the view has modified this property
         byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -1202,6 +1227,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 .setBaseColumnCount(baseColumnCount)
                 .setEncodedCQCounter(cqCounter)
                 .setUseStatsForParallelization(useStatsForParallelization)
+                .setViewTTL(viewTTL)
+                .setViewTTLHighWaterMark(viewTTLHWM)
                 .setExcludedColumns(ImmutableList.of())
                 .setTenantId(tenantId)
                 .setSchemaName(schemaName)
@@ -1217,6 +1244,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         ImmutableList.of() : ImmutableList.copyOf(physicalTables))
                 .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
                 .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
+                .setViewModifiedViewTTL(viewModifiedViewTTL)
                 .setColumns(columns)
                 .build();
     }
