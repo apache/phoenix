@@ -680,6 +680,11 @@ public class DelegateRegionObserver implements RegionObserver {
     }
 
     @Override
+    public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> ctx, WALKey key,
+            WALEdit edit) throws IOException {
+    }
+
+    @Override
     public InternalScanner preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
             Store store, KeyValueScanner memstoreScanner, InternalScanner s, long readPoint)
             throws IOException {
