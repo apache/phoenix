@@ -490,12 +490,11 @@ public enum SQLExceptionCode {
 
     STATS_COLLECTION_DISABLED_ON_SERVER(1401, "STS01", "Stats collection attempted but is disabled on server"),
 
-    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901,"43M12",
+    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMESTAMP_COLUMN(901,"43M12",
             "Cannot use a connection with SCN set to upsert data for " +
                     "table with ROW_TIMESTAMP column."),
-    CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES(903,"43M14",
-            "Cannot use a connection with SCN set to " +
-                    "upsert data for a mutable table with indexes.");
+    CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES(903,"43M14",
+            "Cannot use a connection with SCN set to upsert data for a table with indexes.");
 
 
     private final int errorCode;
