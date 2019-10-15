@@ -783,9 +783,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
       try {
           if (failPreIndexUpdatesForTesting) {
-              // Remove all locks as they are already unlocked. There is no need to unlock them again later when
-              // postBatchMutateIndispensably() is called
-              context.rowLocks.clear();
               throw new DoNotRetryIOException("Simulating the first (i.e., pre) index table write failure");
           }
           doIndexWritesWithExceptions(context, false);
@@ -794,6 +791,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       } catch (Throwable e) {
           metricSource.updatePreIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
           metricSource.incrementPreIndexUpdateFailures();
+          // Remove all locks as they are already unlocked. There is no need to unlock them again later when
+          // postBatchMutateIndispensably() is called
+          context.rowLocks.clear();
           removePendingRows(context);
           rethrowIndexingException(e);
       }
