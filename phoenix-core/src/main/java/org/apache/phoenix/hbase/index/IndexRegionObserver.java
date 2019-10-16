@@ -793,8 +793,8 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           metricSource.incrementPreIndexUpdateFailures();
           // Remove all locks as they are already unlocked. There is no need to unlock them again later when
           // postBatchMutateIndispensably() is called
-          context.rowLocks.clear();
           removePendingRows(context);
+          context.rowLocks.clear();
           rethrowIndexingException(e);
       }
       throw new RuntimeException(
