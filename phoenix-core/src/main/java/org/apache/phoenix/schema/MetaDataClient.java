@@ -1301,8 +1301,10 @@ public class MetaDataClient {
             PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
             return compiler.compile(index);
         } else {
-            ServerBuildIndexCompiler compiler = new ServerBuildIndexCompiler(connection, getFullTableName(dataTableRef));
-            return compiler.compile(index);
+            ServerBuildIndexCompiler compiler = new ServerBuildIndexCompiler(connection,
+                    SchemaUtil.getTableName(dataTableRef.getTable().getSchemaName().getString(), dataTableRef.getTable().getTableName().getString()),
+                    SchemaUtil.getTableName(index.getSchemaName().getString(), index.getTableName().getString()));
+            return compiler.compile();
         }
     }
 
@@ -1672,9 +1674,6 @@ public class MetaDataClient {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        String dataTableFullName = SchemaUtil.getTableName(
-                tableRef.getTable().getSchemaName().getString(),
-                tableRef.getTable().getTableName().getString());
         return buildIndex(table, tableRef);
     }
 
