@@ -81,18 +81,16 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps)) {
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             Long scn = (currentScnValue != null) ? Long.valueOf(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
-            PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =
-                    new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
-            MutationPlan plan = compiler.compile(indexTable);
-            Scan scan = plan.getContext().getScan();
-
+                    new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName, indexTableFullName);
+            MutationPlan plan = compiler.compile();
+            queryPlan = plan.getQueryPlan();
+            Scan scan = queryPlan.getContext().getScan();
             try {
                 scan.setTimeRange(0, scn);
             } catch (IOException e) {
                 throw new SQLException(e);
             }
-            queryPlan = plan.getQueryPlan();
             // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver
             if (txnScnValue != null) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
