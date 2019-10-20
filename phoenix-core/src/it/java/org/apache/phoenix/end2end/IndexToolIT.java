@@ -29,6 +29,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
@@ -46,6 +48,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.end2end.index.PartialIndexRebuilderIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -74,10 +77,12 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(PartialIndexRebuilderIT.class);
     private final boolean localIndex;
     private final boolean mutable;
     private final boolean transactional;
@@ -248,6 +253,71 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    private void setEveryNthRowWithNull(int nrows, int nthRowNull, PreparedStatement stmt) throws Exception {
+        for (int i = 0; i < nrows; i++) {
+            stmt.setInt(1, i);
+            stmt.setInt(2, i * 10);
+            if (i % nthRowNull != 0) {
+                stmt.setInt(3, 9000 + i * nthRowNull);
+            } else {
+                stmt.setNull(3, Types.INTEGER);
+            }
+            stmt.execute();
+        }
+    }
+
+    @Test
+    public void testWithSetNull() throws Exception {
+        // This test is for building non-transactional mutable global indexes with direct api
+        if (localIndex || transactional || !mutable) {
+            return;
+        }
+        // This tests the cases where a column having a null value is overwritten with a not null value and vice versa;
+        // and after that the index table is still rebuilt correctly
+        final int NROWS = 2 * 3 * 5 * 7;
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String stmString1 =
+                    "CREATE TABLE " + dataTableFullName
+                            + " (ID INTEGER NOT NULL PRIMARY KEY, VAL INTEGER, ZIP INTEGER) "
+                            + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertStmt = "UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)";
+            PreparedStatement stmt = conn.prepareStatement(upsertStmt);
+            setEveryNthRowWithNull(NROWS, 2, stmt);
+            conn.commit();
+            setEveryNthRowWithNull(NROWS, 3, stmt);
+            conn.commit();
+            String stmtString2 =
+                    String.format(
+                            "CREATE %s INDEX %s ON %s (VAL) INCLUDE (ZIP) ASYNC ",
+                            (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+            // Run the index MR job and verify that the index table is built correctly
+            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(NROWS, actualRowCount);
+
+            // Repeat the test with compaction
+            setEveryNthRowWithNull(NROWS, 5, stmt);
+            conn.commit();
+            setEveryNthRowWithNull(NROWS, 7, stmt);
+            conn.commit();
+            TestUtil.doMajorCompaction(conn, dataTableFullName);
+            // Run the index MR job and verify that the index table is built correctly
+            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(NROWS, actualRowCount);
         }
     }
 
