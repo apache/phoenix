@@ -299,16 +299,18 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+                // We want delete markers to be replayed during index rebuild.
+                buildIndexScan.setRaw(true);
+                buildIndexScan.setCacheBlocks(false);
+                buildIndexScan.readAllVersions();
+                buildIndexScan.setTimeRange(0, maxTimestamp);
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
             byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
             buildIndexScan.withStartRow(dataRowKey, true);
             buildIndexScan.withStopRow(dataRowKey, true);
-            buildIndexScan.setTimeRange(0, maxTimestamp);
-            // If the data table row has been deleted then we want to delete the corresponding index row too.
-            // Thus, we are using a raw scan
-            buildIndexScan.setRaw(true);
+
             try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScan)){
                 resultScanner.next();
             } catch (Throwable t) {
