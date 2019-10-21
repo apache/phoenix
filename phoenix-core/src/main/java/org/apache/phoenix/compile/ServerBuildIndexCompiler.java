@@ -89,7 +89,12 @@ public class ServerBuildIndexCompiler {
 
     public MutationPlan compile(PTable index) throws SQLException {
         try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
-            String query = "SELECT count(*) FROM " + tableName;
+            String query;
+            if (index.getIndexType() == PTable.IndexType.LOCAL) {
+                query = "SELECT count(*) FROM " + tableName;
+            } else {
+                query = "SELECT * FROM " + tableName;
+            }
             this.plan = statement.compileQuery(query);
             TableRef tableRef = plan.getTableRef();
             Scan scan = plan.getContext().getScan();
@@ -110,25 +115,27 @@ public class ServerBuildIndexCompiler {
             // the index table possibly remotely
             if (index.getIndexType() == PTable.IndexType.LOCAL) {
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
+                // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
+                // However, in this case, we need to project all of the data columns that contribute to the index.
+                IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
+                for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
+                    if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                        scan.addFamily(columnRef.getFamily());
+                    } else {
+                        scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+                    }
+                }
             } else {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
-            }
-            // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
-            // However, in this case, we need to project all of the data columns that contribute to the index.
-            IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
-            for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                    scan.addFamily(columnRef.getFamily());
-                } else {
-                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                }
+                scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
             }
 
             if (dataTable.isTransactional()) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, connection.getMutationState().encodeTransaction());
             }
+
 
             // Go through MutationPlan abstraction so that we can create local indexes
             // with a connectionless connection (which makes testing easier).

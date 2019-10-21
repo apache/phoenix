@@ -1069,6 +1069,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
         boolean hasMore;
         int rowCount = 0;
+        RegionScanner newScanner;
+        if (!scan.isRaw()) {
+            // We need to use raw scan here to replay delete markers too (PHOENIX-5535)
+            scan.getFamilyMap().clear();
+            scan.setRaw(true);
+            scan.setCacheBlocks(false);
+            scan.setMaxVersions();
+            newScanner = region.getScanner(scan);
+        }
+        else {
+            // The scan is already raw, so do not do anything
+            newScanner = innerScanner;
+        }
+
         try {
             int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
             long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
@@ -1080,7 +1094,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = new ArrayList<Cell>();
-                    hasMore = innerScanner.nextRaw(results);
+                    hasMore =  newScanner.nextRaw(results);
                     if (!results.isEmpty()) {
                         Put put = null;
                         Delete del = null;
@@ -1133,6 +1147,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
             throw e;
         } finally {
+            if (newScanner != innerScanner) {
+                newScanner.close();
+            }
             region.closeRegionOperation();
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
