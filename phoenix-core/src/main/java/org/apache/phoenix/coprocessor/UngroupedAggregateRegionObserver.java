@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
@@ -130,7 +131,6 @@ import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
-import org.apache.phoenix.schema.stats.StatisticsScanner;
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -1087,116 +1087,136 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throw new RuntimeException(e);
         }
     }
-    
-    private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
-            Configuration config) throws IOException {
-        byte[] indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-        boolean useProto = true;
-        // for backward compatibility fall back to look up by the old attribute
-        if (indexMetaData == null) {
-            useProto = false;
-            indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
-        }
-        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
-        boolean hasMore;
-        int rowCount = 0;
-        try {
-            int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
-            final long blockingMemstoreSize = getBlockingMemstoreSize(region, config);
-            MutationList mutations = new MutationList(maxBatchSize);
-            region.startRegionOperation();
-            byte[] uuidValue = ServerCacheClient.generateId();
-            synchronized (innerScanner) {
-                do {
-                    List<Cell> results = new ArrayList<Cell>();
-                    hasMore = innerScanner.nextRaw(results);
-                    if (!results.isEmpty()) {
-                        Put put = null;
-                        Delete del = null;
-                        for (Cell cell : results) {
+    private class IndexRebuildRegionScanner extends BaseRegionScanner {
+        private long pageSizeInRows = Long.MAX_VALUE;
+        private boolean hasMore;
+        private final int maxBatchSize;
+        private MutationList mutations;
+        private final long maxBatchSizeBytes;
+        private final long blockingMemstoreSize;
+        private final byte[] clientVersionBytes;
+        private List<Cell> results = new ArrayList<Cell>();
+        private byte[] indexMetaData;
+        private boolean useProto = true;
+        private Scan scan;
+        private RegionScanner innerScanner;
+        final Region region;
 
-                            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
-                                if (put == null) {
-                                    put = new Put(CellUtil.cloneRow(cell));
-                                    put.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
-                                    put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    put.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
-                                    put.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
-                                    mutations.add(put);
-                                    // Since we're replaying existing mutations, it makes no sense to write them to the wal
-                                    put.setDurability(Durability.SKIP_WAL);
+        IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
+                                   final Configuration config) {
+            super(innerScanner);
+            if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
+                pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+            }
+
+            maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            mutations = new MutationList(maxBatchSize);
+            maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                    QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+            blockingMemstoreSize = getBlockingMemstoreSize(region, config);
+            clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+            indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            if (indexMetaData == null) {
+                useProto = false;
+                indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+            }
+            this.scan = scan;
+            this.innerScanner = innerScanner;
+            this.region = region;
+        }
+        @Override
+        public RegionInfo getRegionInfo() {
+            return region.getRegionInfo();
+        }
+
+        @Override
+        public boolean isFilterDone() { return hasMore; }
+
+        @Override
+        public void close() throws IOException { innerScanner.close(); }
+
+        private void setMutationAttributes(Mutation m, byte[] uuidValue) {
+            m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
+            m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+            m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                    BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+            m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
+            // Since we're replaying existing mutations, it makes no sense to write them to the wal
+            m.setDurability(Durability.SKIP_WAL);
+        }
+
+        @Override
+        public boolean next(List<Cell> results) throws IOException {
+            int rowCount = 0;
+            try {
+                byte[] uuidValue = ServerCacheClient.generateId();
+                synchronized (innerScanner) {
+                    do {
+                        List<Cell> row = new ArrayList<Cell>();
+                        hasMore = innerScanner.nextRaw(row);
+                        if (!row.isEmpty()) {
+                            Put put = null;
+                            Delete del = null;
+                            for (Cell cell : row) {
+                                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                                    if (put == null) {
+                                        put = new Put(CellUtil.cloneRow(cell));
+                                        setMutationAttributes(put, uuidValue);
+                                        mutations.add(put);
+                                    }
+                                    put.add(cell);
+                                } else {
+                                    if (del == null) {
+                                        del = new Delete(CellUtil.cloneRow(cell));
+                                        setMutationAttributes(del, uuidValue);
+                                        mutations.add(del);
+                                    }
+                                    del.addDeleteMarker(cell);
                                 }
-                                put.add(cell);
-                            } else {
-                                if (del == null) {
-                                    del = new Delete(CellUtil.cloneRow(cell));
-                                    del.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
-                                    del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    del.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                                        BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
-                                    del.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
-                                    mutations.add(del);
-                                    // Since we're replaying existing mutations, it makes no sense to write them to the wal
-                                    del.setDurability(Durability.SKIP_WAL);
-                                }
-                                del.addDeleteMarker(cell);
                             }
+                            if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                                checkForRegionClosing();
+                                commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+                                uuidValue = ServerCacheClient.generateId();
+                                mutations.clear();
+                            }
+                            rowCount++;
                         }
-                        if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            checkForRegionClosing();
-                            commitBatchWithRetries(region, mutations, blockingMemstoreSize);
-                            uuidValue = ServerCacheClient.generateId();
-                            mutations.clear();
-                        }
-                        rowCount++;
+
+                    } while (hasMore && rowCount < pageSizeInRows);
+                    if (!mutations.isEmpty()) {
+                        checkForRegionClosing();
+                        commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                     }
-                    
-                } while (hasMore);
-                if (!mutations.isEmpty()) {
-                    checkForRegionClosing();
-                    commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+                }
+            } catch (IOException e) {
+                hasMore = false;
+                LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
+                throw e;
+            } finally {
+                if (!hasMore) {
+                    region.closeRegionOperation();
                 }
             }
-        } catch (IOException e) {
-            LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
-            throw e;
-        } finally {
-            region.closeRegionOperation();
+            byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+            final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+            results.add(aggKeyValue);
+            return hasMore;
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
-        final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
-                SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
 
-        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
-            @Override
-            public RegionInfo getRegionInfo() {
-                return region.getRegionInfo();
-            }
+        @Override
+        public long getMaxResultSize() {
+            return scan.getMaxResultSize();
+        }
+    }
+    
+    private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
+            final Configuration config) throws IOException {
 
-            @Override
-            public boolean isFilterDone() {
-                return true;
-            }
-
-            @Override
-            public void close() throws IOException {
-                innerScanner.close();
-            }
-
-            @Override
-            public boolean next(List<Cell> results) throws IOException {
-                results.add(aggKeyValue);
-                return false;
-            }
-
-            @Override
-            public long getMaxResultSize() {
-                return scan.getMaxResultSize();
-            }
-        };
+        region.startRegionOperation();
+        RegionScanner scanner = new IndexRebuildRegionScanner(innerScanner, region, scan, config);
         return scanner;
     }
     

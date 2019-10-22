@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * {@link InputFormat} implementation from Phoenix for building index
@@ -89,6 +90,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             Scan scan = queryPlan.getContext().getScan();
             try {
                 scan.setTimeRange(0, scn);
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
             } catch (IOException e) {
                 throw new SQLException(e);
             }

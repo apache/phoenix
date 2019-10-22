@@ -252,10 +252,6 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                             return result.getRow();
                         }
                     };
-                    for (Cell cell : result.rawCells()) {
-                        String cellString = cell.toString();
-                        LOG.debug("Rebuilt row :" + cellString + " value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
-                    }
                     byte[] builtIndexRowKey = indexMaintainer.buildRowKey(getter, new ImmutableBytesWritable(dataRowKey), null, null, maxTimestamp);
                     if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
                             indexRowKey, 0, indexRowKey.length) != 0) {
