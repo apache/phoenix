@@ -26,8 +26,6 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
@@ -893,7 +891,25 @@ public class QueryParserTest {
 
     @Test
     public void testLimitRVCOffsetQuery() throws Exception {
-        String sql = "SELECT * FROM T LIMIT 10 OFFSET (A,B,C)=('a','b','c')";
-        parseQuery(sql);
+      String sql = "SELECT * FROM T LIMIT 10 OFFSET (A,B,C)=('a','b','c')";
+      parseQuery(sql);
+    }
+
+    @Test
+    public void testShowStmt() throws Exception {
+        // Happy paths
+        parseQuery("show schemas");
+        parseQuery("show schemas like 'foo%'");
+        parseQuery("show tables");
+        parseQuery("show tables in foo");
+        parseQuery("show tables in foo like 'bar%'");
+        parseQuery("show tables like 'bar%'");
+
+        // Expected failures.
+        parseQueryThatShouldFail("show schemas like foo");
+        parseQueryThatShouldFail("show schemas in foo");
+        parseQueryThatShouldFail("show tables 'foo'");
+        parseQueryThatShouldFail("show tables in 'foo'");
+        parseQueryThatShouldFail("show tables like foo");
     }
 }
