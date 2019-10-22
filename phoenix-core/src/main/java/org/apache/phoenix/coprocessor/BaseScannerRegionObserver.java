@@ -67,6 +67,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
+    // The number of index rows to be rebuild in one RPC call
+    public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
