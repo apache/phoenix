@@ -35,6 +35,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -432,14 +433,51 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 			//Expected
 		}
 	}
-    
+
+	@Test
+    public void testShowTablesMultiTenant() throws Exception {
+        // Each tenant should only be able list tables corresponding to their TENANT_ID
+        String tenantId2 = "T_" + generateUniqueName();
+        String secondTenantConnectionURL =
+            PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  tenantId2);
+        String tenantTable2 = "V_" + generateUniqueName();
+        createTestTable(
+            secondTenantConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // Non-tenant connections should list all the tables.
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Set<String> tables = new HashSet<>();
+            ResultSet rs = conn.prepareStatement("show tables").executeQuery();
+            while (rs.next()) {
+              tables.add(rs.getString("TABLE_NAME"));
+            }
+            assertTrue(tables.contains(PARENT_TABLE_NAME));
+            assertTrue(tables.contains(TENANT_TABLE_NAME));
+            assertTrue(tables.contains(tenantTable2));
+        }
+        // Tenant specific connections should not list tables from other tenants.
+        try (Connection conn = DriverManager.getConnection(secondTenantConnectionURL, props)) {
+            Set<String> tables = new HashSet<>();
+            ResultSet rs = conn.prepareStatement("show tables").executeQuery();
+            while (rs.next()) {
+              tables.add(rs.getString("TABLE_NAME"));
+            }
+            assertTrue(tables.contains(PARENT_TABLE_NAME));
+            assertFalse(tables.contains(TENANT_TABLE_NAME));
+            assertTrue(tables.contains(tenantTable2));
+        }
+    }
+
     @Test
     public void testTableMetadataScan() throws Exception {
         // create a tenant table with same name for a different tenant to make sure we are not picking it up in metadata scans for TENANT_ID
         String tenantId2 = "T_" + generateUniqueName();
-        String secondTenatConnectionURL = PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  tenantId2);
+        String secondTenantConnectionURL =
+            PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  tenantId2);
         String tenantTable2 = "V_" + generateUniqueName();
-        createTestTable(secondTenatConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
+        createTestTable(
+            secondTenantConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
