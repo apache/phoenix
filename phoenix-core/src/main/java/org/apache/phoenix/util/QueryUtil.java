@@ -18,13 +18,53 @@
 
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SUPERTABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_ALIAS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SEQUENCE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CATALOG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.util.SchemaUtil.getEscapedFullColumnName;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -35,6 +75,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
+import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
+import org.apache.phoenix.expression.function.SQLTableTypeFunction;
+import org.apache.phoenix.expression.function.SQLViewTypeFunction;
+import org.apache.phoenix.expression.function.SqlTypeNameFunction;
+import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -45,6 +92,10 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
@@ -462,6 +513,286 @@ public final class QueryUtil {
     public static Connection getConnectionForQueryLog(Configuration config) throws SQLException {
         //we don't need this connection to upgrade anything or start dispatcher
         return getConnectionOnServer(config);
+    }
+
+    public static PreparedStatement getCatalogsStmt(PhoenixConnection connection) throws SQLException {
+        List<String> parameterValues = new ArrayList<String>(4);
+        StringBuilder buf = new StringBuilder("select \n" +
+            " DISTINCT " + TENANT_ID + " " + TABLE_CAT +
+            " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
+            " where " + COLUMN_NAME + " is null" +
+            " and " + COLUMN_FAMILY + " is null" +
+            " and " + TENANT_ID + " is not null");
+        addTenantIdFilter(connection, buf, null, parameterValues);
+        buf.append(" order by " + TENANT_ID);
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+        for(int i = 0; i < parameterValues.size(); i++) {
+            stmt.setString(i+1, parameterValues.get(i));
+        }
+        return stmt;
+    }
+
+    /**
+     * Util that generates a PreparedStatement against syscat to fetch schema listings.
+     */
+    public static PreparedStatement getSchemasStmt(
+        PhoenixConnection connection, String catalog, String schemaPattern) throws SQLException {
+        List<String> parameterValues = new ArrayList<String>(4);
+        StringBuilder buf = new StringBuilder("select distinct \n" +
+                TABLE_SCHEM + "," +
+                TENANT_ID + " " + TABLE_CATALOG +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
+                " where " + COLUMN_NAME + " is null");
+        addTenantIdFilter(connection, buf, catalog, parameterValues);
+        if (schemaPattern != null) {
+            buf.append(" and " + TABLE_SCHEM + " like ?");
+            parameterValues.add(schemaPattern);
+        }
+        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
+            buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
+        }
+
+        // TODO: we should union this with SYSTEM.SEQUENCE too, but we only have support for
+        // UNION ALL and we really need UNION so that it dedups.
+
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+        for(int i = 0; i < parameterValues.size(); i++) {
+            stmt.setString(i+1, parameterValues.get(i));
+        }
+        return stmt;
+    }
+
+    public static PreparedStatement getSuperTablesStmt(PhoenixConnection connection,
+        String catalog, String schemaPattern, String tableNamePattern) throws SQLException {
+        List<String> parameterValues = new ArrayList<String>(4);
+        StringBuilder buf = new StringBuilder("select \n" +
+                TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
+                TABLE_SCHEM + "," +
+                TABLE_NAME + "," +
+                COLUMN_FAMILY + " " + SUPERTABLE_NAME +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
+                " where " + COLUMN_NAME + " is null" +
+                " and " + LINK_TYPE + " = " + PTable.LinkType.PHYSICAL_TABLE.getSerializedValue());
+        addTenantIdFilter(connection, buf, catalog, parameterValues);
+        if (schemaPattern != null) {
+            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
+            if(schemaPattern.length() > 0) {
+                parameterValues.add(schemaPattern);
+            }
+        }
+        if (tableNamePattern != null) {
+            buf.append(" and " + TABLE_NAME + " like ?" );
+            parameterValues.add(tableNamePattern);
+        }
+        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," +TABLE_NAME + "," + SUPERTABLE_NAME);
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+        for(int i = 0; i < parameterValues.size(); i++) {
+            stmt.setString(i+1, parameterValues.get(i));
+        }
+        return stmt;
+    }
+
+    public static PreparedStatement getIndexInfoStmt(PhoenixConnection connection,
+            String catalog, String schema, String table, boolean unique, boolean approximate) throws SQLException {
+        if (unique) { // No unique indexes
+            return null;
+        }
+        List<String> parameterValues = new ArrayList<String>(4);
+        StringBuilder buf = new StringBuilder("select \n" +
+            TENANT_ID + " " + TABLE_CAT + ",\n" + // use this column for column family name
+            TABLE_SCHEM + ",\n" +
+            DATA_TABLE_NAME + " " + TABLE_NAME + ",\n" +
+            "true NON_UNIQUE,\n" +
+            "null INDEX_QUALIFIER,\n" +
+            TABLE_NAME + " INDEX_NAME,\n" +
+            DatabaseMetaData.tableIndexOther + " TYPE,\n" +
+            ORDINAL_POSITION + ",\n" +
+            COLUMN_NAME + ",\n" +
+            "CASE WHEN " + COLUMN_FAMILY + " IS NOT NULL THEN null WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC,\n" +
+            "null CARDINALITY,\n" +
+            "null PAGES,\n" +
+            "null FILTER_CONDITION,\n" +
+            // Include data type info, though not in spec
+            ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + ",\n" +
+            SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + ",\n" +
+            DATA_TYPE + " " + TYPE_ID + ",\n" +
+            COLUMN_FAMILY + ",\n" +
+            COLUMN_SIZE + ",\n" +
+            ARRAY_SIZE +
+            "\nfrom " + SYSTEM_CATALOG +
+            "\nwhere ");
+        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = ?" ));
+        if(schema != null && schema.length() > 0) {
+            parameterValues.add(schema);
+        }
+        buf.append("\nand " + DATA_TABLE_NAME + " = ?" );
+        parameterValues.add(table);
+        buf.append("\nand " + COLUMN_NAME + " is not null" );
+        addTenantIdFilter(connection, buf, catalog, parameterValues);
+        buf.append("\norder by INDEX_NAME," + ORDINAL_POSITION);
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+        for(int i = 0; i < parameterValues.size(); i++) {
+            stmt.setString(i+1, parameterValues.get(i));
+        }
+        return stmt;
+    }
+
+    /**
+     * Util that generates a PreparedStatement against syscat to get the table listing in a given schema.
+     */
+    public static PreparedStatement getTablesStmt(PhoenixConnection connection, String catalog, String schemaPattern,
+        String tableNamePattern, String[] types) throws SQLException {
+        boolean isSequence = false;
+        boolean hasTableTypes = types != null && types.length > 0;
+        StringBuilder typeClauseBuf = new StringBuilder();
+        List<String> parameterValues = new ArrayList<String>(4);
+        if (hasTableTypes) {
+            List<String> tableTypes = Lists.newArrayList(types);
+            isSequence = tableTypes.remove(SEQUENCE_TABLE_TYPE);
+            StringBuilder typeBuf = new StringBuilder();
+            for (String type : tableTypes) {
+                try {
+                    PTableType tableType = PTableType.fromValue(type);
+                    typeBuf.append('\'');
+                    typeBuf.append(tableType.getSerializedValue());
+                    typeBuf.append('\'');
+                    typeBuf.append(',');
+                } catch (IllegalArgumentException e) {
+                    // Ignore and continue
+                }
+            }
+            if (typeBuf.length() > 0) {
+                typeClauseBuf.append(" and " + TABLE_TYPE + " IN (");
+                typeClauseBuf.append(typeBuf);
+                typeClauseBuf.setCharAt(typeClauseBuf.length()-1, ')');
+            }
+        }
+        StringBuilder buf = new StringBuilder("select \n");
+        // If there were table types specified and they were all filtered out
+        // and we're not querying for sequences, return an empty result set.
+        if (hasTableTypes && typeClauseBuf.length() == 0 && !isSequence) {
+            return null;
+        }
+        if (typeClauseBuf.length() > 0 || !isSequence) {
+            buf.append(
+                TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
+                TABLE_SCHEM + "," +
+                TABLE_NAME + " ," +
+                SQLTableTypeFunction.NAME + "(" + TABLE_TYPE + ") AS " + TABLE_TYPE + "," +
+                REMARKS + " ," +
+                TYPE_NAME + "," +
+                SELF_REFERENCING_COL_NAME + "," +
+                REF_GENERATION + "," +
+                IndexStateNameFunction.NAME + "(" + INDEX_STATE + ") AS " + INDEX_STATE + "," +
+                IMMUTABLE_ROWS + "," +
+                SALT_BUCKETS + "," +
+                MULTI_TENANT + "," +
+                VIEW_STATEMENT + "," +
+                SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
+                SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
+                TRANSACTION_PROVIDER + " IS NOT NULL AS " + TRANSACTIONAL + "," +
+                IS_NAMESPACE_MAPPED + "," +
+                GUIDE_POSTS_WIDTH + "," +
+                TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS TRANSACTION_PROVIDER" +
+                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
+                " where " + COLUMN_NAME + " is null" +
+                " and " + COLUMN_FAMILY + " is null" +
+                " and " + TABLE_NAME + " != '" + MetaDataClient.EMPTY_TABLE + "'");
+            addTenantIdFilter(connection, buf, catalog, parameterValues);
+            if (schemaPattern != null) {
+                buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
+                if(schemaPattern.length() > 0) {
+                    parameterValues.add(schemaPattern);
+                }
+            }
+            if (tableNamePattern != null) {
+                buf.append(" and " + TABLE_NAME + " like ?" );
+                parameterValues.add(tableNamePattern);
+            }
+            if (typeClauseBuf.length() > 0) {
+                buf.append(typeClauseBuf);
+            }
+        }
+        if (isSequence) {
+            // Union the SYSTEM.CATALOG entries with the SYSTEM.SEQUENCE entries
+            if (typeClauseBuf.length() > 0) {
+                buf.append(" UNION ALL\n");
+                buf.append(" select\n");
+            }
+            buf.append(
+                TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
+                SEQUENCE_SCHEMA + " " + TABLE_SCHEM + "," +
+                SEQUENCE_NAME + " " + TABLE_NAME + " ," +
+                "'" + SEQUENCE_TABLE_TYPE + "' " + TABLE_TYPE + "," +
+                "'' " + REMARKS + " ," +
+                "'' " + TYPE_NAME + "," +
+                "'' " + SELF_REFERENCING_COL_NAME + "," +
+                "'' " + REF_GENERATION + "," +
+                "CAST(null AS CHAR(1)) " + INDEX_STATE + "," +
+                "CAST(null AS BOOLEAN) " + IMMUTABLE_ROWS + "," +
+                "CAST(null AS INTEGER) " + SALT_BUCKETS + "," +
+                "CAST(null AS BOOLEAN) " + MULTI_TENANT + "," +
+                "'' " + VIEW_STATEMENT + "," +
+                "'' " + VIEW_TYPE + "," +
+                "'' " + INDEX_TYPE + "," +
+                "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
+                "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
+                "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "," +
+                "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n");
+            buf.append(" from " + SYSTEM_SEQUENCE + "\n");
+            StringBuilder whereClause = new StringBuilder();
+            addTenantIdFilter(connection, whereClause, catalog, parameterValues);
+            if (schemaPattern != null) {
+                appendConjunction(whereClause);
+                whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
+                if(schemaPattern.length() > 0) {
+                    parameterValues.add(schemaPattern);
+                }
+            }
+            if (tableNamePattern != null) {
+                appendConjunction(whereClause);
+                whereClause.append(SEQUENCE_NAME + " like ?\n" );
+                parameterValues.add(tableNamePattern);
+            }
+            if (whereClause.length() > 0) {
+                buf.append(" where\n");
+                buf.append(whereClause);
+            }
+        }
+        buf.append(" order by 4, 1, 2, 3\n");
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+        for(int i = 0; i < parameterValues.size(); i++) {
+            stmt.setString(i+1, parameterValues.get(i));
+        }
+        return stmt;
+    }
+
+    public static void addTenantIdFilter(PhoenixConnection connection, StringBuilder buf, String tenantIdPattern,
+                                         List<String> parameterValues) {
+        PName tenantId = connection.getTenantId();
+        if (tenantIdPattern == null) {
+            if (tenantId != null) {
+                appendConjunction(buf);
+                buf.append(" (" + TENANT_ID + " IS NULL " +
+                        " OR " + TENANT_ID + " = ?) ");
+                parameterValues.add(tenantId.getString());
+            }
+        } else if (tenantIdPattern.length() == 0) {
+            appendConjunction(buf);
+            buf.append(TENANT_ID + " IS NULL ");
+        } else {
+            appendConjunction(buf);
+            buf.append(" TENANT_ID LIKE ? ");
+            parameterValues.add(tenantIdPattern);
+            if (tenantId != null) {
+                buf.append(" and TENANT_ID = ? ");
+                parameterValues.add(tenantId.getString());
+            }
+        }
+    }
+
+    private static void appendConjunction(StringBuilder buf) {
+        buf.append(buf.length() == 0 ? "" : " and ");
     }
     
 }
