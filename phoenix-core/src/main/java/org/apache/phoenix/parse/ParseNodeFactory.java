@@ -934,4 +934,11 @@ public class ParseNodeFactory {
         return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
     }
 
+    public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+        return new ShowTablesStatement(schema, pattern);
+    }
+
+    public ShowSchemasStatement showSchemasStatement(String pattern) {
+        return new ShowSchemasStatement(pattern);
+    }
 }

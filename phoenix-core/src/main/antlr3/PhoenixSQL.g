@@ -73,6 +73,7 @@ tokens
     SESSION='session';
     TABLE='table';
     SCHEMA='schema';
+    SCHEMAS='schemas';
     ADD='add';
     SPLIT='split';
     EXPLAIN='explain';
@@ -147,6 +148,7 @@ tokens
     IMMUTABLE = 'immutable';
     GRANT = 'grant';
     REVOKE = 'revoke';
+    SHOW = 'show';
 }
 
 
@@ -425,6 +427,7 @@ oneStatement returns [BindableStatement ret]
     |   s=drop_index_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=show_node
     |   s=trace_node
     |   s=create_function_node
     |   s=drop_function_node
@@ -487,6 +490,12 @@ revoke_permission_node returns [ChangePermsStatement ret]
         }
     ;
 
+// Parse a show statement. SHOW TABLES, SHOW SCHEMAS ...
+show_node returns [ShowStatement ret]
+    :   SHOW TABLES (IN schema=identifier)? (LIKE pattern=string_literal)? { $ret = factory.showTablesStatement(schema, pattern); }
+    |   SHOW SCHEMAS (LIKE pattern=string_literal)? { $ret = factory.showSchemasStatement(pattern); }
+    ;
+
 // Parse a create view statement.
 create_view_node returns [CreateTableStatement ret]
     :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name 
@@ -524,6 +533,11 @@ create_sequence_node returns [CreateSequenceStatement ret]
 int_literal_or_bind returns [ParseNode ret]
     : n=int_or_long_literal { $ret = n; }
     | b=bind_expression { $ret = b; }
+    ;
+
+// Returns the normalized string literal
+string_literal returns [String ret]
+    :   s=STRING_LITERAL { ret = SchemaUtil.normalizeLiteral(factory.literal(s.getText())); }
     ;
 
 // Parse a drop sequence statement.
