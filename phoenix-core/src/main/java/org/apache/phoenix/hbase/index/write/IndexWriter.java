@@ -163,29 +163,11 @@ public class IndexWriter implements Stoppable {
    * @param clientVersion version of the client
    * @throws IOException
    */
-  public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
+  public void writeAndHandleFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
+                                    boolean allowLocalUpdates, int clientVersion) throws IOException {
       // convert the strings to htableinterfaces to which we can talk and group by TABLE
       Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-      writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates, clientVersion);
       writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
-  }
-
-  /**
-   * see {@link #writeAndKillYourselfOnFailure(Collection)}.
-   * @param toWrite
-   * @throws IOException
-   */
-  public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
-    try {
-      write(toWrite, allowLocalUpdates, clientVersion);
-      if (LOGGER.isTraceEnabled()) {
-        LOGGER.trace("Done writing all index updates!\n\t" + toWrite);
-      }
-    } catch (Exception e) {
-      this.failurePolicy.handleFailure(toWrite, e);
-    }
   }
 
   /**
