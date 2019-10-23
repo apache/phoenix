@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -64,6 +65,7 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -340,6 +342,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(numRows, rs.getInt(1));
                 assertEquals(true, verifyRowsForEmptyColValue(conn, fullIndexName,
                         IndexRegionObserver.VERIFIED_BYTES));
+                rs = conn.createStatement().executeQuery("SELECT * FROM " + fullIndexName);
+                assertTrue(rs.next());
+                assertEquals("1", rs.getString(1));
 
                 // Now try to fail Phase1 and observe that index state is not DISABLED
                 try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
@@ -417,7 +422,48 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testGlobalImmutableIndexUnverifiedOnlyInPhase1() throws Exception {
+        if (localIndex || transactional) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        TABLE_NAME = fullTableName;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+            conn.setAutoCommit(true);
+            createAndPopulateTableAndIndexForConsistentIndex(conn, fullTableName, fullIndexName, 0, null);
+
+            // Now force fail
+            TestUtil.removeCoprocessor(conn, fullTableName, IndexRegionObserver.class);
+            TestUtil.addCoprocessor(conn, fullTableName, UpsertFailingRegionObserver.class);
+            try {
+                upsertRows(conn, fullTableName, 1);
+            } catch (Exception e) {
+                // ignore this since we force the fail
+            }
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + TABLE_NAME);
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            GlobalIndexCheckerIT.checkUnverifiedCellCount(conn, fullIndexName);
+        }
+    }
+
     public static class DeleteFailingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws
+                IOException {
+            throw new DoNotRetryIOException();
+        }
+    }
+
+    public static class UpsertFailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws
                 IOException {
