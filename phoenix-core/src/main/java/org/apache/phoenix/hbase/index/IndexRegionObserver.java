@@ -506,7 +506,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       return mutations;
   }
 
-  public void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
+  public static void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
       List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
       if (cellList == null) {
           return;
