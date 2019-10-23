@@ -72,7 +72,6 @@ import com.google.common.collect.Lists;
 public class PostDDLCompiler {
     private final PhoenixConnection connection;
     private final Scan scan;
-    private PostDDLMutationPlan mutationPlan = null;
 
     public PostDDLCompiler(PhoenixConnection connection) {
         this(connection, new Scan());
@@ -92,12 +91,7 @@ public class PostDDLCompiler {
             new MultipleTableRefColumnResolver(tableRefs),
                 scan,
                 new SequenceManager(statement));
-        this.mutationPlan = new PostDDLMutationPlan(context, tableRefs, timestamp, emptyCF, deleteList, projectCFs);
-        return this.mutationPlan;
-    }
-
-    public QueryPlan getQueryPlan(TableRef tableRef) throws SQLException {
-        return mutationPlan.getQueryPlan(tableRef);
+        return new PostDDLMutationPlan(context, tableRefs, timestamp, emptyCF, deleteList, projectCFs);
     }
 
     private static class MultipleTableRefColumnResolver implements ColumnResolver {
@@ -171,120 +165,6 @@ public class PostDDLCompiler {
             this.projectCFs = projectCFs;
         }
 
-        public QueryPlan getQueryPlan(final TableRef tableRef) throws SQLException {
-            if (tableRefs.isEmpty()) {
-                return null;
-            }
-            QueryPlan plan = null;
-            boolean wasAutoCommit = connection.getAutoCommit();
-            try {
-                connection.setAutoCommit(true);
-                SQLException sqlE = null;
-                /*
-                 * Handles:
-                 * 1) deletion of all rows for a DROP TABLE and subsequently deletion of all rows for a DROP INDEX;
-                 * 2) deletion of all column values for a ALTER TABLE DROP COLUMN
-                 * 3) updating the necessary rows to have an empty KV
-                 * 4) updating table stats
-                 */
-
-                Scan scan = ScanUtil.newScan(context.getScan());
-                SelectStatement select = SelectStatement.COUNT_ONE;
-                // We need to use this tableRef
-                ColumnResolver resolver = new SingleTableRefColumnResolver(tableRef);
-                PhoenixStatement statement = new PhoenixStatement(connection);
-                StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
-                long ts = timestamp;
-                // FIXME: DDL operations aren't transactional, so we're basing the timestamp on a server timestamp.
-                // Not sure what the fix should be. We don't need conflict detection nor filtering of invalid transactions
-                // in this case, so maybe this is ok.
-                if (ts!= HConstants.LATEST_TIMESTAMP && tableRef.getTable().isTransactional()) {
-                    ts = TransactionUtil.convertToNanoseconds(ts);
-                }
-                ScanUtil.setTimeRange(scan, scan.getTimeRange().getMin(), ts);
-                if (emptyCF != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
-                    scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER, EncodedColumnsUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
-                }
-                ServerCache cache = null;
-                try {
-                    if (deleteList != null) {
-                        if (deleteList.isEmpty()) {
-                            scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
-                            // In the case of a row deletion, add index metadata so mutable secondary indexing works
-                            /* TODO: we currently manually run a scan to delete the index data here
-                            ImmutableBytesWritable ptr = context.getTempPtr();
-                            tableRef.getTable().getIndexMaintainers(ptr);
-                            if (ptr.getLength() > 0) {
-                                IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                cache = client.addIndexMetadataCache(context.getScanRanges(), ptr);
-                                byte[] uuidValue = cache.getId();
-                                scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                            }
-                            */
-                        } else {
-                            // In the case of the empty key value column family changing, do not send the index
-                            // metadata, as we're currently managing this from the client. It's possible for the
-                            // data empty column family to stay the same, while the index empty column family
-                            // changes.
-                            PColumn column = deleteList.get(0);
-                            byte[] cq = column.getColumnQualifierBytes();
-                            if (emptyCF == null) {
-                                scan.addColumn(column.getFamilyName().getBytes(), cq);
-                            }
-                            scan.setAttribute(BaseScannerRegionObserver.DELETE_CF, column.getFamilyName().getBytes());
-                            scan.setAttribute(BaseScannerRegionObserver.DELETE_CQ, cq);
-                        }
-                    }
-                    List<byte[]> columnFamilies = Lists.newArrayListWithExpectedSize(tableRef.getTable().getColumnFamilies().size());
-                    if (projectCFs == null) {
-                        for (PColumnFamily family : tableRef.getTable().getColumnFamilies()) {
-                            columnFamilies.add(family.getName().getBytes());
-                        }
-                    } else {
-                        for (byte[] projectCF : projectCFs) {
-                            columnFamilies.add(projectCF);
-                        }
-                    }
-                    // Need to project all column families into the scan, since we haven't yet created our empty key value
-                    RowProjector projector = ProjectionCompiler.compile(context, SelectStatement.COUNT_ONE, GroupBy.EMPTY_GROUP_BY);
-                    context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
-                    // Explicitly project these column families and don't project the empty key value,
-                    // since at this point we haven't added the empty key value everywhere.
-                    if (columnFamilies != null) {
-                        scan.getFamilyMap().clear();
-                        for (byte[] family : columnFamilies) {
-                            scan.addFamily(family);
-                        }
-                        projector = new RowProjector(projector,false);
-                    }
-                    // Ignore exceptions due to not being able to resolve any view columns,
-                    // as this just means the view is invalid. Continue on and try to perform
-                    // any other Post DDL operations.
-                    try {
-                        // Since dropping a VIEW does not affect the underlying data, we do
-                        // not need to pass through the view statement here.
-                        WhereCompiler.compile(context, select); // Push where clause into scan
-                    } catch (ColumnFamilyNotFoundException e) {
-                        return null;
-                    } catch (ColumnNotFoundException e) {
-                        return null;
-                    } catch (AmbiguousColumnException e) {
-                        return null;
-                    }
-                    plan = new AggregatePlan(context, select, tableRef, projector, null, null,
-                            OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, null);
-                } finally {
-                    if (cache != null) { // Remove server cache if there is one
-                        cache.close();
-                    }
-                }
-            } finally {
-                if (!wasAutoCommit) connection.setAutoCommit(wasAutoCommit);
-            }
-            return plan;
-        }
-
         @Override
         public MutationState execute() throws SQLException {
             if (tableRefs.isEmpty()) {
@@ -303,36 +183,125 @@ public class PostDDLCompiler {
                  */
                 long totalMutationCount = 0;
                 for (final TableRef tableRef : tableRefs) {
-                    QueryPlan plan = getQueryPlan(tableRef);
-                    if (plan == null)
-                        continue;
+                    Scan scan = ScanUtil.newScan(context.getScan());
+                    SelectStatement select = SelectStatement.COUNT_ONE;
+                    // We need to use this tableRef
+                    ColumnResolver resolver = new SingleTableRefColumnResolver(tableRef);
+                    PhoenixStatement statement = new PhoenixStatement(connection);
+                    StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
+                    long ts = timestamp;
+                    // FIXME: DDL operations aren't transactional, so we're basing the timestamp on a server timestamp.
+                    // Not sure what the fix should be. We don't need conflict detection nor filtering of invalid transactions
+                    // in this case, so maybe this is ok.
+                    if (ts!= HConstants.LATEST_TIMESTAMP && tableRef.getTable().isTransactional()) {
+                        ts = TransactionUtil.convertToNanoseconds(ts);
+                    }
+                    ScanUtil.setTimeRange(scan, scan.getTimeRange().getMin(), ts);
+                    if (emptyCF != null) {
+                        scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
+                        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER, EncodedColumnsUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
+                    }
+                    ServerCache cache = null;
                     try {
-                        ResultIterator iterator = plan.iterator();
-                        try {
-                            Tuple row = iterator.next();
-                            ImmutableBytesWritable ptr = context.getTempPtr();
-                            totalMutationCount += (Long)plan.getProjector().getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
-                        } catch (SQLException e) {
-                            sqlE = e;
-                        } finally {
-                            try {
-                                iterator.close();
-                            } catch (SQLException e) {
-                                if (sqlE == null) {
-                                    sqlE = e;
-                                } else {
-                                    sqlE.setNextException(e);
+                        if (deleteList != null) {
+                            if (deleteList.isEmpty()) {
+                                scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
+                                // In the case of a row deletion, add index metadata so mutable secondary indexing works
+                                /* TODO: we currently manually run a scan to delete the index data here
+                                ImmutableBytesWritable ptr = context.getTempPtr();
+                                tableRef.getTable().getIndexMaintainers(ptr);
+                                if (ptr.getLength() > 0) {
+                                    IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
+                                    cache = client.addIndexMetadataCache(context.getScanRanges(), ptr);
+                                    byte[] uuidValue = cache.getId();
+                                    scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                 }
-                            } finally {
-                                if (sqlE != null) {
-                                    throw sqlE;
+                                */
+                            } else {
+                                // In the case of the empty key value column family changing, do not send the index
+                                // metadata, as we're currently managing this from the client. It's possible for the
+                                // data empty column family to stay the same, while the index empty column family
+                                // changes.
+                                PColumn column = deleteList.get(0);
+                                byte[] cq = column.getColumnQualifierBytes();
+                                if (emptyCF == null) {
+                                    scan.addColumn(column.getFamilyName().getBytes(), cq);
                                 }
+                                scan.setAttribute(BaseScannerRegionObserver.DELETE_CF, column.getFamilyName().getBytes());
+                                scan.setAttribute(BaseScannerRegionObserver.DELETE_CQ, cq);
                             }
                         }
-                    } catch (TableNotFoundException e) {
-                        // Ignore and continue, as HBase throws when table hasn't been written to
-                        // FIXME: Remove if this is fixed in 0.96
+                        List<byte[]> columnFamilies = Lists.newArrayListWithExpectedSize(tableRef.getTable().getColumnFamilies().size());
+                        if (projectCFs == null) {
+                            for (PColumnFamily family : tableRef.getTable().getColumnFamilies()) {
+                                columnFamilies.add(family.getName().getBytes());
+                            }
+                        } else {
+                            for (byte[] projectCF : projectCFs) {
+                                columnFamilies.add(projectCF);
+                            }
+                        }
+                        // Need to project all column families into the scan, since we haven't yet created our empty key value
+                        RowProjector projector = ProjectionCompiler.compile(context, SelectStatement.COUNT_ONE, GroupBy.EMPTY_GROUP_BY);
+                        context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
+                        // Explicitly project these column families and don't project the empty key value,
+                        // since at this point we haven't added the empty key value everywhere.
+                        if (columnFamilies != null) {
+                            scan.getFamilyMap().clear();
+                            for (byte[] family : columnFamilies) {
+                                scan.addFamily(family);
+                            }
+                            projector = new RowProjector(projector,false);
+                        }
+                        // Ignore exceptions due to not being able to resolve any view columns,
+                        // as this just means the view is invalid. Continue on and try to perform
+                        // any other Post DDL operations.
+                        try {
+                            // Since dropping a VIEW does not affect the underlying data, we do
+                            // not need to pass through the view statement here.
+                            WhereCompiler.compile(context, select); // Push where clause into scan
+                        } catch (ColumnFamilyNotFoundException e) {
+                            continue;
+                        } catch (ColumnNotFoundException e) {
+                            continue;
+                        } catch (AmbiguousColumnException e) {
+                            continue;
+                        }
+                        QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, null, null,
+                                OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, null);
+                        try {
+                            ResultIterator iterator = plan.iterator();
+                            try {
+                                Tuple row = iterator.next();
+                                ImmutableBytesWritable ptr = context.getTempPtr();
+                                totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
+                            } catch (SQLException e) {
+                                sqlE = e;
+                            } finally {
+                                try {
+                                    iterator.close();
+                                } catch (SQLException e) {
+                                    if (sqlE == null) {
+                                        sqlE = e;
+                                    } else {
+                                        sqlE.setNextException(e);
+                                    }
+                                } finally {
+                                    if (sqlE != null) {
+                                        throw sqlE;
+                                    }
+                                }
+                            }
+                        } catch (TableNotFoundException e) {
+                            // Ignore and continue, as HBase throws when table hasn't been written to
+                            // FIXME: Remove if this is fixed in 0.96
+                        }
+                    } finally {
+                        if (cache != null) { // Remove server cache if there is one
+                            cache.close();
+                        }
                     }
+
                 }
                 final long count = totalMutationCount;
                 return new MutationState(1, 1000, connection) {
