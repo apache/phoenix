@@ -615,7 +615,7 @@ public class Indexer extends BaseRegionObserver {
           long start = EnvironmentEdgeManager.currentTimeMillis();
           
           current.addTimelineAnnotation("Actually doing index update for first time");
-          writer.writeAndKillYourselfOnFailure(context.indexUpdates, false, context.clientVersion);
+          writer.writeAndHandleFailure(context.indexUpdates, false, context.clientVersion);
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowIndexWriteThreshold) {
@@ -685,7 +685,7 @@ public class Indexer extends BaseRegionObserver {
         // do the usual writer stuff, killing the server again, if we can't manage to make the index
         // writes succeed again
         try {
-            writer.writeAndKillYourselfOnFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
+            writer.writeAndHandleFailure(updates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IOException e) {
                 LOGGER.error("During WAL replay of outstanding index updates, "
                         + "Exception is thrown instead of killing server during index writing", e);
@@ -723,7 +723,7 @@ public class Indexer extends BaseRegionObserver {
            * hopes they come up before the primary table finishes.
            */
           Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
+          recoveryWriter.writeAndHandleFailure(indexUpdates, true, ScanUtil.UNKNOWN_CLIENT_VERSION);
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {
