@@ -1240,15 +1240,19 @@ public class MutationState implements SQLCloseable {
                     } else if (m instanceof Put) {
                         long timestamp = IndexRegionObserver.getMaxTimestamp(m);
 
-                        // Phase 1 index mutations are set to unverified
-                        ((Put) m).addColumn(emptyCF, emptyCQ, timestamp, IndexRegionObserver.UNVERIFIED_BYTES);
-                        addToMap(unverifiedIndexMutations, tableInfo, m);
+                        // Phase 1 index mutations are set to unverified.
+                        // Just send empty with Unverified
+                        Put unverifiedPut = new Put(m.getRow());
+                        unverifiedPut.addColumn(emptyCF, emptyCQ, timestamp, IndexRegionObserver.UNVERIFIED_BYTES);
+                        addToMap(unverifiedIndexMutations, tableInfo, unverifiedPut);
 
                         // Phase 3 mutations are verified
-                        Put verifiedPut = new Put(m.getRow());
-                        verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
+                        // Send entire mutation with verified
+                        // Remove the empty column prepared by Index codec as we need to change its value
+                        IndexRegionObserver.removeEmptyColumn(m, emptyCF, emptyCQ);
+                        ((Put) m).addColumn(emptyCF, emptyCQ, timestamp,
                                 IndexRegionObserver.VERIFIED_BYTES);
-                        addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
+                        addToMap(verifiedOrDeletedIndexMutations, tableInfo, m);
                     } else {
                         addToMap(unverifiedIndexMutations, tableInfo, m);
                     }
