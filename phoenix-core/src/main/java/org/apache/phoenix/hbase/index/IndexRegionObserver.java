@@ -506,9 +506,25 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       return mutations;
   }
 
+  public void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
+      List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
+      if (cellList == null) {
+          return;
+      }
+      Iterator<Cell> cellIterator = cellList.iterator();
+      while (cellIterator.hasNext()) {
+          Cell cell = cellIterator.next();
+          if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                  emptyCQ, 0, emptyCQ.length) == 0) {
+              cellIterator.remove();
+              return;
+          }
+      }
+  }
+
   private void prepareIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
                                      MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context,
-                                     Collection<? extends Mutation> mutations) throws Throwable {
+                                     Collection<? extends Mutation> mutations, long now) throws Throwable {
       IndexMetaData indexMetaData = this.builder.getIndexMetaData(miniBatchOp);
       if (!(indexMetaData instanceof PhoenixIndexMetaData)) {
           throw new DoNotRetryIOException(
@@ -517,7 +533,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
       List<IndexMaintainer> maintainers = ((PhoenixIndexMetaData)indexMetaData).getIndexMaintainers();
 
-      List<Pair<Mutation, byte[]>> indexUpdatesForDeletes;
       // get the current span, or just use a null-span to avoid a bunch of if statements
       try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
           Span current = scope.getSpan();
@@ -534,7 +549,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Pair<Mutation, byte[]>, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
-          indexUpdatesForDeletes = new ArrayList<>(indexUpdates.size());
+          context.preIndexUpdates = new ArrayList<>(indexUpdates.size());
           context.intermediatePostIndexUpdates = new ArrayList<>(indexUpdates.size());
           while(indexUpdatesItr.hasNext()) {
               Pair<Pair<Mutation, byte[]>, byte[]> next = indexUpdatesItr.next();
@@ -555,35 +570,30 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                   // add the VERIFIED cell, which is the empty cell
                   Mutation m = next.getFirst().getFirst();
                   boolean rebuild = PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap());
-                  long ts = getMaxTimestamp(m);
                   if (rebuild) {
                       if (m instanceof Put) {
+                          long ts = getMaxTimestamp(m);
+                          // Remove the empty column prepared by Index codec as we need to change its value
+                          removeEmptyColumn(m, emptyCF, emptyCQ);
                           ((Put)m).addColumn(emptyCF, emptyCQ, ts, VERIFIED_BYTES);
                       }
                   } else {
-                      if (m instanceof Put) {
-                          ((Put)m).addColumn(emptyCF, emptyCQ, ts, UNVERIFIED_BYTES);
-                          // Ignore post index updates (i.e., the third write phase updates) for this row if it is
-                          // going through concurrent updates
-                          ImmutableBytesPtr rowKey = new ImmutableBytesPtr(next.getSecond());
-                          if (!context.pendingRows.contains(rowKey)) {
-                              Put put = new Put(m.getRow());
-                              put.addColumn(emptyCF, emptyCQ, ts, VERIFIED_BYTES);
-                              context.intermediatePostIndexUpdates.add(new Pair<>(new Pair<>(put, next.getFirst().getSecond()), next.getSecond()));
+                      indexUpdatesItr.remove();
+                      // For this mutation whether it is put or delete, set the status of the index row "unverified"
+                      // This will be done before the data table row is updated (i.e., in the first write phase)
+                      Put unverifiedPut = new Put(m.getRow());
+                      unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
+                      context.preIndexUpdates.add(new Pair <>(unverifiedPut, next.getFirst().getSecond()));
+                      // Ignore post index updates (i.e., the third write phase updates) for this row if it is
+                      // going through concurrent updates
+                      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(next.getSecond());
+                      if (!context.pendingRows.contains(rowKey)) {
+                          if (m instanceof Put) {
+                              // Remove the empty column prepared by Index codec as we need to change its value
+                              removeEmptyColumn(m, emptyCF, emptyCQ);
+                              ((Put) m).addColumn(emptyCF, emptyCQ, now, VERIFIED_BYTES);
                           }
-                      } else {
-                          // For a delete mutation, first unverify the existing row in the index table and then delete
-                          // the row from the index table after deleting the corresponding row from the data table
-                          indexUpdatesItr.remove();
-                          Put put = new Put(m.getRow());
-                          put.addColumn(emptyCF, emptyCQ, ts, UNVERIFIED_BYTES);
-                          indexUpdatesForDeletes.add(new Pair<>(put, next.getFirst().getSecond()));
-                          // Ignore post index updates (i.e., the third write phase updates) for this row if it is
-                          // going through concurrent updates
-                          ImmutableBytesPtr rowKey = new ImmutableBytesPtr(next.getSecond());
-                          if (!context.pendingRows.contains(rowKey)) {
-                              context.intermediatePostIndexUpdates.add(next);
-                          }
+                          context.intermediatePostIndexUpdates.add(next);
                       }
                   }
               }
@@ -592,10 +602,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
               miniBatchOp.addOperationsFromCP(0,
                       localUpdates.toArray(new Mutation[localUpdates.size()]));
           }
-          if (!indexUpdatesForDeletes.isEmpty()) {
-              context.preIndexUpdates = indexUpdatesForDeletes;
-          }
-
           if (!indexUpdates.isEmpty() && context.preIndexUpdates.isEmpty()) {
               context.preIndexUpdates = new ArrayList<>(indexUpdates.size());
           }
@@ -634,7 +640,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
 
       long start = EnvironmentEdgeManager.currentTimeMillis();
-      prepareIndexMutations(c, miniBatchOp, context, mutations);
+      prepareIndexMutations(c, miniBatchOp, context, mutations, now);
       metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
 
       // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
