@@ -322,6 +322,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.global.index.row.age.threshold.to.delete.ms";
     // Enable the IndexRegionObserver Coprocessor
     public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+    // The number of index rows to be rebuild in one RPC call
+    public static final String INDEX_REBUILD_PAGE_SIZE_IN_ROWS = "phoenix.index.rebuild_page_size_in_rows";
 
     /**
      * Get executor service used for parallel scans

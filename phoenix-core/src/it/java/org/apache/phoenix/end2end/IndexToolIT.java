@@ -81,7 +81,6 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolIT extends ParallelStatsEnabledIT {
-
     private final boolean localIndex;
     private final boolean transactional;
     private final boolean directApi;
@@ -117,6 +116,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
