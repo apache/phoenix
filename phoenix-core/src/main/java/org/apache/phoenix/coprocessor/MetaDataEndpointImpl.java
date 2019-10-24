@@ -1735,6 +1735,45 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 byte[][] parentPhysicalSchemaTableNames = new byte[3][];
                 getParentAndPhysicalNames(tableMetadata, parentSchemaTableNames, parentPhysicalSchemaTableNames);
                 if (parentPhysicalSchemaTableNames[2] != null) {
+                    if (parentTable == null) {
+                        // This is needed when we connect with a 4.14 client to
+                        // a 4.15.0+ server.
+                        // In that case we need to resolve the parent table on
+                        // the server.
+                        parentTable = doGetTable(ByteUtil.EMPTY_BYTE_ARRAY,
+                                parentPhysicalSchemaTableNames[1],
+                                parentPhysicalSchemaTableNames[2], clientTimeStamp, clientVersion);
+                        if (parentTable == null) {
+                            builder.setReturnCode(
+                                    MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                        if (parentSchemaTableNames[2] != null
+                                && Bytes.compareTo(parentSchemaTableNames[2],
+                                        parentPhysicalSchemaTableNames[2]) != 0) {
+                            // if view is created on view
+                            byte[] tenantId = parentSchemaTableNames[0] == null
+                                    ? ByteUtil.EMPTY_BYTE_ARRAY
+                                    : parentSchemaTableNames[0];
+                            parentTable = doGetTable(tenantId, parentSchemaTableNames[1],
+                                    parentSchemaTableNames[2], clientTimeStamp, clientVersion);
+                            if (parentTable == null) {
+                                // it could be a global view
+                                parentTable = doGetTable(ByteUtil.EMPTY_BYTE_ARRAY,
+                                        parentSchemaTableNames[1], parentSchemaTableNames[2],
+                                        clientTimeStamp, clientVersion);
+                            }
+                        }
+                        if (parentTable == null) {
+                            builder.setReturnCode(
+                                    MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                    }
                     parentTableKey = SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
                             parentPhysicalSchemaTableNames[1], parentPhysicalSchemaTableNames[2]);
                     cParentPhysicalName = parentTable.getPhysicalName().getBytes();
@@ -1757,6 +1796,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                  */
                 parentTableName = MetaDataUtil.getParentTableName(tableMetadata);
                 parentTableKey = SchemaUtil.getTableKey(tenantIdBytes, parentSchemaName, parentTableName);
+                if (parentTable == null) {
+                    // This is needed when we connect with a 4.14 client to a 4.15.0+ server.
+                    // In that case we need to resolve the parent table on the server.
+                    parentTable =
+                            doGetTable(tenantIdBytes, parentSchemaName, parentTableName, clientTimeStamp, null,
+                                    request.getClientVersion());
+                }
                 if (IndexType.LOCAL == indexType) {
                     cPhysicalName = parentTable.getPhysicalName().getBytes();
                     cParentPhysicalName = parentTable.getPhysicalName().getBytes();
