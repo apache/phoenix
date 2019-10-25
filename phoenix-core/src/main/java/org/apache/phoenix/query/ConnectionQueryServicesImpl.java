@@ -3663,7 +3663,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // with SYSTEM Namespace
             createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
 
-            ConnectionQueryServicesImpl.this.upgradeRequired.set(false);
+            clearUpgradeRequired();
             success = true;
         } catch (UpgradeInProgressException | UpgradeNotRequiredException e) {
             // don't set it as initializationException because otherwise client won't be able to retry
@@ -5372,6 +5372,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public boolean isUpgradeRequired() {
         return upgradeRequired.get();
+    }
+
+    @Override
+    public void clearUpgradeRequired() {
+        upgradeRequired.set(false);
     }
 
     @Override

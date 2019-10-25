@@ -141,10 +141,18 @@ public class ViewUtil {
     }
     
     /**
+     * Check metadata to find all child views for a given table/view
+     * @param sysCatOrsysChildLink For older (pre-4.15.0) clients, we look for child links inside SYSTEM.CATALOG,
+     *                             otherwise we look for them inside SYSTEM.CHILD_LINK
+     * @param tenantId tenantId
+     * @param schemaName table schema name
+     * @param tableName table name
+     * @param timestamp passed client-side timestamp
      * @return true if the given table has at least one child view
-     * @throws IOException 
+     * @throws IOException
      */
-    public static boolean hasChildViews(Table systemCatalog, byte[] tenantId, byte[] schemaName, byte[] tableName, long timestamp) throws IOException {
+    public static boolean hasChildViews(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schemaName,
+                                        byte[] tableName, long timestamp) throws IOException {
         byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
         SingleColumnValueFilter linkFilter =
@@ -154,28 +162,26 @@ public class ViewUtil {
                     // if we found a row with the CHILD_TABLE link type we are done and can
                     // terminate the scan
                     @Override
-                    public boolean filterAllRemaining() throws IOException {
+                    public boolean filterAllRemaining() {
                         return matchedColumn;
                     }
                 };
         linkFilter.setFilterIfMissing(true);
         scan.setFilter(linkFilter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-        try (ResultScanner scanner = systemCatalog.getScanner(scan)) {
+        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan)) {
             Result result = scanner.next();
             return result!=null; 
         }
     }
 
-    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes, byte[] schemaName, byte[] tableName)
+    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
+            byte[] schemaName, byte[] tableName, byte[] sysCatOrSysChildLink)
             throws IOException, SQLException, ClassNotFoundException {
         Table hTable = null;
         try {
-            hTable =
-                    ServerUtil.getHTableForCoprocessorScan(env,
-                            SchemaUtil.getPhysicalTableName(
-                                    PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                                    env.getConfiguration()));
+            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
+                            sysCatOrSysChildLink, env.getConfiguration()));
         }
         catch (Exception e){
         }

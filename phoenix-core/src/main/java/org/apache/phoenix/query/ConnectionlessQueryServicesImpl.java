@@ -755,6 +755,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
+    public void clearUpgradeRequired() {}
+
+    @Override
     public Configuration getConfiguration() {
         return config;
     }
