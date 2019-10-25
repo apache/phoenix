@@ -480,6 +480,28 @@ public class IndexTool extends Configured implements Tool {
 
         private Job configureJobForServerBuildIndex()
                 throws Exception {
+            long indexRebuildQueryTimeoutMs =
+                    configuration.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+            long indexRebuildRPCTimeoutMs =
+                    configuration.getLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
+            long indexRebuildClientScannerTimeOutMs =
+                    configuration.getLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
+            int indexRebuildRpcRetriesCounter =
+                    configuration.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
+            // Set various phoenix and hbase level timeouts and rpc retries
+            configuration.set(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                    Long.toString(indexRebuildQueryTimeoutMs));
+            configuration.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                    Long.toString(indexRebuildClientScannerTimeOutMs));
+            configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY,
+                    Long.toString(indexRebuildRPCTimeoutMs));
+            configuration.set(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+                    Long.toString(indexRebuildRpcRetriesCounter));
+            configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
