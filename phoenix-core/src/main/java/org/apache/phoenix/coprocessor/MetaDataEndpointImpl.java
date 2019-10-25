@@ -57,6 +57,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -1714,9 +1716,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
 
             // check if the table was dropped, but had child views that were have not yet been cleaned up
-            if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME) &&
-                    clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG) {
-                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName);
+            if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+                byte[] sysCatOrSysChildLink = SchemaUtil.getPhysicalTableName(
+                        clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ?
+                        SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_NAME_BYTES,
+                        env.getConfiguration()).getName();
+                // TODO: PHOENIX-5544 In the case of old clients, this actually does not do anything since the
+                // parent->child links were already removed when dropping the base table
+                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName, sysCatOrSysChildLink);
             }
 
             byte[] parentTableKey = null;
@@ -2079,7 +2086,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         TableViewFinderResult result = new TableViewFinderResult();
         try (Table hTable =
                      env.getTable(SchemaUtil.getPhysicalTableName(
-                             PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                             SYSTEM_CHILD_LINK_NAME_BYTES,
                              env.getConfiguration()))) {
             ViewUtil.findAllRelatives(hTable, tenantId, schemaName, tableName,
                     LinkType.CHILD_TABLE, result);
@@ -2237,7 +2244,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // after the view metadata is dropped, drop parent->child link
                 MetaDataResponse response =
                         processRemoteRegionMutations(
-                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                                SYSTEM_CHILD_LINK_NAME_BYTES,
                                 childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_DELETE_CHILD_LINK);
                 if (response != null) {
                     done.run(response);
@@ -2341,10 +2348,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             if (tableType == PTableType.TABLE || tableType == PTableType.VIEW || tableType == PTableType.SYSTEM) {
                 // check to see if the table has any child views
-                try (Table hTable =
-                             env.getTable(SchemaUtil.getPhysicalTableName(
-                                     PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                                     env.getConfiguration()))) {
+                try (Table hTable = env.getTable(SchemaUtil.getPhysicalTableName(
+                        clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ?
+                                SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_NAME_BYTES,
+                        env.getConfiguration()))) {
                     boolean hasChildViews =
                             ViewUtil.hasChildViews(hTable, tenantId, schemaName, tableName,
                                     clientTimeStamp);
@@ -2355,9 +2362,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     EnvironmentEdgeManager.currentTimeMillis(), null);
                         }
                         try {
-                            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                            Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS, Bytes.toString(tenantId),
-                                    Bytes.toString(schemaName), Bytes.toString(tableName), this.accessCheckEnabled);
+                            if (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                                PhoenixConnection conn =
+                                        QueryUtil.getConnectionOnServer(env.getConfiguration())
+                                                .unwrap(PhoenixConnection.class);
+                                Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
+                                        Bytes.toString(tenantId), Bytes.toString(schemaName),
+                                        Bytes.toString(tableName), this.accessCheckEnabled);
+                            }
+                            // else: the client version is old, so we cannot add a task to cleanup
+                            // child view metadata since SYSTEM.TASK may not exist
                         } catch (Throwable t) {
                             LOGGER.error("Adding a task to drop child views failed!", t);
                         }

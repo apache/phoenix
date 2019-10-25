@@ -362,6 +362,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
+    public void clearUpgradeRequired() {
+        getDelegate().isUpgradeRequired();
+    }
+
+    @Override
     public Configuration getConfiguration() {
         return getDelegate().getConfiguration();
     }
