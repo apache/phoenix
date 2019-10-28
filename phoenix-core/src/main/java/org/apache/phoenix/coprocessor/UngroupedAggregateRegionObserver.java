@@ -37,7 +37,10 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -1072,6 +1075,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         private Scan scan;
         private RegionScanner innerScanner;
         final Region region;
+        IndexMaintainer indexMaintainer;
 
         IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                                    final Configuration config) {
@@ -1092,10 +1096,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 useProto = false;
                 indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
             }
+            if (!scan.isRaw()) {
+                List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+                indexMaintainer = maintainers.get(0);
+            }
             this.scan = scan;
             this.innerScanner = innerScanner;
             this.region = region;
         }
+
         @Override
         public HRegionInfo getRegionInfo() {
             return region.getRegionInfo();
@@ -1115,6 +1124,46 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
             // Since we're replaying existing mutations, it makes no sense to write them to the wal
             m.setDurability(Durability.SKIP_WAL);
+        }
+
+        private Delete generateDeleteMarkers(List<Cell> row) {
+            Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
+            if (row.size() == allColumns.size() + 1) {
+                // We have all the columns for the index table plus the empty column. So, no delete marker is needed
+                return null;
+            }
+            Set<ColumnReference> includedColumns = Sets.newLinkedHashSetWithExpectedSize(row.size());
+            long ts = 0;
+            for (Cell cell : row) {
+                includedColumns.add(new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell)));
+                if (ts < cell.getTimestamp()) {
+                    ts = cell.getTimestamp();
+                }
+            }
+            byte[] rowKey;
+            Delete del = null;
+            for (ColumnReference column : allColumns) {
+                if (!includedColumns.contains(column)) {
+                    if (del == null) {
+                        Cell cell = row.get(0);
+                        rowKey = new byte[cell.getRowLength()];
+                        System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowKey, 0, cell.getRowLength());
+                        del = new Delete(rowKey);
+                    }
+                    del.addColumns(column.getFamily(), column.getQualifier(), ts);
+                }
+            }
+            return del;
+        }
+
+        private byte[] commitIfReady(byte[] uuidValue) throws IOException {
+            if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                checkForRegionClosingOrSplitting();
+                commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+                uuidValue = ServerCacheClient.generateId();
+                mutations.clear();
+            }
+            return uuidValue;
         }
 
         @Override
@@ -1146,11 +1195,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del.addDeleteMarker(cell);
                                 }
                             }
-                            if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                                checkForRegionClosingOrSplitting();
-                                commitBatchWithRetries(region, mutations, blockingMemstoreSize);
-                                uuidValue = ServerCacheClient.generateId();
-                                mutations.clear();
+                            uuidValue = commitIfReady(uuidValue);
+                            if (!scan.isRaw()) {
+                                Delete deleteMarkers = generateDeleteMarkers(row);
+                                if (deleteMarkers != null) {
+                                    setMutationAttributes(deleteMarkers, uuidValue);
+                                    mutations.add(deleteMarkers);
+                                    uuidValue = commitIfReady(uuidValue);
+                                }
                             }
                             rowCount++;
                         }
