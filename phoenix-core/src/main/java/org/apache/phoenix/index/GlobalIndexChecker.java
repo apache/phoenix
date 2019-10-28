@@ -302,9 +302,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             buildIndexScan.setStartRow(dataRowKey);
             buildIndexScan.setStopRow(dataRowKey);
             buildIndexScan.setTimeRange(0, maxTimestamp);
-            // If the data table row has been deleted then we want to delete the corresponding index row too.
-            // Thus, we are using a raw scan
-            buildIndexScan.setRaw(true);
             try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScan)){
                 resultScanner.next();
             } catch (Throwable t) {
