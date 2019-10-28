@@ -119,7 +119,6 @@
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
-    <bouncycastle.version>1.46</bouncycastle.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -1063,12 +1062,6 @@
         <version>${servlet.api.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.bouncycastle</groupId>
-        <artifactId>bcprov-jdk16</artifactId>
-        <version>${bouncycastle.version}</version>
-        <scope>test</scope>
-      </dependency>
-       <dependency>
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
