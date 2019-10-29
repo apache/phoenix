@@ -1231,7 +1231,7 @@ public class MutationState implements SQLCloseable {
                     }
                     if (m instanceof Delete) {
                         Put put = new Put(m.getRow());
-                        put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
+                        put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m) - 1,
                                 IndexRegionObserver.UNVERIFIED_BYTES);
                         // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
                         addToMap(unverifiedIndexMutations, tableInfo, put);
@@ -1242,7 +1242,7 @@ public class MutationState implements SQLCloseable {
                         // Phase 1 index mutations are set to unverified.
                         // Just send empty with Unverified
                         Put unverifiedPut = new Put(m.getRow());
-                        unverifiedPut.addColumn(emptyCF, emptyCQ, timestamp, IndexRegionObserver.UNVERIFIED_BYTES);
+                        unverifiedPut.addColumn(emptyCF, emptyCQ, timestamp - 1, IndexRegionObserver.UNVERIFIED_BYTES);
                         addToMap(unverifiedIndexMutations, tableInfo, unverifiedPut);
 
                         // Phase 3 mutations are verified
