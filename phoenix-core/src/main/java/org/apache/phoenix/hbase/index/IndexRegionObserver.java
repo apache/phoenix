@@ -19,6 +19,7 @@ package org.apache.phoenix.hbase.index;
 
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
+import static org.apache.phoenix.util.ServerUtil.wrapInDoNotRetryIOException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -163,6 +164,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
       // row (i.e., concurrent updates).
       private HashSet<ImmutableBytesPtr> pendingRows = new HashSet<>();
       private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
+      long dataWriteStartTime;
 
       private BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
@@ -576,7 +578,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
                       // For this mutation whether it is put or delete, set the status of the index row "unverified"
                       // This will be done before the data table row is updated (i.e., in the first write phase)
                       Put unverifiedPut = new Put(m.getRow());
-                      unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
+                      unverifiedPut.addColumn(emptyCF, emptyCQ, now - 1, UNVERIFIED_BYTES);
                       context.preIndexUpdates.add(new Pair <Mutation, byte[]>(unverifiedPut, next.getFirst().getSecond()));
                       // Ignore post index updates (i.e., the third write phase updates) for this row if it is
                       // going through concurrent updates
@@ -656,6 +658,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           for (RowLock rowLock : context.rowLocks) {
               rowLocks.add(lockManager.lockRow(rowLock.getRowKey(), rowLockWaitDuration));
           }
+          context.dataWriteStartTime = EnvironmentEdgeManager.currentTimeMillis();
           context.rowLocks.clear();
           context.rowLocks = rowLocks;
           // Check if we need to skip post index update for any of the row
@@ -712,6 +715,23 @@ public class IndexRegionObserver extends BaseRegionObserver {
       try {
           for (RowLock rowLock : context.rowLocks) {
               rowLock.release();
+          }
+          // Sleep for one millisecond if we have done the data table updates in less than 1 ms. The sleep is necessary
+          // not to allow another data table write on the same row within the same ms. The sleep is very rare to happen.
+          // Assume that a data table write completes at timestamp t.  Now assume another write happens on the same data
+          // row at timestamp t+1. The mutation for unverifying the index table row(s) for the previous write will have
+          // timestamp t. If this happens before the last phase of the first write (with timestamp t) completes, then
+          // the index row(s) for the first write will have the verified status. We do not want this to happen as the
+          // updates for the first write are supposed to be overwritten (unverified) by the second write.
+
+          if (!context.rowLocks.isEmpty() && context.dataWriteStartTime == EnvironmentEdgeManager.currentTimeMillis()) {
+              try {
+                  Thread.sleep(1);
+              } catch (InterruptedException e) {
+                  wrapInDoNotRetryIOException("Thread sleep is interrupted after data write", e,
+                          EnvironmentEdgeManager.currentTimeMillis());
+              }
+              LOG.debug("After data write, slept 1ms for " + c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
           }
           this.builder.batchCompleted(miniBatchOp);
 
