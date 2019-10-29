@@ -340,7 +340,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
-    public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 7*24*60*60*1000; /* 7 days */
+    public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 10*60*1000; /* 10 minutes */
     public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
     public static final long DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS = 16*1024;
 
