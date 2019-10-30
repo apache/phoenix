@@ -53,6 +53,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
@@ -927,7 +928,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean isViewIndex = TRUE_BYTES_AS_STRING
                     .equals(tableProps.get(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME));
 
-            if ((tableType == PTableType.INDEX && !isTransactional) || isViewIndex) {
+            boolean isViewBaseTransactional = false;
+            if (!isTransactional && isViewIndex) {
+                if (Boolean.TRUE.equals(tableProps.getOrDefault(TRANSACTIONAL, Boolean.FALSE))) {
+                    isViewBaseTransactional = true;
+                }
+            }
+
+            if (!isTransactional && !isViewBaseTransactional
+                    && (tableType == PTableType.INDEX || isViewIndex)) {
                 if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     builder.removeCoprocessor(GlobalIndexChecker.class.getName());
                 } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName()) &&
