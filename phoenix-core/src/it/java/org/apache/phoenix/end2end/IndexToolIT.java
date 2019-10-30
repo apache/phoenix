@@ -113,7 +113,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static synchronized void setup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
@@ -131,7 +131,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     @Parameters(
             name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3},useSnapshot={4}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
         for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {

@@ -141,7 +141,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
     }
 
     @Parameters(name="{1} {2}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Scan range is empty.
         testCases.addAll(

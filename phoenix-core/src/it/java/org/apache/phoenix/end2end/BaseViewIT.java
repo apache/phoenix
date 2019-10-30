@@ -73,7 +73,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	}
     
     @Parameters(name="transactionProvider={0}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { {"TEPHRA"}, {"OMID"}, {null} }), 0);
     }
     

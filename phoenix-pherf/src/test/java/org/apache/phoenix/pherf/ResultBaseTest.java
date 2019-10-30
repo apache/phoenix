@@ -30,7 +30,7 @@ public class ResultBaseTest {
     private static Properties properties;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         if (isSetUpDone) {
             return;
         }
@@ -41,7 +41,7 @@ public class ResultBaseTest {
         isSetUpDone = true;
     }
     
-    @AfterClass public static void tearDown() throws Exception {
+    @AfterClass public static synchronized void tearDown() throws Exception {
     	new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
     }
 }

@@ -54,7 +54,7 @@ public class ContextClassloaderIT  extends BaseTest {
     private static ClassLoader badContextClassloader;
 
     @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
+    public static synchronized void setUpBeforeClass() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         setUpConfigForMiniCluster(conf);
         hbaseTestUtil = new HBaseTestingUtility(conf);

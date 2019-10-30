@@ -47,7 +47,7 @@ public class ConnectionCachingIT extends ParallelStatsEnabledIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionCachingIT.class);
 
   @Parameters(name= "phoenix.scanner.lease.renew.enabled={0}")
-  public static Iterable<String> data() {
+  public static synchronized Iterable<String> data() {
     return Arrays.asList("true", "false");
   }
 

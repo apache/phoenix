@@ -56,7 +56,7 @@ public class ReadWriteKeyValuesWithCodecTest {
   private static final byte[] FAMILY = Bytes.toBytes("family");
 
   @BeforeClass
-  public static void setupCodec() {
+  public static synchronized void setupCodec() {
     Configuration conf = UTIL.getConfiguration();
     IndexTestingUtils.setupConfig(conf);
     conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());

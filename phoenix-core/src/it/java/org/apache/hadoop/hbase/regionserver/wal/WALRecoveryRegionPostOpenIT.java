@@ -101,7 +101,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
     private static volatile boolean failIndexTableWrite=false;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put("hbase.coprocessor.region.classes", IndexTableFailingRegionObserver.class.getName());
         serverProps.put(Indexer.RecoveryFailurePolicyKeyForTesting, ReleaseLatchOnFailurePolicy.class.getName());

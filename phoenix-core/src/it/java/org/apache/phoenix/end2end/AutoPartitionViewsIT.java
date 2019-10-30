@@ -57,7 +57,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             + "=tenant2";
 
     @Parameters(name = "AutoPartitionViewsIT_salted={0},multi-tenant={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false, false }, { false, true }, { true, false },
                 { true, true } });
     }

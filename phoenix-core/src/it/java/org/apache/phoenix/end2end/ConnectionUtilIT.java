@@ -42,7 +42,7 @@ public class ConnectionUtilIT {
     private static Configuration conf;
   
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         conf = hbaseTestUtil.getConfiguration();
         setUpConfigForMiniCluster(conf);

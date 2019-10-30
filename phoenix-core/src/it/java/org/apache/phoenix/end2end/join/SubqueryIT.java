@@ -50,7 +50,7 @@ public class SubqueryIT extends BaseJoinIT {
     }
     
     @Parameters
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {}, {

@@ -76,7 +76,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
     private static PhoenixConnection phoenixConn;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
             Boolean.TRUE.toString());

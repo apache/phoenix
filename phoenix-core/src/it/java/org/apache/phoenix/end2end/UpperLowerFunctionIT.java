@@ -36,7 +36,7 @@ public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
     private static String lastName = "Smith";
 
     @BeforeClass
-    public static void init() throws SQLException {
+    public static synchronized void init() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + tableName + " ("
                 + "id INTEGER PRIMARY KEY,"

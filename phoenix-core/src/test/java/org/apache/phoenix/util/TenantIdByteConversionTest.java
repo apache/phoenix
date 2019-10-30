@@ -89,7 +89,7 @@ public class TenantIdByteConversionTest {
     }
 
     @Parameters
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> testCases = Lists.newArrayList();
         // Varchar
         testCases.add(new Object[] {

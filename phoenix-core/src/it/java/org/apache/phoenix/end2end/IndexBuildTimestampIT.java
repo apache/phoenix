@@ -69,13 +69,13 @@ public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static synchronized void setup() throws Exception {
         IndexToolIT.setup();
     }
 
     @Parameters(
             name = "mutable={0},localIndex={1},async={2},view={3}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(16);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans) {

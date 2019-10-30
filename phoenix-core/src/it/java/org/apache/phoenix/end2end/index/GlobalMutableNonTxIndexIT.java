@@ -30,7 +30,7 @@ public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
     }
 
     @Parameters(name="GlobalMutableNonTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3},skipPostIndexUpdates={4}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
                 {false, true, null, false, false},
                 {false, true, null, false, true},
