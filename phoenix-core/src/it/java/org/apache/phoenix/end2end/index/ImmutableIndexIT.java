@@ -125,7 +125,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put("hbase.coprocessor.region.classes", CreateIndexRegionObserver.class.getName());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(5);
@@ -138,7 +138,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
 		return TestUtil.filterTxParamData(
 		        Arrays.asList(new Object[][] {
     				{ false, false, null, false }, { false, false, null, true },

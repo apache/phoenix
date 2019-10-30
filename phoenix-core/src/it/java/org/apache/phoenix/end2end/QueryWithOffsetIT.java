@@ -71,7 +71,7 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="preSplit = {0}")
-    public static Collection<String> data() {
+    public static synchronized Collection<String> data() {
         return Arrays.asList(new String[] { " SPLIT ON ('e','i','o')", " SALT_BUCKETS=10" });
     }
 

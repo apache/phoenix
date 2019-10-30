@@ -82,12 +82,12 @@ public class TestPerRegionIndexWriteCache {
   public TestName testName = new TestName();
 
   @BeforeClass
-  public static void startDfs() throws Exception {
+  public static synchronized void startDfs() throws Exception {
       miniDfs = TEST_UTIL.startMiniDFSCluster(1);
   }
 
   @AfterClass
-  public static void stopDfs() throws Exception {
+  public static synchronized void stopDfs() throws Exception {
       if (miniDfs != null) {
           miniDfs.shutdown();
           miniDfs = null;

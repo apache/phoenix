@@ -63,7 +63,7 @@ public class PartialResultServerConfigurationIT {
     private static String url;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
@@ -80,7 +80,7 @@ public class PartialResultServerConfigurationIT {
     }
 
     @AfterClass
-    public static void tearDownAfterClass() throws Exception {
+    public static synchronized void tearDownAfterClass() throws Exception {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {

@@ -59,7 +59,7 @@ public class PhoenixDriverIT extends BaseUniqueNamesOwnClusterIT {
     private static String zkQuorum;
     
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);

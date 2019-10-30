@@ -43,7 +43,7 @@ public class PhoenixClientRpcIT extends BaseUniqueNamesOwnClusterIT {
     private String dataTableFullName;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
         		TestPhoenixIndexRpcSchedulerFactory.class.getName());
         NUM_SLAVES_BASE = 2;
@@ -51,7 +51,7 @@ public class PhoenixClientRpcIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @AfterClass
-    public static void cleanUpAfterTestSuite() throws Exception {
+    public static synchronized void cleanUpAfterTestSuite() throws Exception {
         TestPhoenixIndexRpcSchedulerFactory.reset();
     }
     

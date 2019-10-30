@@ -49,7 +49,7 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
     }
     
     @Parameters(name="TransactionalViewIT_transactionProvider={0}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                  {"TEPHRA"},{"OMID"}}),0);
     }

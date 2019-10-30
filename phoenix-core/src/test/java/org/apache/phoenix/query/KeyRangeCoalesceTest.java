@@ -44,7 +44,7 @@ public class KeyRangeCoalesceTest extends TestCase {
     }
 
     @Parameters(name="{0} coalesces to {1}")
-    public static Collection<?> data() {
+    public static synchronized Collection<?> data() {
         return Arrays.asList(new Object[][] {
                 {expect(
                     EMPTY_RANGE

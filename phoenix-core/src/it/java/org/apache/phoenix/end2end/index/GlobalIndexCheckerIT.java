@@ -71,14 +71,14 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Parameters(
             name = "async={0},encoded={1}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(4);
         boolean[] Booleans = new boolean[]{true, false};
             for (boolean async : Booleans) {

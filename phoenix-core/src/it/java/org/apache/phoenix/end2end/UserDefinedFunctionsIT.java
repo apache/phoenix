@@ -272,7 +272,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         setUpConfigForMiniCluster(conf);
         util = new HBaseTestingUtility(conf);

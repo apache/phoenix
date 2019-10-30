@@ -66,7 +66,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     private boolean isNamespaceMapped;
 
     @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList(true, false);
     }
 

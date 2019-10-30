@@ -41,7 +41,7 @@ import static org.junit.Assert.assertTrue;
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
 
-    @BeforeClass public static void doSetup() throws Exception {
+    @BeforeClass public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMap();
         //disable major compactions
         serverProps.put(HConstants.MAJOR_COMPACTION_PERIOD, "0");

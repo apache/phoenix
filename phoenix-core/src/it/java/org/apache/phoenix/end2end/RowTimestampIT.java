@@ -69,7 +69,7 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
 
     // name is used by failsafe as file name in reports
     @Parameters(name = "RowTimestampIT_mutable={0},ascending={1}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(
             new Boolean[][] { { false, false }, { false, true }, { true, false }, { true, true } });
     }

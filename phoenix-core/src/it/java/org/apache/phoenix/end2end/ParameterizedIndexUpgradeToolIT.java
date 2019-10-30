@@ -244,7 +244,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     }
 
     @Parameters(name ="IndexUpgradeToolIT_mutable={0},upgrade={1},isNamespaceEnabled={2}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
             {false, false, true},
             {true, false, false},

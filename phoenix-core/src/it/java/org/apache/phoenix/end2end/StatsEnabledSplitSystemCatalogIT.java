@@ -83,7 +83,7 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseUniqueNamesOwnClusterI
 	}
 	
 	@BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         NUM_SLAVES_BASE = 3;
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));

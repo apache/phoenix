@@ -53,7 +53,7 @@ public class RebuildIndexConnectionPropsIT extends BaseUniqueNamesOwnClusterIT {
     private static int NUM_RPC_RETRIES = 1;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         Map<String, String> serverProps = new HashMap<>();

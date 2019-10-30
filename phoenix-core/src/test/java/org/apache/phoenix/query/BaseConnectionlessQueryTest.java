@@ -101,7 +101,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         startServer(getUrl());
         ensureTableCreated(getUrl(), ATABLE_NAME);
         ensureTableCreated(getUrl(), ENTITY_HISTORY_TABLE_NAME);
@@ -134,7 +134,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
     }
     
     @AfterClass
-    public static void doTeardown() throws Exception {
+    public static synchronized void doTeardown() throws Exception {
         if (driver != null) {
             try {
                 driver.close();

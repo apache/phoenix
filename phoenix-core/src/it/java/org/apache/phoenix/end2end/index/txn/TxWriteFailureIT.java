@@ -80,7 +80,7 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
 	}
 	
 	@BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
         serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
@@ -92,7 +92,7 @@ public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
     }
 	
 	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1},transactionProvider={2}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
                  { false, false, "TEPHRA" }, { false, true, "TEPHRA" }, { true, false, "TEPHRA" }, { true, true, "TEPHRA" },
                  { false, false, "OMID" }, { false, true, "OMID" }, 

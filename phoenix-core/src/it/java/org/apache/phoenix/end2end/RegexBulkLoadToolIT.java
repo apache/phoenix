@@ -49,7 +49,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
     private static String zkQuorum;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
         zkQuorum = TestUtil.LOCALHOST + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + getUtility().getZkCluster().getClientPort();
         conn = DriverManager.getConnection(getUrl());
