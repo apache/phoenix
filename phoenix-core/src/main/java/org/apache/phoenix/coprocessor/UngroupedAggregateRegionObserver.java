@@ -1147,6 +1147,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         @Override
         public boolean next(List<Cell> results) throws IOException {
             int rowCount = 0;
+            region.startRegionOperation();
             try {
                 byte[] uuidValue = ServerCacheClient.generateId();
                 synchronized (innerScanner) {
@@ -1196,9 +1197,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
                 throw e;
             } finally {
-                if (!hasMore) {
-                    region.closeRegionOperation();
-                }
+                region.closeRegionOperation();
             }
             byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
             final KeyValue aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
@@ -1216,7 +1215,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
                                          final Configuration config) throws IOException {
 
-        region.startRegionOperation();
         RegionScanner scanner = new IndexRebuildRegionScanner(innerScanner, region, scan, config);
         return scanner;
     }
