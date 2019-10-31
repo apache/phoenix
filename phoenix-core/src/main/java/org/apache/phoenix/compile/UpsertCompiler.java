@@ -171,9 +171,11 @@ public class UpsertCompiler {
         table.newKey(ptr, pkValues);
         if (table.getIndexType() == IndexType.LOCAL && maintainer != null) {
             byte[] rowKey = maintainer.buildDataRowKey(ptr, viewConstants);
+            PName parentPhysicalTableName = SchemaUtil.getPhysicalHBaseTableName(
+			    table.getParentSchemaName(), table.getParentTableName(), true);
             HRegionLocation region =
                     statement.getConnection().getQueryServices()
-                            .getTableRegionLocation(table.getParentName().getBytes(), rowKey);
+                            .getTableRegionLocation(parentPhysicalTableName.getBytes(), rowKey);
             byte[] regionPrefix =
                     region.getRegionInfo().getStartKey().length == 0 ? new byte[region
                             .getRegionInfo().getEndKey().length] : region.getRegionInfo()
