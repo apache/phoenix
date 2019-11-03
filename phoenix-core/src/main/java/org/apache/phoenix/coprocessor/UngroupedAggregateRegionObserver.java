@@ -38,9 +38,7 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -1102,8 +1100,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         private boolean useProto = true;
         private Scan scan;
         private RegionScanner innerScanner;
-        final Region region;
-        IndexMaintainer indexMaintainer;
+        private Region region;
+        private IndexMaintainer indexMaintainer;
+        private byte[] indexRowKey = null;
 
         IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                                    final Configuration config) {
@@ -1131,6 +1130,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             this.scan = scan;
             this.innerScanner = innerScanner;
             this.region = region;
+            indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         }
 
         @Override
@@ -1194,6 +1194,35 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             return uuidValue;
         }
 
+        private boolean checkIndexRow(final byte[] indexRowKey, final Put put) throws IOException {
+            ValueGetter getter = new ValueGetter() {
+                final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
+
+                @Override
+                public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
+                    List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
+                    if (cellList == null || cellList.isEmpty()) {
+                        return null;
+                    }
+                    Cell cell = cellList.get(0);
+                    valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                    return valuePtr;
+                }
+
+                @Override
+                public byte[] getRowKey() {
+                    return put.getRow();
+                }
+            };
+            byte[] builtIndexRowKey = indexMaintainer.buildRowKey(getter, new ImmutableBytesWritable(put.getRow()),
+                    null, null, HConstants.LATEST_TIMESTAMP);
+            if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
+                    indexRowKey, 0, indexRowKey.length) != 0) {
+                return false;
+            }
+            return true;
+        }
+
         @Override
         public boolean next(List<Cell> results) throws IOException {
             int rowCount = 0;
@@ -1222,6 +1251,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         mutations.add(del);
                                     }
                                     del.addDeleteMarker(cell);
+                                }
+                            }
+                            if (indexRowKey != null) {
+                                // GlobalIndexChecker passed the index row key. This is to build a single index row.
+                                // Check if the data table row we have just scanned matches with the index row key.
+                                // If not, there is no need to build the index row from this data table row,
+                                // and just return zero row count.
+                                if (!checkIndexRow(indexRowKey, put)) {
+                                    break;
                                 }
                             }
                             uuidValue = commitIfReady(uuidValue);

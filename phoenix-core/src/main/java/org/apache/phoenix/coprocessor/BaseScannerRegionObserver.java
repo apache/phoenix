@@ -106,6 +106,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String PHYSICAL_DATA_TABLE_NAME = "_PhysicalDataTableName";
     public static final String EMPTY_COLUMN_FAMILY_NAME = "_EmptyCFName";
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
+    public static final String INDEX_ROW_KEY = "_IndexRowKey";
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
