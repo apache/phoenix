@@ -53,7 +53,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -61,6 +60,8 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -86,7 +87,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         private Scan scan;
         private Scan indexScan;
         private Scan singleRowIndexScan;
-        private Scan singleRowDataScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
         private byte[] emptyCF;
@@ -224,53 +224,10 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
         }
 
-        private boolean doesDataRowExist(byte[] indexRowKey, byte[] dataRowKey) throws IOException {
-            singleRowDataScan.setStartRow(dataRowKey);
-            singleRowDataScan.setStopRow(dataRowKey);
-            singleRowDataScan.setTimeRange(0, maxTimestamp);
-            try (ResultScanner resultScanner = dataHTable.getScanner(singleRowDataScan)) {
-                final Result result = resultScanner.next();
-                if (result == null) {
-                    // There is no data table row for this index unverified index row. We need to skip it.
-                    return false;
-                }
-                else {
-                    ValueGetter getter = new ValueGetter() {
-                        final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
-
-                        @Override
-                        public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
-                            Cell cell = result.getColumnLatestCell(ref.getFamily(), ref.getQualifier());
-                            if (cell == null) {
-                                return null;
-                            }
-                            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                            return valuePtr;
-                        }
-
-                        @Override
-                        public byte[] getRowKey() {
-                            return result.getRow();
-                        }
-                    };
-                    byte[] builtIndexRowKey = indexMaintainer.buildRowKey(getter, new ImmutableBytesWritable(dataRowKey), null, null, maxTimestamp);
-                    if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
-                            indexRowKey, 0, indexRowKey.length) != 0) {
-                        // The row key of the index row that has been built is different than the row key of the unverified
-                        // index row
-                        return false;
-                    }
-                }
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(dataHTable.getName().toString(), t);
-            }
-            return true;
-        }
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
             // Build the data table row key from the index table row key
             if (buildIndexScan == null) {
                 buildIndexScan = new Scan();
-                singleRowDataScan = new Scan();
                 indexScan = new Scan(scan);
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
@@ -295,6 +252,11 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+                // Scan only columns included in the index table plus the empty column
+                for (ColumnReference column : indexMaintainer.getAllColumns()) {
+                    buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
+                }
+                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
@@ -302,12 +264,20 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             buildIndexScan.setStartRow(dataRowKey);
             buildIndexScan.setStopRow(dataRowKey);
             buildIndexScan.setTimeRange(0, maxTimestamp);
+            // Pass the index row key to the partial index builder which will build the index row only when the data
+            // table row for dataRowKey matches with this unverified index row.
+            buildIndexScan.setAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY, indexRowKey);
+            Result result = null;
             try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScan)){
-                resultScanner.next();
+                result = resultScanner.next();
             } catch (Throwable t) {
                 ServerUtil.throwIOException(dataHTable.getName().toString(), t);
             }
-            if (!doesDataRowExist(indexRowKey, dataRowKey)) {
+            // A single cell will be returned. We decode that here
+            byte[] value = result.value();
+            long rowCount = PLong.INSTANCE.getCodec().decodeLong(new ImmutableBytesWritable(value), SortOrder.getDefault());
+            if (rowCount == 0) {
+                // This means there does not exist a data table row for this unverified index row
                 // Delete the unverified row from index if it is old enough
                 deleteRowIfAgedEnough(indexRowKey, row, ts, false);
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
