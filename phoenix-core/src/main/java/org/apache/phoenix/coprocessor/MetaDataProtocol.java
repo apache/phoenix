@@ -112,6 +112,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
     // Version at which we allow SYSTEM.CATALOG to split
     public static final int MIN_SPLITTABLE_SYSTEM_CATALOG = VersionUtil.encodeVersion("4", "15", "0");
+    public static final String MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION = "4.15.0";
 
     // Version at and after which we will no longer expect client to serialize thresholdBytes for
     // spooling into the scan
