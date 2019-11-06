@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
+import static org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ_BYTES;
@@ -57,7 +58,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -76,6 +76,7 @@ import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -1715,15 +1716,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
             }
 
-            // check if the table was dropped, but had child views that were have not yet been cleaned up
+            // check if the table was previously dropped, but had child views that have not
+            // yet been cleaned up.
+            // Note that for old clients connecting to a 4.15 server whose metadata hasn't been
+            // upgraded, we disallow dropping a base table that has child views, so in that case
+            // this is a no-op (See PHOENIX-5544)
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                byte[] sysCatOrSysChildLink = SchemaUtil.getPhysicalTableName(
-                        clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ?
-                        SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_NAME_BYTES,
-                        env.getConfiguration()).getName();
-                // TODO: PHOENIX-5544 In the case of old clients, this actually does not do anything since the
-                // parent->child links were already removed when dropping the base table
-                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName, sysCatOrSysChildLink);
+                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName,
+                        getSystemTableForChildLinks(clientVersion, env.getConfiguration()).getName());
             }
 
             byte[] parentTableKey = null;
@@ -1973,6 +1973,26 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // 3. Finally write the mutations to create the table
 
                 if (tableType == PTableType.VIEW) {
+                    // If we are connecting with an old client to a server that has new metadata
+                    // i.e. it was previously connected to by a 4.15 client, then the client will
+                    // also send the parent->child link metadata to SYSTEM.CATALOG rather than using
+                    // the new ChildLinkMetaDataEndpoint coprocessor. In this case, we must continue
+                    // doing the server-server RPC to send these mutations to SYSTEM.CHILD_LINK.
+                    if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG &&
+                            getSystemTableForChildLinks(clientVersion, env.getConfiguration()).equals(
+                                    SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
+                                            env.getConfiguration()))) {
+                        List<Mutation> childLinkMutations =
+                                MetaDataUtil.removeChildLinkMutations(tableMetadata);
+                        MetaDataResponse response =
+                                processRemoteRegionMutations(
+                                        PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
+                                        childLinkMutations, UNABLE_TO_CREATE_CHILD_LINK);
+                        if (response != null) {
+                            done.run(response);
+                            return;
+                        }
+                    }
                     // Pass in the parent's PTable so that we only tag cells corresponding to the
                     // view's property in case they are different from the parent
                     ViewUtil.addTagsToPutsForViewAlteredProperties(tableMetadata, parentTable);
@@ -2242,10 +2262,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
 
                 // after the view metadata is dropped, drop parent->child link
-                MetaDataResponse response =
-                        processRemoteRegionMutations(
-                                SYSTEM_CHILD_LINK_NAME_BYTES,
-                                childLinkMutations, MetaDataProtos.MutationCode.UNABLE_TO_DELETE_CHILD_LINK);
+                MetaDataResponse response = processRemoteRegionMutations(
+                        getSystemTableForChildLinks(request.getClientVersion(),
+                                env.getConfiguration()).getName(), childLinkMutations,
+                        MetaDataProtos.MutationCode.UNABLE_TO_DELETE_CHILD_LINK);
                 if (response != null) {
                     done.run(response);
                     return;
@@ -2348,32 +2368,44 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             if (tableType == PTableType.TABLE || tableType == PTableType.VIEW || tableType == PTableType.SYSTEM) {
                 // check to see if the table has any child views
-                try (Table hTable = env.getTable(SchemaUtil.getPhysicalTableName(
-                        clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ?
-                                SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_NAME_BYTES,
+                try (Table hTable = env.getTable(getSystemTableForChildLinks(clientVersion,
                         env.getConfiguration()))) {
                     boolean hasChildViews =
                             ViewUtil.hasChildViews(hTable, tenantId, schemaName, tableName,
                                     clientTimeStamp);
                     if (hasChildViews) {
                         if (!isCascade) {
+                            LOGGER.error("DROP without CASCADE on tables with child views "
+                                    + "is not permitted");
                             // DROP without CASCADE on tables with child views is not permitted
                             return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
                                     EnvironmentEdgeManager.currentTimeMillis(), null);
                         }
-                        try {
-                            if (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                        // For 4.15+ clients and older clients connecting to an upgraded server,
+                        // add a task to drop child views of the base table.
+                        if (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
+                                SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
+                                env.getConfiguration()).equals(hTable.getName())) {
+                            try {
                                 PhoenixConnection conn =
                                         QueryUtil.getConnectionOnServer(env.getConfiguration())
                                                 .unwrap(PhoenixConnection.class);
                                 Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
                                         Bytes.toString(tenantId), Bytes.toString(schemaName),
                                         Bytes.toString(tableName), this.accessCheckEnabled);
+                            } catch (Throwable t) {
+                                LOGGER.error("Adding a task to drop child views failed!", t);
                             }
-                            // else: the client version is old, so we cannot add a task to cleanup
-                            // child view metadata since SYSTEM.TASK may not exist
-                        } catch (Throwable t) {
-                            LOGGER.error("Adding a task to drop child views failed!", t);
+                        } else {
+                            // (See PHOENIX-5544) For an old client connecting to a non-upgraded
+                            // server, we disallow dropping a base table that has child views.
+                            LOGGER.error("Dropping a table that has child views is not permitted "
+                                    + "for old clients connecting to a new server with old metadata."
+                                    + " Please upgrade the client to " +
+                                    MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
+                            return new MetaDataMutationResult(
+                                    MutationCode.UNALLOWED_TABLE_MUTATION,
+                                    EnvironmentEdgeManager.currentTimeMillis(), null);
                         }
                     }
                 }
@@ -2474,9 +2506,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         // Also if QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true, we block adding
                         // a column to a parent table so that we can rollback the upgrade if required.
                         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-                            LOGGER.error(
-                                    "Unable to add or drop a column as the client is older than "
-                                            + MIN_SPLITTABLE_SYSTEM_CATALOG);
+                            LOGGER.error("Unable to add or drop a column as the client is older "
+                                    + "than " + MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
                             return new MetaDataProtocol.MetaDataMutationResult(MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                                     EnvironmentEdgeManager.currentTimeMillis(), null);
                         } else if (allowSplittableSystemCatalogRollback) {
