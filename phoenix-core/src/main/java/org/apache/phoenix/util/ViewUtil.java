@@ -19,8 +19,11 @@ import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -69,8 +72,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
@@ -219,6 +225,40 @@ public class ViewUtil {
                 }
             }
         }
+    }
+
+
+    /**
+     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find parent->child
+     * links i.e. {@link LinkType#CHILD_TABLE}.
+     * If the client is older than 4.15.0 and the SYSTEM.CHILD_LINK table does not exist, we use
+     * the SYSTEM.CATALOG table. In all other cases, we use the SYSTEM.CHILD_LINK table.
+     * This is required for backwards compatibility.
+     * @param clientVersion client version
+     * @param conf server-side configuration
+     * @return name of the system table to be used
+     * @throws SQLException
+     */
+    public static TableName getSystemTableForChildLinks(int clientVersion,
+            Configuration conf) throws SQLException, IOException {
+        byte[] fullTableName = SYSTEM_CHILD_LINK_NAME_BYTES;
+        if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                    conf).unwrap(PhoenixConnection.class);
+                    Admin admin = connection.getQueryServices().getAdmin()) {
+
+                // If this is an old client and the CHILD_LINK table doesn't exist i.e. metadata
+                // hasn't been updated since there was never a connection from a 4.15 client
+                if (!admin.tableExists(SchemaUtil.getPhysicalTableName(
+                        SYSTEM_CHILD_LINK_NAME_BYTES, conf))) {
+                    fullTableName = SYSTEM_CATALOG_NAME_BYTES;
+                }
+            } catch (ClassNotFoundException e) {
+                logger.error("Error getting a connection on the server : " + e);
+                throw new SQLException(e);
+            }
+        }
+        return SchemaUtil.getPhysicalTableName(fullTableName, conf);
     }
 
     public static boolean isDivergedView(PTable view) {
