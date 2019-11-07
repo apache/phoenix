@@ -506,16 +506,15 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
   }
 
-  private void prepareIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
-                                     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context,
-                                     Collection<? extends Mutation> mutations, long now) throws Throwable {
-      IndexMetaData indexMetaData = this.builder.getIndexMetaData(miniBatchOp);
-      if (!(indexMetaData instanceof PhoenixIndexMetaData)) {
-          throw new DoNotRetryIOException(
-                  "preBatchMutateWithExceptions: indexMetaData is not an instance of PhoenixIndexMetaData " +
-                          c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
-      }
-      List<IndexMaintainer> maintainers = ((PhoenixIndexMetaData)indexMetaData).getIndexMaintainers();
+  private void prepareIndexMutations(
+          ObserverContext<RegionCoprocessorEnvironment> c,
+          MiniBatchOperationInProgress<Mutation> miniBatchOp,
+          BatchMutateContext context,
+          Collection<? extends Mutation> mutations,
+          long now,
+          PhoenixIndexMetaData indexMetaData) throws Throwable {
+
+      List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
       try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -526,7 +525,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
 
           // get the index updates for all elements in this batch
           Collection<Pair<Pair<Mutation, byte[]>, byte[]>> indexUpdates =
-                  this.builder.getIndexUpdates(miniBatchOp, mutations);
+                  this.builder.getIndexUpdates(miniBatchOp, mutations, indexMetaData);
 
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
@@ -590,10 +589,24 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
   }
 
+  protected PhoenixIndexMetaData getPhoenixIndexMetaData(
+          ObserverContext<RegionCoprocessorEnvironment> observerContext,
+          MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      IndexMetaData indexMetaData = this.builder.getIndexMetaData(miniBatchOp);
+      if (!(indexMetaData instanceof PhoenixIndexMetaData)) {
+          throw new DoNotRetryIOException(
+                  "preBatchMutateWithExceptions: indexMetaData is not an instance of "+PhoenixIndexMetaData.class.getName() +
+                          ", current table is:" +
+                          observerContext.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+      }
+      return (PhoenixIndexMetaData)indexMetaData;
+  }
+
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
       ignoreAtomicOperations(miniBatchOp);
-      BatchMutateContext context = new BatchMutateContext(this.builder.getIndexMetaData(miniBatchOp).getClientVersion());
+      PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
+      BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
       setBatchMutateContext(c, context);
       Mutation firstMutation = miniBatchOp.getOperation(0);
       ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
@@ -619,7 +632,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
 
       long start = EnvironmentEdgeManager.currentTimeMillis();
-      prepareIndexMutations(c, miniBatchOp, context, mutations, now);
+      prepareIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
       metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
 
       // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
