@@ -1210,7 +1210,7 @@ public class UpgradeUtil {
 			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
             while (rs.next()) {
             	String tenantId = rs.getString("TENANT_ID");
-				if (prevTenantId != tenantId) {
+				if (!java.util.Objects.equals(prevTenantId, tenantId)) {
 					prevTenantId = tenantId;
 					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             		metaConn = new PhoenixConnection(oldMetaConnection, props); 
@@ -2300,7 +2300,7 @@ public class UpgradeUtil {
         for (TableInfo viewInfo : viewInfoList) {
             tenantId = viewInfo.getTenantId()!=null ? Bytes.toString(viewInfo.getTenantId()) : null;
             String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(), viewInfo.getTableName());
-            if (prevTenantId != tenantId) {
+            if (!java.util.Objects.equals(prevTenantId, tenantId)) {
                 if (tenantId != null) {
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                 } else {
