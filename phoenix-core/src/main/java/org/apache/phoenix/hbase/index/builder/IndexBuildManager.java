@@ -81,9 +81,9 @@ public class IndexBuildManager implements Stoppable {
 
   public Collection<Pair<Pair<Mutation, byte[]>, byte[]>> getIndexUpdates(
       MiniBatchOperationInProgress<Mutation> miniBatchOp,
-      Collection<? extends Mutation> mutations) throws Throwable {
+      Collection<? extends Mutation> mutations,
+      IndexMetaData indexMetaData) throws Throwable {
     // notify the delegate that we have started processing a batch
-    final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
