@@ -156,7 +156,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       // The collection of candidate index mutations that will be applied after the data table mutations
       private Collection<Pair<Pair<Mutation, byte[]>, byte[]>> intermediatePostIndexUpdates;
       private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-      private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
       long dataWriteStartTime;
 
       private BatchMutateContext(int clientVersion) {
@@ -375,24 +374,17 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-  private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context) {
+  private void lockRows(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                        BatchMutateContext context) throws IOException {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           if (miniBatchOp.getOperationStatus(i) == IGNORE) {
               continue;
           }
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isEnabled(m)) {
-              ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-              if (!context.rowsToLock.contains(row)) {
-                  context.rowsToLock.add(row);
-              }
+              ImmutableBytesPtr rowKey = new ImmutableBytesPtr(m.getRow());
+              context.rowLocks.add(lockManager.lockRow(rowKey, rowLockWaitDuration));
           }
-      }
-  }
-
-  private void lockRows(BatchMutateContext context) throws IOException {
-      for (ImmutableBytesPtr rowKey : context.rowsToLock) {
-          context.rowLocks.add(lockManager.lockRow(rowKey, rowLockWaitDuration));
       }
   }
 
@@ -621,8 +613,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
        * while determining the index updates
        */
       if (replayWrite == null) {
-          populateRowsToLock(miniBatchOp, context);
-          lockRows(context);
+          lockRows(miniBatchOp, context);
       }
       long now = EnvironmentEdgeManager.currentTimeMillis();
       // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
