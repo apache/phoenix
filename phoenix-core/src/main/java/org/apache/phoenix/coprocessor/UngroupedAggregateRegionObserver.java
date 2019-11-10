@@ -97,6 +97,7 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -1140,8 +1141,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 if (!includedColumns.contains(column)) {
                     if (del == null) {
                         Cell cell = row.get(0);
-                        rowKey = new byte[cell.getRowLength()];
-                        System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowKey, 0, cell.getRowLength());
+                        rowKey = CellUtil.cloneRow(cell);
                         del = new Delete(rowKey);
                     }
                     del.addColumns(column.getFamily(), column.getQualifier(), ts);
@@ -1219,15 +1219,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del.addDeleteMarker(cell);
                                 }
                             }
-                            if (indexRowKey != null) {
-                                // GlobalIndexChecker passed the index row key. This is to build a single index row.
-                                // Check if the data table row we have just scanned matches with the index row key.
-                                // If not, there is no need to build the index row from this data table row,
-                                // and just return zero row count.
-                                if (!checkIndexRow(indexRowKey, put)) {
-                                    break;
-                                }
-                            }
                             uuidValue = commitIfReady(uuidValue);
                             if (!scan.isRaw()) {
                                 Delete deleteMarkers = generateDeleteMarkers(row);
@@ -1236,6 +1227,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     mutations.add(deleteMarkers);
                                     uuidValue = commitIfReady(uuidValue);
                                 }
+                            }
+                            if (indexRowKey != null) {
+                                // GlobalIndexChecker passed the index row key. This is to build a single index row.
+                                // Check if the data table row we have just scanned matches with the index row key.
+                                // If not, there is no need to build the index row from this data table row,
+                                // and just return zero row count.
+                                if (checkIndexRow(indexRowKey, put)) {
+                                    rowCount = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
+                                }
+                                else {
+                                    rowCount = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
+                                }
+                                break;
                             }
                             rowCount++;
                         }
