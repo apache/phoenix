@@ -27,6 +27,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -56,10 +57,9 @@ import com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class ImmutableStorageSchemeTest {
     
-    protected static final LiteralExpression CONSTANT_EXPRESSION = LiteralExpression.newConstant(QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
     protected static final byte[] BYTE_ARRAY1 = new byte[]{1,2,3,4,5};
     protected static final byte[] BYTE_ARRAY2 = new byte[]{6,7,8};
-    protected Expression FALSE_EVAL_EXPRESSION = new DelegateExpression(LiteralExpression.newConstant(null)) {
+    protected Expression FALSE_EVAL_EXPRESSION = new DelegateExpression(new LiteralExpression.Builder().build()) {
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
             return false;
@@ -78,7 +78,7 @@ public class ImmutableStorageSchemeTest {
                         });
     }
     
-    public ImmutableStorageSchemeTest(ImmutableStorageScheme immutableStorageScheme, byte serializationVersion) {
+    public ImmutableStorageSchemeTest(ImmutableStorageScheme immutableStorageScheme, byte serializationVersion) throws SQLException {
         this.immutableStorageScheme = immutableStorageScheme;
         this.immutableStorageScheme.setSerializationVersion(serializationVersion);
         this.serializationVersion = serializationVersion;
@@ -87,11 +87,11 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testWithExpressionsThatEvaluatetoFalse() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        children.add(CONSTANT_EXPRESSION);
+        children.add(new LiteralExpression.Builder().setValue(QueryConstants.EMPTY_COLUMN_VALUE_BYTES).build());
         children.add(FALSE_EVAL_EXPRESSION);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
         children.add(FALSE_EVAL_EXPRESSION);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY2, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY2).setDataType(PVarbinary.INSTANCE).build());
         ImmutableBytesPtr ptr = evaluate(children);
         
         ImmutableBytesPtr ptrCopy = new ImmutableBytesPtr(ptr);
@@ -117,7 +117,7 @@ public class ImmutableStorageSchemeTest {
         int numElements = Short.MAX_VALUE+2;
         List<Expression> children = Lists.newArrayListWithExpectedSize(numElements);
         for (int i=0; i<numElements; ++i) {
-            children.add(CONSTANT_EXPRESSION);
+            children.add(new LiteralExpression.Builder().setValue(QueryConstants.EMPTY_COLUMN_VALUE_BYTES).build());
         }
         SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(immutableStorageScheme, children);
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
@@ -142,7 +142,7 @@ public class ImmutableStorageSchemeTest {
         int numElements = Short.MAX_VALUE+2;
         List<Expression> children = Lists.newArrayListWithExpectedSize(numElements);
         for (int i=0; i<=numElements; i+=2) {
-            children.add(CONSTANT_EXPRESSION);
+            children.add(new LiteralExpression.Builder().setValue(QueryConstants.EMPTY_COLUMN_VALUE_BYTES).build());
             children.add(FALSE_EVAL_EXPRESSION);
         }
         SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(immutableStorageScheme, children);
@@ -170,11 +170,11 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testLeadingNulls() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
         children.add(nullExpression);
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY2, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY2).setDataType(PVarbinary.INSTANCE).build());
         ImmutableBytesPtr ptr = evaluate(children);
 
         assertDecodedContents(ptr, new byte[][] {EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY, BYTE_ARRAY1, BYTE_ARRAY2});
@@ -183,9 +183,9 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testTrailingNulls() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY2, PVarbinary.INSTANCE));
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY2).setDataType(PVarbinary.INSTANCE).build());
         children.add(nullExpression);
         children.add(nullExpression);
         ImmutableBytesPtr ptr = evaluate(children);
@@ -196,15 +196,15 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testManyNulls() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
         byte[][] testData = new byte[300][];
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
         testData[0] = BYTE_ARRAY1;
         for (int i = 1; i < testData.length - 1; i++) {
             children.add(nullExpression);
             testData[i] = EMPTY_BYTE_ARRAY;
         }
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY2, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY2).setDataType(PVarbinary.INSTANCE).build());
         testData[299] = BYTE_ARRAY2;
         ImmutableBytesPtr ptr = evaluate(children);
 
@@ -214,9 +214,9 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testSingleLeadingTrailingNull() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
         children.add(nullExpression);
         ImmutableBytesPtr ptr = evaluate(children);
 
@@ -227,10 +227,10 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testSingleMiddleNull() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY1, PVarbinary.INSTANCE));
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY1).setDataType(PVarbinary.INSTANCE).build());
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant(BYTE_ARRAY2, PVarbinary.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(BYTE_ARRAY2).setDataType(PVarbinary.INSTANCE).build());
         ImmutableBytesPtr ptr = evaluate(children);
 
         assertDecodedContents(ptr, new byte[][] { BYTE_ARRAY1, EMPTY_BYTE_ARRAY, BYTE_ARRAY2 });
@@ -242,7 +242,7 @@ public class ImmutableStorageSchemeTest {
         List<Expression> children = Lists.newArrayListWithExpectedSize(1);
         List<Integer> failedValues = Lists.newArrayList();
         while (curr <= Short.MAX_VALUE) {
-            children.add(LiteralExpression.newConstant(curr, PSmallint.INSTANCE));
+            children.add(new LiteralExpression.Builder().setValue(curr).setDataType(PSmallint.INSTANCE).build());
             ImmutableBytesPtr ptr = evaluate(children);
             ColumnValueDecoder decoder = immutableStorageScheme.getDecoder();
             assertTrue(decoder.decode(ptr, 0));
@@ -270,13 +270,14 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testSingleByteValues() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((byte) -128, PTinyint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((byte) -128).setDataType(PTinyint.INSTANCE).build());
+
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((byte) 0, PUnsignedTinyint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((byte) 0).setDataType(PUnsignedTinyint.INSTANCE).build());
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((byte) 127, PUnsignedTinyint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((byte) 127).setDataType(PUnsignedTinyint.INSTANCE).build());
         ImmutableBytesPtr ptr = evaluate(children);
 
         assertNullAtIndex(ptr, 0);
@@ -290,19 +291,20 @@ public class ImmutableStorageSchemeTest {
     @Test
     public void testSeparatorByteValues() throws Exception {
         List<Expression> children = Lists.newArrayListWithExpectedSize(4);
-        LiteralExpression nullExpression = LiteralExpression.newConstant(null);
+        LiteralExpression nullExpression = new LiteralExpression.Builder().build();
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((short) -32513, PSmallint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((short) -32513).setDataType(PSmallint.INSTANCE).build());
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((short) 32767, PSmallint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((short) 32767).setDataType(PSmallint.INSTANCE).build());
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant(Integer.MAX_VALUE, PInteger.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(Integer.MAX_VALUE).setDataType(PInteger.INSTANCE).build());
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant(Integer.MIN_VALUE, PInteger.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue(Integer.MIN_VALUE).setDataType(PInteger.INSTANCE).build());
         // see if we can differentiate two nulls and {separatorByte, 2}
         children.add(nullExpression);
         children.add(nullExpression);
-        children.add(LiteralExpression.newConstant((short) -32514, PSmallint.INSTANCE));
+        children.add(new LiteralExpression.Builder().setValue((short) -32514).setDataType(PSmallint.INSTANCE).build());
+
 
         ImmutableBytesPtr ptr = evaluate(children);
 

@@ -420,7 +420,7 @@ public class IndexUtil {
      * @param rootExpression the root expression from which to begin traversal
      * @param offset the offset to set on each RowKeyColumnExpression
      */
-    public static void setRowKeyExpressionOffset(Expression rootExpression, final int offset) {
+    public static void setRowKeyExpressionOffset(Expression rootExpression, final int offset) throws SQLException {
         rootExpression.accept(new RowKeyExpressionVisitor() {
 
             @Override

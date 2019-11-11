@@ -44,9 +44,11 @@ public class NotExpression extends BaseSingleExpression {
         }
         if (child.isStateless()) {
             if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, child.getDeterminism());
+                return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism())
+                        .build();
             }
-            return LiteralExpression.newConstant(!(Boolean) PBoolean.INSTANCE.toObject(ptr), PBoolean.INSTANCE, child.getDeterminism());
+            return new LiteralExpression.Builder().setValue(!(Boolean) PBoolean.INSTANCE.toObject(ptr))
+                    .setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism()).build();
         }
         return new NotExpression(child);
     }
@@ -81,7 +83,7 @@ public class NotExpression extends BaseSingleExpression {
     }
     
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

@@ -53,7 +53,7 @@ public class AndExpression extends AndOrExpression {
 			determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return new LiteralExpression.Builder().setValue(true).setDeterminism(determinism).build();
         }
         if (children.size() == 1) {
             return children.get(0);
@@ -95,7 +95,7 @@ public class AndExpression extends AndOrExpression {
     }
     
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

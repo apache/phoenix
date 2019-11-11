@@ -170,7 +170,7 @@ public abstract class BaseExpression implements Expression {
         } else if (lhs == null) { 
             return rhs;
         } else if (rhs == null) {
-            return LiteralExpression.newConstant(null, lhs.getDataType(), lhs.getDeterminism());
+            return new LiteralExpression.Builder().setDataType(lhs.getDataType()).setDeterminism(lhs.getDeterminism()).build();
         } else {
             if (rhs.getDataType() != null && lhs.getDataType() != null && !rhs.getDataType().isCastableTo(lhs.getDataType())) {
                 throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType());
@@ -222,7 +222,7 @@ public abstract class BaseExpression implements Expression {
     public void reset() {
     }
     
-    protected final <T> List<T> acceptChildren(ExpressionVisitor<T> visitor, Iterator<Expression> iterator) {
+    protected final <T> List<T> acceptChildren(ExpressionVisitor<T> visitor, Iterator<Expression> iterator) throws SQLException {
         if (iterator == null) {
             iterator = visitor.defaultIterator(this);
         }

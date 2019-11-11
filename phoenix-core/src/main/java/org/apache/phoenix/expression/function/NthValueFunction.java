@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -45,7 +46,7 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
     public static final String NAME = "NTH_VALUE";
     private int offset;
 
-    public NthValueFunction() {
+    public NthValueFunction() throws SQLException {
     }
 
     public NthValueFunction(List<Expression> childExpressions) {

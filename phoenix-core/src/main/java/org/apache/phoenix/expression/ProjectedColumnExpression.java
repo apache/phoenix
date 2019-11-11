@@ -20,6 +20,7 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -148,7 +149,7 @@ public class ProjectedColumnExpression extends ColumnExpression {
     }
 
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         return visitor.visit(this);
     }
 

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -178,7 +179,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) throws SQLException {
         return delegate.getIndexMaintainer(dataTable, connection);
     }
 

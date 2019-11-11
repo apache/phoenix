@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -204,7 +205,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
      * (new index cell)
      */
     @Test
-    public void testGetMutableIndexUpdate() throws IOException {
+    public void testGetMutableIndexUpdate() throws IOException, SQLException {
         setCurrentRowState(FAM, INDEXED_QUALIFIER, 1, VALUE_1);
 
         // update ts and value
@@ -234,7 +235,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
      * There should be one index row version per data row version.
      */
     @Test
-    public void testRebuildMultipleVersionRow() throws IOException {
+    public void testRebuildMultipleVersionRow() throws IOException, SQLException {
         // when doing a rebuild, we are replaying mutations so we want to ignore newer mutations
         // see LocalTable#getCurrentRowState()
         Mockito.when(mockIndexMetaData.getReplayWrite()).thenReturn(ReplayWrite.INDEX_ONLY);
@@ -294,7 +295,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
      * was causing this test to take >90 seconds, so here we set a timeout of 5 seconds
      */
     @Test(timeout = 10000)
-    public void testManyVersions() throws IOException {
+    public void testManyVersions() throws IOException, SQLException {
         // when doing a rebuild, we are replaying mutations so we want to ignore newer mutations
         // see LocalTable#getCurrentRowState()
         Mockito.when(mockIndexMetaData.getReplayWrite()).thenReturn(ReplayWrite.INDEX_ONLY);

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -54,7 +55,7 @@ public class OrExpression extends AndOrExpression {
     }
     
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

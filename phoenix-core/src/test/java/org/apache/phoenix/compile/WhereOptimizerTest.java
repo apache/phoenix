@@ -592,12 +592,12 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testSubstrExpressionWithoutLengthVariable() {
+    public void testSubstrExpressionWithoutLengthVariable() throws SQLException {
         assertEquals("SUBSTR(ENTITY_ID, 1)",((SubstrFunction)substr2(ENTITY_ID,1)).toString());
     }
 
     @Test
-    public void testSubstrExpressionWithLengthVariable() {
+    public void testSubstrExpressionWithLengthVariable() throws SQLException {
         assertEquals("SUBSTR(ENTITY_ID, 1, 10)",((SubstrFunction)substr(ENTITY_ID,1, 10)).toString());
     }
 

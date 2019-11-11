@@ -165,7 +165,7 @@ public class CoerceExpression extends BaseSingleExpression {
     }    
 
     @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.hbase.index.builder;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -73,7 +74,7 @@ public interface IndexBuilder extends Stoppable {
    * @return a Map of the mutations to make -> target index table name
    * @throws IOException on failure
    */
-  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context, LocalHBaseState localHBaseState) throws IOException;
+  public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context, LocalHBaseState localHBaseState) throws IOException, SQLException;
 
     /**
      * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal flush or compaction
@@ -149,7 +150,7 @@ public interface IndexBuilder extends Stoppable {
    * @return list of mutations as a result of executing the ON DUPLICATE KEY clause
    * or null if Increment does not represent an ON DUPLICATE KEY clause.
    */
-  public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
+  public List<Mutation> executeAtomicOp(Increment inc) throws IOException, SQLException;
 
   public ReplayWrite getReplayWrite(Mutation m);
 }

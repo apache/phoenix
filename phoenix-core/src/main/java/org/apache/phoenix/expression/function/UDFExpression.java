@@ -24,6 +24,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
 
@@ -91,7 +92,7 @@ public class UDFExpression extends ScalarFunction {
     }
 
     @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         return udfFunction.accept(visitor);
     }
 

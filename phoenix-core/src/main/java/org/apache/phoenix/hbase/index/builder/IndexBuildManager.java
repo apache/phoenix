@@ -18,6 +18,7 @@
 package org.apache.phoenix.hbase.index.builder;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -154,7 +155,7 @@ public class IndexBuildManager implements Stoppable {
     return delegate.isAtomicOp(m);
   }
 
-  public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
+  public List<Mutation> executeAtomicOp(Increment inc) throws IOException, SQLException {
       return delegate.executeAtomicOp(inc);
   }
   

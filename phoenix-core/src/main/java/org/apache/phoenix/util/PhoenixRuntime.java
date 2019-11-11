@@ -1103,8 +1103,7 @@ public class PhoenixRuntime {
         for (PColumn col : pColumns) {
             Object value = values[i];
             // for purposes of encoding, sort order of the columns doesn't matter.
-            Expression expr = LiteralExpression.newConstant(value, col.getDataType(), col.getMaxLength(), col.getScale());
-            expressions.add(expr);
+            expressions.add(new LiteralExpression.Builder().setValue(value).setDataType(col.getDataType()).setMaxLength(col.getMaxLength()).setScale(col.getScale()).build());
             i++;
         }
         KeyValueSchema kvSchema = buildKeyValueSchema(pColumns);
@@ -1168,8 +1167,8 @@ public class PhoenixRuntime {
         for (PColumn col : pColumns) {
             Object value = values[i];
             // for purposes of encoding, sort order of the columns doesn't matter.
-            Expression expr = LiteralExpression.newConstant(value, col.getDataType(), col.getMaxLength(), col.getScale());
-            expressions.add(expr);
+            expressions.add(new LiteralExpression.Builder().setValue(value).setDataType(col.getDataType())
+                    .setMaxLength(col.getMaxLength()).setScale(col.getScale()).build());
             i++;
         }
         KeyValueSchema kvSchema = buildKeyValueSchema(pColumns);

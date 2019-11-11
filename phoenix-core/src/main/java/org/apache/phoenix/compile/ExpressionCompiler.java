@@ -148,7 +148,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     private int nodeCount;
     private int totalNodeCount;
     private final boolean resolveViewConstants;
-    private static final Expression NOT_NULL_STRING = LiteralExpression.newConstant(PVarchar.INSTANCE.toObject(KeyRange.IS_NOT_NULL_RANGE.getLowerRange()));
 
     public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
@@ -263,7 +262,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(false, determinism);
+            return new LiteralExpression.Builder().setValue(false).setDeterminism(determinism).build();
         }
         if (children.size() == 1) {
             return children.get(0);
@@ -410,7 +409,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // If the column is matched in a WHERE clause against a constant not equal to it's constant, then the entire
         // query would become degenerate.
         if (!resolveViewConstants && IndexUtil.getViewConstantValue(column, ptr)) {
-            return LiteralExpression.newConstant(column.getDataType().toObject(ptr), column.getDataType());
+            return new LiteralExpression.Builder().setValue(column.getDataType().toObject(ptr))
+                    .setDataType(column.getDataType()).build();
         }
         if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
             addColumn(column);
@@ -431,12 +431,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public Expression visit(BindParseNode node) throws SQLException {
         Object value = context.getBindManager().getBindValue(node);
-        return LiteralExpression.newConstant(value, Determinism.ALWAYS);
+        return new LiteralExpression.Builder().setValue(value).setDeterminism(Determinism.ALWAYS).build();
     }
 
     @Override
     public Expression visit(LiteralParseNode node) throws SQLException {
-        return LiteralExpression.newConstant(node.getValue(), node.getType(), Determinism.ALWAYS);
+        return new LiteralExpression.Builder().setValue(node.getValue()).setDataType(node.getType()).setDeterminism(Determinism.ALWAYS).build();
     }
 
     @Override
@@ -494,7 +494,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (rhs instanceof LiteralExpression) {
             String pattern = (String)((LiteralExpression)rhs).getValue();
             if (pattern == null || pattern.length() == 0) {
-                return LiteralExpression.newConstant(null, PBoolean.INSTANCE, rhs.getDeterminism());
+                return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(rhs.getDeterminism()).build();
             }
             // TODO: for pattern of '%' optimize to strlength(lhs) > 0
             // We can't use lhs IS NOT NULL b/c if lhs is NULL we need
@@ -503,7 +503,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // Can't possibly be as long as the constant, then FALSE
             Integer lhsMaxLength = lhs.getMaxLength();
             if (lhsMaxLength != null && lhsMaxLength < index) {
-                return LiteralExpression.newConstant(false, rhs.getDeterminism());
+                return new LiteralExpression.Builder().setValue(false).setDeterminism(rhs.getDeterminism()).build();
             }
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
@@ -512,7 +512,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                   if (pattern.equals(rhsLiteral)) {
                       return new ComparisonExpression(children, op);
                   } else {
-                      rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
+                      rhs = new LiteralExpression.Builder().setValue(rhsLiteral).setDataType(PChar.INSTANCE)
+                              .setDeterminism(rhs.getDeterminism()).build();
                       return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
                   }
                 }
@@ -521,7 +522,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 byte[] wildcard = {StringUtil.MULTI_CHAR_LIKE};
                 StringUtil.fill(wildcardString, 0, pattern.length(), wildcard, 0, 1, false);
                 if (pattern.equals(new String (wildcardString))) {
-                    List<Expression> compareChildren = Arrays.asList(lhs, NOT_NULL_STRING);
+                    List<Expression> compareChildren = Arrays.asList(lhs,
+                            new LiteralExpression.Builder().setValue(PVarchar.INSTANCE
+                                    .toObject(KeyRange.IS_NOT_NULL_RANGE.getLowerRange())).build());
                     return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOp.LESS : CompareOp.GREATER_OR_EQUAL);
                 }
             }
@@ -539,9 +542,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
-                return LiteralExpression.newConstant(null, expression.getDeterminism());
+                return new LiteralExpression.Builder().setDeterminism(expression.getDeterminism()).build();
             } else {
-                return LiteralExpression.newConstant(Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr)) ^ node.isNegate(), expression.getDeterminism());
+                return new LiteralExpression.Builder().setValue(Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr)) ^ node.isNegate())
+                        .setDeterminism(expression.getDeterminism()).build();
             }
         }
         if (node.isNegate()) {
@@ -750,7 +754,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return ExpressionUtil.getConstantExpression(expression, ptr); 
         } 
         else if (isNull) {
-            return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
+            return new LiteralExpression.Builder().setDataType(expression.getDataType())
+                    .setDeterminism(expression.getDeterminism()).build();
         }
         // Otherwise create and return the expression
         return wrapGroupByExpression(expression);
@@ -817,7 +822,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDouble.INSTANCE) {
                     return new DoubleAddExpression(children);
                 } else if (theType == null) {
-                	return LiteralExpression.newConstant(null, theType, determinism);
+                    return new LiteralExpression.Builder().setDataType(theType).setDeterminism(determinism).build();
                 } else if (theType == PTimestamp.INSTANCE || theType == PUnsignedTimestamp.INSTANCE) {
                     return new TimestampAddExpression(children);
                 } else if (theType.isCoercibleTo(PDate.INSTANCE)) {
@@ -947,7 +952,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDouble.INSTANCE) {
                     return new DoubleSubtractExpression(children);
                 } else if (theType == null) {
-                	return LiteralExpression.newConstant(null, theType, determinism);
+                    return new LiteralExpression.Builder().setDataType(theType).setDeterminism(determinism).build();
                 } else if (theType == PTimestamp.INSTANCE || theType == PUnsignedTimestamp.INSTANCE) {
                     return new TimestampSubtractExpression(children);
                 } else if (theType.isCoercibleTo(PDate.INSTANCE)) {
@@ -982,7 +987,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDouble.INSTANCE) {
                   return new DoubleMultiplyExpression( children);
                 } else {
-                  return LiteralExpression.newConstant(null, theType, determinism);
+                  return new LiteralExpression.Builder().setDataType(theType).setDeterminism(determinism).build();
                 }
             }
         });
@@ -1026,7 +1031,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDouble.INSTANCE) {
                   return new DoubleDivideExpression(children);
                 } else {
-                  return LiteralExpression.newConstant(null, theType, determinism);
+                  return new LiteralExpression.Builder().setDataType(theType).setDeterminism(determinism).build();
                 }
             }
         });
@@ -1199,11 +1204,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else {
                     value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
                 }
-                elements[i] = LiteralExpression.newConstant(value, theArrayElemDataType, child.getDeterminism()).getValue();
+                elements[i] = new LiteralExpression.Builder().setValue(value).setDataType(theArrayElemDataType)
+                        .setDeterminism(child.getDeterminism()).build().getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
-            return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), null, null, arrayExpression.getSortOrder(), Determinism.ALWAYS, rowKeyOrderOptimizable);
+            return new LiteralExpression.Builder().setValue(value).setDataType(PDataType.fromTypeId(arrayElemDataType.getSqlType()
+                    + PDataType.ARRAY_TYPE_BASE)).setSortOrder(arrayExpression.getSortOrder()).setDeterminism(Determinism.ALWAYS)
+                    .setRowKeyOrderOptimizable(rowKeyOrderOptimizable).build();
         }
         
         return wrapGroupByExpression(arrayExpression);
@@ -1223,13 +1230,14 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     public Expression visitLeave(ExistsParseNode node, List<Expression> l) throws SQLException {
         LiteralExpression child = (LiteralExpression) l.get(0);
         PhoenixArray array = (PhoenixArray) child.getValue();
-        return LiteralExpression.newConstant(array.getDimensions() > 0 ^ node.isNegate(), PBoolean.INSTANCE);
+        return new LiteralExpression.Builder().setValue(array.getDimensions() > 0 ^ node.isNegate())
+                .setDataType(PBoolean.INSTANCE).build();
     }
 
     @Override
     public Expression visit(SubqueryParseNode node) throws SQLException {
         Object result = context.getSubqueryResult(node.getSelectNode());
-        return LiteralExpression.newConstant(result);
+        return new LiteralExpression.Builder().setValue(result).build();
     }
     
     public int getTotalNodeCount() {

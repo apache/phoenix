@@ -729,7 +729,7 @@ public class ScanUtil {
         return regionStartKey.length > 0 ? regionStartKey.length : regionEndKey.length;
     }
     
-    private static void setRowKeyOffset(Filter filter, int offset) {
+    private static void setRowKeyOffset(Filter filter, int offset) throws SQLException {
         if (filter instanceof BooleanExpressionFilter) {
             BooleanExpressionFilter boolFilter = (BooleanExpressionFilter)filter;
             IndexUtil.setRowKeyExpressionOffset(boolFilter.getExpression(), offset);
@@ -742,7 +742,7 @@ public class ScanUtil {
         }
     }
 
-    public static void setRowKeyOffset(Scan scan, int offset) {
+    public static void setRowKeyOffset(Scan scan, int offset) throws SQLException {
         Filter filter = scan.getFilter();
         if (filter == null) {
             return;

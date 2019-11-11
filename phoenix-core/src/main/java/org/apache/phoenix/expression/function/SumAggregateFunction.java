@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -54,7 +55,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class SumAggregateFunction extends DelegateConstantToCountAggregateFunction {
     public static final String NAME = "SUM";
     
-    public SumAggregateFunction() {
+    public SumAggregateFunction() throws SQLException {
     }
     
     // TODO: remove when not required at built-in func register time

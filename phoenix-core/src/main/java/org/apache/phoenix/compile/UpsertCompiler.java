@@ -694,7 +694,8 @@ public class UpsertCompiler {
                         }
                         // Add literal null for missing PK columns
                         pos = projectedExpressions.size();
-                        Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), Determinism.ALWAYS);
+                        Expression literalNull = new LiteralExpression.Builder().setDataType(column.getDataType())
+                                .setDeterminism(Determinism.ALWAYS).build();
                         projectedExpressions.add(literalNull);
                         allColumnsIndexes[pos] = column.getPosition();
                     }
@@ -921,7 +922,8 @@ public class UpsertCompiler {
             if (isTopLevel()) {
                 context.getBindManager().addParamMetaData(node, column);
                 Object value = context.getBindManager().getBindValue(node);
-                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
+                return new LiteralExpression.Builder().setValue(value).setDataType(column.getDataType())
+                        .setSortOrder(column.getSortOrder()).setDeterminism(Determinism.ALWAYS).build();
             }
             return super.visit(node);
         }    
@@ -929,7 +931,8 @@ public class UpsertCompiler {
         @Override
         public Expression visit(LiteralParseNode node) throws SQLException {
             if (isTopLevel()) {
-                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
+                return new LiteralExpression.Builder().setValue(node.getValue()).setDataType(column.getDataType())
+                        .setSortOrder(column.getSortOrder()).setDeterminism(Determinism.ALWAYS).build();
             }
             return super.visit(node);
         }

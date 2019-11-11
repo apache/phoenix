@@ -67,7 +67,7 @@ public class InListExpression extends BaseSingleExpression {
         Expression firstChild = children.get(0);
 
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
-            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
+            return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(firstChild.getDeterminism()).build();
         }
         if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
@@ -93,7 +93,7 @@ public class InListExpression extends BaseSingleExpression {
             throw sqlE != null ? sqlE : new SQLException("Only one element in IN list");
         }
         if (coercedKeyExpressions.size() == 2 && addedNull) {
-            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
+            return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(Determinism.ALWAYS).build();
         }
         Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);
         if (isNegate) {
@@ -260,7 +260,7 @@ public class InListExpression extends BaseSingleExpression {
     }
 
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

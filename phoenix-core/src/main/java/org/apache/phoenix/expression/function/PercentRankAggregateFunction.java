@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -44,7 +45,7 @@ import org.apache.phoenix.schema.types.PDataType;
 public class PercentRankAggregateFunction extends DistinctValueWithCountAggregateFunction {
     public static final String NAME = "PERCENT_RANK";
 
-    public PercentRankAggregateFunction() {
+    public PercentRankAggregateFunction() throws SQLException {
 
     }
 

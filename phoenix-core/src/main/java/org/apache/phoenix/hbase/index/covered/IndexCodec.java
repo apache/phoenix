@@ -10,6 +10,7 @@
 package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -66,7 +67,7 @@ public interface IndexCodec {
      * @return the pairs of (updates,index table name) that should be applied.
      * @throws IOException
      */
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException;
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException, SQLException;
 
     /**
      * This allows the codec to dynamically change whether or not indexing should take place for a table. If it doesn't

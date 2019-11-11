@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.compile.SequenceValueExpression;
@@ -117,7 +118,7 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
     }
 
     @Override
-    public E visit(KeyValueColumnExpression node) {
+    public E visit(KeyValueColumnExpression node) throws SQLException {
         return null;
     }
     
@@ -127,7 +128,7 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
     }
     
     @Override
-    public E visit(ProjectedColumnExpression node) {
+    public E visit(ProjectedColumnExpression node) throws SQLException {
         return null;
     }
 

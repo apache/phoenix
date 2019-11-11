@@ -63,9 +63,9 @@ public class CbrtFunctionTest {
     private static void test(Number value, PNumericType dataType, double expected)
             throws SQLException {
         LiteralExpression literal;
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
         testExpression(literal, expected);
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         testExpression(literal, expected);
     }
 

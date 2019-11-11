@@ -118,7 +118,7 @@ public class UnnestArrayPlanTest {
         List<Tuple> tuples = toTuples(arrayType, arrays);
 		LiteralResultIterationPlan subPlan = new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE,
 				TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, null, OrderBy.EMPTY_ORDER_BY, null);
-        LiteralExpression dummy = LiteralExpression.newConstant(null, arrayType);
+        LiteralExpression dummy = new LiteralExpression.Builder().setDataType(arrayType).build();
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(Arrays.asList(dummy), 0);
         UnnestArrayPlan plan = new UnnestArrayPlan(subPlan, new RowKeyColumnExpression(dummy, accessor), withOrdinality);
         PName colName = PNameFactory.newName("ELEM");

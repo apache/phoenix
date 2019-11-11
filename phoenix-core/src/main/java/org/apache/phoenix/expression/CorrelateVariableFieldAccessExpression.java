@@ -59,7 +59,7 @@ public class CorrelateVariableFieldAccessExpression extends BaseTerminalExpressi
         boolean success = evaluate(null, ptr);
         Object value = success ? getDataType().toObject(ptr) : null;
         try {
-            LiteralExpression expr = LiteralExpression.newConstant(value, getDataType());
+            LiteralExpression expr = new LiteralExpression.Builder().setValue(value).setDataType(getDataType()).build();
             expr.write(output);
         } catch (SQLException e) {
             throw new IOException(e);

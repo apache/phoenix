@@ -33,11 +33,15 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test class for {@link OrderedResultIterator}.
  */
 public class OrderedResultIteratorTest {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrderedResultIteratorTest.class);
 
   @Test
   public void testNullIteratorOnClose() throws SQLException {
@@ -56,7 +60,12 @@ public class OrderedResultIteratorTest {
     public void testSpoolingBackwardCompatibility() {
         RegionScanner s = Mockito.mock(RegionScanner.class);
         Scan scan = new Scan();
-        Expression exp = LiteralExpression.newConstant(Boolean.TRUE);
+        Expression exp = null;
+        try {
+            exp = new LiteralExpression.Builder().setValue(Boolean.TRUE).build();
+        } catch (SQLException e) {
+            LOGGER.error(e.getMessage());
+        }
         OrderByExpression ex = OrderByExpression.createByCheckIfOrderByReverse(exp, false, false, false);
         ScanRegionObserver.serializeIntoScan(scan, 0, Arrays.asList(ex), 100);
         // Check 5.1.0 & Check > 5.1.0

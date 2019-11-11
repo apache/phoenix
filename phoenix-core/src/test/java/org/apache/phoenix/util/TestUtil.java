@@ -331,8 +331,8 @@ public class TestUtil {
         return BigDecimal.valueOf(sum).divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
     }
 
-    public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
-        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
+    public static Expression constantComparison(CompareOp op, PColumn c, Object o) throws SQLException {
+        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), new LiteralExpression.Builder().setValue(o).build()), op);
     }
 
     public static Expression kvColumn(PColumn c) {
@@ -343,8 +343,9 @@ public class TestUtil {
         return new RowKeyColumnExpression(c, new RowKeyValueAccessor(columns, columns.indexOf(c)));
     }
 
-    public static Expression constantComparison(CompareOp op, Expression e, Object o) {
-        return  new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
+    public static Expression constantComparison(CompareOp op, Expression e, Object o) throws SQLException {
+        return  new ComparisonExpression(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).build()), op);
+
     }
 
     private static boolean useByteBasedRegex(StatementContext context) {
@@ -356,32 +357,34 @@ public class TestUtil {
                     QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
     }
 
-    public static Expression like(Expression e, Object o, StatementContext context) {
+    public static Expression like(Expression e, Object o, StatementContext context) throws SQLException {
         return useByteBasedRegex(context)?
-               ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE):
-               StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_SENSITIVE);
+               ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).build()), LikeType.CASE_SENSITIVE):
+               StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).build()), LikeType.CASE_SENSITIVE);
     }
 
-    public static Expression ilike(Expression e, Object o, StatementContext context) {
+    public static Expression ilike(Expression e, Object o, StatementContext context) throws SQLException {
         return useByteBasedRegex(context)?
-                ByteBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE):
-                StringBasedLikeExpression.create(Arrays.asList(e, LiteralExpression.newConstant(o)), LikeType.CASE_INSENSITIVE);
+                ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).build()), LikeType.CASE_INSENSITIVE):
+                StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).build()), LikeType.CASE_INSENSITIVE);
     }
 
-    public static Expression substr(Expression e, Object offset, Object length) {
-        return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(length)));
+    public static Expression substr(Expression e, Object offset, Object length) throws SQLException {
+        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.Builder().setValue(offset).build(),
+                new LiteralExpression.Builder().setValue(length).build()));
     }
 
-    public static Expression substr2(Expression e, Object offset) {
+    public static Expression substr2(Expression e, Object offset) throws SQLException {
 
-        return  new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(null)));
+        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.Builder().setValue(offset).build(),
+                new LiteralExpression.Builder().build()));
     }
 
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
         return  new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
 
-    public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) {
+    public static SingleKeyValueComparisonFilter singleKVFilter(Expression e) throws SQLException {
         return  new SingleCQKeyValueComparisonFilter(e);
     }
 
@@ -389,11 +392,11 @@ public class TestUtil {
         return  new RowKeyComparisonFilter(e, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
     }
 
-    public static MultiKeyValueComparisonFilter multiKVFilter(Expression e) {
+    public static MultiKeyValueComparisonFilter multiKVFilter(Expression e) throws SQLException {
         return  new MultiCQKeyValueComparisonFilter(e, false, ByteUtil.EMPTY_BYTE_ARRAY);
     }
     
-    public static MultiEncodedCQKeyValueComparisonFilter multiEncodedKVFilter(Expression e, QualifierEncodingScheme encodingScheme) {
+    public static MultiEncodedCQKeyValueComparisonFilter multiEncodedKVFilter(Expression e, QualifierEncodingScheme encodingScheme) throws SQLException {
         return  new MultiEncodedCQKeyValueComparisonFilter(e, encodingScheme, false, null);
     }
 
@@ -418,7 +421,7 @@ public class TestUtil {
         List<Expression> expressions = new ArrayList<Expression>(literals.length + 1);
         expressions.add(e);
         for (Object o : literals) {
-            expressions.add(LiteralExpression.newConstant(o, childType));
+            expressions.add(new LiteralExpression.Builder().setValue(o).setDataType(childType).build());
         }
         return InListExpression.create(expressions, false, new ImmutableBytesWritable(), true);
     }

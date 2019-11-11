@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -130,7 +131,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     }
     
     @Override
-    public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
+    public List<Mutation> executeAtomicOp(Increment inc) throws IOException, SQLException {
         byte[] opBytes = inc.getAttribute(ATOMIC_OP_ATTRIB);
         if (opBytes == null) { // Unexpected
             return null;

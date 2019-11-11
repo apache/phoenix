@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -46,7 +47,7 @@ public class LastValuesFunction extends FirstLastValueBaseFunction {
     public static final String NAME = "LAST_VALUES";
     private int offset;
 
-    public LastValuesFunction() {
+    public LastValuesFunction() throws SQLException {
     }
 
     public LastValuesFunction(List<Expression> childExpressions) {

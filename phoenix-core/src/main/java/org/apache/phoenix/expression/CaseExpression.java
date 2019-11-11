@@ -59,7 +59,7 @@ public class CaseExpression extends BaseCompoundExpression {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             int index = caseExpression.evaluateIndexOf(null, ptr);
             if (index < 0) {
-                return LiteralExpression.newConstant(null, caseExpression.getDeterminism());
+                return new LiteralExpression.Builder().setDeterminism(caseExpression.getDeterminism()).build();
             }
             return caseExpression.getChildren().get(index);
         }
@@ -219,7 +219,7 @@ public class CaseExpression extends BaseCompoundExpression {
     }
     
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

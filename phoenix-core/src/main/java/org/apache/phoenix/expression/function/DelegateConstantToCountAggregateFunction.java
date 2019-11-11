@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -39,7 +40,7 @@ abstract public class DelegateConstantToCountAggregateFunction extends SingleAgg
     private static final ImmutableBytesWritable ZERO = new ImmutableBytesWritable(PLong.INSTANCE.toBytes(0L));
     private CountAggregateFunction delegate;
     
-    public DelegateConstantToCountAggregateFunction() {
+    public DelegateConstantToCountAggregateFunction() throws SQLException {
     }
     
     public DelegateConstantToCountAggregateFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {

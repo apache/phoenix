@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -43,7 +44,6 @@ import org.apache.phoenix.schema.types.PDataType;
  * @since 0.1
  */
 abstract public class SingleAggregateFunction extends AggregateFunction {
-    private static final List<Expression> DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
     protected boolean isConstant;
     private Aggregator aggregator;
     
@@ -82,8 +82,8 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
         }
     };
     
-    protected SingleAggregateFunction() {
-        this(DEFAULT_EXPRESSION_LIST, true);
+    protected SingleAggregateFunction() throws SQLException {
+        this(Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).build()), true);
     }
 
     public SingleAggregateFunction(List<Expression> children) {
@@ -158,7 +158,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
     }
 
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         SingleAggregateFunction function = getDelegate();
         List<T> l = acceptChildren(visitor, visitor.visitEnter(function));
         T t = visitor.visitLeave(function, l);

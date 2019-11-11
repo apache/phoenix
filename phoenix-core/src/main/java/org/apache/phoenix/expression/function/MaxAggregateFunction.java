@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -41,7 +42,7 @@ import org.apache.phoenix.schema.types.PDataType;
 public class MaxAggregateFunction extends MinAggregateFunction {
     public static final String NAME = "MAX";
 
-    public MaxAggregateFunction() {
+    public MaxAggregateFunction() throws SQLException {
     }
 
     public MaxAggregateFunction(List<Expression> childExpressions) {

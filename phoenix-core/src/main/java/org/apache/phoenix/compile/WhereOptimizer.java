@@ -454,7 +454,7 @@ public class WhereOptimizer {
             List<Expression> group = Lists.newArrayList();
             for (Expression expression : candidates) {
                 PDataType type = expression.getDataType();
-                group.add(LiteralExpression.newConstant(type.getSampleValue(), type));
+                group.add(new LiteralExpression.Builder().setValue(type.getSampleValue()).setDataType(type).build());
             }
             sampleValues.add(group);
         }
@@ -483,9 +483,10 @@ public class WhereOptimizer {
         
         result.addAll(candidates.subList(0, count));
         
-        return count == candidates.size() 
+        return count == candidates.size()
                 && (context.getScanRanges().isPointLookup() || context.getScanRanges().useSkipScanFilter())
-                && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
+                && (remaining == null || remaining.equals(new LiteralExpression.Builder().setValue(true)
+                .setDeterminism(Determinism.ALWAYS).build()));
     }
 
     private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {
@@ -516,11 +517,11 @@ public class WhereOptimizer {
         }
 
         @Override
-        public Expression visitLeave(AndExpression node, List<Expression> l) {
+        public Expression visitLeave(AndExpression node, List<Expression> l) throws SQLException {
             if (!l.equals(node.getChildren())) {
                 if (l.isEmpty()) {
                     // Don't return null here, because then our defaultReturn will kick in
-                    return LiteralExpression.newConstant(true, Determinism.ALWAYS);
+                    return new LiteralExpression.Builder().setValue(true).setDeterminism(Determinism.ALWAYS).build();
                 }
                 if (l.size() == 1) {
                     return l.get(0);

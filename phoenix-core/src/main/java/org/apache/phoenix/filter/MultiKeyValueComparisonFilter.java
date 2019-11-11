@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeSet;
@@ -35,7 +36,8 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -47,6 +49,7 @@ import org.apache.phoenix.util.ServerUtil;
  */
 public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFilter {
     private static final byte[] UNITIALIZED_KEY_BUFFER = new byte[0];
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultiKeyValueComparisonFilter.class);
 
     private Boolean matchedColumn;
     protected final IncrementalResultTuple inputTuple = new IncrementalResultTuple();
@@ -57,7 +60,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     public MultiKeyValueComparisonFilter() {
     }
 
-    public MultiKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) {
+    public MultiKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) throws SQLException {
         super(expression);
         this.allCFs = allCFs;
         this.essentialCF = essentialCF == null ? ByteUtil.EMPTY_BYTE_ARRAY : essentialCF;
@@ -197,7 +200,11 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
                 return null;
             }
         };
-        expression.accept(visitor);
+        try {
+            expression.accept(visitor);
+        } catch (SQLException e) {
+            LOGGER.error(e.getMessage());
+        }
     }
     
     @Override

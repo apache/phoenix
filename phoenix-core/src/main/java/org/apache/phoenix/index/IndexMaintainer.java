@@ -136,8 +136,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private static final int EXPRESSION_NOT_PRESENT = -1;
     private static final int ESTIMATED_EXPRESSION_SIZE = 8;
-    
-    public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
+
+    public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) throws SQLException {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
@@ -228,7 +228,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     WritableUtils.writeVInt(output, protoBytes.length);
                     output.write(protoBytes);
             }
-        } catch (IOException e) {
+        } catch (IOException | SQLException e) {
             throw new RuntimeException(e); // Impossible
         }
         ptr.set(stream.toByteArray(), 0, stream.size());
@@ -241,7 +241,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param keyValueIndexes indexes to serialize
      */
     public static void serializeAdditional(PTable table, ImmutableBytesWritable indexMetaDataPtr,
-            List<PTable> keyValueIndexes, PhoenixConnection connection) {
+            List<PTable> keyValueIndexes, PhoenixConnection connection) throws SQLException {
         int nMutableIndexes = indexMetaDataPtr.getLength() == 0 ? 0 : ByteUtil.vintFromBytes(indexMetaDataPtr);
         int nIndexes = nMutableIndexes + keyValueIndexes.size();
         int estimatedSize = indexMetaDataPtr.getLength() + 1; // Just in case new size increases buffer
@@ -310,7 +310,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         maintainers.add(maintainer);
                     }
                 }
-            } catch (IOException e) {
+            } catch (IOException | SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
         }
@@ -383,7 +383,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isDataTableSalted = isDataTableSalted;
     }
     
-    private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection) {
+    private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection) throws SQLException {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
@@ -960,7 +960,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexRowKeySchema;
     }
     
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException, SQLException {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         Put put = null;
         // New row being inserted: add the empty key value
@@ -1036,7 +1036,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     byte[] value = ptr.copyBytesIfNecessary();
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                        colValues[indexArrayPos] = new LiteralExpression(value);
+                        colValues[indexArrayPos] = new LiteralExpression.Builder().setByteValue(value).build();
                     }
                 }
                 
@@ -1350,11 +1350,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Needed for backward compatibility. Clients older than 4.10 will have non-encoded tables.
         this.immutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
         this.encodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-        initCachedState();
+        try {
+            initCachedState();
+        } catch (SQLException e) {
+            throw new IOException(e.getMessage());
+        }
     }
     
         
-    public static IndexMaintainer fromProto(ServerCachingProtos.IndexMaintainer proto, RowKeySchema dataTableRowKeySchema, boolean isDataTableSalted) throws IOException {
+    public static IndexMaintainer fromProto(ServerCachingProtos.IndexMaintainer proto, RowKeySchema dataTableRowKeySchema, boolean isDataTableSalted) throws IOException, SQLException {
         IndexMaintainer maintainer = new IndexMaintainer(dataTableRowKeySchema, isDataTableSalted);
         maintainer.nIndexSaltBuckets = proto.getSaltBuckets();
         maintainer.isMultiTenant = proto.getIsMultiTenant();
@@ -1590,7 +1594,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     /**
      * Init calculated state reading/creating
      */
-    private void initCachedState() {
+    private void initCachedState() throws SQLException {
         byte[] emptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(encodingScheme).getFirst();
         dataEmptyKeyValueRef = new ColumnReference(emptyKeyValueCFPtr.copyBytesIfNecessary(), emptyKvQualifier);
         this.allColumns = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size() + coveredColumnsMap.size());

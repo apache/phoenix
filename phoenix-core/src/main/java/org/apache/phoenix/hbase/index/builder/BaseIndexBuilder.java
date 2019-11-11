@@ -11,6 +11,7 @@ package org.apache.phoenix.hbase.index.builder;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 
@@ -98,7 +99,7 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     }
 
     @Override
-    public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
+    public List<Mutation> executeAtomicOp(Increment inc) throws IOException, SQLException {
         return null;
     }
     

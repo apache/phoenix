@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -46,11 +47,12 @@ public class OrExpressionTest {
         return new OrExpression(Arrays.asList(lhs, rhs));
     }
 
-    private OrExpression createOr(Boolean x, Boolean y) {
-        return createOr(LiteralExpression.newConstant(x), LiteralExpression.newConstant(y));
+    private OrExpression createOr(Boolean x, Boolean y) throws SQLException {
+        return createOr(new LiteralExpression.Builder().setValue(x).build(),
+                new LiteralExpression.Builder().setValue(y).build());
     }
 
-    private void testImmediateSingle(Boolean expected, Boolean lhs, Boolean rhs) {
+    private void testImmediateSingle(Boolean expected, Boolean lhs, Boolean rhs) throws SQLException {
         OrExpression or = createOr(lhs, rhs);
         ImmutableBytesWritable out = new ImmutableBytesWritable();
         MultiKeyValueTuple tuple = new MultiKeyValueTuple();
@@ -61,7 +63,7 @@ public class OrExpressionTest {
 
     // Evaluating OR when values of both sides are known should immediately succeed
     // and return the same result regardless of order.
-    private void testImmediate(Boolean expected, Boolean a, Boolean b) {
+    private void testImmediate(Boolean expected, Boolean a, Boolean b) throws SQLException {
         testImmediateSingle(expected, a, b);
         testImmediateSingle(expected, b, a);
     }
@@ -206,14 +208,14 @@ public class OrExpressionTest {
     }
 
     @Test
-    public void testImmediateCertainty() {
+    public void testImmediateCertainty() throws SQLException {
         testImmediate(true, true, true);
         testImmediate(true, false, true);
         testImmediate(false, false, false);
     }
 
     @Test
-    public void testImmediateUncertainty() {
+    public void testImmediateUncertainty() throws SQLException {
         testImmediate(true, true, null);
         testImmediate(null, false, null);
         testImmediate(null, null, null);
@@ -271,7 +273,7 @@ public class OrExpressionTest {
     }
 
     @Test
-    public void testTruthTable() {
+    public void testTruthTable() throws SQLException {
         // See: https://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_(3VL)
         Boolean[][] testCases = new Boolean[][] {
             //              should short circuit?

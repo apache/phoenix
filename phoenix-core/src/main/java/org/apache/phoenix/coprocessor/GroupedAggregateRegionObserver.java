@@ -31,6 +31,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -110,7 +111,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
      */
     @Override
     protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-            Scan scan, RegionScanner s) throws IOException {
+            Scan scan, RegionScanner s) throws IOException, SQLException {
         boolean keyOrdered = false;
         byte[] expressionBytes = scan.getAttribute(BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS);
 
@@ -232,7 +233,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         IndexUtil.setRowKeyExpressionOffset(expression, offset);
                     }
                     expressions.add(expression);
-                } catch (EOFException e) {
+                } catch (EOFException | SQLException e) {
                     break;
                 }
             }

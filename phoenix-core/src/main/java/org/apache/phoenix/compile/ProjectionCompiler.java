@@ -103,7 +103,6 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ProjectionCompiler {
-    private static final Expression NULL_EXPRESSION = LiteralExpression.newConstant(null);
     private ProjectionCompiler() {
     }
     
@@ -118,7 +117,7 @@ public class ProjectionCompiler {
                         DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
         return compile(context, statement, groupBy, Collections.<PColumn>emptyList(),
                 // Pass null expression because we don't want empty key value to be projected
-                NULL_EXPRESSION,
+                new LiteralExpression.Builder().build(),
                 wildcardIncludesDynamicCols);
     }
     
@@ -170,7 +169,8 @@ public class ProjectionCompiler {
             expression = coerceIfNecessary(i-posOffset+projectedOffset, targetColumns, expression);
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (IndexUtil.getViewConstantValue(column, ptr)) {
-                expression = LiteralExpression.newConstant(column.getDataType().toObject(ptr), expression.getDataType());
+                expression = new LiteralExpression.Builder().setValue(column.getDataType().toObject(ptr))
+                        .setDataType(expression.getDataType()).build();
             }
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);

@@ -218,7 +218,7 @@ public class PhoenixTxIndexMutationGenerator {
             Set<ColumnReference> upsertColumns, 
             Collection<Pair<Mutation, byte[]>> indexUpdates,
             Map<ImmutableBytesPtr, MultiMutation> mutations,
-            Map<ImmutableBytesPtr, MultiMutation> mutationsToFindPreviousValue) throws IOException {
+            Map<ImmutableBytesPtr, MultiMutation> mutationsToFindPreviousValue) throws IOException, SQLException {
         List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
         if (scanner != null) {
             Result result;
@@ -350,7 +350,7 @@ public class PhoenixTxIndexMutationGenerator {
             PhoenixIndexMetaData indexMetaData,
             Collection<Pair<Mutation, byte[]>> indexUpdates,
             TxTableState state)
-            throws IOException {
+            throws IOException, SQLException {
         state.applyMutation();
         byte[] regionStartKey = this.regionStartKey;
         byte[] regionEndKey = this.regionEndKey;
@@ -481,7 +481,7 @@ public class PhoenixTxIndexMutationGenerator {
     }
     
     public static PhoenixTxIndexMutationGenerator newGenerator(final PhoenixConnection connection, PTable table, List<PTable> indexes,
-            Map<String, byte[]> attributes) {
+            Map<String, byte[]> attributes) throws SQLException {
         final List<IndexMaintainer> indexMaintainers = Lists.newArrayListWithExpectedSize(indexes.size());
         for (PTable index : indexes) {
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);

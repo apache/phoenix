@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -29,7 +30,7 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 
 public abstract class DistinctValueWithCountAggregateFunction extends SingleAggregateFunction {
 
-    public DistinctValueWithCountAggregateFunction() {
+    public DistinctValueWithCountAggregateFunction() throws SQLException {
     }
 
     public DistinctValueWithCountAggregateFunction(List<Expression> children) {
