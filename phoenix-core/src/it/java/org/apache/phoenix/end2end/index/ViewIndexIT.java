@@ -38,9 +38,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.IndexToolIT;
@@ -283,7 +283,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             createViewIndex(conn, schemaName, globalViewIdx, globalView, "K1");
             //now check that the right coprocs are installed
             Admin admin = conn.getQueryServices().getAdmin();
-            TableDescriptor td = admin.getTableDescriptor(TableName.valueOf(
+            HTableDescriptor td = admin.getTableDescriptor(TableName.valueOf(
                 MetaDataUtil.getViewIndexPhysicalName(SchemaUtil.getPhysicalHBaseTableName(
                     schemaName, baseTable, isNamespaceMapped).getString())));
             assertTrue(td.hasCoprocessor(GlobalIndexChecker.class.getName()));
