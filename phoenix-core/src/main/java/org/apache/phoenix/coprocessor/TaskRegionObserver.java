@@ -60,6 +60,7 @@ import org.slf4j.LoggerFactory;
 
 public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskRegionObserver.class);
+    public static final String TASK_DETAILS = "TaskDetails";
 
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
@@ -252,7 +253,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
             }
             JsonParser jsonParser = new JsonParser();
             JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
-            jsonObject.addProperty("TaskDetails", taskStatus);
+            jsonObject.addProperty(TASK_DETAILS, taskStatus);
             data = jsonObject.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());

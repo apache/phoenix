@@ -18,10 +18,19 @@
 package org.apache.phoenix.end2end;
 
 import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.coprocessor.TaskRegionObserver.TASK_DETAILS;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,6 +39,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +47,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -340,6 +351,60 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         validateCols(view);
     }
 
+    // Test case to ensure PHOENIX-5546 does not happen
+    @Test
+    public void testRepeatedCreateAndDropCascadeTableWorks() throws Exception {
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTableViewAndDropCascade(conn, fullTableName, fullViewName);
+            validateViewDoesNotExist(conn, fullViewName);
+            validateSystemTaskContainsCompletedDropChildViewsTasks(conn, SCHEMA1, tableName, 1);
+
+            // Repeat this and check that the view still doesn't exist
+            createTableViewAndDropCascade(conn, fullTableName, fullViewName);
+            validateViewDoesNotExist(conn, fullViewName);
+            validateSystemTaskContainsCompletedDropChildViewsTasks(conn, SCHEMA1, tableName, 2);
+        }
+    }
+
+    private void createTableViewAndDropCascade(Connection conn, String fullTableName,
+            String fullViewName) throws SQLException {
+        String tableDdl = "CREATE TABLE " + fullTableName +
+                "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
+        conn.createStatement().execute(tableDdl);
+        String ddl = "CREATE VIEW " + fullViewName +
+                " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
+        conn.createStatement().execute(ddl);
+
+        // drop table cascade should succeed
+        conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
+        runDropChildViewsTask();
+    }
+
+    private void validateSystemTaskContainsCompletedDropChildViewsTasks(Connection conn,
+            String schemaName, String tableName, int numTasks) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + SYSTEM_TASK_NAME +
+                " WHERE " + TASK_TYPE + "=" + DROP_CHILD_VIEWS.getSerializedValue() +
+                " AND " + TENANT_ID + " IS NULL" +
+                " AND " + TABLE_SCHEM + "='" + schemaName +
+                "' AND " + TABLE_NAME + "='" + tableName + "'");
+        assertTrue(rs.next());
+        for (int i = 0; i < numTasks; i++) {
+            Timestamp maxTs = new Timestamp(HConstants.LATEST_TIMESTAMP);
+            assertNotEquals("Should have got a valid timestamp", maxTs, rs.getTimestamp(2));
+            assertTrue("Task should be completed",
+                    PTable.TaskStatus.COMPLETED.toString().equals(rs.getString(6)));
+            assertNotNull("Task end time should not be null", rs.getTimestamp(7));
+            String taskData = rs.getString(9);
+            assertTrue("Task data should contain final status", taskData != null &&
+                    taskData.contains(TASK_DETAILS) &&
+                    taskData.contains(PTable.TaskStatus.COMPLETED.toString()));
+        }
+    }
+
     @Test
     public void testViewAndTableInDifferentSchemasWithNamespaceMappingEnabled() throws Exception {
         testViewAndTableInDifferentSchemas(true);
@@ -351,7 +416,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     }
 
-    public void testViewAndTableInDifferentSchemas(boolean isNamespaceMapped) throws Exception {
+    private void testViewAndTableInDifferentSchemas(boolean isNamespaceMapped) throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         Connection conn = DriverManager.getConnection(getUrl(),props);

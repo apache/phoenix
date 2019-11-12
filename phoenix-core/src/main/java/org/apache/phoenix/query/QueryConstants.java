@@ -399,5 +399,6 @@ public interface QueryConstants {
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            STORE_NULLS + "=" + Boolean.TRUE;
 }
