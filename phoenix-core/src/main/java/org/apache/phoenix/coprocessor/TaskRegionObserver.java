@@ -22,10 +22,8 @@ import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +59,7 @@ import org.slf4j.LoggerFactory;
 
 public class TaskRegionObserver extends BaseRegionObserver {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskRegionObserver.class);
+    public static final String TASK_DETAILS = "TaskDetails";
 
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
@@ -248,7 +247,7 @@ public class TaskRegionObserver extends BaseRegionObserver {
             }
             JsonParser jsonParser = new JsonParser();
             JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
-            jsonObject.addProperty("TaskDetails", taskStatus);
+            jsonObject.addProperty(TASK_DETAILS, taskStatus);
             data = jsonObject.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
