@@ -521,12 +521,9 @@ public class MetaDataClient {
         return updateCache(schemaName, tableName, false);
     }
 
-    private MetaDataMutationResult updateCache(String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
+    public MetaDataMutationResult updateCache(String schemaName, String tableName,
+            boolean alwaysHitServer) throws SQLException {
         return updateCache(connection.getTenantId(), schemaName, tableName, alwaysHitServer);
-    }
-
-    public MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName) throws SQLException {
-        return updateCache(tenantId, schemaName, tableName, false);
     }
 
     public MetaDataMutationResult updateCache(PName tenantId, String schemaName, String tableName, boolean alwaysHitServer) throws SQLException {
@@ -599,14 +596,11 @@ public class MetaDataClient {
             connection.getMutationState().startTransaction(table.getTransactionProvider());
         }
         resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
-        // Do not make rpc to getTable if
-        // 1. table is a system table
-        // 2. table was already resolved as of that timestamp
-        // 3. table does not have a ROW_TIMESTAMP column and age is less then UPDATE_CACHE_FREQUENCY
-        if (table != null && !alwaysHitServer
-                && (systemTable || resolvedTimestamp == tableResolvedTimestamp || 
-                (table.getRowTimestampColPos() == -1 && connection.getMetaDataCache().getAge(tableRef) < table.getUpdateCacheFrequency() ))) {
-            return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, QueryConstants.UNSET_TIMESTAMP, table);
+
+        if (avoidRpcToGetTable(alwaysHitServer, resolvedTimestamp, systemTable, table, tableRef,
+                tableResolvedTimestamp)) {
+            return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
+                    QueryConstants.UNSET_TIMESTAMP, table);
         }
 
         MetaDataMutationResult result;
@@ -723,6 +717,20 @@ public class MetaDataClient {
         }
 
         return result;
+    }
+
+    // Do not make rpc to getTable if
+    // 1. table is a system table that does not have a ROW_TIMESTAMP column OR
+    // 2. table was already resolved as of that timestamp OR
+    // 3. table does not have a ROW_TIMESTAMP column and age is less then UPDATE_CACHE_FREQUENCY
+    private boolean avoidRpcToGetTable(boolean alwaysHitServer, Long resolvedTimestamp,
+            boolean systemTable, PTable table, PTableRef tableRef, long tableResolvedTimestamp) {
+        return table != null && !alwaysHitServer &&
+                (systemTable && table.getRowTimestampColPos() == -1 ||
+                        resolvedTimestamp == tableResolvedTimestamp ||
+                        (table.getRowTimestampColPos() == -1 &&
+                                connection.getMetaDataCache().getAge(tableRef) <
+                                        table.getUpdateCacheFrequency()));
     }
 
     public MetaDataMutationResult updateCache(String schemaName) throws SQLException {
