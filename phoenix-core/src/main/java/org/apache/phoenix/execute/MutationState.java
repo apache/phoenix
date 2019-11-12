@@ -42,7 +42,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -83,8 +82,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PNameImpl;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableRef;
@@ -105,8 +102,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -776,8 +771,14 @@ public class MutationState implements SQLCloseable {
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
         PTable table = tableRef.getTable();
-        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName()
-                .getString());
+
+        // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
+        // get the latest timestamp in order to upsert data with the correct server-side timestamp
+        // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
+        boolean hitServerForLatestTimestamp =
+                table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
+        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
+                table.getTableName().getString(), hitServerForLatestTimestamp);
         PTable resolvedTable = result.getTable();
         if (resolvedTable == null) { throw new TableNotFoundException(table.getSchemaName().getString(), table
                 .getTableName().getString()); }
