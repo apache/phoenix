@@ -941,6 +941,16 @@ public class MetaDataUtil {
         return null;
     }
 
+    public static PDataType<?> getIndexDataType(List<Mutation> tableMetaData,
+            KeyValueBuilder builder, ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+                PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES, builder, value)) {
+            return PDataType.fromTypeId(
+                    PInteger.INSTANCE.getCodec().decodeInt(value, SortOrder.getDefault()));
+        }
+        return getLegacyViewIndexIdDataType();
+    }
+
     public static PColumn getColumn(int pkCount, byte[][] rowKeyMetaData, PTable table) throws ColumnFamilyNotFoundException, ColumnNotFoundException {
         PColumn col = null;
         if (pkCount > FAMILY_NAME_INDEX

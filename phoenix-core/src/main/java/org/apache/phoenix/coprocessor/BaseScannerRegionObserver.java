@@ -178,8 +178,11 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             byte[] expectedUpperRegionKey =
                     scan.getAttribute(EXPECTED_UPPER_REGION_KEY) == null ? scan.getStopRow() : scan
                             .getAttribute(EXPECTED_UPPER_REGION_KEY);
-            isStaleRegionBoundaries = expectedUpperRegionKey != null &&
-                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
+
+            byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW);
+            isStaleRegionBoundaries = (expectedUpperRegionKey != null &&
+                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
+                    (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
             isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
                     ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
