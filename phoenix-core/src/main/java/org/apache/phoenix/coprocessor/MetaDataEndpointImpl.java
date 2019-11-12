@@ -2392,7 +2392,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                                 .unwrap(PhoenixConnection.class);
                                 Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
                                         Bytes.toString(tenantId), Bytes.toString(schemaName),
-                                        Bytes.toString(tableName), this.accessCheckEnabled);
+                                        Bytes.toString(tableName),
+                                        PTable.TaskStatus.CREATED.toString(),
+                                        null, null, null, null,
+                                        this.accessCheckEnabled);
                             } catch (Throwable t) {
                                 LOGGER.error("Adding a task to drop child views failed!", t);
                             }
