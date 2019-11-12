@@ -930,7 +930,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             boolean isViewBaseTransactional = false;
             if (!isTransactional && isViewIndex) {
-                if (Boolean.TRUE.equals(tableProps.getOrDefault(TRANSACTIONAL, Boolean.FALSE))) {
+                if (tableProps.containsKey(TRANSACTIONAL) &&
+                        Boolean.TRUE.equals(tableProps.get(TRANSACTIONAL))) {
                     isViewBaseTransactional = true;
                 }
             }
