@@ -161,7 +161,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
         String childViewScanKey = isChildView ? ",'Y'" : "";
         assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER _IDX_" + baseTableName + " [-9223372036854775808,'1'" + childViewScanKey + "] - [-9223372036854775808,'3'" + childViewScanKey + "]\n" +
+            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER _IDX_" + baseTableName + " ["+ Short.MIN_VALUE +",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE + ",'3'" + childViewScanKey + "]\n" +
             "    SERVER FILTER BY FIRST KEY ONLY",
             QueryUtil.getExplainPlan(rs));
         
@@ -264,7 +264,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
                 " ORDER BY WO_ID, A_DATE DESC";
         ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 5 RANGES OVER _IDX_" + baseTableName + " [-9223372036854775808,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [-9223372036854775808,'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']\n" +
+            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 5 RANGES OVER _IDX_" + baseTableName + " [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']\n" +
             "    SERVER FILTER BY FIRST KEY ONLY",
             QueryUtil.getExplainPlan(rs));
         

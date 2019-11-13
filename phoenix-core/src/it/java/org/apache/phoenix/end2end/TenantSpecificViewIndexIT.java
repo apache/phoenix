@@ -133,7 +133,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         //are owned by different tenants.
         assertEquals(sequenceNameA, sequenceNameB);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequenceValue(null, sequenceNameA, sequenceSchemaName, Long.MIN_VALUE + 2L);
+        verifySequenceValue(null, sequenceNameA, sequenceSchemaName, Short.MIN_VALUE + 2L);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
@@ -209,7 +209,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
                         SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes()))
-                    + " [" + Long.toString(Long.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
+                    + " [" + Long.toString(Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                     QueryUtil.getExplainPlan(rs));
         }
 
