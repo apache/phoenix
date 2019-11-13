@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -41,7 +42,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -85,14 +85,19 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
-        Map<String, String> props = Collections.emptyMap();
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        clientProps.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         boolean splitSystemCatalog = (driver == null);
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put(QueryServices.PHOENIX_ACLS_ENABLED, "true");
         serverProps.put(PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY,
                 TestMetaDataRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
+        // Set this in server properties too since we get a connection on the server and pass in
+        // server-side properties when running the drop child views tasks
+        serverProps.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                new ReadOnlyProps(clientProps.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
             splitSystemCatalog();
@@ -186,7 +191,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
             // test for a view that is in non-default schema
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, TBL));
+                TableName tableName = TableName.valueOf(NS, TBL);
+                HTableDescriptor desc = new HTableDescriptor(tableName);
                 desc.addFamily(new HColumnDescriptor(CF));
                 admin.createTable(desc);
 
@@ -199,11 +205,14 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         .contains(NS + ":" + TBL));
 
                 conn.createStatement().execute("DROP VIEW " + view1);
+                admin.disableTable(tableName);
+                admin.deleteTable(tableName);
             }
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in default schema (for backward compatibility)
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS + "." + TBL));
+                TableName tableName = TableName.valueOf(NS + "." + TBL);
+                HTableDescriptor desc = new HTableDescriptor(tableName);
                 desc.addFamily(new HColumnDescriptor(CF));
                 admin.createTable(desc);
 
@@ -217,11 +226,14 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         .contains(NS + "." + TBL));
 
                 conn.createStatement().execute("DROP VIEW " + view2);
+                admin.disableTable(tableName);
+                admin.deleteTable(tableName);
             }
 
             // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
             {
-                HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(NS, NS + "." + TBL));
+                TableName tableName = TableName.valueOf(NS, NS + "." + TBL);
+                HTableDescriptor desc = new HTableDescriptor(tableName);
                 desc.addFamily(new HColumnDescriptor(CF));
                 admin.createTable(desc);
 
@@ -234,6 +246,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                         .contains(NS + ":" + NS + "." + TBL));
 
                 conn.createStatement().execute("DROP VIEW " + view3);
+                admin.disableTable(tableName);
+                admin.deleteTable(tableName);
             }
             conn.createStatement().execute("DROP SCHEMA " + NS);
         }
@@ -359,26 +373,44 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            createTableViewAndDropCascade(conn, fullTableName, fullViewName);
+            createTableViewAndDropCascade(conn, fullTableName, fullViewName, false);
             validateViewDoesNotExist(conn, fullViewName);
             validateSystemTaskContainsCompletedDropChildViewsTasks(conn, SCHEMA1, tableName, 1);
 
             // Repeat this and check that the view still doesn't exist
-            createTableViewAndDropCascade(conn, fullTableName, fullViewName);
+            createTableViewAndDropCascade(conn, fullTableName, fullViewName, false);
             validateViewDoesNotExist(conn, fullViewName);
             validateSystemTaskContainsCompletedDropChildViewsTasks(conn, SCHEMA1, tableName, 2);
         }
     }
 
+    // We set DROP_METADATA_ATTRIB to true and check that this does not fail dropping child views
+    // that have an index, though their underlying physical table was already dropped.
+    // See PHOENIX-5545.
+    @Test
+    public void testDropTableCascadeWithChildViewWithIndex() throws SQLException {
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTableViewAndDropCascade(conn, fullTableName, fullViewName, true);
+            validateViewDoesNotExist(conn, fullViewName);
+            validateSystemTaskContainsCompletedDropChildViewsTasks(conn, SCHEMA1, tableName, 1);
+        }
+    }
+
     private void createTableViewAndDropCascade(Connection conn, String fullTableName,
-            String fullViewName) throws SQLException {
+            String fullViewName, boolean createViewIndex) throws SQLException {
         String tableDdl = "CREATE TABLE " + fullTableName +
                 "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
         conn.createStatement().execute(tableDdl);
         String ddl = "CREATE VIEW " + fullViewName +
                 " (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
-
+        if (createViewIndex) {
+            conn.createStatement().execute("CREATE INDEX " + "INDEX_" + generateUniqueName() +
+                    " ON " + fullViewName + "(v2)");
+        }
         // drop table cascade should succeed
         conn.createStatement().execute("DROP TABLE " + fullTableName + " CASCADE");
         runDropChildViewsTask();
