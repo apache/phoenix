@@ -3177,7 +3177,8 @@ public class MetaDataClient {
                 connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), parentTableName, result.getMutationTime());
 
                 if (table != null) {
-                    boolean dropMetaData = false;
+                    boolean dropMetaData = connection.getQueryServices().getProps()
+                            .getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     long ts = (scn == null ? result.getMutationTime() : scn);
                     List<TableRef> tableRefs = Lists.newArrayListWithExpectedSize(2 + table.getIndexes().size());
                     connection.setAutoCommit(true);
