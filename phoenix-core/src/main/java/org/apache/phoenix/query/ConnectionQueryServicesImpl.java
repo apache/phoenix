@@ -1932,7 +1932,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             parentPhysicalTableName = parentTable.getPhysicalName().getBytes();
         }
         if (parentPhysicalTableName != null) {
-            flushTable(parentPhysicalTableName);
+            try {
+                flushTable(parentPhysicalTableName);
+            } catch (PhoenixIOException ex) {
+                if (ex.getCause() instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                    LOGGER.info("Flushing physical parent table " + Bytes.toString(parentPhysicalTableName) + " of " + table.getName()
+                            .getString() + " failed with : " + ex + " with cause: " + ex.getCause()
+                            + " since the table has already been dropped");
+                } else {
+                    throw ex;
+                }
+            }
         }
     }
 
