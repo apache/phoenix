@@ -20,20 +20,29 @@ package org.apache.phoenix.hbase.index.builder;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.IndexUpdate;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +82,19 @@ public class IndexBuildManager implements Stoppable {
       throw new IOException("Couldn't instantiate index builder:" + builderClass
           + ", disabling indexing on table " + e.getRegion().getTableDescriptor().getTableName().getNameAsString());
     }
+  }
+
+  public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, IndexMetaData indexMetaData, long ts) throws IOException {
+    Set<ColumnReference> columns = new HashSet<>();
+    List<IndexMaintainer> indexMaintainers = ((PhoenixIndexMetaData)indexMetaData).getIndexMaintainers();
+    for (IndexMaintainer maintainer : indexMaintainers) {
+      columns.addAll(maintainer.getAllColumns());
+    }
+    columns.add(new ColumnReference(indexMaintainers.get(0).getDataEmptyKeyValueCF(), indexMaintainers.get(0).getEmptyKeyValueQualifier()));
+    this.delegate.scanCurrentRowStates(rows, columns, ts);
+  }
+  public void removeRowStates(Set<ImmutableBytesPtr> rows) {
+    this.delegate.removeRowStates(rows);
   }
 
   public IndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {

@@ -12,6 +12,7 @@ package org.apache.phoenix.hbase.index.covered;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
@@ -21,8 +22,10 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.BaseIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +49,14 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
         this.localTable = new LocalTable(env);
     }
 
+    @Override
+    public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, Collection<? extends ColumnReference> columns, long ts) throws IOException {
+        localTable.scanCurrentRowStates(rows, columns, ts);
+    }
+    @Override
+    public void removeRowStates(Set<ImmutableBytesPtr> rows) {
+        localTable.removeRowStates(rows);
+    }
     @Override
     public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData indexMetaData) throws IOException {
     	// create a state manager, so we can manage each batch

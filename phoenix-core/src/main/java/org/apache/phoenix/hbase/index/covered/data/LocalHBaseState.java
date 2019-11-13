@@ -19,11 +19,13 @@ package org.apache.phoenix.hbase.index.covered.data;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * Access the current state of the row in the local HBase table, given a mutation
@@ -46,4 +48,7 @@ public interface LocalHBaseState {
   public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)
       throws IOException;
 
+  public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, Collection<? extends ColumnReference> columns, long ts)
+          throws IOException;
+  public void removeRowStates(Set<ImmutableBytesPtr> rows);
 }

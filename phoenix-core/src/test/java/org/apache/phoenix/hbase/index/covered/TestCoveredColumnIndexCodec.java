@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexCodec.ColumnEntry;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -139,6 +141,16 @@ public class TestCoveredColumnIndexCodec {
       return r;
     }
 
+    @Override
+    public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, Collection<? extends ColumnReference> columns, long ts)
+            throws IOException {
+
+    }
+
+    @Override
+    public void removeRowStates(Set<ImmutableBytesPtr> rows) {
+
+    }
   }
 
   /**

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Stoppable;
@@ -34,6 +35,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * Interface to build updates ({@link Mutation}s) to the index tables, based on the primary table
@@ -151,4 +154,8 @@ public interface IndexBuilder extends Stoppable {
   public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
 
   public ReplayWrite getReplayWrite(Mutation m);
+
+  public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, Collection<? extends ColumnReference> columns, long ts)
+          throws IOException;
+  public void removeRowStates(Set<ImmutableBytesPtr> rows);
 }

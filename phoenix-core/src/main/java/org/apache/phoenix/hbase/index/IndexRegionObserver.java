@@ -638,7 +638,17 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
 
       long start = EnvironmentEdgeManager.currentTimeMillis();
-      prepareIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
+      if (replayWrite == null) {
+          this.builder.scanCurrentRowStates(context.rowsToLock, indexMetaData, now);
+      }
+      try {
+          prepareIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
+      }
+      finally {
+          if (replayWrite == null) {
+              this.builder.removeRowStates(context.rowsToLock);
+          }
+      }
       metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
 
       // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to

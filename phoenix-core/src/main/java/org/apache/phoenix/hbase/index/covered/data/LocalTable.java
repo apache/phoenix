@@ -21,21 +21,36 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.ByteArrayComparable;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.MultiRowRangeFilter;
+import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Ordering;
 import com.google.common.primitives.Longs;
+import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 
 /**
  * Wrapper around a lazily instantiated, local HTable.
@@ -49,15 +64,63 @@ import com.google.common.primitives.Longs;
 public class LocalTable implements LocalHBaseState {
 
   private RegionCoprocessorEnvironment env;
+    private Map<ImmutableBytesPtr, Result> results = null;
 
   public LocalTable(RegionCoprocessorEnvironment env) {
     this.env = env;
   }
 
+  public void scanCurrentRowStates(Set<ImmutableBytesPtr> rows, Collection<? extends ColumnReference> columns, long ts) throws IOException {
+      if (results == null) {
+          results = new ConcurrentHashMap<>();
+      }
+      Scan s = IndexManagementUtil.newLocalStateScan(Collections.singletonList(columns));
+      List<MultiRowRangeFilter.RowRange> ranges = new ArrayList<>();
+      for (ImmutableBytesPtr row : rows) {
+          ranges.add(new MultiRowRangeFilter.RowRange(row.get(), true, row.get(), true));
+      }
+      s.setFilter(new MultiRowRangeFilter(ranges));
+      s.setTimeRange(0, ts);
+      Region region = this.env.getRegion();
+      try (RegionScanner scanner = region.getScanner(s)) {
+          boolean more;
+          do {
+              List<Cell> kvs = new ArrayList<Cell>(1);
+              more = scanner.next(kvs);
+              if (kvs.isEmpty()) {
+                  return;
+              }
+              Result r = Result.create(kvs);
+              Cell cell = kvs.get(0);
+              byte[] rowKey = new byte[cell.getRowLength()];
+              System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowKey, 0, cell.getRowLength());
+              results.put(new ImmutableBytesPtr(rowKey), r);
+          } while (more);
+      }
+  }
+
+  public void removeRowStates(Set<ImmutableBytesPtr> rows) {
+      for (ImmutableBytesPtr row : rows) {
+          results.remove(row);
+      }
+  }
+
   @Override
   public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations)
       throws IOException {
-    byte[] row = m.getRow();
+      byte[] row = m.getRow();
+      Result r;
+      if (results != null) {
+          if (m.getAttribute(BaseScannerRegionObserver.REPLAY_WRITES) == null) {
+              r = results.get(new ImmutableBytesPtr(row));
+              if (r == null) {
+                  List<Cell> kvs = new ArrayList<Cell>(1);
+                  r = Result.create(kvs);
+              }
+              return r;
+          }
+      }
+
     // need to use a scan here so we can get raw state, which Get doesn't provide.
     Scan s = IndexManagementUtil.newLocalStateScan(Collections.singletonList(columns));
     s.setStartRow(row);
@@ -76,7 +139,7 @@ public class LocalTable implements LocalHBaseState {
       assert !more : "Got more than one result when scanning"
           + " a single row in the primary table!";
 
-      Result r = Result.create(kvs);
+      r = Result.create(kvs);
       return r;
     }
   }
