@@ -1962,11 +1962,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         PName physicalName = parentTable.getPhysicalName();
                         long seqValue = getViewIndexSequenceValue(connection, tenantIdStr, parentTable, physicalName);
                         Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
-
                         NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
                         List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
                         Cell cell = cells.get(0);
-                        PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
+                        PDataType<?> dataType = MetaDataUtil.getIndexDataType(tableMetadata,
+                                GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
                         Object val = dataType.toObject(seqValue, PLong.INSTANCE);
                         byte[] bytes = new byte[dataType.getByteSize() + 1];
                         dataType.toBytes(val, bytes, 0);
@@ -2103,7 +2103,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         long sequenceTimestamp = HConstants.LATEST_TIMESTAMP;
         try {
             connection.getQueryServices().createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
-                    Long.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
+                    Short.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
         } catch (SequenceAlreadyExistsException e) {
             //someone else got here first and created the sequence, or it was pre-existing. Not a problem.
         }

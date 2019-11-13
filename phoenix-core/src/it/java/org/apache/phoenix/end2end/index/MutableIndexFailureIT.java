@@ -600,7 +600,7 @@ public class MutableIndexFailureIT extends BaseTest {
                             Cell firstCell = entry.getValue().get(0);
                             long indexId = MetaDataUtil.getViewIndexIdDataType().getCodec().decodeLong(firstCell.getRowArray(), firstCell.getRowOffset() + regionStartKeyLen, SortOrder.getDefault());
                             // Only throw for first local index as the test may have multiple local indexes
-                            if (indexId == Long.MIN_VALUE) {
+                            if (indexId == Short.MIN_VALUE) {
                                 throwException = true;
                                 break;
                             }
