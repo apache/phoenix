@@ -188,7 +188,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             PName physicalName = PNameFactory.newName(hbaseTableName);
             String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
             String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
-            verifySequenceValue(null, newSequenceName, newSchemaName, -32765);
+            verifySequenceValue(null, newSequenceName, newSchemaName, Short.MIN_VALUE + 3);
             admin.close();
         }
     }

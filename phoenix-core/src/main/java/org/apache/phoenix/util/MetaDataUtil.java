@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -941,6 +942,13 @@ public class MetaDataUtil {
         return null;
     }
 
+	/**
+     * Retrieve the viewIndexId datatype from create request.
+     *
+     * @see MetaDataEndpointImpl#createTable(com.google.protobuf.RpcController,
+     *      org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest,
+     *      com.google.protobuf.RpcCallback)
+     */
     public static PDataType<?> getIndexDataType(List<Mutation> tableMetaData,
             KeyValueBuilder builder, ImmutableBytesWritable value) {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
