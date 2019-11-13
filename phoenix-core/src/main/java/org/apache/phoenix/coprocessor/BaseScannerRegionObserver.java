@@ -175,11 +175,20 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         byte[] upperExclusiveRegionKey = region.getRegionInfo().getEndKey();
         boolean isStaleRegionBoundaries;
         if (isLocalIndex) {
+            // For local indexes we have to abort any scan that was open during a split.
+            // We detect that condition as follows:
+            // 1. The scanner's stop row has to always match the region's end key.
+            // 2. Phoenix sets the SCAN_ACTUAL_START_ROW attribute to the scan's original start row
+            //    We cannot directly compare that with the region's start key, but can enforce that
+            //    the original start row still falls within the new region.
             byte[] expectedUpperRegionKey =
                     scan.getAttribute(EXPECTED_UPPER_REGION_KEY) == null ? scan.getStopRow() : scan
                             .getAttribute(EXPECTED_UPPER_REGION_KEY);
-            isStaleRegionBoundaries = expectedUpperRegionKey != null &&
-                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
+
+            byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW);
+            isStaleRegionBoundaries = (expectedUpperRegionKey != null &&
+                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
+                    (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
             isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
                     ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
