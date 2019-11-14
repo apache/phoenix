@@ -162,10 +162,11 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 "CREATE TABLE TEST.MULTI_TENANT_TABLE " + " (TENANT_ID VARCHAR(15) NOT NULL,ID INTEGER NOT NULL"
                         + ", NAME VARCHAR, CONSTRAINT PK_1 PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
         conn.createStatement().execute(createTblStr);
-        conn.createStatement().execute("CREATE TABLE TRANSACTIONAL_TABLE(id bigint NOT NULL "
-                        + "PRIMARY KEY, a.name varchar, sal bigint, address varchar) "
-                + " TRANSACTIONAL=true "//", TRANSACTION_PROVIDER='TEPHRA' "
-                + ((tableDDLOptions.trim().length() > 0) ? "," : "") + tableDDLOptions);
+        String createTxnTableStr = "CREATE TABLE TRANSACTIONAL_TABLE(id bigint NOT NULL "
+                + "PRIMARY KEY, a.name varchar, sal bigint, address varchar) "
+                + " TRANSACTIONAL=true , TRANSACTION_PROVIDER='TEPHRA' "
+                + ((tableDDLOptions.trim().length() > 0) ? "," : "") + tableDDLOptions;
+        conn.createStatement().execute(createTxnTableStr);
 
         //views
         conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW (view_column varchar) "
@@ -301,6 +302,20 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         int status = iut.executeTool();
         Assert.assertEquals(-1, status);
         validate(true);
+    }
+
+    @Test
+    public void testToolWithNoIndex() throws Exception {
+        if (!upgrade || isNamespaceEnabled) {
+            return;
+        }
+        conn.createStatement().execute("CREATE TABLE TEST.NEW_TABLE (id bigint NOT NULL "
+                + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
+        iut.setInputTables("TEST.NEW_TABLE");
+        iut.prepareToolSetup();
+        int status = iut.executeTool();
+        Assert.assertEquals(0, status);
+        conn.createStatement().execute("DROP TABLE TEST.NEW_TABLE");
     }
 
     @Test
