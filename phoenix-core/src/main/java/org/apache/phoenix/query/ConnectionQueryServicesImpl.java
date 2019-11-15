@@ -158,6 +158,7 @@ import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
+import org.apache.phoenix.coprocessor.TTLAwareRegionObserver;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
@@ -1066,6 +1067,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             }
+
+            if (!SchemaUtil.isSystemTable(tableName)) {
+                if (!descriptor.hasCoprocessor(TTLAwareRegionObserver.class.getName())) {
+                    descriptor.addCoprocessor(TTLAwareRegionObserver.class.getName(), null, priority-2, null);
+                }
+            }
+
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
