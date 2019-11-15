@@ -93,6 +93,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
+    public static final String VIEW_TTL = "_ViewTTL";
+    public static final String MASK_VIEW_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
+    public static final String DELETE_VIEW_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
@@ -116,7 +119,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     // In case of Index Write failure, we need to determine that Index mutation
     // is part of normal client write or Index Rebuilder. # PHOENIX-5080
     public final static byte[] REPLAY_INDEX_REBUILD_WRITES = PUnsignedTinyint.INSTANCE.toBytes(3);
-    
+
     public enum ReplayWrite {
         TABLE_AND_INDEX,
         INDEX_ONLY,
@@ -209,6 +212,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             TimeRange timeRange = scan.getTimeRange();
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
         }
+
         if (isRegionObserverFor(scan)) {
             // For local indexes, we need to throw if out of region as we'll get inconsistent
             // results otherwise while in other cases, it may just mean out client-side data

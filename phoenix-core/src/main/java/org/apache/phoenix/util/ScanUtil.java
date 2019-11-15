@@ -23,6 +23,8 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -41,6 +43,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -53,13 +56,19 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -70,8 +79,10 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -960,5 +971,141 @@ public class ScanUtil {
     
     public static void setClientVersion(Scan scan, int version) {
         scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
+    }
+
+    public static long getViewTTL(Scan scan) {
+        byte[] viewTTL = scan.getAttribute(BaseScannerRegionObserver.VIEW_TTL);
+        if (viewTTL == null) {
+            return 0L;
+        }
+        return Bytes.toLong(viewTTL);
+    }
+
+    public static boolean isMaskTTLExpiredRows(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.MASK_VIEW_TTL_EXPIRED) != null &&
+                (Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserver.MASK_VIEW_TTL_EXPIRED),
+                PDataType.TRUE_BYTES) == 0)
+                && scan.getAttribute(BaseScannerRegionObserver.VIEW_TTL) != null;
+    }
+
+    public static boolean isDeleteTTLExpiredRows(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.DELETE_VIEW_TTL_EXPIRED) != null && (
+                Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserver.DELETE_VIEW_TTL_EXPIRED),
+                        PDataType.TRUE_BYTES) == 0)
+                && scan.getAttribute(BaseScannerRegionObserver.VIEW_TTL) != null;
+    }
+
+    public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
+        boolean addedEmptyColumn = false;
+        Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
+        while (iterator.hasNext()) {
+            Filter filter = iterator.next();
+            if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
+                ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
+                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+                    scan.addColumn(emptyCF, emptyCQ);
+                }
+            } else if (filter instanceof ColumnProjectionFilter) {
+                ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF),
+                        new ImmutableBytesPtr(emptyCQ));
+                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+                    scan.addColumn(emptyCF, emptyCQ);
+                }
+            } else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
+                ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
+            } else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
+                scan.addColumn(emptyCF, emptyCQ);
+                addedEmptyColumn = true;
+            }
+        }
+        if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+            scan.addColumn(emptyCF, emptyCQ);
+        }
+    }
+
+    public static boolean containsOneOrMoreColumn(Scan scan) {
+        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        if (familyMap == null || familyMap.isEmpty()) {
+            return false;
+        }
+        for (Map.Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+            NavigableSet<byte[]> family = entry.getValue();
+            if (family != null && !family.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
+            PhoenixConnection phoenixConnection) throws SQLException {
+        if (table.isTransactional() || table.getType() != PTableType.INDEX) {
+            return;
+        }
+
+        PTable indexTable = table;
+        if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
+            return;
+        }
+        String schemaName = indexTable.getParentSchemaName().getString();
+        String tableName = indexTable.getParentTableName().getString();
+        PTable dataTable;
+        try {
+            dataTable =
+                    PhoenixRuntime.getTable(phoenixConnection,
+                            SchemaUtil.getTableName(schemaName, tableName));
+        } catch (TableNotFoundException e) {
+            // This index table must be being deleted. No need to set the scan attributes
+            return;
+        }
+        // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
+        // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
+        if (table.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            int lastIndexOf = table.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            String indexName = table.getName().getString().substring(lastIndexOf + 1);
+            indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
+        }
+
+        if (!dataTable.getIndexes().contains(indexTable)) {
+            return;
+        }
+        if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable),
+                    phoenixConnection);
+            scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+        }
+        scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME,
+                dataTable.getPhysicalName().getBytes());
+        IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
+        byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+        byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+        if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
+            BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
+        }
+        addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+    }
+
+    public static void setScanAttributesForViewTTL(Scan scan, PTable table,
+            PhoenixConnection phoenixConnection) throws SQLException {
+
+        if (table.getViewTTL() != 0) {
+            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
+            byte[]
+                    emptyColumnName =
+                    table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                            QueryConstants.EMPTY_COLUMN_BYTES :
+                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
+            scan.setAttribute(BaseScannerRegionObserver.MASK_VIEW_TTL_EXPIRED, PDataType.TRUE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.VIEW_TTL, Bytes.toBytes(Long.valueOf(table.getViewTTL())));
+            addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
+        }
+
     }
 }

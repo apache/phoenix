@@ -133,7 +133,8 @@ public class TableResultIterator implements ResultIterator {
         this.caches = caches;
         this.retry=plan.getContext().getConnection().getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
-        IndexUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
+        ScanUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
+        ScanUtil.setScanAttributesForViewTTL(scan, table, plan.getContext().getConnection());
     }
 
     @Override
