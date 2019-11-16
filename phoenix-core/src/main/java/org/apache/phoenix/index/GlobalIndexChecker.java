@@ -326,7 +326,10 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Delete the unverified row from index if it is old enough
                 deleteRowIfAgedEnough(indexRowKey, row, ts, false);
                 // Open a new scanner starting from the row after the current row
-                indexScan.setStartRow(indexRowKey);
+                byte[] nextIndexRowKey = new byte[indexRowKey.length + 1];
+                System.arraycopy(indexRowKey, 0, nextIndexRowKey, 0, indexRowKey.length);
+                nextIndexRowKey[indexRowKey.length] = 0;
+                indexScan.setStartRow(nextIndexRowKey);
                 scanner = region.getScanner(indexScan);
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
