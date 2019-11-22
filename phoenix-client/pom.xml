@@ -68,6 +68,7 @@
                 ${project.basedir}/../config/csv-bulk-load-config.properties
               </file>
             </transformer>
+<!--	    
             <transformer
                 implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
               <resource>README.md</resource>
@@ -82,6 +83,12 @@
                 implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
               <resource>NOTICE</resource>
               <file>${project.basedir}/../NOTICE</file>
+            </transformer>
+-->
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">
+            </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+              <addHeader>false</addHeader>
             </transformer>
           </transformers>
           <relocations>
@@ -368,6 +375,8 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
+		    <exclude>META-INF/LICENSE</exclude>
+		    <exclude>META-INF/NOTICE</exclude>
                     <exclude>LICENSE.*</exclude>
                     <exclude>NOTICE.*</exclude>
                   </excludes>
@@ -425,7 +434,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
-      <version>1.7.7</version>
     </dependency>
   </dependencies>
 </project>

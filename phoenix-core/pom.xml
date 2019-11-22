@@ -632,7 +632,6 @@
     <dependency>
         <groupId>org.jruby.joni</groupId>
         <artifactId>joni</artifactId>
-        <version>${joni.version}</version>
     </dependency>
     <dependency>
       <groupId>com.clearspring.analytics</groupId>
@@ -645,14 +644,11 @@
        <dependency>
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
-      </dependency>
+    </dependency>
     <dependency>
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-framework</artifactId>
-      <version>${curator.version}</version>
     </dependency>
-
-
   </dependencies>
 
   <reporting>
