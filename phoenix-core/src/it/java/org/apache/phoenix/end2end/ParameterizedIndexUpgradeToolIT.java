@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.index.GlobalIndexChecker;
@@ -59,6 +60,7 @@ import java.util.UUID;
 
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
+import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 @RunWith(Parameterized.class)
@@ -139,6 +141,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 Boolean.toString(isNamespaceEnabled));
         clientProps.put(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
                 Boolean.toString(isNamespaceEnabled));
+        clientProps.put(DROP_METADATA_ATTRIB, Boolean.toString(true));
         serverProps.putAll(clientProps);
         //To mimic the upgrade/rollback scenario, so that table creation uses old/new design
         clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
@@ -229,23 +232,28 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             throws IOException {
         if (mutable) {
             for (String table : tableList) {
-                Assert.assertTrue(admin.getDescriptor(TableName.valueOf(table))
+                Assert.assertTrue("Can't find IndexRegionObserver for " + table,
+                    admin.getDescriptor(TableName.valueOf(table))
                         .hasCoprocessor(IndexRegionObserver.class.getName()));
-                Assert.assertFalse(admin.getDescriptor(TableName.valueOf(table))
+                Assert.assertFalse("Found Indexer on " + table,
+                    admin.getDescriptor(TableName.valueOf(table))
                         .hasCoprocessor(Indexer.class.getName()));
             }
         }
         for (String index : indexList) {
-            Assert.assertTrue(admin.getDescriptor(TableName.valueOf(index))
+            Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
+                admin.getDescriptor(TableName.valueOf(index))
                     .hasCoprocessor(GlobalIndexChecker.class.getName()));
         }
         // Transactional indexes should not have new coprocessors
         for (String index : TRANSACTIONAL_INDEXES_LIST) {
-            Assert.assertFalse(admin.getDescriptor(TableName.valueOf(index))
+            Assert.assertFalse("Found GlobalIndexChecker on transactional index " + index,
+                admin.getDescriptor(TableName.valueOf(index))
                     .hasCoprocessor(GlobalIndexChecker.class.getName()));
         }
         for (String table : TRANSACTIONAL_TABLE_LIST) {
-            Assert.assertFalse(admin.getDescriptor(TableName.valueOf(table))
+            Assert.assertFalse("Found IndexRegionObserver on transactional table",
+                admin.getDescriptor(TableName.valueOf(table))
                     .hasCoprocessor(IndexRegionObserver.class.getName()));
         }
     }
@@ -254,14 +262,17 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             throws IOException {
         if (mutable) {
             for (String table : tableList) {
-                Assert.assertTrue(admin.getDescriptor(TableName.valueOf(table))
+                Assert.assertTrue("Can't find Indexer for " + table,
+                    admin.getDescriptor(TableName.valueOf(table))
                         .hasCoprocessor(Indexer.class.getName()));
-                Assert.assertFalse(admin.getDescriptor(TableName.valueOf(table))
+                Assert.assertFalse("Found IndexRegionObserver on " + table,
+                    admin.getDescriptor(TableName.valueOf(table))
                         .hasCoprocessor(IndexRegionObserver.class.getName()));
             }
         }
         for (String index : indexList) {
-            Assert.assertFalse(admin.getDescriptor(TableName.valueOf(index))
+            Assert.assertFalse("Found GlobalIndexChecker on " + index,
+                admin.getDescriptor(TableName.valueOf(index))
                     .hasCoprocessor(GlobalIndexChecker.class.getName()));
         }
     }
@@ -335,7 +346,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     }
 
     @After
-    public void cleanup() throws SQLException {
+    public void cleanup() throws IOException, SQLException {
         //TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3
         conn.createStatement().execute("DROP INDEX INDEX1 ON TEST.MOCK1");
         conn.createStatement().execute("DROP INDEX INDEX2 ON TEST.MOCK1");
@@ -371,5 +382,16 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
         conn.close();
         connTenant.close();
+        assertTableNotExists("TEST.MOCK1");
+        assertTableNotExists("TEST.MOCK2");
+        assertTableNotExists("TEST.MOCK3");
+        assertTableNotExists("TEST.MULTI_TENANT_TABLE");
+    }
+
+    private void assertTableNotExists(String table) throws IOException {
+        TableName tableName =
+            SchemaUtil.getPhysicalTableName(Bytes.toBytes(table), isNamespaceEnabled);
+        Assert.assertFalse("Table " + table + " exists when it shouldn't",
+            admin.tableExists(tableName));
     }
 }
