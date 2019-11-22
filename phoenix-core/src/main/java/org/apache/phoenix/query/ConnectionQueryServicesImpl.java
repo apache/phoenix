@@ -823,7 +823,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        addCoprocessors(physicalTableName, tableDescriptor, tableType, tableProps);
+        addCoprocessors(physicalTableName, tableDescriptor, tableType, tableProps, existingDesc);
 
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
@@ -849,7 +849,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
 
-    private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType, Map<String,Object> tableProps) throws SQLException {
+    private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor,
+                                 PTableType tableType, Map<String,Object> tableProps,
+                                 HTableDescriptor existingDesc) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
@@ -920,23 +922,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (descriptor.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         descriptor.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
                     }
-                    if (indexRegionObserverEnabled) {
-                        if (descriptor.hasCoprocessor(Indexer.class.getName())) {
-                            descriptor.removeCoprocessor(Indexer.class.getName());
-                        }
-                        if (!descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                            IndexRegionObserver.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
-                        }
-                    } else {
-                        if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                            descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
-                        }
-                        if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
-                            Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                            opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                            Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                    // we only want to mess with the indexing coprocs if we're on the original
+                    // CREATE statement. Otherwise, if we're on an ALTER or CREATE TABLE
+                    // IF NOT EXISTS of an existing table, we should leave them unaltered,
+                    // because they should be upgraded or downgraded using the IndexUpgradeTool
+                    if (!doesPhoenixTableAlreadyExist(existingDesc)) {
+                        if (indexRegionObserverEnabled) {
+                            if (descriptor.hasCoprocessor(Indexer.class.getName())) {
+                                descriptor.removeCoprocessor(Indexer.class.getName());
+                            }
+                            if (!descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                                Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                                opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                                IndexRegionObserver.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                            }
+                        } else {
+                            if (descriptor.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                                descriptor.removeCoprocessor(IndexRegionObserver.class.getName());
+                            }
+                            if (!descriptor.hasCoprocessor(Indexer.class.getName())) {
+                                Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
+                                opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                                Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
+                            }
                         }
                     }
                 }
@@ -997,6 +1005,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
+    }
+
+    private boolean doesPhoenixTableAlreadyExist(HTableDescriptor existingDesc) {
+        //if the table descriptor already has Phoenix coprocs, we assume it's
+        //already gone through a Phoenix create statement once
+        if (existingDesc == null){
+            return false;
+        }
+        boolean hasScanObserver = existingDesc.hasCoprocessor(ScanRegionObserver.class.getName());
+        boolean hasUnAggObserver = existingDesc.hasCoprocessor(
+            UngroupedAggregateRegionObserver.class.getName());
+        boolean hasGroupedObserver = existingDesc.hasCoprocessor(
+            GroupedAggregateRegionObserver.class.getName());
+        boolean hasIndexObserver = existingDesc.hasCoprocessor(Indexer.class.getName())
+            || existingDesc.hasCoprocessor(IndexRegionObserver.class.getName())
+            || existingDesc.hasCoprocessor(GlobalIndexChecker.class.getName());
+        return hasScanObserver && hasUnAggObserver && hasGroupedObserver && hasIndexObserver;
     }
 
     private static interface RetriableOperation {
@@ -2119,7 +2144,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } else {
             tableDescriptor.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
         }
-        this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
+        this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps, tableDescriptor);
     }
 
     private Pair<HTableDescriptor,HTableDescriptor> separateAndValidateProperties(PTable table, Map<String, List<Pair<String, Object>>> properties,
