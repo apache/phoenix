@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+
 import com.google.common.collect.ListMultimap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -36,8 +37,6 @@ import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +49,6 @@ public class IndexBuildManager implements Stoppable {
   private static final Logger LOGGER = LoggerFactory.getLogger(IndexBuildManager.class);
   private final IndexBuilder delegate;
   private boolean stopped;
-  private RegionCoprocessorEnvironment regionCoprocessorEnvironment;
 
   /**
    * @param env environment in which <tt>this</tt> is running. Used to setup the
@@ -61,7 +59,6 @@ public class IndexBuildManager implements Stoppable {
     // Prevent deadlock by using single thread for all reads so that we know
     // we can get the ReentrantRWLock. See PHOENIX-2671 for more details.
     this.delegate = getIndexBuilder(env);
-    this.regionCoprocessorEnvironment = env;
   }
   
   private static IndexBuilder getIndexBuilder(RegionCoprocessorEnvironment e) throws IOException {
@@ -91,14 +88,10 @@ public class IndexBuildManager implements Stoppable {
       IndexMetaData indexMetaData) throws Throwable {
     // notify the delegate that we have started processing a batch
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
-    CachedLocalTable cachedLocalTable =
-            IndexManagementUtil.preScanAllRequiredRows(
-                    mutations,
-                    (PhoenixIndexMetaData)indexMetaData,
-                    this.regionCoprocessorEnvironment.getRegion());
+
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     for (Mutation m : mutations) {
-      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
+      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData);
       for (Pair<Mutation, byte[]> update : updates) {
         indexUpdates.put(new HTableInterfaceReference(new ImmutableBytesPtr(update.getSecond())), new Pair<>(update.getFirst(), m.getRow()));
       }
@@ -112,15 +105,10 @@ public class IndexBuildManager implements Stoppable {
     final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
-    CachedLocalTable cachedLocalTable =
-            IndexManagementUtil.preScanAllRequiredRows(
-                    mutations,
-                    (PhoenixIndexMetaData)indexMetaData,
-                    this.regionCoprocessorEnvironment.getRegion());
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     ArrayList<Pair<Mutation, byte[]>> results = new ArrayList<>(mutations.size());
     for (Mutation m : mutations) {
-      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
+      Collection<Pair<Mutation, byte[]>> updates = delegate.getIndexUpdate(m, indexMetaData);
       if (PhoenixIndexMetaData.isIndexRebuild(m.getAttributesMap())) {
         for (Pair<Mutation, byte[]> update : updates) {
           update.getFirst().setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,

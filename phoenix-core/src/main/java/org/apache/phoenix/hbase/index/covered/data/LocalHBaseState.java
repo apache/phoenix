@@ -19,7 +19,6 @@ package org.apache.phoenix.hbase.index.covered.data;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -44,7 +43,7 @@ public interface LocalHBaseState {
    *         {@link Result} with no stored {@link Cell}s.
    * @throws IOException if there is an issue reading the row
    */
-  public List<Cell> getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)
+  public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)
       throws IOException;
 
 }
