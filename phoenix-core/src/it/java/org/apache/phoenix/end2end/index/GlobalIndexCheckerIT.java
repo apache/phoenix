@@ -30,11 +30,14 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -44,6 +47,8 @@ import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -464,6 +469,65 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexName);
+        }
+    }
+
+    @Test
+    public void testViewIndexRowUpdate() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Create a base table
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (oid varchar(10) not null, kp char(3) not null, val1 varchar(10)" +
+                    "CONSTRAINT pk PRIMARY KEY (oid, kp)) COLUMN_ENCODED_BYTES=0, MULTI_TENANT=true");
+            // Create a view on the base table
+            String viewName = generateUniqueName();
+            conn.createStatement().execute("CREATE VIEW " + viewName + " (id char(10) not null, " +
+                    "val2 varchar, val3 varchar, CONSTRAINT pk PRIMARY KEY (id)) AS SELECT * FROM " + dataTableName +
+                    " WHERE kp = '0EC'");
+            // Create an index on the view
+            String indexName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                    viewName + " (val2) include (val3)");
+            Properties props = new Properties();
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "o1");
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+                // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase)
+                // This will leave index rows unverified
+                // Create a view of the view
+                String childViewName = generateUniqueName();
+                tenantConn.createStatement().execute("CREATE VIEW " + childViewName + " (zid CHAR(15)) " +
+                        "AS SELECT * FROM " + viewName);
+                // Create another view of the child view
+                String grandChildViewName = generateUniqueName();
+                tenantConn.createStatement().execute("CREATE VIEW " + grandChildViewName + " (val4 CHAR(15)) " +
+                        "AS SELECT * FROM " + childViewName);
+                IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+                tenantConn.createStatement().execute("upsert into " + childViewName + " (zid, id, val1, val2, val3) VALUES('z1','1', 'a1','b1','c1')");
+                tenantConn.commit();
+                IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+                // Activate read repair
+                String selectSql = "select val3 from  " + childViewName + " WHERE val2  = 'b1'";
+                ResultSet rs = tenantConn.createStatement().executeQuery(selectSql);
+                assertTrue(rs.next());
+                assertEquals("c1", rs.getString("val3"));
+                // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase)
+                // This will leave index rows unverified
+                IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+                tenantConn.createStatement().execute("upsert into " + grandChildViewName + " (zid, id, val2, val3, val4) VALUES('z1', '2', 'b2', 'c2', 'd1')");
+                tenantConn.commit();
+                IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+                // Activate read repair
+                selectSql = "select id, val3 from  " + grandChildViewName + " WHERE val2  = 'b2'";
+                rs = tenantConn.createStatement().executeQuery(selectSql);
+                assertTrue(rs.next());
+                assertEquals("2", rs.getString("id"));
+                assertEquals("c2", rs.getString("val3"));
+            }
         }
     }
 
