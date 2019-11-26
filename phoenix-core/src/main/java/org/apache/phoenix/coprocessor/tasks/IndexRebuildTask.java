@@ -94,7 +94,7 @@ public class IndexRebuildTask extends BaseTask  {
             // Run index tool async.
             boolean runForeground = false;
             Map.Entry<Integer, Job> indexToolRes = IndexTool
-                    .run(conf, taskRecord.getSchemaName(), taskRecord.getTableName(), indexName, true,
+                    .run(conf, taskRecord.getSchemaName(), taskRecord.getTableName(), indexName,
                             false, taskRecord.getTenantId(), shouldDisable, rebuildAll, runForeground);
             int status = indexToolRes.getKey();
             if (status != 0) {
