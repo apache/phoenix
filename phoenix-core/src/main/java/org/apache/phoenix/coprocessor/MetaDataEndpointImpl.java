@@ -603,6 +603,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             getCoprocessorHost().preGetTable(Bytes.toString(tenantId), SchemaUtil.getTableName(schemaName, tableName),
                     TableName.valueOf(table.getPhysicalName().getBytes()));
 
+            if (request.getClientVersion() < MIN_SPLITTABLE_SYSTEM_CATALOG
+                    && table.getType() == PTableType.VIEW
+                    && table.getViewType() != ViewType.MAPPED) {
+                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                    PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
+                    table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                }
+            }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
             builder.setMutationTime(currentTime);
             if (blockWriteRebuildIndex) {
@@ -2823,14 +2831,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     /**
-     * Looks up the table locally if its present on this region, or else makes an rpc call
-     * to look up the region using PhoenixRuntime.getTable
+     * Looks up the table locally if its present on this region.
      */
     private PTable doGetTable(byte[] tenantId, byte[] schemaName, byte[] tableName,
                               long clientTimeStamp, RowLock rowLock, int clientVersion) throws IOException, SQLException {
         Region region = env.getRegion();
         final byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-        // if this region doesn't contain the metadata rows look up the table by using PhoenixRuntime.getTable
+        // if this region doesn't contain the metadata rows then fail
         if (!region.getRegionInfo().containsRow(key)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_ERROR)
                     .setSchemaName(Bytes.toString(schemaName))
