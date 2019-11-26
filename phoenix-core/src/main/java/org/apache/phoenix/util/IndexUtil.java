@@ -958,6 +958,13 @@ public class IndexUtil {
             // This index table must be being deleted. No need to set the scan attributes
             return;
         }
+        // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
+        // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
+        if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+            indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
+        }
         if (!dataTable.getIndexes().contains(indexTable)) {
             return;
         }
