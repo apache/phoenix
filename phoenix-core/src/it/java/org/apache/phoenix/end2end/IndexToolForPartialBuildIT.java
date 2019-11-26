@@ -237,6 +237,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         // complete index rebuild
         args.add("-it");
         args.add(indexName);
+        args.add("-runfg");
         args.add("-op");
         args.add("/tmp/output/partialTable_");
         return args.toArray(new String[0]);
