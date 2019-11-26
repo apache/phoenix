@@ -38,11 +38,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
@@ -50,12 +47,10 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.end2end.index.GlobalIndexCheckerIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
-import org.apache.phoenix.mapreduce.index.PhoenixIndexImportMapper;
 import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
 
 import org.apache.phoenix.query.QueryServices;
@@ -658,10 +653,9 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         args.add(indxTable);
         if (directApi) {
             args.add("-direct");
-            // Need to run this job in foreground for the test to be deterministic
-            args.add("-runfg");
         }
-
+        // Need to run this job in foreground for the test to be deterministic
+        args.add("-runfg");
         if (useSnapshot) {
             args.add("-snap");
         }
@@ -702,15 +696,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             boolean transactional = dataTable.isTransactional();
             boolean localIndex = PTable.IndexType.LOCAL.equals(indexTable.getIndexType());
 
-            if (directApi) {
-                if ((localIndex || !transactional) && !useSnapshot) {
-                    assertEquals(job.getMapperClass(), PhoenixServerBuildIndexMapper.class);
-                } else {
-                    assertEquals(job.getMapperClass(), PhoenixIndexImportDirectMapper.class);
-                }
-            }
-            else {
-                assertEquals(job.getMapperClass(), PhoenixIndexImportMapper.class);
+            if ((localIndex || !transactional) && !useSnapshot) {
+                assertEquals(job.getMapperClass(), PhoenixServerBuildIndexMapper.class);
+            } else {
+                assertEquals(job.getMapperClass(), PhoenixIndexImportDirectMapper.class);
             }
         }
     }
