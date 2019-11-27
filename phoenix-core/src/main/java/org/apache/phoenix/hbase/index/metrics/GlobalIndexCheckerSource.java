@@ -29,6 +29,9 @@ public interface GlobalIndexCheckerSource extends BaseSource {
     String METRICS_DESCRIPTION = "Metrics about the Phoenix Global Index Checker";
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
+    String INDEX_INSPECTION = "indexInspections";
+    String INDEX_INSPECTION_DESC = "The number of index rows inspected for verified status";
+
     String INDEX_REPAIR = "indexRepairs";
     String INDEX_REPAIR_DESC = "The number of index row repairs";
 
@@ -40,6 +43,11 @@ public interface GlobalIndexCheckerSource extends BaseSource {
 
     String INDEX_REPAIR_FAILURE_TIME = "indexRepairFailureTime";
     String INDEX_REPAIR_FAILURE_TIME_DESC = "Histogram for the time in milliseconds for index row repair failures";
+
+    /**
+     * Increments the number of index rows inspected for verified status
+     */
+    public void incrementIndexInspections();
 
     /**
      * Increments the number of index repairs

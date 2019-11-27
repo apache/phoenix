@@ -473,6 +473,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
          * @throws IOException
          */
         private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
+            metricsSource.incrementIndexInspections();
+
             Cell cell = cellList.get(0);
             if (verifyRowAndRemoveEmptyColumn(cellList)) {
                 return true;
