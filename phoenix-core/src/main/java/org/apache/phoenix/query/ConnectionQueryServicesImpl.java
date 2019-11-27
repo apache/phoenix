@@ -1471,22 +1471,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             ht = this.getTable(metaTable);
             final byte[] tablekey = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-            final Map<byte[], GetVersionResponse> results =
-                    ht.coprocessorService(MetaDataService.class, tablekey, tablekey, new Batch.Call<MetaDataService,GetVersionResponse>() {
-                        @Override
-                        public GetVersionResponse call(MetaDataService instance) throws IOException {
-                            ServerRpcController controller = new ServerRpcController();
-                            BlockingRpcCallback<GetVersionResponse> rpcCallback =
-                                    new BlockingRpcCallback<>();
-                            GetVersionRequest.Builder builder = GetVersionRequest.newBuilder();
-                            builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                            instance.getVersion(controller, builder.build(), rpcCallback);
-                            if(controller.getFailedOn() != null) {
-                                throw controller.getFailedOn();
-                            }
-                            return rpcCallback.get();
-                        }
-                    });
+            Map<byte[], GetVersionResponse> results;
+            try {
+                results =
+                        ht.coprocessorService(MetaDataService.class, tablekey, tablekey,
+                            new Batch.Call<MetaDataService, GetVersionResponse>() {
+                                @Override
+                                public GetVersionResponse call(MetaDataService instance)
+                                        throws IOException {
+                                    ServerRpcController controller = new ServerRpcController();
+                                    BlockingRpcCallback<GetVersionResponse> rpcCallback =
+                                            new BlockingRpcCallback<>();
+                                    GetVersionRequest.Builder builder =
+                                            GetVersionRequest.newBuilder();
+                                    builder.setClientVersion(
+                                        VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
+                                            PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                                    instance.getVersion(controller, builder.build(), rpcCallback);
+                                    if (controller.getFailedOn() != null) {
+                                        throw controller.getFailedOn();
+                                    }
+                                    return rpcCallback.get();
+                                }
+                            });
+            } catch (Throwable t) {
+                throw ServerUtil.parseServerException(t);
+            }
             for (Map.Entry<byte[],GetVersionResponse> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
                 GetVersionResponse versionResponse = result.getValue();
@@ -1519,13 +1529,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             + " is consistent on client and server.")
                             .build().buildException(); }
             lowestClusterHBaseVersion = minHBaseVersion;
-        } catch (SQLException | AccessDeniedException e) {
-            throw e;
-        } catch (Throwable t) {
-            // This is the case if the "phoenix.jar" is not on the classpath of HBase on the region server
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setRootCause(t)
-            .setMessage("Ensure that " + QueryConstants.DEFAULT_COPROCESS_JAR_NAME + " is put on the classpath of HBase in every region server: " + t.getMessage())
-            .build().buildException();
         } finally {
             if (ht != null) {
                 try {
