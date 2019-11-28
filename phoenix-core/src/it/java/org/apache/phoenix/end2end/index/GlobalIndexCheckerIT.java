@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.end2end.index.ImmutableIndexIT.verifyRowsForEmptyColValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -35,23 +34,12 @@ import java.util.Properties;
 import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -258,7 +246,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
             conn.commit();
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
-            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab' and val2 = 'abcc'";
             // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -266,47 +254,6 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("abcc", rs.getString(1));
             assertEquals("abcd", rs.getString(2));
             assertFalse(rs.next());
-            // Add rows and check everything is still okay
-            verifyTableHealth(conn, dataTableName, indexTableName);
-        }
-    }
-
-    public static void checkUnverifiedCellCount(Connection conn, String indexTableName) throws Exception {
-        Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .getTable(Bytes.toBytes(indexTableName));
-        long indexCnt = TestUtil.getRowCount(hIndexTable, false);
-        assertEquals(1, indexCnt);
-        assertEquals(true, verifyRowsForEmptyColValue(conn, indexTableName, IndexRegionObserver.UNVERIFIED_BYTES));
-        Scan s = new Scan();
-        int cntCellValues = 0;
-        try (ResultScanner scanner = hIndexTable.getScanner(s)) {
-            Result result;
-            while ((result = scanner.next()) != null) {
-                CellScanner cellScanner = result.cellScanner();
-                while (cellScanner.advance()) {
-                    cntCellValues++;
-                }
-            }
-        }
-        assertEquals(1, cntCellValues);
-    }
-    @Test
-    public void testUnverifiedRowIncludesOnlyEmptyCell() throws Exception {
-        String dataTableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions);
-            String indexTableName = generateUniqueName();
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
-            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase)
-            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
-            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
-            conn.commit();
-            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
-            // check that in the first phase we don't send the full row.
-            // We count the num of cells for this
-            checkUnverifiedCellCount(conn, indexTableName);
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexTableName);
         }
