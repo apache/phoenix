@@ -148,6 +148,10 @@ if command == 'start':
         print >> sys.stderr, "daemon mode not supported on this platform"
         sys.exit(-1)
 
+    # get the current umask for the sub process
+    current_umask = os.umask(0)
+    os.umask(current_umask)
+
     # run in the background
     d = os.path.dirname(out_file_path)
     if not os.path.exists(d):
@@ -171,8 +175,12 @@ if command == 'start':
                 sys.exit(0)
             signal.signal(signal.SIGTERM, handler)
 
+            def initsubproc():
+                # set the parent's umask
+                os.umask(current_umask)
+
             print '%s launching %s' % (datetime.datetime.now(), cmd)
-            child = subprocess.Popen(cmd.split())
+            child = subprocess.Popen(cmd.split(), preexec_fn=initsubproc)
             sys.exit(child.wait())
 
 elif command == 'stop':
