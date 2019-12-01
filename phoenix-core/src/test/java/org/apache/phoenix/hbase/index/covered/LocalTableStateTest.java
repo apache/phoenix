@@ -20,36 +20,32 @@ package org.apache.phoenix.hbase.index.covered;
 import static org.junit.Assert.assertEquals;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
-import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
-import org.apache.phoenix.hbase.index.covered.data.LocalTable;
+import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
-/**
- *
- */
+
 public class LocalTableStateTest {
 
   private static final byte[] row = Bytes.toBytes("row");
@@ -88,23 +84,16 @@ public class LocalTableStateTest {
 
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
-    RegionScanner scanner = Mockito.mock(RegionScanner.class);
-    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
-      @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
-        List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
-        KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
-        kv.setSequenceId(0);
-        list.add(kv);
-        return false;
-      }
-    });
 
 
-    LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(state, m);
+    KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
+    kv.setSequenceId(0);
+    HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
+            new  HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)kv));
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
+    LocalTableState table = new LocalTableState(cachedLocalTable, m);
     //add the kvs from the mutation
     table.addPendingUpdates(m.get(fam, qual));
 
@@ -121,48 +110,6 @@ public class LocalTableStateTest {
       ScannerCreatedException(String msg) {
           super(msg);
       }
-  }
-  
-  @Test(expected = ScannerCreatedException.class)
-  public void testScannerForMutableRows() throws Exception {
-      IndexMetaData indexMetaData = new IndexMetaData() {
-
-          @Override
-          public ReplayWrite getReplayWrite() {
-              return null;
-          }
-
-        @Override
-        public boolean requiresPriorRowState(Mutation m) {
-            return true;
-        }
-            
-        @Override
-        public int getClientVersion() {
-            return ScanUtil.UNKNOWN_CLIENT_VERSION;
-        }
-
-    };
-    Put m = new Put(row);
-    m.addColumn(fam, qual, ts, val);
-    // setup mocks
-    Configuration conf = new Configuration(false);
-    RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
-    Mockito.when(env.getConfiguration()).thenReturn(conf);
-
-    Region region = Mockito.mock(Region.class);
-    Mockito.when(env.getRegion()).thenReturn(region);
-    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
-
-    LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(state, m);
-    //add the kvs from the mutation
-    table.addPendingUpdates(m.get(fam, qual));
-
-    // setup the lookup
-    ColumnReference col = new ColumnReference(fam, qual);
-    table.setCurrentTimestamp(ts);
-    table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
   }
 
   @Test
@@ -194,10 +141,9 @@ public class LocalTableStateTest {
 
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
-    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
 
-    LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(state, m);
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(null);
+    LocalTableState table = new LocalTableState(cachedLocalTable, m);
     //add the kvs from the mutation
     table.addPendingUpdates(m.get(fam, qual));
 
@@ -224,24 +170,18 @@ public class LocalTableStateTest {
 
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
-    RegionScanner scanner = Mockito.mock(RegionScanner.class);
-    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
     final KeyValue storedKv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
     storedKv.setSequenceId(2);
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
-      @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
-        List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
 
-        list.add(storedKv);
-        return false;
-      }
-    });
-    LocalHBaseState state = new LocalTable(env);
-    LocalTableState table = new LocalTableState(state, m);
+    HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
+            new  HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)storedKv));
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
+    LocalTableState table = new LocalTableState(cachedLocalTable, m);
+
     // add the kvs from the mutation
-    KeyValue kv = PhoenixKeyValueUtil.maybeCopyCell(m.get(fam, qual).get(0));
+    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
     kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 
@@ -258,8 +198,6 @@ public class LocalTableStateTest {
     p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     s = p.getFirst();
     assertEquals("Didn't correctly rollback the row - still found it!", null, s.next());
-    Mockito.verify(env, Mockito.times(1)).getRegion();
-    Mockito.verify(region, Mockito.times(1)).getScanner(Mockito.any(Scan.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -270,24 +208,19 @@ public class LocalTableStateTest {
 
     Region region = Mockito.mock(Region.class);
     Mockito.when(env.getRegion()).thenReturn(region);
-    RegionScanner scanner = Mockito.mock(RegionScanner.class);
-    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final KeyValue storedKv =
         new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
     storedKv.setSequenceId(2);
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
-      @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
-        List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
 
-        list.add(storedKv);
-        return false;
-      }
-    });
-    LocalHBaseState state = new LocalTable(env);
+
     Put pendingUpdate = new Put(row);
     pendingUpdate.addColumn(fam, qual, ts, val);
-    LocalTableState table = new LocalTableState(state, pendingUpdate);
+    HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
+            new  HashMap<ImmutableBytesPtr, List<Cell>>();
+    rowKeyPtrToCells.put(new ImmutableBytesPtr(row), Collections.singletonList((Cell)storedKv));
+    CachedLocalTable cachedLocalTable = CachedLocalTable.build(rowKeyPtrToCells);
+    LocalTableState table = new LocalTableState(cachedLocalTable, pendingUpdate);
+
 
     // do the lookup for the given column
     ColumnReference col = new ColumnReference(fam, qual);
@@ -303,8 +236,6 @@ public class LocalTableStateTest {
     p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     s = p.getFirst();
     assertEquals("Lost already loaded update!", storedKv, s.next());
-    Mockito.verify(env, Mockito.times(1)).getRegion();
-    Mockito.verify(region, Mockito.times(1)).getScanner(Mockito.any(Scan.class));
   }
 
   // TODO add test here for making sure multiple column references with the same column family don't

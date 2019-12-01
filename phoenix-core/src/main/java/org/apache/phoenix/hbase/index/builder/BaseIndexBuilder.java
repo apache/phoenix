@@ -133,4 +133,8 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     public ReplayWrite getReplayWrite(Mutation m) {
         return null;
     }
+
+    public RegionCoprocessorEnvironment getEnv() {
+        return this.env;
+    }
 }
