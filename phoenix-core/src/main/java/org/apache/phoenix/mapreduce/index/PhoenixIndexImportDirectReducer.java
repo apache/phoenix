@@ -34,6 +34,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,18 @@ public class PhoenixIndexImportDirectReducer extends
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
+        String strNumOfRegions = PhoenixConfigurationUtil.getNumOfRegions(context.getConfiguration());
+        if (strNumOfRegions != null) {
+            // Check if we have a region split/merge. Different numOfRegions requires we need to run IndexTool again
+            String fullTableName = PhoenixConfigurationUtil.getInputTableName(context.getConfiguration());
+            int newNumRegions = IndexUtil.getNumOfRegions(context.getConfiguration(), fullTableName);
+            int prevNumRegions = Integer.parseInt(strNumOfRegions);
+            if (newNumRegions != prevNumRegions) {
+                throw new IOException(String.format("Data table split/merge happened during Index rebuild. Old region cnt=%d, New region cnt = %d"
+                , prevNumRegions, newNumRegions));
+            }
+        }
+
         try {
             IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
 

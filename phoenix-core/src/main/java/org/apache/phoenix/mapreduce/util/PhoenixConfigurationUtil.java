@@ -121,6 +121,8 @@ public final class PhoenixConfigurationUtil {
 
     public static final String SCRUTINY_DATA_TABLE_NAME = "phoenix.mr.scrutiny.data.table.name";
 
+    public static final String NUM_OF_REGIONS = "phoenix.mr.number.of.regions";
+
     public static final String SCRUTINY_INDEX_TABLE_NAME = "phoenix.mr.scrutiny.index.table.name";
 
     public static final String INDEX_TOOL_DATA_TABLE_NAME = "phoenix.mr.index_tool.data.table.name";
@@ -571,6 +573,17 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(qDataTableName);
         configuration.set(SCRUTINY_DATA_TABLE_NAME, qDataTableName);
+    }
+
+    public static String getNumOfRegions(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(NUM_OF_REGIONS);
+    }
+
+    public static void setNumOfRegions(Configuration configuration, String numOfRegions) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(numOfRegions);
+        configuration.set(NUM_OF_REGIONS, numOfRegions);
     }
 
     public static String getScrutinyIndexTableName(Configuration configuration) {

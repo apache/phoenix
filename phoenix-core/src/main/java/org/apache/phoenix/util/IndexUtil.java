@@ -44,15 +44,18 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -984,5 +987,17 @@ public class IndexUtil {
             BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
         }
         addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+    }
+
+    public static int getNumOfRegions(Configuration configuration, String tableName)
+            throws IOException {
+        int numRegions;
+        try (org.apache.hadoop.hbase.client.Connection tempHConn =
+                ConnectionFactory.createConnection(configuration);
+                RegionLocator regionLocator =
+                        tempHConn.getRegionLocator(TableName.valueOf(tableName))) {
+            numRegions = regionLocator.getStartKeys().length;
+        }
+        return numRegions;
     }
 }

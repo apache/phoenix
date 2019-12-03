@@ -53,6 +53,8 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.end2end.index.GlobalIndexCheckerIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectReducer;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportMapper;
@@ -630,6 +632,101 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     fail("Region did not have any results: " + region.getRegionInfo());
                 }
             }
+        }
+    }
+
+    /**
+     * Test that index tool fails when data table splits
+     */
+    @Test
+    public void testDataTableSplit() throws Exception {
+        if (localIndex) return; // can't split local indexes
+        if (!mutable) return;
+        if (transactional) return;
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        final TableName dataTN = TableName.valueOf(dataTableFullName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        TableName indexTN = TableName.valueOf(indexTableFullName);
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String dataDDL =
+                    "CREATE TABLE " + dataTableFullName + "(\n"
+                            + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
+                            + "\"info\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"test\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"info\".CAP_DATE VARCHAR NULL,\n" + "\"info\".ORG_ID BIGINT NULL,\n"
+                            + "\"info\".ORG_NAME VARCHAR(255) NULL\n" + ") COLUMN_ENCODED_BYTES = 0";
+            conn.createStatement().execute(dataDDL);
+
+            String[] carNumPrefixes = new String[] {"a", "b", "c", "d"};
+
+            // split the data table, as the tool splits the index table to have the same # of regions
+            // doesn't really matter what the split points are, we just want a target # of regions
+            int numSplits = carNumPrefixes.length;
+            int targetNumRegions = numSplits + 1;
+            byte[][] splitPoints = new byte[numSplits][];
+            for (String prefix : carNumPrefixes) {
+                splitPoints[--numSplits] = Bytes.toBytes(prefix);
+            }
+            HTableDescriptor dataTD = admin.getTableDescriptor(dataTN);
+            admin.disableTable(dataTN);
+            admin.deleteTable(dataTN);
+            admin.createTable(dataTD, splitPoints);
+            assertEquals(targetNumRegions, admin.getTableRegions(dataTN).size());
+
+            // insert data where index column values start with a, b, c, d
+            int idCounter = 1;
+            try (PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + dataTableFullName
+                    + "(ID,\"info\".CAR_NUM,\"test\".CAR_NUM,CAP_DATE,ORG_ID,ORG_NAME) VALUES(?,?,?,'2016-01-01 00:00:00',11,'orgname1')")){
+                for (String carNum : carNumPrefixes) {
+                    for (int i = 0; i < 100; i++) {
+                        ps.setString(1, idCounter++ + "");
+                        ps.setString(2, carNum + "_" + i);
+                        ps.setString(3, "test-" + carNum + "_ " + i);
+                        ps.addBatch();
+                    }
+                }
+                ps.executeBatch();
+                conn.commit();
+            }
+
+            String indexDDL =
+                    String.format(
+                            "CREATE INDEX %s on %s (\"info\".CAR_NUM,\"test\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                            indexTableName, dataTableFullName);
+            conn.createStatement().execute(indexDDL);
+            // First one successfully runs
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
+
+            // Force a failure due to region split now
+            IndexTool indexingTool = new IndexTool();
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            indexingTool.setConf(conf);
+            final String[] cmdArgs =
+                    getArgValues(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null);
+            List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
+            cmdArgList.remove("-runfg");
+
+            // To repro a failure keep setting this configuration so that reducer will fail.
+            indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
+
+            Job job = indexingTool.getJob();
+            // It might be too quick that indexTool did not create a job yet
+            while (job == null) {
+                job = indexingTool.getJob();
+            }
+            // Reducer will check the actual value which is not 0
+            while (job.reduceProgress() < 1.0) {
+                PhoenixConfigurationUtil.setNumOfRegions(job.getConfiguration(), "0");
+            }
+
+            job.waitForCompletion(false);
+            assertEquals(false, job.isSuccessful());
         }
     }
 
