@@ -53,6 +53,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
@@ -121,6 +122,10 @@ public final class PhoenixConfigurationUtil {
 
     public static final String SCRUTINY_DATA_TABLE_NAME = "phoenix.mr.scrutiny.data.table.name";
 
+    public static final String NUM_OF_REGIONS = "phoenix.mr.number.of.regions";
+
+    public static final String REGIONS = "phoenix.mr.regions";
+
     public static final String SCRUTINY_INDEX_TABLE_NAME = "phoenix.mr.scrutiny.index.table.name";
 
     public static final String INDEX_TOOL_DATA_TABLE_NAME = "phoenix.mr.index_tool.data.table.name";
@@ -152,6 +157,8 @@ public final class PhoenixConfigurationUtil {
     public static final String ONLY_VERIFY_INDEX = "phoenix.mr.index.onlyVerifyIndex";
 
     public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
+
+    public static final String FAIL_ON_REGION_NUM_CHANGE = "phoenix.mr.index.fail.on.region.num.change";
 
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
@@ -583,6 +590,11 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
     }
 
+    public static void setFailOnRegionNumChange(Configuration configuration, boolean shouldFail){
+        Preconditions.checkNotNull(configuration);
+        configuration.set(FAIL_ON_REGION_NUM_CHANGE, Boolean.toString(shouldFail));
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -592,6 +604,23 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(qDataTableName);
         configuration.set(SCRUTINY_DATA_TABLE_NAME, qDataTableName);
+    }
+
+    public static String getNumOfRegions(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(NUM_OF_REGIONS);
+    }
+
+    public static String getRegions(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(REGIONS);
+    }
+
+    public static void setRegions(Configuration configuration, List<String> regions) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(regions);
+        configuration.set(NUM_OF_REGIONS, String.valueOf(regions.size()));
+        configuration.set(REGIONS, String.join("",regions));
     }
 
     public static String getScrutinyIndexTableName(Configuration configuration) {
@@ -722,6 +751,12 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
         return IndexTool.IndexVerifyType.fromValue(value);
+    }
+
+    public static boolean getFailOnRegionNumChange(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        boolean shouldFail = configuration.getBoolean(FAIL_ON_REGION_NUM_CHANGE, false);
+        return shouldFail;
     }
 
     public static boolean getSplitByStats(final Configuration configuration) {

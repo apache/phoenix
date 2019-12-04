@@ -24,7 +24,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -66,9 +65,11 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectReducer;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
 import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
@@ -900,6 +901,67 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     fail("Region did not have any results: " + region.getRegionInfo());
                 }
             }
+        }
+    }
+
+    /**
+     * Test that index tool fails when data table splits
+     */
+    @Test
+    public void testDataTableSplit() throws Exception {
+        if (localIndex || !mutable || transactional) return;
+
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        final TableName dataTN = TableName.valueOf(dataTableFullName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        TableName indexTN = TableName.valueOf(indexTableFullName);
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+                Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String dataDDL =
+                    "CREATE TABLE " + dataTableFullName + "(\n"
+                            + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
+                            + "\"info\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"test\".CAR_NUM VARCHAR(18) NULL,\n"
+                            + "\"info\".CAP_DATE VARCHAR NULL,\n" + "\"info\".ORG_ID BIGINT NULL,\n"
+                            + "\"info\".ORG_NAME VARCHAR(255) NULL\n" + ") COLUMN_ENCODED_BYTES = 0 ";
+            conn.createStatement().execute(dataDDL);
+
+            int idCounter = 1;
+            try (PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + dataTableFullName
+                    + "(ID,\"info\".CAR_NUM,\"test\".CAR_NUM,CAP_DATE,ORG_ID,ORG_NAME) VALUES(?,?,'test-','2016-01-01 00:00:00',11,'orgname1')")) {
+                for (int i = 0; i < 1000; i++) {
+                    ps.setString(1, idCounter++ + "");
+                    ps.setString(2, "c_" + i);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                conn.commit();
+            }
+
+            String indexDDL =
+                    String.format(
+                            "CREATE INDEX %s on %s (\"info\".CAR_NUM,\"test\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                            indexTableName, dataTableFullName);
+            conn.createStatement().execute(indexDDL);
+            String[] failForRegion = new String[1];
+            failForRegion[0] = "-failonrnc";
+
+            // First one successfully runs
+            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, failForRegion);
+            // Check that we set the region split number
+            assertEquals("1", PhoenixConfigurationUtil.getNumOfRegions(indexTool.getJob().getConfiguration()));
+
+            // Force a failure due to region split now
+            PhoenixIndexImportDirectReducer.setSplitRegionForTesting(true);
+            // To repro a failure keep setting this configuration so that reducer will fail.
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, -1, failForRegion);
+
+        } finally {
+            PhoenixIndexImportDirectReducer.setSplitRegionForTesting(false);
         }
     }
 

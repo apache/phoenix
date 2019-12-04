@@ -181,6 +181,7 @@ public class IndexTool extends Configured implements Tool {
     private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
     private String qDataTable;
     private String qIndexTable;
+    private boolean failOnRegionNumChange;
     private boolean useSnapshot;
     private boolean isLocalIndexBuild;
     private boolean shouldDeleteBeforeRebuild;
@@ -247,6 +248,9 @@ public class IndexTool extends Configured implements Tool {
             "Applicable only to global indexes on tables, not to local or view indexes. "
             + "If specified, truncates the index table and rebuilds (optional)");
 
+    private static final Option FAIL_ON_REGION_NUM_CHANGE_OPTION = new Option("failonrnc", "fail-on-region-num-change", false,
+            "If specified, fails if the number of regions changes since index tool started (optional)");
+
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -263,6 +267,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(SNAPSHOT_OPTION);
         options.addOption(TENANT_ID_OPTION);
         options.addOption(DELETE_ALL_AND_REBUILD_OPTION);
+        options.addOption(FAIL_ON_REGION_NUM_CHANGE_OPTION);
         options.addOption(HELP_OPTION);
         AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
@@ -352,6 +357,8 @@ public class IndexTool extends Configured implements Tool {
         }
 
         public Job getJob() throws Exception {
+            PhoenixConfigurationUtil.setFailOnRegionNumChange(configuration, failOnRegionNumChange);
+
             if (isPartialBuild) {
                 return configureJobForPartialBuild();
             } else {
@@ -500,6 +507,7 @@ public class IndexTool extends Configured implements Tool {
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
+            PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
 
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 indexColumns.toArray(new String[indexColumns.size()]));
@@ -625,6 +633,10 @@ public class IndexTool extends Configured implements Tool {
             // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
             conf.set(TableOutputFormat.OUTPUT_TABLE,
                 PhoenixConfigurationUtil.getPhysicalTableName(job.getConfiguration()));
+            List<String> regions = IndexUtil.getRegionsAsString(connection,
+                    PhoenixConfigurationUtil.getIndexToolDataTableName(job.getConfiguration()));
+            PhoenixConfigurationUtil.setRegions(conf, regions);
+
             //Set the Output classes
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
             job.setMapOutputValueClass(IntWritable.class);
@@ -693,6 +705,7 @@ public class IndexTool extends Configured implements Tool {
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
             useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
             shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+            failOnRegionNumChange = cmdLine.hasOption(FAIL_ON_REGION_NUM_CHANGE_OPTION.getOpt());
 
             byte[][] splitKeysBeforeJob = null;
             isLocalIndexBuild = false;

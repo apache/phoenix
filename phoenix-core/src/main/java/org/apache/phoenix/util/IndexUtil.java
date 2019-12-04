@@ -46,8 +46,10 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
@@ -108,6 +110,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -142,6 +145,9 @@ import com.google.common.collect.Lists;
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
     public static final byte[] INDEX_COLUMN_NAME_SEP_BYTES = Bytes.toBytes(INDEX_COLUMN_NAME_SEP);
+    public static final String REGION_NAME_STRING = "RegionName=";
+    public static final String START_KEY_STRING = "StartKey=";
+    public static final String END_KEY_STRING = "EndKey=";
 
     private static Cache<String, Boolean> indexNameGlobalIndexCheckerEnabledMap = CacheBuilder.newBuilder()
             .expireAfterWrite(QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN,
@@ -984,5 +990,28 @@ public class IndexUtil {
             BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
         }
         addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+    }
+
+    public static List<HRegionInfo> getRegions(Connection conn, String tableName)
+            throws SQLException, IOException {
+        List<HRegionInfo> regionList = new ArrayList<>();
+        ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        try (Admin admin = queryServices.getAdmin()){
+            regionList = admin.getTableRegions(TableName.valueOf(tableName));
+        }
+        return regionList;
+    }
+
+    public static List<String> getRegionsAsString(Connection conn, String tableName)
+            throws SQLException, IOException {
+        List<String> regions = new ArrayList<>();
+
+        List<HRegionInfo> regionList = getRegions(conn, tableName);
+        for (HRegionInfo hRegionInfo : regionList) {
+            regions.add(String.format("%s%s%s%s%s%s", REGION_NAME_STRING, hRegionInfo.getRegionNameAsString(),
+                    START_KEY_STRING, Bytes.toStringBinary(hRegionInfo.getStartKey()),
+                    END_KEY_STRING, Bytes.toStringBinary(hRegionInfo.getEndKey())));
+        }
+        return regions;
     }
 }
