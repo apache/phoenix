@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
@@ -111,6 +112,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -989,14 +991,12 @@ public class IndexUtil {
         addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 
-    public static int getNumOfRegions(Configuration configuration, String tableName)
-            throws IOException {
+    public static int getNumOfRegions(Connection conn, String tableName)
+            throws SQLException, IOException {
         int numRegions;
-        try (org.apache.hadoop.hbase.client.Connection tempHConn =
-                ConnectionFactory.createConnection(configuration);
-                RegionLocator regionLocator =
-                        tempHConn.getRegionLocator(TableName.valueOf(tableName))) {
-            numRegions = regionLocator.getStartKeys().length;
+        ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        try (Admin admin = queryServices.getAdmin()){
+            numRegions = admin.getRegions(TableName.valueOf(tableName)).size();
         }
         return numRegions;
     }

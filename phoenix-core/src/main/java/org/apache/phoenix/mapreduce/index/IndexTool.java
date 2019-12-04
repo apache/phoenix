@@ -596,7 +596,7 @@ public class IndexTool extends Configured implements Tool {
             // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
             conf.set(TableOutputFormat.OUTPUT_TABLE,
                 PhoenixConfigurationUtil.getPhysicalTableName(job.getConfiguration()));
-            int numRegions = IndexUtil.getNumOfRegions(configuration, qDataTable);
+            int numRegions = IndexUtil.getNumOfRegions(connection, qDataTable);
             PhoenixConfigurationUtil.setNumOfRegions(conf, String.valueOf(numRegions));
 
             //Set the Output classes

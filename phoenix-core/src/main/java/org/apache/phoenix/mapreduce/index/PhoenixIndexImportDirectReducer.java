@@ -50,17 +50,39 @@ public class PhoenixIndexImportDirectReducer extends
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
 
+    private static final String SPLIT_MERGE_ERROR_STR_FMT =
+            "Data table split/merge happened during Index rebuild. Old region cnt=%d, New region cnt = %d";
+
+    private static Integer regionCountForTesting = null;
+
+    public static void setRegionCountForTesting(Integer regionCount) {
+        regionCountForTesting = regionCount;
+    }
+
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
         String strNumOfRegions = PhoenixConfigurationUtil.getNumOfRegions(context.getConfiguration());
         if (strNumOfRegions != null) {
             // Check if we have a region split/merge. Different numOfRegions requires we need to run IndexTool again
             String fullTableName = PhoenixConfigurationUtil.getInputTableName(context.getConfiguration());
-            int newNumRegions = IndexUtil.getNumOfRegions(context.getConfiguration(), fullTableName);
-            int prevNumRegions = Integer.parseInt(strNumOfRegions);
-            if (newNumRegions != prevNumRegions) {
-                throw new IOException(String.format("Data table split/merge happened during Index rebuild. Old region cnt=%d, New region cnt = %d"
-                , prevNumRegions, newNumRegions));
+            final Properties overrideProps = new Properties();
+            try {
+                final Connection
+                        connection =
+                        ConnectionUtil.getOutputConnection(context.getConfiguration(), overrideProps);
+                int
+                        newNumRegions =
+                        regionCountForTesting != null ?
+                                regionCountForTesting :
+                                IndexUtil.getNumOfRegions(connection, fullTableName);
+                int prevNumRegions = Integer.parseInt(strNumOfRegions);
+                if (newNumRegions != prevNumRegions) {
+                    throw new IOException(String.format(SPLIT_MERGE_ERROR_STR_FMT, prevNumRegions,
+                            newNumRegions));
+                }
+            } catch (SQLException e) {
+                LOGGER.error("Failed get the number of regions");
+                throw new RuntimeException(e.getMessage());
             }
         }
 
