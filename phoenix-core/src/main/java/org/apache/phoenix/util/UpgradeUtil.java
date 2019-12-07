@@ -42,6 +42,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -1348,28 +1350,37 @@ public class UpgradeUtil {
             syncUpdateCacheFreqForIndexesOfTable(table, stmt);
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            try (Table childLinkTable = newConn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalName(
-                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                            newConn.getQueryServices().getProps())
-                            .getName())) {
-                ViewUtil.findAllRelatives(childLinkTable, tenantId,
-                        table.getSchemaName().getBytes(), table.getTableName().getBytes(),
-                        LinkType.CHILD_TABLE, childViewsResult);
+            for (int i=0; i<2; i++) {
+                try (Table sysCatOrSysChildLinkTable = newConn.getQueryServices()
+                        .getTable(SchemaUtil.getPhysicalName(
+                                i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                                newConn.getQueryServices().getProps())
+                                .getName())) {
+                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId,
+                            table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                            LinkType.CHILD_TABLE, childViewsResult);
 
-                // Iterate over the chain of child views
-                for (TableInfo tableInfo: childViewsResult.getLinks()) {
-                    PTable view;
-                    String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
-                            tableInfo.getTableName());
-                    try {
-                        view = PhoenixRuntime.getTable(newConn, viewName);
-                    } catch (TableNotFoundException e) {
-                        // Ignore
-                        LOGGER.warn("Error getting PTable for view: " + viewName);
-                        continue;
+                    // Iterate over the chain of child views
+                    for (TableInfo tableInfo: childViewsResult.getLinks()) {
+                        PTable view;
+                        String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
+                                tableInfo.getTableName());
+                        try {
+                            view = PhoenixRuntime.getTable(newConn, viewName);
+                        } catch (TableNotFoundException e) {
+                            // Ignore
+                            LOGGER.warn("Error getting PTable for view: " + viewName);
+                            continue;
+                        }
+                        syncUpdateCacheFreqForIndexesOfTable(view, stmt);
                     }
-                    syncUpdateCacheFreqForIndexesOfTable(view, stmt);
+                    break;
+                } catch (TableNotFoundException ex) {
+                    // try again with SYSTEM.CATALOG in case the schema is old
+                    if (i == 1) {
+                        // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                        throw ex;
+                    }
                 }
             }
             stmt.executeBatch();
@@ -2110,14 +2121,23 @@ public class UpgradeUtil {
             LOGGER.info(String.format("teanantId %s..", conn.getTenantId()));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            try (Table childLinkTable =
-                    conn.getQueryServices()
-                            .getTable(SchemaUtil.getPhysicalName(
-                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, readOnlyProps)
-                                    .getName())) {
-                byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
-                ViewUtil.findAllRelatives(childLinkTable, tenantId, schemaName.getBytes(),
-                    tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+
+            for (int i=0; i<2; i++) {
+                try (Table sysCatOrSysChildLinkTable = conn.getQueryServices()
+                        .getTable(SchemaUtil.getPhysicalName(
+                                i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                                readOnlyProps).getName())) {
+                    byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
+                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId, schemaName.getBytes(),
+                            tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+                    break;
+                } catch (TableNotFoundException ex) {
+                    // try again with SYSTEM.CATALOG in case the schema is old
+                    if (i == 1) {
+                        // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                        throw ex;
+                    }
+                }
             }
 
             // Upgrade the data or main table
