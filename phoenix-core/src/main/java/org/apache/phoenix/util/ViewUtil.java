@@ -86,25 +86,25 @@ public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
 
-    public static void findAllRelatives(Table systemTable, byte[] tenantId, byte[] schema, byte[] table,
+    public static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
-        findAllRelatives(systemTable, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
+        findAllRelatives(sysCatOrsysChildLink, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
     }
 
-    static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
+    private static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp, TableViewFinderResult result) throws IOException {
         TableViewFinderResult currentResult =
-            findRelatedViews(systemCatalog, tenantId, schema, table, linkType, timestamp);
+            findRelatedViews(sysCatOrsysChildLink, tenantId, schema, table, linkType, timestamp);
         result.addResult(currentResult);
         for (TableInfo viewInfo : currentResult.getLinks()) {
-            findAllRelatives(systemCatalog, viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName(), linkType, timestamp, result);
+            findAllRelatives(sysCatOrsysChildLink, viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName(), linkType, timestamp, result);
         }
     }
 
     /**
      * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the related tables/views
      */
-    static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
+    private static TableViewFinderResult findRelatedViews(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp) throws IOException {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
             throw new IllegalArgumentException("findAllRelatives does not support link type "+linkType);
@@ -122,7 +122,7 @@ public class ViewUtil {
         if (linkType==PTable.LinkType.PHYSICAL_TABLE)
             scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
         List<TableInfo> tableInfoList = Lists.newArrayList();
-        try (ResultScanner scanner = systemCatalog.getScanner(scan))  {
+        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan))  {
             for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                 byte[][] rowKeyMetaData = new byte[5][];
                 byte[] viewTenantId = null;
@@ -191,7 +191,7 @@ public class ViewUtil {
         }
         catch (Exception e){
         }
-        // if the SYSTEM.CHILD_LINK doesn't exist just return
+        // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
         if (hTable==null) {
             return;
         }

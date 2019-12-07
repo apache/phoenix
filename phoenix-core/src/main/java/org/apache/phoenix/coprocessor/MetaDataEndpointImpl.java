@@ -2131,12 +2131,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
 
-    private List<PTable> findAllChildViews(long clientTimeStamp, byte[] tenantId, byte[] schemaName, byte[] tableName) throws IOException, SQLException {
+    private List<PTable> findAllChildViews(long clientTimeStamp, int clientVersion, byte[] tenantId,
+            byte[] schemaName, byte[] tableName) throws IOException, SQLException {
         TableViewFinderResult result = new TableViewFinderResult();
         try (Table hTable =
                      ServerUtil.getHTableForCoprocessorScan(env,
-                             SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
-                                     env.getConfiguration()))) {
+                             getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
             ViewUtil.findAllRelatives(hTable, tenantId, schemaName, tableName,
                     LinkType.CHILD_TABLE, result);
         }
@@ -2521,7 +2521,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             List<RowLock> locks = Lists.newArrayList();
             try {
                 if (expectedType == PTableType.TABLE) {
-                    childViews = findAllChildViews(clientTimeStamp, tenantId, schemaName, tableName);
+                    childViews = findAllChildViews(clientTimeStamp, clientVersion, tenantId,
+                            schemaName, tableName);
 
                     if (!childViews.isEmpty()) {
                         // From 4.15 onwards we allow SYSTEM.CATALOG to split and no longer propagate parent
