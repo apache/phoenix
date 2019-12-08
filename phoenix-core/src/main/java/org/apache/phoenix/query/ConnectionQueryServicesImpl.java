@@ -3928,6 +3928,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+        metaConnection.setAutoCommit(false);
         PTable sysCatalogPTable = metaConnection.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
         int numColumns = sysCatalogPTable.getColumns().size();
         try (PreparedStatement mutateTable = metaConnection.prepareStatement(MetaDataClient.MUTATE_TABLE)) {
