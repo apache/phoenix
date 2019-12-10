@@ -62,7 +62,7 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateCoprocs() throws Exception {
-        String schemaName = "S" + generateUniqueName();
+        String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
         String indexName = "I_" + generateUniqueName();
         String physicalTableName = SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName,
@@ -77,9 +77,24 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
         HTableDescriptor baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
         HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
 
-        assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
-        assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+        assertUsingNewCoprocs(baseDescriptor, indexDescriptor);
 
+        //Simulate an index upgrade rollback by removing coprocs and enabling old Indexer
+        downgradeIndexCoprocs(admin, baseDescriptor, indexDescriptor);
+
+        baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
+        indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
+        assertUsingOldCoprocs(baseDescriptor, indexDescriptor);
+
+        //Now that we've downgraded, we make sure that a create statement won't re-upgrade us
+        createBaseTable(schemaName, tableName, true, 0, null);
+        baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
+        indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
+        assertUsingOldCoprocs(baseDescriptor, indexDescriptor);
+    }
+
+    private void downgradeIndexCoprocs(Admin admin, HTableDescriptor baseDescriptor,
+                                       HTableDescriptor indexDescriptor) throws Exception {
         removeCoproc(IndexRegionObserver.class, baseDescriptor, admin);
         removeCoproc(IndexRegionObserver.class, indexDescriptor, admin);
         removeCoproc(GlobalIndexChecker.class, indexDescriptor, admin);
@@ -89,14 +104,6 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
         Indexer.enableIndexing(baseDescriptor, NonTxIndexBuilder.class,
             props, 100);
         admin.modifyTable(baseDescriptor.getTableName(), baseDescriptor);
-        baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
-        indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
-        assertUsingOldCoprocs(baseDescriptor, indexDescriptor);
-
-        createBaseTable(schemaName, tableName, true, 0, null);
-        baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
-        indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
-        assertUsingOldCoprocs(baseDescriptor, indexDescriptor);
     }
 
     @Test
@@ -140,16 +147,14 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
         HTableDescriptor baseDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalTableName));
         HTableDescriptor indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
 
-        assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
-        assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+        assertUsingNewCoprocs(baseDescriptor, indexDescriptor);
         String columnName = "foo";
         addColumnToBaseTable(schemaName, tableName, columnName);
-        assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
-        assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+        assertUsingNewCoprocs(baseDescriptor, indexDescriptor);
         dropColumnToBaseTable(schemaName, tableName, columnName);
-        assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
-        assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+        assertUsingNewCoprocs(baseDescriptor, indexDescriptor);
     }
+
     private void assertUsingOldCoprocs(HTableDescriptor baseDescriptor,
                                        HTableDescriptor indexDescriptor) {
         assertCoprocsContains(Indexer.class, baseDescriptor);
@@ -173,27 +178,16 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
 
     private void assertCoprocsContains(Class clazz, HTableDescriptor descriptor) {
         String expectedCoprocName = clazz.getName();
-        boolean foundCoproc = isCoprocPresent(descriptor, expectedCoprocName);
+        boolean foundCoproc = descriptor.hasCoprocessor(expectedCoprocName);
         Assert.assertTrue("Could not find coproc " + expectedCoprocName +
             " in descriptor " + descriptor,foundCoproc);
     }
 
     private void assertCoprocsNotContains(Class clazz, HTableDescriptor descriptor) {
         String expectedCoprocName = clazz.getName();
-        boolean foundCoproc = isCoprocPresent(descriptor, expectedCoprocName);
+        boolean foundCoproc = descriptor.hasCoprocessor(expectedCoprocName);
         Assert.assertFalse("Could find coproc " + expectedCoprocName +
             " in descriptor " + descriptor,foundCoproc);
-    }
-
-    private boolean isCoprocPresent(HTableDescriptor descriptor, String expectedCoprocName) {
-        boolean foundCoproc = false;
-        for (String coprocName : descriptor.getCoprocessors()){
-            if (coprocName.equals(expectedCoprocName)){
-                foundCoproc = true;
-                break;
-            }
-        }
-        return foundCoproc;
     }
 
     private void removeCoproc(Class clazz, HTableDescriptor descriptor, Admin admin) throws Exception {
