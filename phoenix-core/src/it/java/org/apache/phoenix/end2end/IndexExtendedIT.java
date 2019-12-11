@@ -76,7 +76,7 @@ public class IndexExtendedIT extends BaseTest {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
@@ -87,7 +87,7 @@ public class IndexExtendedIT extends BaseTest {
     }
     
     @Parameters(name="mutable = {0} , localIndex = {1}, directApi = {2}, useSnapshot = {3}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         List<Boolean[]> list = Lists.newArrayListWithExpectedSize(10);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans ) {

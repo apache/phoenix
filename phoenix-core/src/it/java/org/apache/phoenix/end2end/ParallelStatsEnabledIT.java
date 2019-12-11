@@ -61,7 +61,7 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     }
 
     @AfterClass
-    public static void freeResources() throws Exception {
+    public static synchronized void freeResources() throws Exception {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 }

@@ -104,7 +104,7 @@ public class MutableIndexReplicationIT extends BaseTest {
     protected static final byte[] row = Bytes.toBytes("row");
 
     @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
+    public static synchronized void setUpBeforeClass() throws Exception {
         setupConfigsAndStartCluster();
         setupDriver();
     }

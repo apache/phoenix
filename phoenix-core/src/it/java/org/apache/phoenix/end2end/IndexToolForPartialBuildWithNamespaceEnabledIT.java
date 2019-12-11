@@ -44,7 +44,7 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
     
     @BeforeClass
     @Shadower(classBeingShadowed = IndexToolForPartialBuildIT.class)
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
@@ -53,7 +53,7 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
     }
     
     @Parameters(name="isNamespaceEnabled = {0}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { true },{ false }
            });

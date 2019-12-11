@@ -83,7 +83,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());

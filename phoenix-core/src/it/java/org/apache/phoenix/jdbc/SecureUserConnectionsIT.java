@@ -73,7 +73,7 @@ public class SecureUserConnectionsIT {
     private static MiniKdc KDC;
 
     @BeforeClass
-    public static void setupKdc() throws Exception {
+    public static synchronized void setupKdc() throws Exception {
         ensureIsEmptyDirectory(KDC_DIR);
         ensureIsEmptyDirectory(KEYTAB_DIR);
         // Create and start the KDC. MiniKDC appears to have a race condition in how it does
@@ -130,7 +130,7 @@ public class SecureUserConnectionsIT {
     }
 
     @AfterClass
-    public static void stopKdc() throws Exception {
+    public static synchronized void stopKdc() throws Exception {
         // Remove our custom ConfigurationFactory for future tests
         InstanceResolver.clearSingletons();
         if (null != KDC) {

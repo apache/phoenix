@@ -90,7 +90,7 @@ public class SkipScanFilterIntersectTest {
     }
 
     @Parameters(name="{0} {4}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Both ranges in second slot are required b/c first slot contains range and upper/lower
         // values differ in this slot position.
