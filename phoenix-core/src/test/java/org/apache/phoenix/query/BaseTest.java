@@ -451,7 +451,7 @@ public abstract class BaseTest {
         }
     }
     
-    protected static synchronized void destroyDriver() {
+    protected static void destroyDriver() {
         if (driver != null) {
             try {
                 assertTrue(destroyDriver(driver));

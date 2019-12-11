@@ -59,7 +59,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClus
     return getOrgId(Math.round(Math.random() * maxOrgId));
   }
 
-  static synchronized void writeToTable(String tableName, Connection conn, int maxOrgId) throws SQLException {
+  static void writeToTable(String tableName, Connection conn, int maxOrgId) throws SQLException {
     try {
 
       String orgId = getRandomOrgId(maxOrgId);
