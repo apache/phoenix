@@ -597,7 +597,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
     
     @BeforeClass
     @Shadower(classBeingShadowed = BaseConnectionlessQueryTest.class)
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // enables manual splitting on salted tables
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));

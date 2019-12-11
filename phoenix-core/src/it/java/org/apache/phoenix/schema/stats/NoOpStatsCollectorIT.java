@@ -62,7 +62,7 @@ public class NoOpStatsCollectorIT extends ParallelStatsDisabledIT {
      * Disable stats on server side by setting QueryServices#STATS_COLLECTION_ENABLED to false
      */
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.FALSE.toString());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

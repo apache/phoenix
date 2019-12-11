@@ -43,7 +43,7 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     protected static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static final void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
@@ -61,7 +61,7 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     }
 
     @AfterClass
-    public static void freeResources() throws Exception {
+    public static synchronized void freeResources() throws Exception {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 }

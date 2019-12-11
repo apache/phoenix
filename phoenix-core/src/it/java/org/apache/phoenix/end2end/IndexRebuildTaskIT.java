@@ -57,7 +57,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Collections.emptyMap();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
 

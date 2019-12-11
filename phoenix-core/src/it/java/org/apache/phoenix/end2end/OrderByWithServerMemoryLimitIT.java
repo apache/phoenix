@@ -37,7 +37,7 @@ import com.google.common.collect.Maps;
 public class OrderByWithServerMemoryLimitIT extends BaseTest {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
         props.put(QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,

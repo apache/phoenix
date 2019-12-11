@@ -50,7 +50,7 @@ import com.google.common.collect.Lists;
 public class PointInTimeQueryIT extends BaseQueryIT {
 
     @Parameters(name="PointInTimeQueryIT_{index},columnEncoded={1}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
             for (boolean columnEncoded : new boolean[]{false,true}) {

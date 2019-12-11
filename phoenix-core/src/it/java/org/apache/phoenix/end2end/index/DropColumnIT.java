@@ -110,7 +110,7 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
     }
     
     @Parameters(name="DropColumnIT_mutable={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                 { false, false }, { false, true }, { true, false }, { true, true }, 
            });

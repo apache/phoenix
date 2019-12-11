@@ -52,7 +52,7 @@ public class IntArithmeticIT extends BaseQueryIT {
     }
     
     @Parameters(name="IntArithmeticIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return BaseQueryIT.allIndexes();
     }
     

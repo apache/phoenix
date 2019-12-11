@@ -45,7 +45,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClus
           LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);
 
   @BeforeClass
-  public static final void doSetup() throws Exception {
+  public static synchronized void doSetup() throws Exception {
 
     setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
 

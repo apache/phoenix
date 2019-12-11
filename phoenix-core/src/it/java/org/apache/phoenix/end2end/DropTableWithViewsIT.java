@@ -58,7 +58,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         SplitSystemCatalogIT.doSetup();
         TaskRegionEnvironment =
                 (RegionCoprocessorEnvironment)getUtility()
@@ -75,7 +75,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     }
 
     @Parameters(name="DropTableWithViewsIT_multiTenant={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                 { false, false }, { false, true },
                 { true, false }, { true, true } });

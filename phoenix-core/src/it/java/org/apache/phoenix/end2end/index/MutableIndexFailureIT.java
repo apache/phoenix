@@ -138,7 +138,7 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProps();
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
@@ -176,7 +176,7 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(
                 Arrays.asList(new Object[][] { 
                     // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130

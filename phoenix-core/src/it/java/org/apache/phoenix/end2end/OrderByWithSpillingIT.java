@@ -29,7 +29,7 @@ import com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class OrderByWithSpillingIT extends OrderByIT {
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // do lot's of spooling!
         props.put(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));

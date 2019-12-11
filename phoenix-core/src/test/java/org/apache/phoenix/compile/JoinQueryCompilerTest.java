@@ -51,7 +51,7 @@ import org.junit.Test;
 public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     
     @BeforeClass
-    public static void createJoinTables() throws SQLException {
+    public static synchronized void createJoinTables() throws SQLException {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("create table " + JOIN_ORDER_TABLE_FULL_NAME +
                     "   (\"order_id\" varchar(15) not null primary key, " +
