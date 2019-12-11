@@ -62,7 +62,7 @@ public class ScannerLeaseRenewalIT {
     private static String url;
     
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);

@@ -53,7 +53,7 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
     static final AtomicInteger numConnections = new AtomicInteger(0);
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         // Phoenix Global client metrics are enabled by default

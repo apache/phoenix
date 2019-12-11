@@ -38,7 +38,7 @@ public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
     }
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(
             new Object[][] { 
                 { true, "TEPHRA", false, false }, { true, "TEPHRA", false, true }, 
@@ -47,7 +47,7 @@ public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         // enable name space mapping at global level on both client and server side
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");

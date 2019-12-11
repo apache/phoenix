@@ -120,7 +120,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
             { "TEPHRA", false }, { "TEPHRA", true },
             { "OMID", false }, 
@@ -128,7 +128,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
         Map<String, String> props = Collections.emptyMap();
         boolean splitSystemCatalog = (driver == null);

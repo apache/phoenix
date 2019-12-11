@@ -47,7 +47,7 @@ public class SplitIT extends BaseUniqueNamesOwnClusterIT {
     private static byte[] splitPoint = null;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put("hbase.coprocessor.region.classes", TestRegionObserver.class.getName());
         serverProps.put(Indexer.CHECK_VERSION_CONF_KEY, "false");

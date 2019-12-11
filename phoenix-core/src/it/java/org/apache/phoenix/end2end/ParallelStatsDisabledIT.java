@@ -47,12 +47,12 @@ import static org.junit.Assert.fail;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
 
     @AfterClass
-    public static void freeResources() throws Exception {
+    public static synchronized void freeResources() throws Exception {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 

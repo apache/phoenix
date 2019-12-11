@@ -69,14 +69,14 @@ public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
     private static Timestamp row3Timestamp;
 
     @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
+    public static synchronized void setUpBeforeClass() throws Exception {
         saveLocale = Locale.getDefault();
         Locale.setDefault(Locale.US);
         initTable();
     }
 
     @AfterClass
-    public static void tearDownAfterClass() {
+    public static synchronized void tearDownAfterClass() {
         Locale.setDefault(saveLocale);
     }
 

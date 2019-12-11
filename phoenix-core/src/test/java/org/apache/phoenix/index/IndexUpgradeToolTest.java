@@ -58,7 +58,7 @@ public class IndexUpgradeToolTest {
     }
 
     @Parameters(name ="IndexUpgradeToolTest_mutable={1}")
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList( false, true);
     }
 

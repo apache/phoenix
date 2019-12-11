@@ -32,7 +32,7 @@ public class NonColumnEncodedImmutableTxStatsCollectorIT extends StatsCollectorI
     }
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(
             new Object[][] { 
                 { false, "TEPHRA", false, false }, { false, "TEPHRA", true, false },

@@ -52,7 +52,7 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     private static final String FULL_INDEX_NAME = SchemaUtil.getTableName(SCHEMA_NAME, INDEX_NAME);
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         createBaseTable(SCHEMA_NAME, TABLE_NAME, true, null, null);

@@ -50,7 +50,7 @@ public class SplitSystemCatalogIT extends BaseTest {
     protected static String TENANT2 = "tenant2";
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
         Map<String, String> props = Collections.emptyMap();
         boolean splitSystemCatalog = (driver == null);

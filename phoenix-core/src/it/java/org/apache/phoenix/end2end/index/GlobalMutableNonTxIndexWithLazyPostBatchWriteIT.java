@@ -31,7 +31,7 @@ public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutab
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(IndexRegionObserver.INDEX_LAZY_POST_BATCH_WRITE, "true");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -56,7 +56,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="DeleteIT_allowServerSideMutations={0}") // name is used by failsafe as file name in reports
-    public static Object[] data() {
+    public static synchronized Object[] data() {
         return new Object[] {"true", "false"};
     }
 

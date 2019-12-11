@@ -31,7 +31,7 @@ public class NonColumnEncodedImmutableNonTxStatsCollectorIT extends StatsCollect
     }
 
     @Parameters(name = "mutable={0},transactionProvider={1},isUserTableNamespaceMapped={2},columnEncoded={3}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return Arrays.asList(
             new Object[][] { { false, null, false, false }, { false, null, true, false } });
     }
