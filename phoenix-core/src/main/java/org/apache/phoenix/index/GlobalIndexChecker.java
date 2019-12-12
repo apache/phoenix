@@ -114,10 +114,12 @@ public class GlobalIndexChecker extends BaseRegionObserver {
      * and used to verify individual rows and rebuild them if they are not valid
      */
     private class GlobalIndexScanner implements RegionScanner {
-        RegionScanner scanner;
+        private RegionScanner scanner;
+        private RegionScanner deleteRowScanner;
         private long ageThreshold;
         private Scan scan;
         private Scan indexScan;
+        private Scan deleteRowScan;
         private Scan singleRowIndexScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
@@ -246,6 +248,14 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(indexRowKey, ts);
                 if (specific) {
+                    // Get all the cells of this row
+                    deleteRowScan.withStartRow(indexRowKey, true);
+                    deleteRowScan.withStopRow(indexRowKey, true);
+                    deleteRowScan.setTimeRange(0, ts + 1);
+                    deleteRowScanner = region.getScanner(deleteRowScan);
+                    row.clear();
+                    deleteRowScanner.next(row);
+                    deleteRowScanner.close();
                     // We are deleting a specific version of a row so the flowing loop is for that
                     for (Cell cell : row) {
                         del.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp());
@@ -261,6 +271,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             if (buildIndexScan == null) {
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
+                deleteRowScan = new Scan();
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
                 byte[] indexTableName = region.getRegionInfo().getTable().getName();
