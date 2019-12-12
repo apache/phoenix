@@ -37,6 +37,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -66,6 +67,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -318,18 +320,28 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             // update phase) and check that this does not impact the correctness (one overwrite)
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
-            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2, val3) values ('a', 'abcc', 'abccc')");
             commitWithException(conn);
             IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
-            String selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Read only one column and verify that this is sufficient for the read repair to fix
+            // all the columns of the unverified index row that was generated due to doing only one phase write above
+            String selectSql =  "SELECT val2 from " + dataTableName + " WHERE val1  = 'ab'";
             // Verify that we will read from the first index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
             // Verify that one phase write has no effect
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals("abc", rs.getString(1));
-            assertEquals("abcd", rs.getString(2));
+            assertFalse(rs.next());
+            // Now read the other column and verify that it is also fixed
+            selectSql =  "SELECT val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the first index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
+            // Verify that one phase write has no effect
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abcd", rs.getString(1));
             assertFalse(rs.next());
             selectSql =  "SELECT val2, val3 from " + dataTableName + " WHERE val2  = 'abcc'";
             // Verify that we will read from the second index table
