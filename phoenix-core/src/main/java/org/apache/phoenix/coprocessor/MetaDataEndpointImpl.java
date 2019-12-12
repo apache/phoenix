@@ -2473,6 +2473,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
 
+        if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && tableType == PTableType.VIEW) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
+                table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+            } catch (ClassNotFoundException e) {
+                throw new IOException(e);
+            }
+        }
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
                 EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete, sharedTablesToDelete);
     }
@@ -2713,6 +2721,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return result;
                 } else {
                     table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
+                    if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
+                        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                            PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
+                            table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                        } catch (ClassNotFoundException e) {
+                            throw new IOException(e);
+                        }
+                    }
                     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table,
                             tableNamesToDelete, sharedTablesToDelete);
                 }
