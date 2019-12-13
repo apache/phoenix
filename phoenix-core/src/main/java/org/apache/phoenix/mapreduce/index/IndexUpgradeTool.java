@@ -19,7 +19,6 @@ package org.apache.phoenix.mapreduce.index;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.gson.Gson;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -108,6 +107,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     private HashMap<String, HashSet<String>> tablesAndIndexes = new HashMap<>();
     private HashMap<String, String> prop = new  HashMap<>();
+    private HashMap<String, String> emptyProp = new HashMap<>();
 
     private boolean dryRun, upgrade, syncRebuild;
     private String operation;
@@ -461,11 +461,17 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
-            String coprocName) throws IOException {
+                                String coprocName) throws IOException {
+        addCoprocessor(admin, tableName, tableDesc, coprocName,
+            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY, prop);
+    }
+
+    private void addCoprocessor(Admin admin, String tableName, HTableDescriptor tableDesc,
+            String coprocName, int priority, Map<String, String> propsToAdd) throws IOException {
         if (!admin.getTableDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
                 tableDesc.addCoprocessor(coprocName,
-                        null, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY, prop);
+                        null, priority, propsToAdd);
             }
             LOGGER.info("Loaded " + coprocName + " coprocessor on table " + tableName);
         } else {
@@ -490,7 +496,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         for (String indexName : indexes) {
             HTableDescriptor indexTableDesc = admin.getTableDescriptor(TableName.valueOf(indexName));
             if (upgrade) {
-                addCoprocessor(admin, indexName, indexTableDesc, GlobalIndexChecker.class.getName());
+                //GlobalIndexChecker needs to be a "lower" priority than all the others so that it
+                //goes first. It also doesn't get the codec props the IndexRegionObserver needs
+                addCoprocessor(admin, indexName, indexTableDesc, GlobalIndexChecker.class.getName(),
+                    QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY -1, emptyProp);
             } else {
                 removeCoprocessor(admin, indexName, indexTableDesc,
                         GlobalIndexChecker.class.getName());
