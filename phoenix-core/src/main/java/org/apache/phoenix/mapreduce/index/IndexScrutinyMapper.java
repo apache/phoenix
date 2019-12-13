@@ -372,13 +372,43 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         for (int i = startIndex; i < sourceValues.size(); i++) {
             Object targetValue = targetValues.get(i);
             Object sourceValue = sourceValues.get(i);
-            if (targetValue != null && !targetValue.equals(sourceValue)) {
+            if (targetValue != null) {
+                if (sourceValue.getClass().isArray()) {
+                    if (compareArrayTypes(sourceValue, targetValue)) {
+                        continue;
+                    }
+                } else {
+                    if (targetValue.equals(sourceValue)) {
+                        continue;
+                    }
+                }
                 context.getCounter(PhoenixScrutinyJobCounters.BAD_COVERED_COL_VAL_COUNT)
                         .increment(1);
                 return false;
             }
         }
         return true;
+    }
+
+    private boolean compareArrayTypes(Object sourceValue, Object targetValue) {
+        if (sourceValue.getClass().getComponentType().equals(byte.class)) {
+            return Arrays.equals((byte[]) sourceValue, (byte[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(char.class)) {
+            return Arrays.equals((char[]) sourceValue, (char[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(boolean.class)) {
+            return Arrays.equals((boolean[]) sourceValue, (boolean[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(double.class)) {
+            return Arrays.equals((double[]) sourceValue, (double[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(int.class)) {
+            return Arrays.equals((int[]) sourceValue, (int[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(short.class)) {
+            return Arrays.equals((short[]) sourceValue, (short[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(long.class)) {
+            return Arrays.equals((long[]) sourceValue, (long[]) targetValue);
+        } else if (sourceValue.getClass().getComponentType().equals(float.class)) {
+            return Arrays.equals((float[]) sourceValue, (float[]) targetValue);
+        }
+        return false;
     }
 
     private String getPkHash(List<Object> pkObjects) {
