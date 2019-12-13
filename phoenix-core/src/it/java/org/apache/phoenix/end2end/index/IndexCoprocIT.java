@@ -23,15 +23,18 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.index.GlobalIndexChecker;
+import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -51,6 +54,16 @@ import java.util.Properties;
 public class IndexCoprocIT extends ParallelStatsDisabledIT {
     private boolean isNamespaceMapped = false;
     private boolean isMultiTenant = false;
+    public static final String GLOBAL_INDEX_CHECKER_CONFIG =
+        "|org.apache.phoenix.index.GlobalIndexChecker|805306365|";
+    public static final String INDEX_REGION_OBSERVER_CONFIG =
+        "|org.apache.phoenix.hbase.index.IndexRegionObserver|805306366|" +
+            "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
+            "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
+    public static final String INDEXER_CONFIG =
+        "|org.apache.phoenix.hbase.index.Indexer|805306366|" +
+            "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
+            "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
 
     public IndexCoprocIT(boolean isMultiTenant){
         this.isMultiTenant = isMultiTenant;
@@ -88,8 +101,8 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
 
         Map<String, String> props = new HashMap<String, String>();
         props.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-        Indexer.enableIndexing(baseDescBuilder, NonTxIndexBuilder.class,
-            props, 100);
+        Indexer.enableIndexing(baseDescBuilder, PhoenixIndexBuilder.class,
+            props, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         admin.modifyTable(baseDescBuilder.build());
         baseDescriptor = admin.getDescriptor(TableName.valueOf(physicalTableName));
         indexDescriptor = admin.getDescriptor(TableName.valueOf(physicalIndexName));
@@ -157,6 +170,8 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
     private void assertUsingOldCoprocs(TableDescriptor baseDescriptor,
                                        TableDescriptor indexDescriptor) {
         assertCoprocsContains(Indexer.class, baseDescriptor);
+        assertCoprocConfig(baseDescriptor, Indexer.class.getName(),
+            INDEXER_CONFIG);
         assertCoprocsNotContains(IndexRegionObserver.class, baseDescriptor);
         assertCoprocsNotContains(IndexRegionObserver.class, indexDescriptor);
         assertCoprocsNotContains(GlobalIndexChecker.class, indexDescriptor);
@@ -170,9 +185,13 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
     private void assertUsingNewCoprocs(TableDescriptor baseDescriptor,
                                        TableDescriptor indexDescriptor) {
         assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
+        assertCoprocConfig(baseDescriptor, IndexRegionObserver.class.getName(),
+            INDEX_REGION_OBSERVER_CONFIG);
         assertCoprocsNotContains(Indexer.class, baseDescriptor);
         assertCoprocsNotContains(Indexer.class, indexDescriptor);
         assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+        assertCoprocConfig(indexDescriptor, GlobalIndexChecker.class.getName(),
+            GLOBAL_INDEX_CHECKER_CONFIG);
     }
 
     private void assertCoprocsContains(Class clazz, TableDescriptor descriptor) {
@@ -201,8 +220,30 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
     }
 
     private void removeCoproc(Class clazz, TableDescriptorBuilder descBuilder, Admin admin) throws Exception {
-       descBuilder.removeCoprocessor(clazz.getName());
-       admin.modifyTable(descBuilder.build());
+        descBuilder.removeCoprocessor(clazz.getName());
+        admin.modifyTable(descBuilder.build());
+    }
+
+    public static void assertCoprocConfig(TableDescriptor indexDesc,
+                                   String className, String expectedConfigValue){
+        boolean foundConfig = false;
+        for (Map.Entry<Bytes, Bytes> entry :
+            indexDesc.getValues().entrySet()){
+            String propKey = Bytes.toString(entry.getKey().get());
+            String propValue = Bytes.toString(entry.getValue().get());
+            //Unfortunately, a good API to read coproc properties didn't show up until
+            //HBase 2.0. Doing this the painful String-matching way to be compatible with 1.x
+            if (propKey.contains("coprocessor")){
+                if (propValue.contains(className)){
+                    Assert.assertEquals(className + " is configured incorrectly",
+                        expectedConfigValue,
+                        propValue);
+                    foundConfig = true;
+                    break;
+                }
+            }
+        }
+        Assert.assertTrue("Couldn't find config for " + className, foundConfig);
     }
 
     private void createIndexTable(String schemaName, String tableName, String indexName)
