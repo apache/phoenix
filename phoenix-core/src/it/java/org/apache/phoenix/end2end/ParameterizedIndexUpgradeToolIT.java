@@ -18,9 +18,11 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.index.IndexCoprocIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.index.GlobalIndexChecker;
@@ -230,18 +232,22 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             throws IOException {
         if (mutable) {
             for (String table : tableList) {
+                HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(table));
                 Assert.assertTrue("Can't find IndexRegionObserver for " + table,
-                    admin.getTableDescriptor(TableName.valueOf(table))
-                        .hasCoprocessor(IndexRegionObserver.class.getName()));
+                    indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
                 Assert.assertFalse("Found Indexer on " + table,
-                    admin.getTableDescriptor(TableName.valueOf(table))
-                        .hasCoprocessor(Indexer.class.getName()));
+                        indexDesc.hasCoprocessor(Indexer.class.getName()));
+                IndexCoprocIT.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
+                    IndexCoprocIT.INDEX_REGION_OBSERVER_CONFIG);
             }
+
         }
         for (String index : indexList) {
+            HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(index));
             Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
-                admin.getTableDescriptor(TableName.valueOf(index))
-                    .hasCoprocessor(GlobalIndexChecker.class.getName()));
+                indexDesc.hasCoprocessor(GlobalIndexChecker.class.getName()));
+            IndexCoprocIT.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
+                IndexCoprocIT.GLOBAL_INDEX_CHECKER_CONFIG);
         }
         // Transactional indexes should not have new coprocessors
         for (String index : TRANSACTIONAL_INDEXES_LIST) {
@@ -260,12 +266,13 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             throws IOException {
         if (mutable) {
             for (String table : tableList) {
+                HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(table));
                 Assert.assertTrue("Can't find Indexer for " + table,
-                    admin.getTableDescriptor(TableName.valueOf(table))
-                        .hasCoprocessor(Indexer.class.getName()));
+                    indexDesc.hasCoprocessor(Indexer.class.getName()));
                 Assert.assertFalse("Found IndexRegionObserver on " + table,
-                    admin.getTableDescriptor(TableName.valueOf(table))
-                        .hasCoprocessor(IndexRegionObserver.class.getName()));
+                    indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
+                IndexCoprocIT.assertCoprocConfig(indexDesc, Indexer.class.getName(),
+                    IndexCoprocIT.INDEXER_CONFIG);
             }
         }
         for (String index : indexList) {
