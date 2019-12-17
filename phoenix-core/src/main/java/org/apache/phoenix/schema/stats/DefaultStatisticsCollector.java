@@ -119,7 +119,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
         }
     }
     
-    private void initGuidepostDepth() throws IOException, ClassNotFoundException, SQLException {
+    private void initGuidepostDepth() throws IOException, SQLException {
         // First check is if guidepost info set on statement itself
         if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {
             int guidepostPerRegion = 0;
@@ -362,7 +362,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     public void init() throws IOException {
         try {
             initGuidepostDepth();
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException e) {
             throw new IOException("Unable to initialize the guide post depth", e);
         }
         this.statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp, guidePostDepth);

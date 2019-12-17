@@ -640,7 +640,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     }
 
     public static PhoenixConnection getRebuildIndexConnection(Configuration config)
-            throws SQLException, ClassNotFoundException {
+            throws SQLException {
         initRebuildIndexConnectionProps(config);
         //return QueryUtil.getConnectionOnServer(rebuildIndexConnectionProps, config).unwrap(PhoenixConnection.class);
         return QueryUtil.getConnectionOnServerWithCustomUrl(rebuildIndexConnectionProps,
