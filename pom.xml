@@ -102,7 +102,7 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <jetty.version>9.3.27.v20190418</jetty.version>
+    <jetty.version>9.4.24.v20191120</jetty.version>
     <tephra.version>0.15.0-incubating</tephra.version>
     <omid.version>1.0.1</omid.version>
     <stream.version>2.9.5</stream.version>
