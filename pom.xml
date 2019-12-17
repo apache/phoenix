@@ -125,7 +125,7 @@
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-   <curator.version>4.0.0</curator.version>
+    <curator.version>4.0.0</curator.version>
 
   </properties>
 
@@ -792,8 +792,22 @@
           </exclusion>
         </exclusions>
       </dependency>
-
-
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-framework</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      
       <!-- Make sure we have all the antlr dependencies -->
       <dependency>
         <groupId>org.antlr</groupId>

@@ -25,13 +25,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 /**
