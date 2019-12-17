@@ -202,8 +202,6 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                                             cell.getValueOffset(), SortOrder.getDefault());
                         }
                     }
-                } catch (ClassNotFoundException e) {
-                    throw new IOException(e);
                 }
             }
             return guidepostWidth;

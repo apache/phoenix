@@ -2089,7 +2089,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -2157,8 +2156,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                          QueryUtil.getConnectionOnServer(props, env.getConfiguration())
                                  .unwrap(PhoenixConnection.class)) {
                 view = PhoenixRuntime.getTableNoCache(connection, SchemaUtil.getTableName(viewSchemaName, viewName));
-            } catch (ClassNotFoundException e) {
-                throw new IOException(e);
             }
             if (view == null) {
                 ServerUtil.throwIOException("View not found", new TableNotFoundException(Bytes.toString(viewSchemaName),
@@ -2494,8 +2491,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                 PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
                 table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
-            } catch (ClassNotFoundException e) {
-                throw new IOException(e);
             }
         }
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
@@ -2600,7 +2595,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                  QueryUtil.getConnectionOnServer(props, env.getConfiguration())
                                          .unwrap(PhoenixConnection.class)) {
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, parentTable);
-                    } catch (ClassNotFoundException e) {
                     }
                 }
 
@@ -2743,8 +2737,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
                             table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
-                        } catch (ClassNotFoundException e) {
-                            throw new IOException(e);
                         }
                     }
                     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table,
@@ -2784,7 +2776,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, schemaName, tableName,
                     clientTimeStamp);
-        } catch (ClassNotFoundException e) {
         }
     }
 
@@ -2990,12 +2981,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
         Region region = env.getRegion();
-        PhoenixConnection connection = null;
-        try {
-            connection = table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                    env.getConfiguration()).unwrap(PhoenixConnection.class);
-        } catch (ClassNotFoundException e) {
-        }
+        PhoenixConnection connection =
+                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
+                        env.getConfiguration()).unwrap(PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             // ignore any indexes derived from ancestors
             if (index.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
@@ -3024,8 +3012,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // Drop the link between the parent table and the
                 // index table
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
-                Delete tableDelete = delete;
-                tableMetaData.add(tableDelete);
+                tableMetaData.add(delete);
                 tableMetaData.add(linkDelete);
                 // Since we're dropping the index, lock it to ensure
                 // that a change in index state doesn't
@@ -3062,12 +3049,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
-        PhoenixConnection connection = null;
-        try {
-            connection = table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                    env.getConfiguration()).unwrap(PhoenixConnection.class);
-        } catch (ClassNotFoundException e) {
-        }
+        PhoenixConnection connection =
+                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
+                        env.getConfiguration()).unwrap(PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             byte[] tenantId = index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes();
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
@@ -3094,8 +3078,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // index table
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 List<Mutation> remoteDropMetadata = Lists.newArrayListWithExpectedSize(2);
-                Delete tableDelete = delete;
-                remoteDropMetadata.add(tableDelete);
+                remoteDropMetadata.add(delete);
                 remoteDropMetadata.add(linkDelete);
                 // if the index is not present on the current region make an rpc to drop it
                 Properties props = new Properties();

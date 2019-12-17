@@ -175,8 +175,6 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                         childRegion, regionStartKeyInHFile, splitKey,
                         childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID,
                         new AtomicInteger(0), region.getRegionInfo());
-            } catch (ClassNotFoundException e) {
-                throw new IOException(e);
             } catch (SQLException e) {
                 throw new IOException(e);
             } finally {
@@ -286,7 +284,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                     maintainers, store.getColumnFamilyDescriptor().getName(),env.getConfiguration());
             
 
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException e) {
             throw new IOException(e);
 
         }

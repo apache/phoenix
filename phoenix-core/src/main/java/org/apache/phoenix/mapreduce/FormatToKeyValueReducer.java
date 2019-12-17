@@ -85,7 +85,7 @@ public class FormatToKeyValueReducer
             tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
             initColumnsMap(conn);
-        } catch (SQLException | ClassNotFoundException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }

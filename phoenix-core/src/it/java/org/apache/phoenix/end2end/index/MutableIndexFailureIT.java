@@ -623,7 +623,6 @@ public class MutableIndexFailureIT extends BaseTest {
                  connection.createStatement().execute(
                         "DROP INDEX IF EXISTS " + "B_" + FAIL_INDEX_NAME + " ON "
                              + fullTableName);
-             } catch (ClassNotFoundException e) {
              } catch (SQLException e) {
              }
          }

@@ -361,8 +361,6 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                     indexTableNames.add(indexTableName);
                 }
             }
-        } catch (ClassNotFoundException e) {
-            throw new IOException(e);
         } catch (SQLException e) {
             throw new IOException(e);
         } finally {
