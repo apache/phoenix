@@ -166,8 +166,6 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
                         .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
                         childRegion, regionStartKeyInHFile, splitKey, region.getRegionInfo());
-            } catch (ClassNotFoundException e) {
-                throw new IOException(e);
             } catch (SQLException e) {
                 throw new IOException(e);
             } finally {
@@ -276,7 +274,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                     maintainers, store.getFamily().getName(),env.getConfiguration());
             
 
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException e) {
             throw new IOException(e);
 
         }

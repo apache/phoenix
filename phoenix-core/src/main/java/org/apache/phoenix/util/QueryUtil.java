@@ -326,8 +326,7 @@ public final class QueryUtil {
      * @return {@link PhoenixConnection} with {@value UpgradeUtil#DO_NOT_UPGRADE} set so that we
      * don't initiate metadata upgrade
      */
-    public static Connection getConnectionOnServer(Configuration conf) throws ClassNotFoundException,
-            SQLException {
+    public static Connection getConnectionOnServer(Configuration conf) throws SQLException {
         return getConnectionOnServer(new Properties(), conf);
     }
     
@@ -345,8 +344,7 @@ public final class QueryUtil {
      * and with the upgrade-required flag cleared so that we don't initiate metadata upgrade.
      */
     public static Connection getConnectionOnServer(Properties props, Configuration conf)
-            throws ClassNotFoundException,
-            SQLException {
+            throws SQLException {
         setServerConnection(props);
         Connection conn = getConnection(props, conf);
         conn.unwrap(PhoenixConnection.class).getQueryServices().clearUpgradeRequired();
@@ -354,20 +352,19 @@ public final class QueryUtil {
     }
 
     public static Connection getConnectionOnServerWithCustomUrl(Properties props, String principal)
-            throws SQLException, ClassNotFoundException {
+            throws SQLException {
         setServerConnection(props);
         String url = getConnectionUrl(props, null, principal);
         LOGGER.info("Creating connection with the jdbc url: " + url);
         return DriverManager.getConnection(url, props);
     }
 
-    public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
-            SQLException {
+    public static Connection getConnection(Configuration conf) throws SQLException {
         return getConnection(new Properties(), conf);
     }
 
     private static Connection getConnection(Properties props, Configuration conf)
-            throws ClassNotFoundException, SQLException {
+            throws SQLException {
         String url = getConnectionUrl(props, conf);
         LOGGER.info("Creating connection with the jdbc url: " + url);
         props = PropertiesUtil.combineProperties(props, conf);
@@ -375,14 +372,14 @@ public final class QueryUtil {
     }
 
     public static String getConnectionUrl(Properties props, Configuration conf)
-            throws ClassNotFoundException, SQLException {
+            throws SQLException {
         return getConnectionUrl(props, conf, null);
     }
     /**
      * @return connection url using the various properties set in props and conf.
      */
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
-            throws ClassNotFoundException, SQLException {
+            throws SQLException {
         // read the hbase properties from the configuration
         int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
         // Build the ZK quorum server string with "server:clientport" list, separated by ','
@@ -462,7 +459,7 @@ public final class QueryUtil {
         return partitionColumnName  + " " + toSQL(CompareOp.EQUAL) + " " + autoPartitionNum;
     }
 
-    public static Connection getConnectionForQueryLog(Configuration config) throws ClassNotFoundException, SQLException {
+    public static Connection getConnectionForQueryLog(Configuration config) throws SQLException {
         //we don't need this connection to upgrade anything or start dispatcher
         return getConnectionOnServer(config);
     }
