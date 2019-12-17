@@ -129,13 +129,8 @@ public class DropColumnMutator implements ColumnMutator {
                 if (existingViewColumn != null && view.getViewStatement() != null) {
                     ParseNode viewWhere =
                             new SQLParser(view.getViewStatement()).parseQuery().getWhere();
-                    PhoenixConnection conn=null;
-                    try {
-                        conn = QueryUtil.getConnectionOnServer(conf).unwrap(
-                                PhoenixConnection.class);
-                    } catch (ClassNotFoundException e) {
-                        throw new IOException(e);
-                    }
+                    PhoenixConnection conn = QueryUtil.getConnectionOnServer(conf).unwrap(
+                            PhoenixConnection.class);
                     PhoenixStatement statement = new PhoenixStatement(conn);
                     TableRef baseTableRef = new TableRef(view);
                     ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
