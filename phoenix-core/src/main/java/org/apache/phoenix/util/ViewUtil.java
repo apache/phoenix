@@ -182,7 +182,7 @@ public class ViewUtil {
 
     public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
             byte[] schemaName, byte[] tableName, byte[] sysCatOrSysChildLink)
-            throws IOException, SQLException, ClassNotFoundException {
+            throws IOException, SQLException {
         Table hTable = null;
         try {
             hTable = ServerUtil.getHTableForCoprocessorScan(env, sysCatOrSysChildLink);
@@ -251,9 +251,9 @@ public class ViewUtil {
                         SYSTEM_CHILD_LINK_NAME_BYTES, conf))) {
                     fullTableName = SYSTEM_CATALOG_NAME_BYTES;
                 }
-            } catch (ClassNotFoundException e) {
+            } catch (SQLException e) {
                 logger.error("Error getting a connection on the server : " + e);
-                throw new SQLException(e);
+                throw e;
             }
         }
         return SchemaUtil.getPhysicalTableName(fullTableName, conf);
