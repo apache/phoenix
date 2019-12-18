@@ -722,14 +722,27 @@ public class MetaDataClient {
     // 1. table is a system table that does not have a ROW_TIMESTAMP column OR
     // 2. table was already resolved as of that timestamp OR
     // 3. table does not have a ROW_TIMESTAMP column and age is less then UPDATE_CACHE_FREQUENCY
+    // 3a. Get the effective UPDATE_CACHE_FREQUENCY for checking the age in the following precedence order:
+    // Table-level property > Connection-level property > Default value.
     private boolean avoidRpcToGetTable(boolean alwaysHitServer, Long resolvedTimestamp,
             boolean systemTable, PTable table, PTableRef tableRef, long tableResolvedTimestamp) {
-        return table != null && !alwaysHitServer &&
-                (systemTable && table.getRowTimestampColPos() == -1 ||
-                        resolvedTimestamp == tableResolvedTimestamp ||
-                        (table.getRowTimestampColPos() == -1 &&
-                                connection.getMetaDataCache().getAge(tableRef) <
-                                        table.getUpdateCacheFrequency()));
+        if (table != null && !alwaysHitServer) {
+            if (systemTable && table.getRowTimestampColPos() == -1 || resolvedTimestamp == tableResolvedTimestamp) {
+                return true;
+            }
+
+            // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS (= 0)?
+            // We should ideally be checking something like hasUpdateCacheFrequency()
+            long effectiveUpdateCacheFrequency = table.getUpdateCacheFrequency() != 0L ?
+                    table.getUpdateCacheFrequency() :
+                    connection.getQueryServices().getProps().getLong(
+                            QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
+
+            return (table.getRowTimestampColPos() == -1 &&
+                    connection.getMetaDataCache().getAge(tableRef) <
+                            effectiveUpdateCacheFrequency);
+        }
+        return false;
     }
 
     public MetaDataMutationResult updateCache(String schemaName) throws SQLException {
