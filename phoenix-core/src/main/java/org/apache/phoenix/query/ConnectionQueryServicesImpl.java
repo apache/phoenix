@@ -327,7 +327,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean returnSequenceValues ;
 
     private Connection connection;
-    private ZKClientService txZKClientService;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
 
@@ -759,9 +758,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws IllegalArgumentException when a property is not set to a valid value.
      */
     private void validateConnectionProperties(Properties info) {
-        if (info.get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB) != null) {
+        if (info.get(DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB) != null) {
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info("Connection's " + DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB + " set to " +
+                        info.get(DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+            }
             ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
-                    info.getProperty(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+                    info.getProperty(DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
         }
     }
 
@@ -772,6 +775,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         throwConnectionClosedIfNullMetaData();
         validateConnectionProperties(info);
         metadata = metadata.clone();
+
         return new PhoenixConnection(this, url, info, metadata);
     }
 
