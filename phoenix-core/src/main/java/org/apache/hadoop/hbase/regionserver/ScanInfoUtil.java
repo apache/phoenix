@@ -32,7 +32,7 @@ public class ScanInfoUtil {
     }
     
     public static ScanInfo cloneScanInfoWithKeepDeletedCells(ScanInfo scanInfo) {
-        return new ScanInfo(scanInfo.getConfiguration(), scanInfo.getFamily(), Math.max(scanInfo.getMinVersions(), 1),
+        return new ScanInfo(scanInfo.getConfiguration(), scanInfo.getFamily(), scanInfo.getMinVersions(),
                     scanInfo.getMaxVersions(), scanInfo.getTtl(), KeepDeletedCells.TRUE,
                     scanInfo.getTimeToPurgeDeletes(), scanInfo.getComparator());
     }
