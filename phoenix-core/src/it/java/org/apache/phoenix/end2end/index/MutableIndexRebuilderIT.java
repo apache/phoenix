@@ -112,6 +112,8 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             // Simulate write failure when rebuilder runs
             TestUtil.addCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
+            long pendingDisableCount = TestUtil.getPendingDisableCount(
+                    conn.unwrap(PhoenixConnection.class), fullIndexName);
             // rebuild writes should retry for exactly the configured number of times
             ExecutorService executor = Executors.newSingleThreadExecutor();
             try {
@@ -123,6 +125,9 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                     }});
                 assertTrue(future.get(120, TimeUnit.SECONDS));
                 assertEquals(numberOfRetries, WriteFailingRegionObserver.attempts.get());
+                // Index rebuild write failures should not increase the pending disable count of the index table
+                assertEquals(pendingDisableCount, TestUtil.getPendingDisableCount(
+                        conn.unwrap(PhoenixConnection.class), fullIndexName));
             } finally {
                 executor.shutdownNow();
             }

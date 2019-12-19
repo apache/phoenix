@@ -467,7 +467,10 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     public static void doBatchWithRetries(MutateCommand mutateCommand,
             IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)
             throws IOException {
-        incrementPendingDisableCounter(iwe, connection);
+        if (!PhoenixIndexMetaData.isIndexRebuild(
+                mutateCommand.getMutationList().get(0).getAttributesMap())) {
+            incrementPendingDisableCounter(iwe, connection);
+        }
         int maxTries = config.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
             HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
         long pause = config.getLong(HConstants.HBASE_CLIENT_PAUSE,
