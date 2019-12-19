@@ -310,44 +310,40 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     }
 
     @Test
-    public void testToolWithIncorrectTables() throws Exception {
+    public void testDryRunAndFailures() throws Exception {
         validate(true);
+
+        // test with incorrect table
         iut.setInputTables("TEST3.TABLE_NOT_PRESENT");
         iut.prepareToolSetup();
 
         int status = iut.executeTool();
         Assert.assertEquals(-1, status);
         validate(true);
-    }
 
-    @Test
-    public void testToolWithNoIndex() throws Exception {
-        if (!upgrade || isNamespaceEnabled) {
-            return;
-        }
-        conn.createStatement().execute("CREATE TABLE TEST.NEW_TABLE (id bigint NOT NULL "
-                + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
-        iut.setInputTables("TEST.NEW_TABLE");
-        iut.prepareToolSetup();
-        int status = iut.executeTool();
-        Assert.assertEquals(0, status);
-        conn.createStatement().execute("DROP TABLE TEST.NEW_TABLE");
-    }
-
-    @Test
-    public void testToolWithInputFileParameter() throws Exception {
+        // test with input file parameter
         BufferedWriter writer = new BufferedWriter(new FileWriter(new File(INPUT_FILE)));
         writer.write(INPUT_LIST);
         writer.close();
 
-        validate(true);
-
         iut.setInputTables(null);
         iut.setInputFile(INPUT_FILE);
         iut.prepareToolSetup();
-        iut.executeTool();
+        status = iut.executeTool();
+        Assert.assertEquals(0, status);
 
         validate(true);
+
+        // test table without index
+        if (upgrade && !isNamespaceEnabled) {
+            conn.createStatement().execute("CREATE TABLE TEST.NEW_TABLE (id bigint NOT NULL "
+                    + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
+            iut.setInputTables("TEST.NEW_TABLE");
+            iut.prepareToolSetup();
+            status = iut.executeTool();
+            Assert.assertEquals(0, status);
+            conn.createStatement().execute("DROP TABLE TEST.NEW_TABLE");
+        }
     }
 
     @After
