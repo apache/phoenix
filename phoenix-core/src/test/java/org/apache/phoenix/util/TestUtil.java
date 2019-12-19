@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
@@ -58,6 +59,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
+
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -1007,6 +1011,26 @@ public class TestUtil {
     public static PIndexState getIndexState(Connection conn, String fullIndexName) throws SQLException {
     	IndexStateCheck state = checkIndexStateInternal(conn, fullIndexName, null, null);
     	return state.indexState;
+    }
+
+    public static long getPendingDisableCount(PhoenixConnection conn, String indexTableName) {
+        byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
+        Get get = new Get(indexTableKey);
+        get.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+
+        try {
+            Result pendingDisableCountResult =
+                    conn.getQueryServices()
+                            .getTable(SchemaUtil.getPhysicalTableName(
+                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                                    conn.getQueryServices().getProps()).getName())
+                            .get(get);
+            return Bytes.toLong(pendingDisableCountResult.getValue(TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
+        } catch (Exception e) {
+            LOGGER.error("Exception in getPendingDisableCount: " + e);
+            return 0;
+        }
     }
     
     private static IndexStateCheck checkIndexStateInternal(Connection conn, String fullIndexName, PIndexState expectedIndexState, Long expectedIndexDisableTimestamp) throws SQLException {
