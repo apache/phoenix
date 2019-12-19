@@ -232,7 +232,6 @@ public class TTLAwareRegionObserver extends BaseRegionObserver {
                         Bytes.toString(rowKey),
                         now-ttl, ts));
                 Delete del = new Delete(rowKey, now-ttl);
-                //del.addFamily(CellUtil.cloneFamily(firstCell));
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
                 return true;

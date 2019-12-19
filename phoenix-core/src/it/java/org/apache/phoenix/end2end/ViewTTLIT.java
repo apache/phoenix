@@ -59,8 +59,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -83,9 +81,6 @@ import static org.junit.Assert.fail;
 
 public class ViewTTLIT extends ParallelStatsDisabledIT {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
-    private static final String ORG_ID_FMT = "00D0x000%s";
-    private static final String ID_FMT = "00A0y000%07d";
     private static final String VIEW_TTL_HEADER_SQL =  "SELECT VIEW_TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
 
@@ -494,11 +489,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         // Define the test data.
         DataSupplier dataSupplier = new DataSupplier() {
-
-            final String
-                    orgId =
-                    String.format("00D0x000%s", schemaBuilder.getDataOptions().getUniqueName());
-            final String kp = SchemaUtil.normalizeIdentifier(schemaBuilder.getEntityKeyPrefix());
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
@@ -1129,11 +1119,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // Define the test data.
         DataSupplier dataSupplier = new DataSupplier() {
 
-            final String
-                    orgId =
-                    String.format("00D0x000%s", schemaBuilder.getDataOptions().getUniqueName());
-            final String kp = SchemaUtil.normalizeIdentifier(schemaBuilder.getEntityKeyPrefix());
-
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
                 String zid = String.format("00A0y000%07d", rowIndex);
@@ -1356,7 +1341,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         fetchedValue != null);
                 assertTrue("Values upserted and fetched do not match",
                         upsertedValue.equals(fetchedValue));
-                LOGGER.info(String.format("Row: %s, %s, %s, %s", rowKey, columnKey, upsertedValue, fetchedValue));
             }
         }
     }
@@ -1378,7 +1362,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private void deleteData(SchemaBuilder schemaBuilder, long scnTimestamp) throws SQLException {
 
         String viewName = schemaBuilder.getEntityTenantViewName();
-        LOGGER.debug(String.format("Deleting from view :- " + viewName));
 
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
@@ -1415,9 +1398,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             scan.setAttribute(BaseScannerRegionObserver.MASK_VIEW_TTL_EXPIRED, PDataType.FALSE_BYTES);
             scan.setAttribute(BaseScannerRegionObserver.VIEW_TTL, Bytes.toBytes(Long.valueOf(table.getViewTTL())));
             PhoenixResultSet rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            if (rs.next()) {
-                LOGGER.debug(String.format("Number of deleted rows :- " + rs.getString(1)));
-            }
         }
     }
 }
