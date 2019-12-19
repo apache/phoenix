@@ -1068,6 +1068,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
+            // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
+            // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
             if (!SchemaUtil.isSystemTable(tableName)) {
                 if (!descriptor.hasCoprocessor(TTLAwareRegionObserver.class.getName())) {
                     descriptor.addCoprocessor(TTLAwareRegionObserver.class.getName(), null, priority-2, null);

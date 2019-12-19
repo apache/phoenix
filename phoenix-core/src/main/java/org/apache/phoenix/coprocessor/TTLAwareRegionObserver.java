@@ -249,6 +249,8 @@ public class TTLAwareRegionObserver extends BaseRegionObserver {
         }
 
         // TODO : Remove it after we verify all SQLs include the empty column.
+        // Before we added ScanUtil.addEmptyColumnToScan some queries like select count(*) did not include
+        // the empty column in scan, thus this method was the fallback in those cases.
         private boolean checkEmptyColumnNotExpired(byte[] rowKey) throws IOException {
             LOG.warn("Scan " + scan + " did not return the empty column for " + region.getRegionInfo().getTable().getNameAsString());
             Get get = new Get(rowKey);
