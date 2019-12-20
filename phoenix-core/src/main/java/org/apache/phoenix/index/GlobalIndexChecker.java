@@ -534,4 +534,5 @@ public class GlobalIndexChecker extends BaseRegionObserver {
     public void stop(CoprocessorEnvironment e) throws IOException {
         this.hTableFactory.shutdown();
     }
+
 }

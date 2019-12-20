@@ -71,6 +71,7 @@ import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreScanner;
@@ -1546,9 +1547,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // This will lead to failure of cross cluster RPC if the effective user is not
         // the login user. Switch to the login user context to ensure we have the expected
         // security context.
+
         final String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
         // since we will make a call to syscat, do nothing if we are compacting syscat itself
-        if (request.isMajor() && !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
+        // also, if max lookback age is already configured, we're already taken care of elsewhere
+        // unless the index stays disabled beyond the max lookback age, in which case you probably
+        // want to rebuild anyway
+        if (request.isMajor() &&
+            !ScanInfoUtil.isMaxLookbackTimeEnabled(compactionConfig) &&
+            !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
             return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
                 @Override
                 public InternalScanner run() throws Exception {
