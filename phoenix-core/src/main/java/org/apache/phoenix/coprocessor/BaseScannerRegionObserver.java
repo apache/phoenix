@@ -18,13 +18,18 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.NavigableSet;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -32,14 +37,17 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanInfo;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
+import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
@@ -56,6 +64,7 @@ import org.apache.phoenix.util.TransactionUtil;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
+    private static final Log LOG = LogFactory.getLog(BaseScannerRegionObserver.class);
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -121,7 +130,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     // In case of Index Write failure, we need to determine that Index mutation
     // is part of normal client write or Index Rebuilder. # PHOENIX-5080
     public final static byte[] REPLAY_INDEX_REBUILD_WRITES = PUnsignedTinyint.INSTANCE.toBytes(3);
-    
     public enum ReplayWrite {
         TABLE_AND_INDEX,
         INDEX_ONLY,
@@ -374,20 +382,107 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
+
     @Override
     public KeyValueScanner preStoreScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-        final Store store, final Scan scan, final NavigableSet<byte[]> targetCols,
-        final KeyValueScanner s) throws IOException {
+                                               final Store store, final Scan scan,
+                                               final NavigableSet<byte[]> targetCols,
+                                               final KeyValueScanner s) throws IOException {
+        if (storeFileScanDoesntNeedAlteration(store, scan)) {
+            return s;
+        }
 
-      if (scan.isRaw() || ScanInfoUtil.isKeepDeletedCells(store.getScanInfo()) || scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP || TransactionUtil.isTransactionalTimestamp(scan.getTimeRange().getMax())) {
-        return s;
-      }
-      
-      if (s!=null) {
-          s.close();
-      }
-      ScanInfo scanInfo = ScanInfoUtil.cloneScanInfoWithKeepDeletedCells(store.getScanInfo());
-      return ScanInfoUtil.createStoreScanner(store, scanInfo, scan, targetCols,
-          c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel()));
+        if (s != null) {
+            s.close();
+        }
+        ScanInfo scanInfo = ScanInfoUtil.cloneScanInfoWithKeepDeletedCells(store.getScanInfo());
+        return ScanInfoUtil.createStoreScanner(store, scanInfo, scan, targetCols,
+            c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel()));
+    }
+
+    private boolean storeFileScanDoesntNeedAlteration(Store store, Scan scan) {
+        boolean isRaw = scan.isRaw();
+        //true if keep deleted cells is either TRUE or TTL
+        boolean keepDeletedCells = ScanInfoUtil.isKeepDeletedCells(store.getScanInfo());
+        boolean timeRangeIsLatest = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP;
+        boolean timestampIsTransactional =
+            TransactionUtil.isTransactionalTimestamp(scan.getTimeRange().getMax());
+        return isRaw
+            || keepDeletedCells
+            || timeRangeIsLatest
+            || timestampIsTransactional;
+    }
+
+    @Override
+    public InternalScanner preFlushScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+                                               final Store store,
+                                               final KeyValueScanner memstoreScanner,
+                                               final InternalScanner s)
+        throws IOException {
+
+        if (!ScanInfoUtil.isMaxLookbackTimeEnabled(c.getEnvironment().getConfiguration())){
+            return s;
+        }
+
+        //close last scanner object before creating a new one
+        if(s != null) {
+            s.close();
+        }
+
+        // Called during flushing the memstore to disk.
+        // Need to retain all the delete markers & all the versions
+        Scan scan = new Scan();
+        scan.setMaxVersions(Integer.MAX_VALUE);
+        ScanInfo oldScanInfo = store.getScanInfo();
+
+        Configuration conf = c.getEnvironment().getConfiguration();
+        //minor compactions and flushes both use "compact retain deletes"
+        ScanType scanType = ScanType.COMPACT_RETAIN_DELETES;
+        ScanInfo scanInfo =
+            ScanInfoUtil.getScanInfoForFlushesAndCompactions(conf, oldScanInfo, store, scanType);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Creating the store scanner with :" + scanInfo + ", " +
+                "scan object:" + scan + " for table " + store.getTableName().getNameAsString() +
+                " and region " + store.getRegionInfo().getRegionNameAsString() +
+                " and cf " + store.getColumnFamilyName());
+        }
+        return new StoreScanner(store, scanInfo, scan, Collections.singletonList(memstoreScanner),
+            scanType, store.getSmallestReadPoint(),
+            HConstants.LATEST_TIMESTAMP);
+    }
+
+    @Override
+    public InternalScanner preCompactScannerOpen(
+        final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+        List<? extends KeyValueScanner> scanners, final ScanType scanType, final long earliestPutTs,
+        final InternalScanner s) throws IOException {
+
+        if (!ScanInfoUtil.isMaxLookbackTimeEnabled(c.getEnvironment().getConfiguration())){
+            return s;
+        }
+        //close last scanner object before creating a new one
+        if(s != null) {
+            s.close();
+        }
+        Scan scan = new Scan();
+        scan.setMaxVersions(Integer.MAX_VALUE);
+        ScanInfo oldScanInfo = store.getScanInfo();
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Compaction triggering for table:" +
+                store.getRegionInfo().getTable().toString()
+                + " with scanType " + scanType  + " for table " +
+                store.getTableName().getNameAsString() + " and region " +
+                store.getRegionInfo().getRegionNameAsString() +
+                " and cf " + store.getColumnFamilyName());
+        }
+
+        Configuration conf = c.getEnvironment().getConfiguration();
+        ScanInfo scanInfo =
+            ScanInfoUtil.getScanInfoForFlushesAndCompactions(conf, oldScanInfo,
+                store, scanType);
+        return new StoreScanner(store, scanInfo, scan, scanners, scanType,
+            store.getSmallestReadPoint(),
+            earliestPutTs);
     }
 }
