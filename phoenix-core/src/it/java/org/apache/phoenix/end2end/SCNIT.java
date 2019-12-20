@@ -24,11 +24,17 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class SCNIT extends ParallelStatsDisabledIT {
@@ -67,7 +73,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
 			rs.close();
 		}
 		props.clear();
-		props.setProperty("CurrentSCN", Long.toString(timeAfterDelete));
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timeAfterDelete));
 		try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
 			ResultSet rs = connscn.createStatement().executeQuery("select * from " + fullTableName);
 			assertTrue(rs.next());
@@ -82,20 +88,10 @@ public class SCNIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testSCNWithTTL() throws Exception {
-		String schemaName = generateUniqueName();
-		String tableName = generateUniqueName();
-		String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-		try (Connection conn = DriverManager.getConnection(getUrl())) {
-			conn.createStatement()
-					.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR) TTL=2");
-			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','aa')");
-			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb')");
-			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('c','cc')");
-			conn.commit();
-			// TTL is 2 sec
-			Thread.sleep(3000);
-		}
-
+		int ttl = 2;
+		String fullTableName = createTableWithTTL(ttl);
+		//sleep for one second longer than ttl
+		Thread.sleep(ttl * 1000 + 1000);
 		Properties props = new Properties();
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(EnvironmentEdgeManager.currentTime() - 1000));
@@ -104,6 +100,56 @@ public class SCNIT extends ParallelStatsDisabledIT {
 			assertFalse(rs.next());
 			rs.close();
 		}
+	}
+
+	@Test
+	public void testTooLowSCNWithTTL() throws Exception {
+		//if scn is for an older time than a table's ttl, it should throw a SQLException
+		int ttl = 2;
+		String fullTableName = createTableWithTTL(ttl);
+		int sleepTime = (ttl + 1)* 1000;
+		//need to sleep long enough for the SCN to still find the syscat row for the table
+		Thread.sleep(sleepTime);
+		Properties props = new Properties();
+		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+			Long.toString(EnvironmentEdgeManager.currentTime() - sleepTime));
+		try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
+			connscn.createStatement().
+				executeQuery(String.format("select * from %s", fullTableName));
+		} catch (SQLException se){
+			SQLExceptionCode code = SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_TTL;
+			assertSqlExceptionCode(code, se);
+			return;
+		}
+		Assert.fail("We should have thrown an exception for the too-early SCN");
+	}
+
+	private void assertSqlExceptionCode(SQLExceptionCode code, SQLException se) {
+		assertEquals(code.getErrorCode(), se.getErrorCode());
+		assertTrue("Wrong error message", se.getMessage().contains(code.getMessage()));
+		assertEquals(code.getSQLState(), se.getSQLState());
+	}
+
+	private String createTableWithTTL(int ttl) throws SQLException, InterruptedException {
+		String schemaName = generateUniqueName();
+		String tableName = generateUniqueName();
+		StringBuilder optionsBuilder = new StringBuilder();
+		if (ttl > 0){
+			optionsBuilder.append("TTL=");
+			optionsBuilder.append(ttl);
+		}
+		String ddlOptions = optionsBuilder.toString();
+		String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+		try (Connection conn = DriverManager.getConnection(getUrl())) {
+			conn.createStatement()
+					.execute(String.format("CREATE TABLE %s" +
+						"(k VARCHAR PRIMARY KEY, v VARCHAR) %s", fullTableName, ddlOptions));
+			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','aa')");
+			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb')");
+			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('c','cc')");
+			conn.commit();
+		}
+		return fullTableName;
 	}
 
 }
