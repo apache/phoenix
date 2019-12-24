@@ -1023,6 +1023,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     endKey = regionBoundaries.get(regionIndex);
                 }
                 if (isLocalIndex) {
+                    if (dataPlan != null && dataPlan.getTableRef().getTable().getType() != PTableType.INDEX) { // Sanity check
+                        ScanRanges dataScanRanges = dataPlan.getContext().getScanRanges();
+                        // we can skip a region completely for local indexes if the data plan does not intersect
+                        if (!dataScanRanges.intersectRegion(regionInfo.getStartKey(), regionInfo.getEndKey(), false)) {
+                            currentKeyBytes = endKey;
+                            regionIndex++;
+                            continue;
+                        }
+                    }
                     // Only attempt further pruning if the prefix range is using
                     // a skip scan since we've already pruned the range of regions
                     // based on the start/stop key.
