@@ -33,11 +33,15 @@ import java.util.Properties;
 
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
@@ -53,6 +57,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * Mapper that reads from the data table and checks the rows against the index table
@@ -121,9 +127,11 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                                     pindexTable);
             qSourceTable = columnNames.getQualifiedSourceTableName();
             qTargetTable = columnNames.getQualifiedTargetTableName();
-            List<String> targetColNames = columnNames.getTargetColNames();
-            List<String> sourceColNames = columnNames.getSourceColNames();
-            List<String> targetPkColNames = columnNames.getTargetPkColNames();
+
+            List<String> targetColNames = columnNames.getTargetColNamesForSkipScan();
+            List<String> sourceColNames = columnNames.getSourceColNamesForSkipScan();
+            List<String> targetPkColNames = columnNames.getTargetPkColNamesForSkipScan();
+
             String targetPksCsv =
                     Joiner.on(",").join(SchemaUtil.getEscapedFullColumnNames(targetPkColNames));
             numSourcePkCols = columnNames.getSourcePkColNames().size();
@@ -141,8 +149,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             // equivalent
             // name)
             targetTableQuery =
-                    QueryUtil.constructSelectStatement(qTargetTable, columnNames.getCastedTargetColNames(), targetPksCsv,
-                        Hint.NO_INDEX, false) + " IN ";
+                    QueryUtil.constructSelectStatement(qTargetTable, columnNames.getCastedTargetColNamesForSkipScan()
+                            , targetPksCsv, Hint.NO_INDEX, false) + " IN ";
             targetTblColumnMetadata =
                     PhoenixRuntime.generateColumnInfo(connection, qTargetTable, targetColNames);
             sourceTblColumnMetadata =
@@ -230,6 +238,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
 
             // fetch results from the target table and output invalid rows
             queryTargetTable(context, targetStatement, targetPkToSourceValues);
+            IndexScrutinyTool.setTargetTableQueryForScrutinyTool(targetStatement);
 
             // any source values we have left over are invalid (e.g. data table rows without
             // corresponding index row)

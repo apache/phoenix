@@ -19,8 +19,7 @@ package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -55,10 +54,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -69,8 +65,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
-import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 
 /**
  * An MR job to verify that the index table is in sync with the data table.
@@ -120,6 +114,9 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private static final Option TENANT_ID_OPTION = new Option("tenant", "tenant-id", true,
             "If specified, uses Tenant connection for tenant view index scrutiny (optional)");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_SCRUTINY_[%s]_[%s]";
+
+    private static PreparedStatement targetTableQuerySqlStmt;
+
 
     /**
      * Which table to use as the source table
@@ -201,6 +198,16 @@ public class IndexScrutinyTool extends Configured implements Tool {
         System.exit(exitCode);
     }
 
+    // Used for testing
+    public static void setTargetTableQueryForScrutinyTool(PreparedStatement targetStmt) {
+        targetTableQuerySqlStmt = targetStmt;
+    }
+
+    // Used for testing
+    public static PreparedStatement getTargetTableQueryForScrutinyTool() {
+        return targetTableQuerySqlStmt;
+    }
+
     class JobFactory {
         Connection connection;
         Configuration configuration;
@@ -268,9 +275,10 @@ public class IndexScrutinyTool extends Configured implements Tool {
                             : new SourceTargetColumnNames.IndexSourceColNames(pdataTable,
                                     pindexTable);
             String qSourceTable = columnNames.getQualifiedSourceTableName();
-            List<String> sourceColumnNames = columnNames.getSourceColNames();
-            List<String> sourceDynamicCols = columnNames.getSourceDynamicCols();
-            List<String> targetDynamicCols = columnNames.getTargetDynamicCols();
+
+            List<String> sourceColumnNames = columnNames.getSourceColNamesForSkipScan();
+            List<String> sourceDynamicCols = columnNames.getSourceDynamicColsForSkipScan();
+            List<String> targetDynamicCols = columnNames.getTargetDynamicColsForSkipScan();
 
             // Setup the select query against source - we either select the index columns from the
             // index table,

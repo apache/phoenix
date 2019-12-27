@@ -21,7 +21,6 @@ import java.util.List;
 
 import org.apache.phoenix.mapreduce.util.IndexColumnNames;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * Get index scrutiny source/target column names, depending on whether the source is the
@@ -53,6 +52,18 @@ public interface SourceTargetColumnNames {
     String getQualifiedSourceTableName();
 
     String getQualifiedTargetTableName();
+
+    List<String> getTargetPkColNamesForSkipScan();
+
+    List<String> getSourceColNamesForSkipScan();
+
+    List<String> getTargetColNamesForSkipScan();
+
+    List<String> getCastedTargetColNamesForSkipScan();
+
+    List<String> getSourceDynamicColsForSkipScan();
+
+    List<String> getTargetDynamicColsForSkipScan();
 
     /**
      * Used when the data table is the source table of a scrutiny
@@ -122,6 +133,35 @@ public interface SourceTargetColumnNames {
             return getCastedColumnNames(getIndexColNames(), dataColSqlTypeNames);
         }
 
+        @Override
+        public List<String> getCastedTargetColNamesForSkipScan() {
+            return getCastedColumnNames(getIndexColNamesForSkipScan(), indexColSqlTypeNamesForSkipScan);
+        }
+
+        @Override
+        public List<String> getTargetColNamesForSkipScan() {
+            return getIndexColNamesForSkipScan();
+        }
+
+        @Override
+        public List<String> getTargetPkColNamesForSkipScan() {
+            return getIndexPkColNamesForSkipScan();
+        }
+
+        @Override
+        public List<String> getSourceColNamesForSkipScan() {
+            return getDataColNamesForSkipScan();
+        }
+
+        @Override
+        public List<String> getSourceDynamicColsForSkipScan() {
+            return getDynamicDataColsForSkipScan();
+        }
+
+        @Override
+        public List<String> getTargetDynamicColsForSkipScan() {
+            return getDynamicIndexColsForSkipScan();
+        }
     }
 
     /**
@@ -190,6 +230,36 @@ public interface SourceTargetColumnNames {
         @Override
         public List<String> getCastedTargetColNames() {
             return getCastedColumnNames(getDataColNames(), indexColSqlTypeNames);
+        }
+
+        @Override
+        public List<String> getCastedTargetColNamesForSkipScan() {
+            return getCastedTargetColNames();
+        }
+
+        @Override
+        public List<String> getSourceColNamesForSkipScan() {
+            return getIndexColNames();
+        }
+
+        @Override
+        public List<String> getTargetPkColNamesForSkipScan() {
+            return getDataPkColNames();
+        }
+
+        @Override
+        public List<String> getTargetColNamesForSkipScan() {
+            return getDataColNames();
+        }
+
+        @Override
+        public List<String> getSourceDynamicColsForSkipScan() {
+            return getDynamicIndexCols();
+        }
+
+        @Override
+        public List<String> getTargetDynamicColsForSkipScan() {
+            return getDynamicDataCols();
         }
     }
 }
