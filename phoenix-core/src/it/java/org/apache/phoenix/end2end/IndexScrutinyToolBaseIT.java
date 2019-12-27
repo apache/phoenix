@@ -39,7 +39,7 @@ import static org.junit.Assert.assertTrue;
  * Tests for the {@link IndexScrutinyTool}
  */
 public class IndexScrutinyToolBaseIT extends BaseTest {
-    protected String outputDir;
+    protected static String outputDir;
 
     @BeforeClass public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMap();
@@ -53,7 +53,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    protected List<Job> runScrutiny(String[] cmdArgs) throws Exception {
+    protected static List<Job> runScrutiny(String[] cmdArgs) throws Exception {
         IndexScrutinyTool scrutiny = new IndexScrutinyTool();
         Configuration conf = new Configuration(getUtility().getConfiguration());
         scrutiny.setConf(conf);
@@ -65,7 +65,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
         return scrutiny.getJobs();
     }
 
-    protected String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
+    protected static String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
             SourceTable sourceTable, boolean outputInvalidRows, OutputFormat outputFormat, Long maxOutputRows, String tenantId, Long scrutinyTs) {
         final List<String> args = Lists.newArrayList();
         if (schemaName != null) {

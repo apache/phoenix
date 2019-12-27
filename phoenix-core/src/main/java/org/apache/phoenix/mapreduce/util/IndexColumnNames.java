@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.util;
 
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -44,7 +45,12 @@ public class IndexColumnNames {
     private List<String> indexPkColNames = Lists.newArrayList();
     private List<String> indexNonPkColNames = Lists.newArrayList();
     private List<String> indexColNames;
+    private List<String> indexPkColNamesForSkipScan = Lists.newArrayList();
+    private List<String> dataColNamesForSkipScan = Lists.newArrayList();
+    private HashMap<String, String> dataColSqlTypeNamesForSkipScan = new HashMap<>();
+    private List<String> indexColNamesForSkipScan = Lists.newArrayList();
     protected List<String> indexColSqlTypeNames = Lists.newArrayList();
+    protected HashMap<String, String> indexColSqlTypeNamesForSkipScan = new HashMap<>();
     private PTable pdataTable;
     private PTable pindexTable;
 
@@ -79,6 +85,8 @@ public class IndexColumnNames {
                 dataColSqlTypeNames.add(getDataTypeString(dPkCol));
                 indexPkColNames.add(indexColumnName);
                 indexColSqlTypeNames.add(getDataTypeString(indexCol));
+                indexColSqlTypeNamesForSkipScan.put(indexColumnName, getDataTypeString(dPkCol));
+                dataColSqlTypeNamesForSkipScan.put(getDataColFullName(dPkCol), getDataTypeString(dPkCol));
                 indexColsAdded.add(indexColumnName);
             }
         }
@@ -88,11 +96,25 @@ public class IndexColumnNames {
             String indexColName = indexPkCol.getName().getString();
             if (!indexColsAdded.contains(indexColName)) {
                 indexPkColNames.add(indexColName);
+                indexPkColNamesForSkipScan.add(indexColName);
+                indexColNamesForSkipScan.add(indexColName);
                 indexColSqlTypeNames.add(getDataTypeString(indexPkCol));
                 PColumn dCol = IndexUtil.getDataColumn(pdataTable, indexColName);
                 dataNonPkColNames.add(getDataColFullName(dCol));
                 dataColSqlTypeNames.add(getDataTypeString(dCol));
+                indexColSqlTypeNamesForSkipScan.put(indexColName, getDataTypeString(dCol));
+                dataColSqlTypeNamesForSkipScan.put(getDataColFullName(dCol), getDataTypeString(dCol));
                 indexColsAdded.add(indexColName);
+            }
+        }
+        dataColNamesForSkipScan.addAll(dataNonPkColNames);
+        dataColNamesForSkipScan.addAll(dataPkColNames);
+
+        for (PColumn indexCol : pindexCols) {
+            String indexColumnName = indexCol.getName().getString();
+            if (IndexUtil.isDataPKColumn(indexCol)) {
+                indexPkColNamesForSkipScan.add(indexColumnName);
+                indexColNamesForSkipScan.add(indexColumnName);
             }
         }
 
@@ -105,11 +127,15 @@ public class IndexColumnNames {
                 PColumn dCol = IndexUtil.getDataColumn(pdataTable, indexColName);
                 dataNonPkColNames.add(getDataColFullName(dCol));
                 dataColSqlTypeNames.add(getDataTypeString(dCol));
+                indexColSqlTypeNamesForSkipScan.put(indexColName, getDataTypeString(dCol));
+                dataColSqlTypeNamesForSkipScan.put(getDataColFullName(dCol), getDataTypeString(dCol));
+                dataColNamesForSkipScan.add(getDataColFullName(dCol));
             }
         }
 
         indexColNames = Lists.newArrayList(Iterables.concat(indexPkColNames, indexNonPkColNames));
         dataColNames = Lists.newArrayList(Iterables.concat(dataPkColNames, dataNonPkColNames));
+        indexColNamesForSkipScan.addAll(indexNonPkColNames);
     }
 
     private String getDataTypeString(PColumn col) {
@@ -168,6 +194,16 @@ public class IndexColumnNames {
         colNames = SchemaUtil.getEscapedFullColumnNames(colNames);
         for (int i = 0; i < colNames.size(); i++) {
             castColNames.add("CAST(" + colNames.get(i) + " AS " + castTypes.get(i) + ")");
+        }
+        return castColNames;
+    }
+
+    protected List<String> getCastedColumnNames(List<String> colNames, HashMap<String, String> castTypes) {
+        List<String> castColNames = Lists.newArrayListWithCapacity(colNames.size());
+        List<String> escapedFullColumnNames = SchemaUtil.getEscapedFullColumnNames(colNames);
+        for (int i = 0; i < escapedFullColumnNames.size(); i++) {
+            String colName = colNames.get(i);
+            castColNames.add("CAST(" + escapedFullColumnNames.get(i) + " AS " + castTypes.get(colName) + ")");
         }
         return castColNames;
     }
@@ -251,5 +287,62 @@ public class IndexColumnNames {
      */
     public List<String> getIndexPkColNames() {
         return indexPkColNames;
+    }
+
+    public List<String> getDataColNamesForSkipScan() {
+        if (pdataTable.isMultiTenant()) {
+            return dataColNames;
+        } else {
+            return dataColNamesForSkipScan;
+        }
+ //       return dataColNamesForSkipScan;
+    }
+
+    public List<String> getIndexPkColNamesForSkipScan() {
+        if (pdataTable.isMultiTenant()) {
+            return indexPkColNames;
+        } else {
+            return indexPkColNamesForSkipScan;
+        }
+   //     return indexPkColNamesForSkipScan;
+    }
+
+    public List<String> getIndexColNamesForSkipScan() {
+        if (pdataTable.isMultiTenant()) {
+            return indexColNames;
+        } else {
+            return indexColNamesForSkipScan;
+        }
+ //      return indexColNamesForSkipScan;
+    }
+
+    public List<String> getDynamicIndexColsForSkipScan() {
+        if (pdataTable.isMultiTenant()) {
+            return getDynamicIndexCols();
+        }
+        // don't want the column family for dynamic columns
+        List<String> indexSqlTypes = Lists.newArrayList();
+
+        for (String colName : indexColNamesForSkipScan) {
+            indexSqlTypes.add(indexColSqlTypeNamesForSkipScan.get(colName));
+        }
+
+        return getDynamicCols(getUnqualifiedColNames(indexColNamesForSkipScan), indexSqlTypes);
+    }
+
+
+    public List<String> getDynamicDataColsForSkipScan() {
+        if (pdataTable.isMultiTenant()) {
+            return getDynamicDataCols();
+        }
+        // don't want the column family for dynamic columns
+        List<String> dataSqlTypes = Lists.newArrayList();
+
+        for (String colName : dataColNamesForSkipScan) {
+            dataSqlTypes.add(dataColSqlTypeNamesForSkipScan.get(colName));
+        }
+
+        return getDynamicCols(getUnqualifiedColNames(dataColNamesForSkipScan), dataSqlTypes);
+
     }
 }

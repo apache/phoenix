@@ -102,8 +102,10 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     private Properties props;
 
     @Parameterized.Parameters public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
-                "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }, { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2",
+        return Arrays.asList(new Object[][] {
+                {"CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
+                        "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }
+                ,{ "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2",
                 "CREATE INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }, { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2",
                 "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" } });
     }
@@ -165,19 +167,23 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     @Test public void testScrutinyOnArrayTypes() throws Exception {
         String dataTableName = generateUniqueName();
         String indexTableName = generateUniqueName();
-        String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, VB VARBINARY)";
+        String
+                dataTableDDL =
+                "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, VB VARBINARY)";
         String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (VB)";
         String upsertData = "UPSERT INTO %s VALUES (?, ?, ?)";
         String upsertIndex = "UPSERT INTO %s (\"0:NAME\", \":ID\", \"0:VB\") values (?,?,?)";
 
-        try (Connection conn =
-                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(String.format(dataTableDDL, dataTableName));
-            conn.createStatement().execute(String.format(indexTableDDL, indexTableName, dataTableName));
+            conn.createStatement()
+                    .execute(String.format(indexTableDDL, indexTableName, dataTableName));
             // insert two rows
-            PreparedStatement upsertDataStmt = conn.prepareStatement(String.format(upsertData, dataTableName));
-            upsertRow(upsertDataStmt, 1, "name-1", new byte[] {127, 0, 0, 1});
-            upsertRow(upsertDataStmt, 2, "name-2", new byte[] {127, 1, 0, 5});
+            PreparedStatement
+                    upsertDataStmt =
+                    conn.prepareStatement(String.format(upsertData, dataTableName));
+            upsertRow(upsertDataStmt, 1, "name-1", new byte[] { 127, 0, 0, 1 });
+            upsertRow(upsertDataStmt, 2, "name-2", new byte[] { 127, 1, 0, 5 });
             conn.commit();
 
             List<Job> completedJobs = runScrutiny(null, dataTableName, indexTableName);
@@ -188,13 +194,15 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
             assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
 
             // Now insert a different varbinary row
-            upsertRow(upsertDataStmt, 3, "name-3", new byte[] {1, 1, 1, 1});
+            upsertRow(upsertDataStmt, 3, "name-3", new byte[] { 1, 1, 1, 1 });
             conn.commit();
 
-            PreparedStatement upsertIndexStmt = conn.prepareStatement(String.format(upsertIndex, indexTableName));
+            PreparedStatement
+                    upsertIndexStmt =
+                    conn.prepareStatement(String.format(upsertIndex, indexTableName));
             upsertIndexStmt.setString(1, "name-3");
             upsertIndexStmt.setInt(2, 3);
-            upsertIndexStmt.setBytes(3, new byte[] {0, 0, 0, 1});
+            upsertIndexStmt.setBytes(3, new byte[] { 0, 0, 0, 1 });
             upsertIndexStmt.executeUpdate();
             conn.commit();
 
@@ -481,9 +489,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
             IOUtils.closeQuietly(fsDataInputStream);
         }
         Iterator<String> lineIterator = lines.iterator();
-        assertEquals("[2, name-2, " + new Timestamp(testTime).toString() + ", 95123]\t[2, name-2, "
-                + new Timestamp(testTime).toString() + ", 9999]", lineIterator.next());
-        assertEquals("[3, name-3, " + new Timestamp(testTime).toString() + ", 95123]\tTarget row not found",
+        assertEquals("[name-2, " + new Timestamp(testTime).toString() + ", 2, 95123]\t[name-2, "
+                + new Timestamp(testTime).toString() + ", 2, 9999]", lineIterator.next());
+        assertEquals("[name-3, " + new Timestamp(testTime).toString() + ", 3, 95123]\tTarget row not found",
                 lineIterator.next());
 
     }
@@ -627,10 +635,10 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     }
 
     private void generateUniqueTableNames() {
-        schemaName = generateUniqueName();
-        dataTableName = generateUniqueName();
+        schemaName = "S_" + generateUniqueName();
+        dataTableName = "D_" + generateUniqueName();
         dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        indexTableName = generateUniqueName();
+        indexTableName = "I_" + generateUniqueName();
         indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
     }
 
@@ -648,7 +656,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         conn.commit();
     }
 
-    private String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
+    private static String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
             SourceTable sourceTable, boolean outputInvalidRows, OutputFormat outputFormat, Long maxOutputRows) {
         return getArgValues(schemaName, dataTable, indxTable, batchSize, sourceTable,
                 outputInvalidRows, outputFormat, maxOutputRows, null, Long.MAX_VALUE);
@@ -659,17 +667,17 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
                 false, null, null, null, scrutinyTS));
     }
 
-    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName)
+    private static List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName)
             throws Exception {
         return runScrutiny(schemaName, dataTableName, indexTableName, null, null);
     }
 
-    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
+    private static List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
             Long batchSize) throws Exception {
         return runScrutiny(schemaName, dataTableName, indexTableName, batchSize, null);
     }
 
-    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
+    public static List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
             Long batchSize, SourceTable sourceTable) throws Exception {
         final String[]
                 cmdArgs =
@@ -694,7 +702,6 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         stmt.setInt(index++, id);
         stmt.setString(index++, name);
         stmt.setBytes(index++, val);
-        stmt.executeUpdate();
     }
 
     private int deleteRow(String fullTableName, String whereCondition) throws SQLException {
