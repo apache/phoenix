@@ -18,7 +18,9 @@
 package org.apache.phoenix.mapreduce.util;
 
 import org.apache.phoenix.schema.PTable;
+import org.apache.hadoop.conf.Configuration;
+
 
 public interface MultiViewJobStatusTracker {
-    void updateJobStatus(PTable view, long numberOfDeletedRows, int state);
+    void updateJobStatus(PTable view, long numberOfDeletedRows, int state, Configuration config, long duration);
 }

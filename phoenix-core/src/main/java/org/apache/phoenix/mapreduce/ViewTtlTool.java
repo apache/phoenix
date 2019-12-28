@@ -27,33 +27,20 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobPriority;
-import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.mapreduce.util.*;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 
@@ -298,98 +285,6 @@ public class ViewTtlTool extends Configured implements Tool {
         }
     }
 
-    public static class ViewTTLDeleteJobMapper
-            extends Mapper<NullWritable, ViewInfoTracker, NullWritable, NullWritable> {
-        private MultiViewJobStatusTracker multiViewJobStatusTracker;
-
-        @Override
-        protected void map(NullWritable key, ViewInfoTracker value,
-                           Context context) {
-            final Configuration config = context.getConfiguration();
-
-            if (this.multiViewJobStatusTracker == null) {
-                try {
-                    Class<?> defaultViewDeletionTrackerClass = DefaultMultiViewJobStatusTracker.class;
-                    if (config.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_MAPPER_TRACKER_CLAZZ) != null) {
-                        defaultViewDeletionTrackerClass = Class.forName(
-                                config.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_MAPPER_TRACKER_CLAZZ));
-                    }
-                    this.multiViewJobStatusTracker = (MultiViewJobStatusTracker) defaultViewDeletionTrackerClass.newInstance();
-                } catch (Exception e) {
-                    LOGGER.debug(e.getStackTrace().toString());
-                }
-            }
-
-            LOGGER.debug(String.format("Deleting from view %s, TenantID %s, and TTL value: %d",
-                    value.getViewName(), value.getTenantId(), value.getViewTtl()));
-
-            try (PhoenixConnection connection =(PhoenixConnection) ConnectionUtil.getInputConnection(config) ){
-                if (value.getTenantId() != null && !value.getTenantId().equals("NULL")) {
-                    try (PhoenixConnection tenantConnection = (PhoenixConnection)PhoenixViewTtlUtil.
-                            buildTenantConnection(connection.getURL(), value.getTenantId())) {
-                        deletingExpiredRows(tenantConnection, value);
-                    }
-                } else {
-                    deletingExpiredRows(connection, value);
-                }
-
-            } catch (SQLException e) {
-                LOGGER.error(e.getErrorCode() + e.getSQLState(), e.getStackTrace());
-            }
-        }
-
-        private void deletingExpiredRows(PhoenixConnection connection, ViewInfoTracker value) throws SQLException {
-            PTable view = PhoenixRuntime.getTable(connection, value.getViewName());
-
-            String deleteIfExpiredStatement = "SELECT /*+ NO_INDEX */ count(*) FROM " + value.getViewName();
-            deletingExpiredRows(connection, view, Long.valueOf(value.getViewTtl()),
-                    deleteIfExpiredStatement, value.getTenantId());
-            List<PTable> allIndexesOnView = view.getIndexes();
-
-            for (PTable viewIndexTable : allIndexesOnView) {
-                deleteIfExpiredStatement = "SELECT count(*) FROM " + value.getViewName();
-                deletingExpiredRows(connection, viewIndexTable, Long.valueOf(value.getViewTtl()),
-                        deleteIfExpiredStatement, value.getTenantId());
-            }
-        }
-
-        /*
-         * Each Mapper that receives a MultiPhoenixViewInputSplit will execute a DeleteMutation/Scan
-         *  (With DELETE_TTL_EXPIRED attribute) per view for all the views and view indexes in the split.
-         * For each DeleteMutation, it bounded by the view start and stop keys for the region and
-         *  TTL attributes and Delete Hint.
-         */
-        private void deletingExpiredRows(PhoenixConnection connection, PTable view, long viewTtl,
-                                         String deleteIfExpiredStatement, String tenantId) throws SQLException {
-            final PhoenixStatement statement = new PhoenixStatement(connection);
-
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
-            final Scan scan = queryPlan.getContext().getScan();
-
-            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(view);
-            byte[] emptyColumnName =
-                    view.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                            QueryConstants.EMPTY_COLUMN_BYTES :
-                            view.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.DELETE_VIEW_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.MASK_VIEW_TTL_EXPIRED, PDataType.FALSE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.VIEW_TTL, Bytes.toBytes(viewTtl));
-            PhoenixResultSet rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            pstmt.close();
-            long numberOfDeletedRows = 0;
-            if (rs.next()) {
-                numberOfDeletedRows = rs.getLong(1);
-            }
-            rs.close();
-
-            this.multiViewJobStatusTracker.updateJobStatus(view, numberOfDeletedRows);
-        }
-    }
-
     @Override
     public int run(String[] args) throws Exception {
         connection = null;
@@ -409,7 +304,6 @@ public class ViewTtlTool extends Configured implements Tool {
                 connection.close();
             }
         }
-
         return ret;
     }
 

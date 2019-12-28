@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
+import org.apache.hadoop.mapreduce.JobStatus;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,8 +26,13 @@ import org.slf4j.LoggerFactory;
 public class DefaultMultiViewJobStatusTracker implements MultiViewJobStatusTracker {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultMultiViewJobStatusTracker.class);
 
-    public void updateJobStatus(PTable view, long numberOfDeletedRows, int state) {
-        LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s : %d",
-                view.getTableName(), view.getTenantId(), numberOfDeletedRows));
+    public void updateJobStatus(PTable view, long numberOfDeletedRows, int state, Configuration config, long duration) {
+        if (state == JobStatus.State.SUCCEEDED.getValue()) {
+            LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s : %d, duration : %d.",
+                    view.getTableName(), view.getTenantId(), numberOfDeletedRows, duration));
+        } else {
+            LOGGER.debug(String.format("Job is in state %d for view %s, TenantID %s : %d.",
+                    state, view.getTableName(), view.getTenantId(), numberOfDeletedRows, state));
+        }
     }
 }
