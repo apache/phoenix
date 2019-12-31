@@ -216,6 +216,7 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -752,16 +753,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         });
     }
 
+    /**
+     * Check that the supplied connection properties are set to valid values.
+     * @param info The properties to be validated.
+     * @throws IllegalArgumentException when a property is not set to a valid value.
+     */
+    private void validateConnectionProperties(Properties info) {
+        if (info.get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB) != null) {
+            ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                    info.getProperty(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+        }
+    }
 
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         checkClosed();
         PMetaData metadata = latestMetaData;
         throwConnectionClosedIfNullMetaData();
+        validateConnectionProperties(info);
         metadata = metadata.clone();
         return new PhoenixConnection(this, url, info, metadata);
     }
-
 
     private ColumnFamilyDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
         ColumnFamilyDescriptorBuilder columnDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(family.getFirst());
