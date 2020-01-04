@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end.join;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -57,24 +56,34 @@ public class HashJoinCacheIT extends BaseJoinIT {
         TestUtil.addCoprocessor(conn, SchemaUtil.normalizeFullTableName(realName), InvalidateHashCache.class);
         return realName;
     }
-                
-    @Test
+
+    @Test(expected = HashJoinCacheNotFoundException.class)
     public void testExpiredCache() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, "1");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName1 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-        String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " +
-                tableName1 + " supp RIGHT JOIN " + tableName2 +
-                " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
+        PreparedStatement statement = null;
+        ResultSet rs = null;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName1 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+            String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+            String query =
+              "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM "
+                + tableName1
+                + " supp RIGHT JOIN "
+                + tableName2
+                + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
             rs.next();
+            // should not reach here
             fail("HashJoinCacheNotFoundException was not thrown or incorrectly handled");
-        } catch (HashJoinCacheNotFoundException e) {
-            //Expected exception
+        } finally {
+            if (statement != null) {
+                statement.close();
+            }
+            if (rs != null) {
+                rs.close();
+            }
         }
     }
 
@@ -82,7 +91,8 @@ public class HashJoinCacheIT extends BaseJoinIT {
         public static Random rand= new Random();
         public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
         @Override
-        public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan) throws IOException {
+        public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+              final Scan scan) {
             final HashJoinInfo joinInfo = HashJoinInfo.deserializeHashJoinFromScan(scan);
             if (joinInfo != null) {
                 TenantCache cache = GlobalCache.getTenantCache(c.getEnvironment(), null);
@@ -98,4 +108,65 @@ public class HashJoinCacheIT extends BaseJoinIT {
         }
         
     }
+
+    @Test(expected = HashJoinCacheNotFoundException.class)
+    public void testExpiredCacheWithLeftJoin() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, "1");
+        PreparedStatement statement = null;
+        ResultSet rs = null;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName1 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+            String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+            final String query =
+              "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM "
+                + tableName1
+                + " supp LEFT JOIN "
+                + tableName2
+                + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            rs.next();
+            // should not reach here
+            fail("HashJoinCacheNotFoundException was not thrown");
+        } finally {
+            if (statement != null) {
+                statement.close();
+            }
+            if (rs != null) {
+                rs.close();
+            }
+        }
+    }
+
+    @Test(expected = HashJoinCacheNotFoundException.class)
+    public void testExpiredCacheWithInnerJoin() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, "1");
+        PreparedStatement statement = null;
+        ResultSet rs = null;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName1 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+            String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+            final String query =
+              "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM "
+                + tableName1
+                + " supp INNER JOIN "
+                + tableName2
+                + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            rs.next();
+            // should not reach here
+            fail("HashJoinCacheNotFoundException was not thrown as expected");
+        } finally {
+            if (statement != null) {
+                statement.close();
+            }
+            if (rs != null) {
+                rs.close();
+            }
+        }
+    }
+
 }
