@@ -443,7 +443,7 @@ public class ServerCacheClient {
                         lastThrowable);
             }
         } finally {
-            cacheUsingTableMap.remove(cacheId);
+            cacheUsingTableMap.remove(Bytes.mapKey(cacheId));
             Closeables.closeQuietly(iterateOverTable);
         }
     }
