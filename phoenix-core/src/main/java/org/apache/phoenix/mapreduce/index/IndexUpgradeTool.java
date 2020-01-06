@@ -648,17 +648,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
 
         if (hasViewIndex) {
-            String viewSql = "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
-                    + "SYSTEM.CATALOG "
-                    + "WHERE COLUMN_FAMILY = \'" + dataTableFullName + "\' "
-                    + (!StringUtil.EMPTY_STRING.equals(schemaName) ? "AND TABLE_SCHEM = \'"
-                    + schemaName + "\' " : "")
-                    + "AND LINK_TYPE = "
-                    + PTable.LinkType.PHYSICAL_TABLE.getSerializedValue();
+            String viewSql = getViewSql(tableName, schemaName);
 
             ResultSet rs = conn.createStatement().executeQuery(viewSql);
             while (rs.next()) {
-                String viewName = rs.getString(1);
+                String viewFullName = rs.getString(1);
+                String viewName = SchemaUtil.getTableNameFromFullName(viewFullName);
                 String tenantId = rs.getString(2);
                 ArrayList<String> viewIndexes = findViewIndexes(conn, schemaName, viewName,
                         tenantId);
@@ -673,16 +668,21 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return indexInfos;
     }
 
+    @VisibleForTesting
+    public String getViewSql(String tableName, String schemaName) {
+       return "SELECT DISTINCT COLUMN_FAMILY, TENANT_ID FROM "
+                + "SYSTEM.CHILD_LINK "
+                + "WHERE TABLE_NAME = \'" + tableName + "\'"
+                + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"
+                + schemaName + "\'" : "")
+                + " AND LINK_TYPE = "
+                + PTable.LinkType.CHILD_TABLE.getSerializedValue();
+    }
+
     private ArrayList<String> findViewIndexes(Connection conn, String schemaName, String viewName,
             String tenantId) throws SQLException {
 
-        String viewIndexesSql = "SELECT DISTINCT COLUMN_FAMILY FROM "
-                + "SYSTEM.CATALOG "
-                + "WHERE TABLE_NAME = \'" + viewName + "\'"
-                + (!StringUtil.EMPTY_STRING.equals(schemaName) ? "AND TABLE_SCHEM = \'"
-                + schemaName + "\' " : "")
-                + "AND LINK_TYPE = " + PTable.LinkType.INDEX_TABLE.getSerializedValue()
-                + (tenantId != null ? " AND TENANT_ID = \'" + tenantId + "\'" : "");
+        String viewIndexesSql = getViewIndexesSql(viewName, schemaName, tenantId);
         ArrayList<String> viewIndexes = new ArrayList<>();
         ResultSet rs = conn.createStatement().executeQuery(viewIndexesSql);
         while (rs.next()) {
@@ -690,6 +690,17 @@ public class IndexUpgradeTool extends Configured implements Tool {
             viewIndexes.add(viewIndexName);
         }
         return viewIndexes;
+    }
+
+    @VisibleForTesting
+    public String getViewIndexesSql(String viewName, String schemaName, String tenantId) {
+        return "SELECT DISTINCT COLUMN_FAMILY FROM "
+                + "SYSTEM.CATALOG "
+                + "WHERE TABLE_NAME = \'" + viewName + "\'"
+                + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"
+                + schemaName + "\'" : "")
+                + " AND LINK_TYPE = " + PTable.LinkType.INDEX_TABLE.getSerializedValue()
+                + (tenantId != null ? " AND TENANT_ID = \'" + tenantId + "\'" : "");
     }
 
     private class IndexInfo {
