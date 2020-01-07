@@ -49,9 +49,11 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
@@ -72,6 +74,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -87,6 +90,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
@@ -113,6 +117,23 @@ import com.google.common.collect.Lists;
  *
  */
 public class IndexTool extends Configured implements Tool {
+    public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
+    public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
+    public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+    public final static String DATA_TABLE_NAME = "DTName";
+    public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
+    public static String INDEX_TABLE_NAME = "ITName";
+    public final static byte[] INDEX_TABLE_NAME_BYTES = Bytes.toBytes(INDEX_TABLE_NAME);
+    public static String DATA_TABLE_ROW_KEY = "DTRowKey";
+    public final static byte[] DATA_TABLE_ROW_KEY_BYTES = Bytes.toBytes(DATA_TABLE_ROW_KEY);
+    public static String INDEX_TABLE_ROW_KEY = "ITRowKey";
+    public final static byte[] INDEX_TABLE_ROW_KEY_BYTES = Bytes.toBytes(INDEX_TABLE_ROW_KEY);
+    public static String DATA_TABLE_TS = "DTTS";
+    public final static byte[] DATA_TABLE_TS_BYTES = Bytes.toBytes(DATA_TABLE_TS);
+    public static String INDEX_TABLE_TS = "ITTS";
+    public final static byte[] INDEX_TABLE_TS_BYTES = Bytes.toBytes(INDEX_TABLE_TS);
+    public static String ERROR_MESSAGE = "Error";
+    public final static byte[] ERROR_MESSAGE_BYTES = Bytes.toBytes(ERROR_MESSAGE);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
@@ -120,6 +141,8 @@ public class IndexTool extends Configured implements Tool {
     private String dataTable;
     private String indexTable;
     private boolean isPartialBuild;
+    private boolean verify;
+    private boolean onlyVerify;
     private String qDataTable;
     private String qIndexTable;
     private boolean useSnapshot;
@@ -144,6 +167,13 @@ public class IndexTool extends Configured implements Tool {
     
     private static final Option DIRECT_API_OPTION = new Option("direct", "direct", false,
             "This parameter is deprecated. Direct mode will be used whether it is set or not. Keeping it for backwards compatibility.");
+
+    private static final Option VERIFY_OPTION = new Option("v", "verify", false,
+            "To verify every index row is rebuilt correctly");
+
+    private static final Option ONLY_VERIFY_OPTION = new Option("ov", "only-verify", false,
+            "To verify every data table row has the corresponding index row with the correct content " +
+            "(without building the index table). If the verify option is set then the only-verify option will be ignored");
 
     private static final double DEFAULT_SPLIT_SAMPLING_RATE = 10.0;
 
@@ -190,6 +220,8 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(INDEX_TABLE_OPTION);
         options.addOption(PARTIAL_REBUILD_OPTION);
         options.addOption(DIRECT_API_OPTION);
+        options.addOption(VERIFY_OPTION);
+        options.addOption(ONLY_VERIFY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
@@ -510,7 +542,12 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
-
+            if (verify) {
+                PhoenixConfigurationUtil.setVerifyIndex(configuration, true);
+            }
+            else if (onlyVerify) {
+                PhoenixConfigurationUtil.setOnlyVerifyIndex(configuration, true);
+            }
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
@@ -573,6 +610,20 @@ public class IndexTool extends Configured implements Tool {
         return job;
     }
 
+    private void createIndexToolOutputTable(Connection connection) throws Exception {
+        ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
+        Admin admin = queryServices.getAdmin();
+        if (admin.tableExists(TableName.valueOf(OUTPUT_TABLE_NAME))) {
+            return;
+        }
+        HTableDescriptor tableDescriptor = new
+                HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
+        tableDescriptor.setValue(ColumnFamilyDescriptorBuilder.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
+        HColumnDescriptor columnDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY);
+        tableDescriptor.addFamily(columnDescriptor);
+        admin.createTable(tableDescriptor);
+    }
+
     @Override
     public int run(String[] args) throws Exception {
         Connection connection = null;
@@ -599,6 +650,8 @@ public class IndexTool extends Configured implements Tool {
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
+            verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
+            onlyVerify = cmdLine.hasOption(ONLY_VERIFY_OPTION.getOpt());
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
                 pDataTable = PhoenixRuntime.getTableNoCache(tempConn, qDataTable);
@@ -613,6 +666,7 @@ public class IndexTool extends Configured implements Tool {
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
+            createIndexToolOutputTable(connection);
             
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {

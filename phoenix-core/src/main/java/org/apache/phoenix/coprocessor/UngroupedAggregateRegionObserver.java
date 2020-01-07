@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
+import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -39,12 +42,15 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -63,6 +69,8 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -89,6 +97,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
+import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -98,9 +107,18 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
+import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
+import org.apache.phoenix.hbase.index.parallel.Task;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
+import org.apache.phoenix.hbase.index.parallel.TaskRunner;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
+import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
+import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -114,6 +132,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -143,6 +162,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -257,7 +277,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
-    private void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
+    public void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
         try {
             commitBatch(region, localRegionMutations, blockingMemstoreSize);
         } catch (IOException e) {
@@ -337,7 +357,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * a high chance that flush might not proceed and memstore won't be freed up.
      * @throws IOException
      */
-    private void checkForRegionClosing() throws IOException {
+    public void checkForRegionClosing() throws IOException {
         synchronized (lock) {
             if(isRegionClosingOrSplitting) {
                 lock.notifyAll();
@@ -394,7 +414,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private long getBlockingMemstoreSize(Region region, Configuration conf) {
+    public static long getBlockingMemstoreSize(Region region, Configuration conf) {
         long flushSize = region.getTableDescriptor().getMemStoreFlushSize();
 
         if (flushSize <= 0) {
@@ -426,7 +446,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 return collectStats(s, statsCollector, region, scan, env.getConfiguration());
             }
         } else if (ScanUtil.isIndexRebuild(scan)) {
-            return rebuildIndices(s, region, scan, env.getConfiguration());
+            return rebuildIndices(s, region, scan, env);
         }
 
         PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
@@ -1088,226 +1108,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throw new RuntimeException(e);
         }
     }
-    private class IndexRebuildRegionScanner extends BaseRegionScanner {
-        private long pageSizeInRows = Long.MAX_VALUE;
-        private boolean hasMore;
-        private final int maxBatchSize;
-        private MutationList mutations;
-        private final long maxBatchSizeBytes;
-        private final long blockingMemstoreSize;
-        private final byte[] clientVersionBytes;
-        private List<Cell> results = new ArrayList<Cell>();
-        private byte[] indexMetaData;
-        private boolean useProto = true;
-        private Scan scan;
-        private RegionScanner innerScanner;
-        private Region region;
-        private IndexMaintainer indexMaintainer;
-        private byte[] indexRowKey = null;
 
-        IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
-                                   final Configuration config) {
-            super(innerScanner);
-            if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
-                pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
-                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
-            }
-
-            maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            mutations = new MutationList(maxBatchSize);
-            maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
-                    QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
-            blockingMemstoreSize = getBlockingMemstoreSize(region, config);
-            clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
-            indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-            if (indexMetaData == null) {
-                useProto = false;
-                indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
-            }
-            if (!scan.isRaw()) {
-                List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
-                indexMaintainer = maintainers.get(0);
-            }
-            this.scan = scan;
-            this.innerScanner = innerScanner;
-            this.region = region;
-            indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
-        }
-
-        @Override
-        public RegionInfo getRegionInfo() {
-            return region.getRegionInfo();
-        }
-
-        @Override
-        public boolean isFilterDone() { return hasMore; }
-
-        @Override
-        public void close() throws IOException { innerScanner.close(); }
-
-        private void setMutationAttributes(Mutation m, byte[] uuidValue) {
-            m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
-            m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-            m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                    BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
-            m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
-            // Since we're replaying existing mutations, it makes no sense to write them to the wal
-            m.setDurability(Durability.SKIP_WAL);
-        }
-
-        private Delete generateDeleteMarkers(List<Cell> row) {
-            Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
-            if (row.size() == allColumns.size() + 1) {
-                // We have all the columns for the index table plus the empty column. So, no delete marker is needed
-                return null;
-            }
-            Set<ColumnReference> includedColumns = Sets.newLinkedHashSetWithExpectedSize(row.size());
-            long ts = 0;
-            for (Cell cell : row) {
-                includedColumns.add(new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell)));
-                if (ts < cell.getTimestamp()) {
-                    ts = cell.getTimestamp();
-                }
-            }
-            byte[] rowKey;
-            Delete del = null;
-            for (ColumnReference column : allColumns) {
-                if (!includedColumns.contains(column)) {
-                    if (del == null) {
-                        Cell cell = row.get(0);
-                        rowKey = CellUtil.cloneRow(cell);
-                        del = new Delete(rowKey);
-                    }
-                    del.addColumns(column.getFamily(), column.getQualifier(), ts);
-                }
-            }
-            return del;
-        }
-
-        private byte[] commitIfReady(byte[] uuidValue) throws IOException {
-            if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                checkForRegionClosing();
-                commitBatchWithRetries(region, mutations, blockingMemstoreSize);
-                uuidValue = ServerCacheClient.generateId();
-                mutations.clear();
-            }
-            return uuidValue;
-        }
-
-        private boolean checkIndexRow(final byte[] indexRowKey, final Put put) throws IOException {
-            ValueGetter getter = new ValueGetter() {
-                final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
-
-                @Override
-                public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
-                    List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
-                    if (cellList == null || cellList.isEmpty()) {
-                        return null;
-                    }
-                    Cell cell = cellList.get(0);
-                    valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                    return valuePtr;
-                }
-
-                @Override
-                public byte[] getRowKey() {
-                    return put.getRow();
-                }
-            };
-            byte[] builtIndexRowKey = indexMaintainer.buildRowKey(getter, new ImmutableBytesWritable(put.getRow()),
-                    null, null, HConstants.LATEST_TIMESTAMP);
-            if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
-                    indexRowKey, 0, indexRowKey.length) != 0) {
-                return false;
-            }
-            return true;
-        }
-
-        @Override
-        public boolean next(List<Cell> results) throws IOException {
-            int rowCount = 0;
-            region.startRegionOperation();
-            try {
-                byte[] uuidValue = ServerCacheClient.generateId();
-                synchronized (innerScanner) {
-                    do {
-                        List<Cell> row = new ArrayList<Cell>();
-                        hasMore = innerScanner.nextRaw(row);
-                        if (!row.isEmpty()) {
-                            Put put = null;
-                            Delete del = null;
-                            for (Cell cell : row) {
-                                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
-                                    if (put == null) {
-                                        put = new Put(CellUtil.cloneRow(cell));
-                                        setMutationAttributes(put, uuidValue);
-                                        mutations.add(put);
-                                    }
-                                    put.add(cell);
-                                } else {
-                                    if (del == null) {
-                                        del = new Delete(CellUtil.cloneRow(cell));
-                                        setMutationAttributes(del, uuidValue);
-                                        mutations.add(del);
-                                    }
-                                    del.addDeleteMarker(cell);
-                                }
-                            }
-                            uuidValue = commitIfReady(uuidValue);
-                            if (!scan.isRaw()) {
-                                Delete deleteMarkers = generateDeleteMarkers(row);
-                                if (deleteMarkers != null) {
-                                    setMutationAttributes(deleteMarkers, uuidValue);
-                                    mutations.add(deleteMarkers);
-                                    uuidValue = commitIfReady(uuidValue);
-                                }
-                            }
-                            if (indexRowKey != null) {
-                                // GlobalIndexChecker passed the index row key. This is to build a single index row.
-                                // Check if the data table row we have just scanned matches with the index row key.
-                                // If not, there is no need to build the index row from this data table row,
-                                // and just return zero row count.
-                                if (checkIndexRow(indexRowKey, put)) {
-                                    rowCount = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
-                                }
-                                else {
-                                    rowCount = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
-                                }
-                                break;
-                            }
-                            rowCount++;
-                        }
-
-                    } while (hasMore && rowCount < pageSizeInRows);
-                    if (!mutations.isEmpty()) {
-                        checkForRegionClosing();
-                        commitBatchWithRetries(region, mutations, blockingMemstoreSize);
-                    }
-                }
-            } catch (IOException e) {
-                hasMore = false;
-                LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
-                throw e;
-            } finally {
-                region.closeRegionOperation();
-            }
-            byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
-            final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
-                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
-            results.add(aggKeyValue);
-            return hasMore;
-        }
-
-        @Override
-        public long getMaxResultSize() {
-            return scan.getMaxResultSize();
-        }
-    }
-    
     private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
-            final Configuration config) throws IOException {
+                                         final RegionCoprocessorEnvironment env) throws IOException {
 
-        RegionScanner scanner = new IndexRebuildRegionScanner(innerScanner, region, scan, config);
+        RegionScanner scanner = new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
         return scanner;
     }
     
