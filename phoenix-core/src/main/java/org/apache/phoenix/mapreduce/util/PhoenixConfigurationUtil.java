@@ -147,6 +147,10 @@ public final class PhoenixConfigurationUtil {
 
     public static final String DISABLED_INDEXES = "phoenix.mr.index.disabledIndexes";
 
+    public static final String VERIFY_INDEX = "phoenix.mr.index.verifyIndex";
+
+    public static final String ONLY_VERIFY_INDEX = "phoenix.mr.index.onlyVerifyIndex";
+
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
 
@@ -562,6 +566,16 @@ public final class PhoenixConfigurationUtil {
         configuration.set(DISABLED_INDEXES, indexName);
     }
 
+    public static void setVerifyIndex(Configuration configuration, boolean verify) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(VERIFY_INDEX, verify);
+    }
+
+    public static void setOnlyVerifyIndex(Configuration configuration, boolean verify) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(ONLY_VERIFY_INDEX, verify);
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -685,6 +699,16 @@ public final class PhoenixConfigurationUtil {
     public static String getDisableIndexes(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(DISABLED_INDEXES);
+    }
+
+    public static boolean getVerifyIndex(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(VERIFY_INDEX, false);
+    }
+
+    public static boolean getOnlyVerifyIndex(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(ONLY_VERIFY_INDEX, false);
     }
 
     public static boolean getSplitByStats(final Configuration configuration) {
