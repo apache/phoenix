@@ -52,9 +52,12 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -85,6 +88,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     private static Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1),
             clientProps = Maps.newHashMapWithExpectedSize(1);
+    public static final String
+            VERIFY_COUNT_ASSERT_MESSAGE = "view-index count in system table doesn't match";
 
     private final boolean mutable;
     private final boolean upgrade;
@@ -344,6 +349,34 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             Assert.assertEquals(0, status);
             conn.createStatement().execute("DROP TABLE TEST.NEW_TABLE");
         }
+    }
+
+    @Test
+    public void verifyViewAndViewIndexes() throws SQLException {
+        String tableName = "MOCK1";
+        String schemaName = "TEST";
+        String viewQuery = iut.getViewSql(tableName, schemaName);
+        ResultSet rs = conn.createStatement().executeQuery(viewQuery);
+        int countViews = 0;
+        List<String> views = new ArrayList<>();
+        List<Integer> indexCount = new ArrayList<>();
+        while (rs.next()) {
+            views.add(rs.getString(1));
+            countViews++;
+        }
+        Assert.assertEquals("view count in system table doesn't match", 2, countViews);
+        for (int i=0; i < views.size(); i++) {
+            String viewName = SchemaUtil.getTableNameFromFullName(views.get(i));
+            String viewIndexQuery = iut.getViewIndexesSql(viewName, schemaName, null);
+            rs = conn.createStatement().executeQuery(viewIndexQuery);
+            int indexes = 0;
+            while (rs.next()) {
+                indexes++;
+            }
+            indexCount.add(indexes);
+        }
+        Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 1, (int) indexCount.get(0));
+        Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 2, (int) indexCount.get(1));
     }
 
     @After
