@@ -43,7 +43,7 @@ public class IndexColumnNamesTest extends BaseIndexTest {
 
     @Test
     public void testGetColumnNames() {
-        IndexColumnNames indexColumnNames = new IndexColumnNames(pDataTable, pIndexTable);
+        IndexColumnNames indexColumnNames = new IndexColumnNames(pDataTable, pIndexTable, null);
         assertEquals("[ID, PK_PART2, 0.NAME, 0.ZIP]", indexColumnNames.getDataColNames().toString());
         assertEquals("[:ID, :PK_PART2, 0:NAME, 0:ZIP]", indexColumnNames.getIndexColNames().toString()); //index column names, leading with the data table pk
         assertEquals("[:ID, :PK_PART2, 0:NAME]", indexColumnNames.getIndexPkColNames().toString());
@@ -66,7 +66,7 @@ public class IndexColumnNamesTest extends BaseIndexTest {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), "PRECISION_NAME_TEST"));
         pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), "PRECISION_NAME_IDX_TEST"));
-        IndexColumnNames indexColumnNames = new IndexColumnNames(pDataTable, pIndexTable);
+        IndexColumnNames indexColumnNames = new IndexColumnNames(pDataTable, pIndexTable, null);
         assertEquals("[\"CHAR_TEST\" CHAR(15), \"VARCHAR_TEST\" VARCHAR(1), \"DECIMAL_TEST\" DECIMAL(10,2), \"BINARY_TEST\" BINARY(11), \"VARCHAR_UNSPEC\" VARCHAR, \"DEC_UNSPEC\" DECIMAL]", indexColumnNames.getDynamicDataCols().toString());
         assertEquals("[\":CHAR_TEST\" CHAR(15), \"0:VARCHAR_TEST\" VARCHAR(1), \"0:DECIMAL_TEST\" DECIMAL(10,2), \"0:BINARY_TEST\" BINARY(11), \"0:VARCHAR_UNSPEC\" VARCHAR, \"0:DEC_UNSPEC\" DECIMAL]",
                 indexColumnNames.getDynamicIndexCols().toString());

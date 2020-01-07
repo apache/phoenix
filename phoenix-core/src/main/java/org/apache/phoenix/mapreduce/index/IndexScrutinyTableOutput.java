@@ -234,12 +234,13 @@ public class IndexScrutinyTableOutput {
             SourceTable sourceTable = PhoenixConfigurationUtil.getScrutinySourceTable(conf);
             long scrutinyExecuteTime =
                     PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(conf);
+            String tenantId = conf.get(PhoenixRuntime.TENANT_ID_ATTRIB);
             SourceTargetColumnNames columnNames =
                     SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                             ? new DataSourceColNames(pdataTable,
-                                    pindexTable)
+                                    pindexTable, tenantId)
                             : new IndexSourceColNames(pdataTable,
-                                    pindexTable);
+                                    pindexTable, tenantId);
 
             Counters counters = job.getCounters();
             int index = 1;

@@ -773,8 +773,9 @@ public class IndexTool extends Configured implements Tool {
                 return; // do nothing if # of regions is too low
             }
         }
+        String tenantId = configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB);
         // build a tablesample query to fetch index column values from the data table
-        DataSourceColNames colNames = new DataSourceColNames(pDataTable, pIndexTable);
+        DataSourceColNames colNames = new DataSourceColNames(pDataTable, pIndexTable, tenantId);
         String qTableSample = String.format(qDataTable + " TABLESAMPLE(%.2f)", samplingRate);
         List<String> dataColNames = colNames.getDataColNames();
         final String dataSampleQuery =

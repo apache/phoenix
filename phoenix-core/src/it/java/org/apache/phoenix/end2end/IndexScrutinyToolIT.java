@@ -567,7 +567,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         PTable pindexTable = PhoenixRuntime.getTable(conn, indexTableFullName);
         SourceTargetColumnNames
                 columnNames =
-                new SourceTargetColumnNames.DataSourceColNames(pdataTable, pindexTable);
+                new SourceTargetColumnNames.DataSourceColNames(pdataTable, pindexTable, null);
         return columnNames;
     }
 

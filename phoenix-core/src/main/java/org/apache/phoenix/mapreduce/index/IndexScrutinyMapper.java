@@ -115,6 +115,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     PhoenixConfigurationUtil.getScrutinyIndexTableName(configuration);
             final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
 
+            String tenantId = configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB);
             // set the target table based on whether we're running the MR over the data or index
             // table
             SourceTable sourceTable =
@@ -122,9 +123,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             SourceTargetColumnNames columnNames =
                     SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                             ? new SourceTargetColumnNames.DataSourceColNames(pdataTable,
-                                    pindexTable)
+                                    pindexTable, tenantId)
                             : new SourceTargetColumnNames.IndexSourceColNames(pdataTable,
-                                    pindexTable);
+                                    pindexTable, tenantId);
             qSourceTable = columnNames.getQualifiedSourceTableName();
             qTargetTable = columnNames.getQualifiedTargetTableName();
 

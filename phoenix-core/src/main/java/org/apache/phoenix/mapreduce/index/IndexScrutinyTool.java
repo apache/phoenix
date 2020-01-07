@@ -266,14 +266,15 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             // set CURRENT_SCN for our scan so that incoming writes don't throw off scrutiny
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE, Long.toString(ts));
+            String tenantId = configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB);
 
             // set the source table to either data or index table
             SourceTargetColumnNames columnNames =
                     SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                             ? new SourceTargetColumnNames.DataSourceColNames(pdataTable,
-                                    pindexTable)
+                                    pindexTable, tenantId)
                             : new SourceTargetColumnNames.IndexSourceColNames(pdataTable,
-                                    pindexTable);
+                                    pindexTable, tenantId);
             String qSourceTable = columnNames.getQualifiedSourceTableName();
 
             List<String> sourceColumnNames = columnNames.getSourceColNamesForSkipScan();

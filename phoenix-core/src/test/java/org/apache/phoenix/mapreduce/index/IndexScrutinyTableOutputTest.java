@@ -43,7 +43,7 @@ public class IndexScrutinyTableOutputTest extends BaseIndexTest {
     @Test
     public void testGetSqlQueryAllInvalidRows() throws SQLException {
         SourceTargetColumnNames columnNames =
-                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable);
+                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable, null);
         String sqlStr =
                 IndexScrutinyTableOutput.getSqlQueryAllInvalidRows(conn, columnNames,
                     SCRUTINY_TIME_MILLIS);
@@ -54,7 +54,7 @@ public class IndexScrutinyTableOutputTest extends BaseIndexTest {
     @Test
     public void testGetSqlQueryMissingTargetRows() throws SQLException {
         SourceTargetColumnNames columnNames =
-                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable);
+                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable, null);
         String query =
                 IndexScrutinyTableOutput.getSqlQueryMissingTargetRows(conn, columnNames,
                     SCRUTINY_TIME_MILLIS);
@@ -65,7 +65,7 @@ public class IndexScrutinyTableOutputTest extends BaseIndexTest {
     @Test
     public void testGetSqlQueryBadCoveredColVal() throws SQLException {
         SourceTargetColumnNames columnNames =
-                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable);
+                new SourceTargetColumnNames.DataSourceColNames(pDataTable, pIndexTable, null);
         String query =
                 IndexScrutinyTableOutput.getSqlQueryBadCoveredColVal(conn, columnNames,
                     SCRUTINY_TIME_MILLIS);
@@ -75,7 +75,7 @@ public class IndexScrutinyTableOutputTest extends BaseIndexTest {
 
     @Test
     public void testGetOutputTableUpsert() throws Exception {
-        IndexColumnNames columnNames = new IndexColumnNames(pDataTable, pIndexTable);
+        IndexColumnNames columnNames = new IndexColumnNames(pDataTable, pIndexTable, null);
         String outputTableUpsert =
                 IndexScrutinyTableOutput.constructOutputTableUpsert(
                     columnNames.getDynamicDataCols(), columnNames.getDynamicIndexCols(), conn);

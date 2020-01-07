@@ -17,6 +17,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.mapreduce.Counters;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -41,6 +43,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
@@ -73,7 +77,7 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
     private long testTime;
     private Properties props;
 
-    private static final Log LOG = LogFactory.getLog(IndexScrutinyToolPerformanceIT.class);
+    private static final Log LOGGER = LogFactory.getLog(IndexScrutinyToolPerformanceIT.class);
     @Parameterized.Parameters public static Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(15);
         list.add(new Object[] {
@@ -82,6 +86,12 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
         list.add(new Object[] {
                 "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
                 null, "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" });
+        list.add(new Object[] {
+                "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
+                null, "CREATE INDEX %s ON %s (NAME, ID, ZIP, EMPLOYER, EMPLOY_DATE)" });
+        list.add(new Object[] {
+                "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
+                null, "CREATE INDEX %s ON %s (NAME, ZIP, EMPLOY_DATE, EMPLOYER)" });
         list.add(new Object[] {
                 "CREATE TABLE %s (ID INTEGER NOT NULL, NAME VARCHAR NOT NULL, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR CONSTRAINT PK_1 PRIMARY KEY (ID, NAME)) ",
                 null, "CREATE INDEX %s ON %s (EMPLOY_DATE) INCLUDE (ZIP)" });
@@ -95,11 +105,17 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
                 "CREATE TABLE %s (COL1 VARCHAR(15) NOT NULL,ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK_1 PRIMARY KEY (COL1, ID)) MULTI_TENANT=true",
                 null, "CREATE INDEX %s ON %s (NAME) " });
         list.add(new Object[] {
+                "CREATE TABLE %s (COL1 VARCHAR(15) NOT NULL,ID INTEGER NOT NULL, NAME VARCHAR NOT NULL, ZIP INTEGER CONSTRAINT PK_1 PRIMARY KEY (COL1, ID, NAME)) MULTI_TENANT=true",
+                null, "CREATE INDEX %s ON %s (ZIP) " });
+        list.add(new Object[] {
                 "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
                 "CREATE VIEW %s AS SELECT * FROM %s", "CREATE INDEX %s ON %s (NAME) " });
-//        list.add(new Object[] {
-//                "CREATE TABLE %s (COL1 VARCHAR(15) NOT NULL,ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK_1 PRIMARY KEY (COL1, ID)) MULTI_TENANT=true",
-//                "CREATE VIEW %s AS SELECT * FROM %s", "CREATE INDEX %s ON %s (NAME) " });
+        list.add(new Object[] {
+                "CREATE TABLE %s (COL1 VARCHAR(15) NOT NULL,ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK_1 PRIMARY KEY (COL1, ID)) MULTI_TENANT=true",
+                "CREATE VIEW %s AS SELECT * FROM %s", "CREATE INDEX %s ON %s (NAME) " });
+        list.add(new Object[] {
+                "CREATE TABLE %s (COL1 VARCHAR(15) NOT NULL,ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER CONSTRAINT PK_1 PRIMARY KEY (COL1, ID)) MULTI_TENANT=true",
+                null, "CREATE INDEX %s  ON %s (NAME, ID, ZIP) " });
         return list;
     }
 
@@ -112,7 +128,8 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
     /**
      * Create the test data and index tables
      */
-    @Before public void setup() throws SQLException {
+    @Before
+    public void setup() throws SQLException {
         generateUniqueTableNames();
         createTestTable(getUrl(), String.format(dataTableDdl, dataTableFullName));
         if (!Strings.isNullOrEmpty(viewDdl)) {
@@ -132,7 +149,8 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
 
     }
 
-    @After public void teardown() throws SQLException {
+    @After
+    public void teardown() throws SQLException {
         if (conn != null) {
             conn.close();
         }
@@ -156,15 +174,24 @@ public class IndexScrutinyToolPerformanceIT extends IndexScrutinyToolBaseIT {
             conn.commit();
         }
 
-        IndexScrutinyToolIT.runScrutiny(schemaName, baseTableName,
-                indexTableName, null, SourceTable.INDEX_TABLE_SOURCE);
+        List<Job> completedJobs = IndexScrutinyToolIT.runScrutiny(schemaName, baseTableName,
+                indexTableName, null, SourceTable.DATA_TABLE_SOURCE);
         PreparedStatement targetStmt = IndexScrutinyTool.getTargetTableQueryForScrutinyTool();
         assertSkipScanFilter(targetStmt);
+        Job job = completedJobs.get(0);
+        Counters counters = job.getCounters();
+        assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
+        assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
 
-        IndexScrutinyToolIT.runScrutiny(schemaName, baseTableName,
-                indexTableName, null, SourceTable.DATA_TABLE_SOURCE);
+        completedJobs = IndexScrutinyToolIT.runScrutiny(schemaName, baseTableName,
+                indexTableName, null, SourceTable.INDEX_TABLE_SOURCE);
         targetStmt = IndexScrutinyTool.getTargetTableQueryForScrutinyTool();
         assertSkipScanFilter(targetStmt);
+
+        job = completedJobs.get(0);
+        counters = job.getCounters();
+        assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
+        assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
     }
 
     private void assertSkipScanFilter(PreparedStatement targetStmt) throws SQLException {

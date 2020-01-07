@@ -74,8 +74,8 @@ public interface SourceTargetColumnNames {
          * @param pdataTable the data table
          * @param pindexTable the index table for the data table
          */
-        public DataSourceColNames(PTable pdataTable, PTable pindexTable) {
-            super(pdataTable, pindexTable);
+        public DataSourceColNames(PTable pdataTable, PTable pindexTable, String tenantId) {
+            super(pdataTable, pindexTable, tenantId);
         }
 
         @Override
@@ -135,7 +135,7 @@ public interface SourceTargetColumnNames {
 
         @Override
         public List<String> getCastedTargetColNamesForSkipScan() {
-            return getCastedColumnNames(getIndexColNamesForSkipScan(), indexColSqlTypeNamesForSkipScan);
+            return getCastedColumnNames(getIndexColNamesForSkipScan(), dataColSqlTypeNames);
         }
 
         @Override
@@ -173,8 +173,8 @@ public interface SourceTargetColumnNames {
          * @param pdataTable the data table
          * @param pindexTable the index table for the data table
          */
-        public IndexSourceColNames(PTable pdataTable, PTable pindexTable) {
-            super(pdataTable, pindexTable);
+        public IndexSourceColNames(PTable pdataTable, PTable pindexTable, String tenantId) {
+            super(pdataTable, pindexTable, tenantId);
         }
 
         @Override

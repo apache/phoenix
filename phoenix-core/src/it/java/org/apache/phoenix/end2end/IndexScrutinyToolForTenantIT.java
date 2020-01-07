@@ -70,9 +70,9 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
      */
     @Before public void setup() throws SQLException {
         tenantId = generateUniqueName();
-        tenantViewName = generateUniqueName();
-        indexNameTenant = generateUniqueName();
-        multiTenantTable = generateUniqueName();
+        tenantViewName = "V_"+ generateUniqueName();
+        indexNameTenant = "I_" + generateUniqueName();
+        multiTenantTable = "D_" + generateUniqueName();
         viewIndexTableName = "_IDX_" + multiTenantTable;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -165,7 +165,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
 
         SourceTargetColumnNames
                 columnNames =
-                new SourceTargetColumnNames.IndexSourceColNames(pDataTable, pIndexTable);
+                new SourceTargetColumnNames.IndexSourceColNames(pDataTable, pIndexTable, null);
         String targetPksCsv = Joiner.on(",").join(SchemaUtil.getEscapedFullColumnNames(columnNames.getTargetPkColNames()));
         String
                 selectQuery =
