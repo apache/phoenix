@@ -76,6 +76,7 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
@@ -89,9 +90,10 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
@@ -126,7 +128,7 @@ public class MutationState implements SQLCloseable {
     private static final int MAX_COMMIT_RETRIES = 3;
 
     private final PhoenixConnection connection;
-    private final long maxSize;
+    private final int maxSize;
     private final long maxSizeBytes;
     private final long batchSize;
     private final long batchSizeBytes;
@@ -146,12 +148,12 @@ public class MutationState implements SQLCloseable {
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection) {
         this(maxSize, maxSizeBytes, connection, false, null);
     }
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection,
-            PhoenixTransactionContext txContext) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+           PhoenixTransactionContext txContext) {
         this(maxSize, maxSizeBytes, connection, false, txContext);
     }
 
@@ -164,23 +166,24 @@ public class MutationState implements SQLCloseable {
                 .getPhoenixTransactionContext());
     }
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, long sizeOffset) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+           long sizeOffset) {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
     }
 
-    private MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, boolean subTask,
-            PhoenixTransactionContext txContext) {
+    private MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+            boolean subTask, PhoenixTransactionContext txContext) {
         this(maxSize, maxSizeBytes, connection, subTask, txContext, 0);
     }
 
-    private MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, boolean subTask,
-            PhoenixTransactionContext txContext, long sizeOffset) {
+    private MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+            boolean subTask, PhoenixTransactionContext txContext, long sizeOffset) {
         this(maxSize, maxSizeBytes, connection, Maps.<TableRef, MultiRowMutationState> newHashMapWithExpectedSize(5),
                 subTask, txContext);
         this.sizeOffset = sizeOffset;
     }
 
-    MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection,
+    MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
             Map<TableRef, MultiRowMutationState> mutations, boolean subTask, PhoenixTransactionContext txContext) {
         this.maxSize = maxSize;
         this.maxSizeBytes = maxSizeBytes;
@@ -201,8 +204,8 @@ public class MutationState implements SQLCloseable {
         }
     }
 
-    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset, long maxSize,
-            long maxSizeBytes, PhoenixConnection connection) throws SQLException {
+    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
+           int maxSize, long maxSizeBytes, PhoenixConnection connection) throws SQLException {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
         if (!mutations.isEmpty()) {
             this.mutations.put(table, mutations);
@@ -216,7 +219,7 @@ public class MutationState implements SQLCloseable {
         return estimatedSize;
     }
 
-    public long getMaxSize() {
+    public int getMaxSize() {
         return maxSize;
     }
 
@@ -368,7 +371,8 @@ public class MutationState implements SQLCloseable {
         return false;
     }
 
-    public static MutationState emptyMutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+    public static MutationState emptyMutationState(int maxSize, long maxSizeBytes,
+                  PhoenixConnection connection) {
         MutationState state = new MutationState(maxSize, maxSizeBytes, connection,
                 Collections.<TableRef, MultiRowMutationState> emptyMap(), false, null);
         state.sizeOffset = 0;
@@ -377,13 +381,14 @@ public class MutationState implements SQLCloseable {
 
     private void throwIfTooBig() throws SQLException {
         if (numRows > maxSize) {
+            int mutationSize = numRows;
             resetState();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build().buildException();
+            throw new MaxMutationSizeExceededException(maxSize, mutationSize);
         }
         if (estimatedSize > maxSizeBytes) {
+            long mutationSizeByte = estimatedSize;
             resetState();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED).build()
-                    .buildException();
+            throw new MaxMutationSizeBytesExceededException(maxSizeBytes, mutationSizeByte);
         }
     }
 
