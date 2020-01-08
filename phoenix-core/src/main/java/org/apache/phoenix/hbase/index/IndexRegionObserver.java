@@ -763,7 +763,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
       ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = post ? context.postIndexUpdates : context.preIndexUpdates;
       //short circuit, if we don't need to do any work
 
-      if (context == null || indexUpdates.isEmpty()) {
+      if (context == null || indexUpdates == null || indexUpdates.isEmpty()) {
           return;
       }
 
