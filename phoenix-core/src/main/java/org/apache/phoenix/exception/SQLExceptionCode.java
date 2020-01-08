@@ -47,6 +47,8 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Maps;
@@ -478,13 +480,24 @@ public enum SQLExceptionCode {
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
-    
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger" +
             " than maximum allowed number of rows, try upserting rows in smaller batches or " +
-            "using autocommit on for deletes."),
+            "using autocommit on for deletes.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxMutationSizeExceededException(
+                    info.getMaxMutationSize(), info.getMutationSize());
+        }
+    }),
     MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is " +
             "bigger than maximum allowed number of bytes, try upserting rows in smaller batches " +
-            "or using autocommit on for deletes."),
+            "or using autocommit on for deletes.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxMutationSizeBytesExceededException(info.getMaxMutationSizeBytes(),
+                    info.getMutationSizeBytes());
+        }
+    }),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
