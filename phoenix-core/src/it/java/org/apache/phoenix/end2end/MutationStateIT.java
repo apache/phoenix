@@ -366,6 +366,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 e.getErrorCode());
             assertTrue(e.getMessage().contains(
                     SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getMessage()));
+            assertTrue(e.getMessage().contains(
+                    connectionProperties.getProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB)));
         }
 
         // set the max mutation size (bytes) to a low value
@@ -381,6 +383,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 e.getErrorCode());
             assertTrue(e.getMessage().contains(
                     SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getMessage()));
+            assertTrue(e.getMessage().contains(connectionProperties.getProperty
+                    (QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB)));
         }
     }
 
