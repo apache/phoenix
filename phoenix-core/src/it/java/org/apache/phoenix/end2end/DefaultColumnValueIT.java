@@ -393,6 +393,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().contains(table));
         }
 
         dml = "UPSERT INTO " + table + " VALUES (1, 2)";
@@ -401,6 +402,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().contains(table));
         }
 
         dml = "UPSERT INTO " + table + " VALUES (1, 2, 3)";
