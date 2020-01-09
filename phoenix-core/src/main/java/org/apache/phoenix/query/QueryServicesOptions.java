@@ -346,7 +346,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
     //default update cache frequency
-    public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
+    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
     // default system task handling interval in milliseconds
