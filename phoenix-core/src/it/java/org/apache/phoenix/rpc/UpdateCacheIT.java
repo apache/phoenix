@@ -19,8 +19,10 @@ package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
@@ -33,12 +35,14 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -243,5 +247,26 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             }
         }
         assertFalse(rs.next());
+    }
+
+    @Test
+    public void testInvalidConnUpdateCacheFrequencyShouldThrow() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+
+        ArrayList<String> invalidUCF = new ArrayList<>();
+        invalidUCF.add("GIBBERISH");
+        invalidUCF.add("10000.6");
+
+        for (String connLevelUCF : invalidUCF) {
+            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, connLevelUCF);
+            try {
+                DriverManager.getConnection(getUrl(), props);
+                fail();
+            } catch (IllegalArgumentException e) {
+                // expected
+                assertTrue(e.getMessage().contains("Connection's " +
+                        QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+            }
+        }
     }
 }
