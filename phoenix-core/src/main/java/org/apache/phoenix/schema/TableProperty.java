@@ -115,17 +115,32 @@ public enum TableProperty {
     UPDATE_CACHE_FREQUENCY(PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY, true, true, true) {
         @Override
         public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+
             if (value instanceof String) {
                 String strValue = (String) value;
                 if ("ALWAYS".equalsIgnoreCase(strValue)) {
                     return 0L;
-                } else if ("NEVER".equalsIgnoreCase(strValue)) {
+                }
+
+                if ("NEVER".equalsIgnoreCase(strValue)) {
                     return Long.MAX_VALUE;
                 }
-            } else {
-                return value == null ? null : ((Number) value).longValue();
+
+                throw new IllegalArgumentException("Table's " +
+                        PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY +
+                        " can only be set to 'ALWAYS', 'NEVER' or a millisecond numeric value.");
             }
-            return value;
+
+            if (value instanceof Integer || value instanceof Long) {
+                return ((Number) value).longValue();
+            }
+
+            throw new IllegalArgumentException("Table's " +
+                    PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY +
+                    " can only be set to 'ALWAYS', 'NEVER' or a millisecond numeric value.");
         }
 
         @Override
