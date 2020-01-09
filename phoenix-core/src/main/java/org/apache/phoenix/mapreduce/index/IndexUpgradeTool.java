@@ -27,8 +27,8 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -50,6 +50,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -57,11 +58,9 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.logging.Logger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -73,9 +72,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.logging.FileHandler;
 import java.util.logging.SimpleFormatter;
-import java.util.stream.Collectors;
 
-import static org.apache.phoenix.query.QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
+import static org.apache.phoenix.query.QueryServicesOptions.
+        GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
 
 public class IndexUpgradeTool extends Configured implements Tool {
 
@@ -100,7 +99,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr",
             "index-sync-rebuild",
             false,
-            "[Optional]Whether or not synchronously rebuild the indexes; default rebuild asynchronous");
+            "[Optional]Whether or not synchronously rebuild the indexes; "
+                    + "default rebuild asynchronous");
 
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
@@ -117,6 +117,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String inputTables;
     private String logFile;
     private String inputFile;
+    private boolean waited = false;
 
     private boolean test = false;
 
@@ -137,6 +138,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public void setTest(boolean test) { this.test = test; }
+
+    public boolean getWaited() { return this.waited; }
 
     public boolean getDryRun() {
         return this.dryRun;
@@ -322,54 +325,153 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return -1;
     }
 
-    private int executeTool(Connection conn, ConnectionQueryServices queryServices,
+    private int executeTool(Connection conn,
+            ConnectionQueryServices queryServices,
             Configuration conf) {
-
-        LOGGER.info("Executing " + operation);
-        List<Integer> statusList = tablesAndIndexes.entrySet().parallelStream().map(entry -> {
+        ArrayList<String> immutableList = new ArrayList<>();
+        ArrayList<String> mutableList = new ArrayList<>();
+        for (Map.Entry<String, HashSet<String>> entry :tablesAndIndexes.entrySet()) {
             String dataTableFullName = entry.getKey();
-            HashSet<String> indexes = entry.getValue();
-
-            try (Admin admin = queryServices.getAdmin()) {
-
+            try {
                 PTable dataTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
-                LOGGER.fine("Executing " + operation + " for " + dataTableFullName);
-
-                boolean mutable = !(dataTable.isImmutableRows());
-
-                disableTable(admin, dataTableFullName, indexes);
-                modifyTable(admin, dataTableFullName, indexes);
-                if (!mutable) {
-                    if (!(test || dryRun || indexes.isEmpty())) {
-                        // If the table is immutable, we need to wait for clients to purge
-                        // their caches of table metadata
-                        LOGGER.fine("Data table is immutable, waiting for "
-                                + (GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1)
-                                + " minutes for client cache to expire");
-                        Thread.sleep(
-                                (GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1) * 60 * 1000);
-                    }
+                if (dataTable.isImmutableRows()) {
+                    //add to list where immutable tables are processed in a different function
+                    immutableList.add(dataTableFullName);
+                } else {
+                    mutableList.add(dataTableFullName);
                 }
-                enableTable(admin, dataTableFullName, indexes);
-            } catch (IOException | SQLException | InterruptedException e) {
-                LOGGER.severe("Something went wrong while executing " + operation
-                        + " steps " + e);
+            } catch (SQLException e) {
+                LOGGER.severe("Something went wrong while getting the PTable "
+                        + dataTableFullName + " "+e);
                 return -1;
             }
-            return 0;
-        }).collect(Collectors.toList());
+        }
+        long startWaitTime = executeToolForImmutableTables(queryServices, immutableList);
+        executeToolForMutableTables(conn, queryServices, conf, mutableList);
+        enableImmutableTables(queryServices, immutableList, startWaitTime);
+        rebuildIndexes(conn, conf, immutableList);
+        return 0;
+    }
 
-        int status = statusList.parallelStream().anyMatch(p -> p == -1) ? -1 : 0;
-
-        // Opportunistically kick-off index rebuilds after upgrade operation
-        if (upgrade && status == 0) {
-            for (String dataTableFullName : tablesAndIndexes.keySet()) {
-                rebuildIndexes(conn, conf, dataTableFullName);
-                LOGGER.info("Started index rebuild post " + operation + " of "
-                        + dataTableFullName);
+    private long executeToolForImmutableTables(ConnectionQueryServices queryServices,
+            ArrayList<String> immutableList) {
+        LOGGER.info("Started " + operation + " for immutable tables");
+        for (String dataTableFullName : immutableList) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                LOGGER.info("Executing " + operation + " of " + dataTableFullName
+                        + " (immutable)");
+                disableTable(admin, dataTableFullName, indexes);
+                modifyTable(admin, dataTableFullName, indexes);
+            } catch (IOException | SQLException e) {
+                LOGGER.severe("Something went wrong while disabling "
+                        + "or modifying immutable table " + e);
+                handleFailure(queryServices, dataTableFullName, immutableList);
             }
         }
-        return status;
+        long startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        return startWaitTime;
+    }
+
+    private void executeToolForMutableTables(Connection conn,
+            ConnectionQueryServices queryServices,
+            Configuration conf,
+            ArrayList<String> mutableTables) {
+        LOGGER.info("Started " + operation + " for mutable tables");
+        for (String dataTableFullName : mutableTables) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                LOGGER.info("Executing " + operation + " of " + dataTableFullName);
+                disableTable(admin, dataTableFullName, indexes);
+                modifyTable(admin, dataTableFullName, indexes);
+                enableTable(admin, dataTableFullName, indexes);
+                LOGGER.info("Completed " + operation + " of " + dataTableFullName);
+            } catch (IOException | SQLException e) {
+                LOGGER.severe("Something went wrong while executing "
+                        + operation + " steps for "+ dataTableFullName + " " + e);
+                handleFailure(queryServices, dataTableFullName, mutableTables);
+            }
+        }
+        // Opportunistically kick-off index rebuilds after upgrade operation
+        rebuildIndexes(conn, conf, mutableTables);
+    }
+
+    private void handleFailure(ConnectionQueryServices queryServices,
+            String dataTableFullName,
+            ArrayList<String> tableList) {
+        LOGGER.info("Performing error handling to revert the steps taken during " +operation);
+        HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+        try (Admin admin = queryServices.getAdmin()) {
+            upgrade = !upgrade;
+            disableTable(admin, dataTableFullName, indexes);
+            modifyTable(admin, dataTableFullName, indexes);
+            enableTable(admin, dataTableFullName, indexes);
+            upgrade = !upgrade;
+
+            tablesAndIndexes.remove(dataTableFullName); //removing from the map
+            tableList.remove(dataTableFullName); //removing from the list
+
+            LOGGER.severe(dataTableFullName+" has been removed from the list as tool failed"
+                    + " to perform "+operation);
+        } catch (IOException | SQLException e) {
+            LOGGER.severe("Revert of the "+operation +" failed in error handling, "
+                    + "throwing runtime exception");
+            LOGGER.severe("Confirm the state for "+getSubListString(tableList, dataTableFullName));
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void enableImmutableTables(ConnectionQueryServices queryServices,
+            ArrayList<String> immutableList,
+            long startWaitTime) {
+        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+        while (waitMore>0) {
+            // If the table is immutable, we need to wait for clients to purge
+            // their caches of table metadata
+            LOGGER.info("waiting for more " + waitMore + " ms for client cache "
+                    + "to expire for immutable tables");
+            try {
+                startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+                Thread.sleep(waitMore);
+                waited = true;
+            } catch (InterruptedException e) {
+                endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+                waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+                LOGGER.warning("Sleep before starting index rebuild is interrupted. "
+                        + "Attempting to sleep again! " + e.getMessage());
+            }
+        }
+        for (String dataTableFullName: immutableList) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                enableTable(admin, dataTableFullName, indexes);
+            } catch (IOException | SQLException e) {
+                LOGGER.severe("Something went wrong while enabling immutable table " + e);
+                //removing to avoid any rebuilds after upgrade
+                tablesAndIndexes.remove(dataTableFullName);
+                immutableList.remove(dataTableFullName);
+                throw new RuntimeException("Manually enable the following tables "
+                        + getSubListString(immutableList, dataTableFullName)
+                        + " and run the index rebuild ", e);
+            }
+        }
+    }
+
+    private String getSubListString(ArrayList<String> tableList, String dataTableFullName) {
+        return StringUtils.join(",", tableList.subList(tableList.indexOf(dataTableFullName),
+                tableList.size()));
+    }
+
+    private long getWaitMoreTime(long endWaitTime, long startWaitTime) {
+        int waitTime = GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN+1;
+        if(test) {
+            return 1;
+        }
+        if(dryRun) {
+            return 0; //no wait
+        }
+        return (((waitTime) * 60000) - Math.abs(endWaitTime-startWaitTime));
     }
 
     private void modifyTable(Admin admin, String dataTableFullName, HashSet<String> indexes)
@@ -424,6 +526,15 @@ public class IndexUpgradeTool extends Configured implements Tool {
             } else {
                 LOGGER.info( "Index table " + indexName + " is already enabled");
             }
+        }
+    }
+
+    private void rebuildIndexes(Connection conn, Configuration conf, ArrayList<String> tableList) {
+        if (!upgrade) {
+            return;
+        }
+        for (String table: tableList) {
+            rebuildIndexes(conn, conf, table);
         }
     }
 

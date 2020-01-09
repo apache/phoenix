@@ -312,6 +312,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         iut.executeTool();
         //testing actual run
         validate(false);
+        Assert.assertEquals("Index upgrade tool didn't wait for client cache to expire",
+                true, iut.getWaited());
     }
 
     @Test
