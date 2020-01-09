@@ -523,7 +523,8 @@ public class UpsertCompiler {
             for (i = posOffset; i < table.getColumns().size(); i++) {
                 PColumn column = table.getColumns().get(i);
                 if (!columnsBeingSet.get(i) && !column.isNullable() && column.getExpressionStr() == null) {
-                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
+                    throw new ConstraintViolationException(table.getName().getString() + "."
+                            + SchemaUtil.getColumnDisplayName(column) + " may not be null");
                 }
             }
         }
@@ -621,7 +622,8 @@ public class UpsertCompiler {
             for (int i = posOffset + nValuesToSet; i < table.getColumns().size(); i++) {
                 PColumn column = table.getColumns().get(i);
                 if (!column.isNullable() && column.getExpressionStr() == null) {
-                    throw new ConstraintViolationException(SchemaUtil.getColumnDisplayName(column) + " may not be null");
+                    throw new ConstraintViolationException(table.getName().getString() + "."
+                            + SchemaUtil.getColumnDisplayName(column) + " may not be null");
                 }
             }
         }
