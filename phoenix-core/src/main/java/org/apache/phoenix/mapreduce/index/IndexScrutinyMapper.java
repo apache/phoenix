@@ -27,16 +27,22 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
@@ -45,7 +51,10 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -54,22 +63,23 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 
+
 /**
  * Mapper that reads from the data table and checks the rows against the index table
  */
 public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWritable, Text, Text> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexScrutinyMapper.class);
-    private Connection connection;
+    protected Connection connection;
     private List<ColumnInfo> targetTblColumnMetadata;
     private long batchSize;
     // holds a batch of rows from the table the mapper is iterating over
     // Each row is a pair - the row TS, and the row values
-    private List<Pair<Long, List<Object>>> currentBatchValues = new ArrayList<>();
-    private String targetTableQuery;
-    private int numTargetPkCols;
-    private boolean outputInvalidRows;
-    private OutputFormat outputFormat = OutputFormat.FILE;
+    protected List<Pair<Long, List<Object>>> currentBatchValues = new ArrayList<>();
+    protected String targetTableQuery;
+    protected int numTargetPkCols;
+    protected boolean outputInvalidRows;
+    protected OutputFormat outputFormat = OutputFormat.FILE;
     private String qSourceTable;
     private String qTargetTable;
     private long executeTimestamp;
@@ -78,10 +88,11 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     private List<ColumnInfo> sourceTblColumnMetadata;
 
     // used to write results to the output table
-    private Connection outputConn;
-    private PreparedStatement outputUpsertStmt;
+    protected Connection outputConn;
+    protected PreparedStatement outputUpsertStmt;
     private long outputMaxRows;
     private MessageDigest md5;
+    private long ttl;
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
@@ -100,14 +111,12 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     PhoenixConfigurationUtil.getScrutinyOutputInvalidRows(configuration);
             outputFormat = PhoenixConfigurationUtil.getScrutinyOutputFormat(configuration);
             executeTimestamp = PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(configuration);
-
             // get the index table and column names
             String qDataTable = PhoenixConfigurationUtil.getScrutinyDataTableName(configuration);
             final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
             final String qIndexTable =
                     PhoenixConfigurationUtil.getScrutinyIndexTableName(configuration);
             final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
-
             // set the target table based on whether we're running the MR over the data or index
             // table
             SourceTable sourceTable =
@@ -148,6 +157,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     PhoenixRuntime.generateColumnInfo(connection, qSourceTable, sourceColNames);
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
+            ttl = getTableTtl();
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
             tryClosingResourceSilently(this.connection);
@@ -210,7 +220,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         }
     }
 
-    private void processBatch(Context context)
+    protected void processBatch(Context context)
             throws SQLException, IOException, InterruptedException {
         if (currentBatchValues.size() == 0) return;
         context.getCounter(PhoenixScrutinyJobCounters.BATCHES_PROCESSED_COUNT).increment(1);
@@ -227,8 +237,13 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             Map<String, Pair<Long, List<Object>>> targetPkToSourceValues =
                     buildTargetStatement(targetStatement);
 
+            preQueryTargetTable();
             // fetch results from the target table and output invalid rows
             queryTargetTable(context, targetStatement, targetPkToSourceValues);
+
+            //check if there are any invalid rows that have been expired, report them
+            //with EXPIRED_ROW_COUNT
+            checkIfInvalidRowsExpired(context, targetPkToSourceValues);
 
             // any source values we have left over are invalid (e.g. data table rows without
             // corresponding index row)
@@ -254,7 +269,62 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         }
     }
 
-    private Map<String, Pair<Long, List<Object>>> buildTargetStatement(PreparedStatement targetStatement)
+    protected void preQueryTargetTable() { }
+
+    protected void checkIfInvalidRowsExpired(Context context,
+            Map<String, Pair<Long,
+            List<Object>>> targetPkToSourceValues) {
+        Set<Map.Entry<String, Pair<Long, List<Object>>>>
+                entrySet = targetPkToSourceValues.entrySet();
+
+        Iterator<Map.Entry<String, Pair<Long, List<Object>>>> itr = entrySet.iterator();
+
+        // iterate and remove items simultaneously
+        while(itr.hasNext()) {
+            Map.Entry<String, Pair<Long, List<Object>>> entry = itr.next();
+            Pair<Long, List<Object>> sourceValues = entry.getValue();
+            Long sourceTS = sourceValues.getFirst();
+            if (hasRowExpiredOnSource(sourceTS, ttl)) {
+                context.getCounter(PhoenixScrutinyJobCounters.EXPIRED_ROW_COUNT).increment(1);
+                itr.remove();
+            }
+        }
+    }
+
+    protected boolean hasRowExpiredOnSource(Long sourceTS, Long ttl) {
+        long currentTS = EnvironmentEdgeManager.currentTimeMillis();
+        return ttl != Integer.MAX_VALUE && sourceTS + ttl*1000 < currentTS;
+    }
+
+    private long getTableTtl() throws SQLException, IOException {
+        PTable psourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
+        if (psourceTable.getType() == PTableType.INDEX
+                && psourceTable.getIndexType() == PTable.IndexType.LOCAL) {
+            return Integer.MAX_VALUE;
+        }
+        String schema = psourceTable.getSchemaName().toString();
+        String table = getSourceTableName(psourceTable);
+        Admin admin = connection.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        String fullTableName = SchemaUtil.getQualifiedTableName(schema, table);
+        HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(fullTableName));
+        return tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(psourceTable)).getTimeToLive();
+    }
+
+    private String getSourceTableName(PTable psourceTable) {
+        String sourcePhysicalName = psourceTable.getPhysicalName().getString();
+        String table;
+        if (psourceTable.getType() == PTableType.VIEW) {
+            table = sourcePhysicalName;
+        } else if (MetaDataUtil.isViewIndex(sourcePhysicalName)) {
+            table = SchemaUtil.getParentTableNameFromIndexTable(sourcePhysicalName,
+                            MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
+        } else {
+            table = psourceTable.getTableName().toString();
+        }
+        return table;
+    }
+
+    protected Map<String, Pair<Long, List<Object>>> buildTargetStatement(PreparedStatement targetStatement)
             throws SQLException {
         Map<String, Pair<Long, List<Object>>> targetPkToSourceValues =
                 new HashMap<>(currentBatchValues.size());
@@ -278,11 +348,10 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         return targetPkToSourceValues;
     }
 
-    private void queryTargetTable(Context context, PreparedStatement targetStatement,
+    protected void queryTargetTable(Context context, PreparedStatement targetStatement,
             Map<String, Pair<Long, List<Object>>> targetPkToSourceValues)
             throws SQLException, IOException, InterruptedException {
         ResultSet targetResultSet = targetStatement.executeQuery();
-
         while (targetResultSet.next()) {
             indxWritable.readFields(targetResultSet);
             List<Object> targetValues = indxWritable.getValues();
@@ -327,7 +396,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     }
 
     // pass in null targetValues if the target row wasn't found
-    private void writeToOutputTable(Context context, List<Object> sourceValues, List<Object> targetValues, long sourceTS, long targetTS)
+    protected void writeToOutputTable(Context context, List<Object> sourceValues, List<Object> targetValues, long sourceTS, long targetTS)
             throws SQLException {
         if (context.getCounter(PhoenixScrutinyJobCounters.INVALID_ROW_COUNT).getValue() > outputMaxRows) {
             return;

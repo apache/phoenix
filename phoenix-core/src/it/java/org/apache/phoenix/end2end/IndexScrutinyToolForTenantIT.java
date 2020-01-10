@@ -89,6 +89,8 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
 
         String idxStmtTenant = String.format(createIndexStr, indexNameTenant, tenantViewName);
         connTenant.createStatement().execute(idxStmtTenant);
+        connTenant.commit();
+        connGlobal.commit();
     }
 
     @After public void teardown() throws SQLException {
