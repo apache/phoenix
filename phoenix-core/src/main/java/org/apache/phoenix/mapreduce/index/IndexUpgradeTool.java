@@ -424,8 +424,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             long startWaitTime) {
 
         while(true) {
-            long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
-            long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+            long waitMore = getWaitMoreTime(startWaitTime);
             if (waitMore <= 0) {
                 isWaitComplete = true;
                 break;
@@ -462,12 +461,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 tableList.size()), ",");
     }
 
-    private long getWaitMoreTime(long endWaitTime, long startWaitTime) {
+    private long getWaitMoreTime(long startWaitTime) {
         int waitTime = GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN+1;
-        if(test) {
-            return 1;
-        }
-        if(dryRun) {
+        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        if(test || dryRun) {
             return 0; //no wait
         }
         return (((waitTime) * 60000) - Math.abs(endWaitTime-startWaitTime));
