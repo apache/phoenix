@@ -119,7 +119,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String inputFile;
 
     private boolean test = false;
-    private boolean waited = false;
+    private boolean isWaitComplete = false;
 
     public void setDryRun(boolean dryRun) {
         this.dryRun = dryRun;
@@ -138,7 +138,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public void setTest(boolean test) { this.test = test; }
-    public boolean getWaited() { return this.waited; }
+    public boolean getIsWaitComplete() { return this.isWaitComplete; }
     public boolean getDryRun() {
         return this.dryRun;
     }
@@ -397,7 +397,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private void handleFailure(ConnectionQueryServices queryServices,
             String dataTableFullName,
             ArrayList<String> tableList) {
-        LOGGER.info("Performing error handling to revert the steps taken during " +operation);
+        LOGGER.info("Performing error handling to revert the steps taken during " + operation);
         HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
         try (Admin admin = queryServices.getAdmin()) {
             upgrade = !upgrade;
@@ -422,24 +422,24 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private void enableImmutableTables(ConnectionQueryServices queryServices,
             ArrayList<String> immutableList,
             long startWaitTime) {
-        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
-        long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
-        while (waitMore>0) {
-            // If the table is immutable, we need to wait for clients to purge
-            // their caches of table metadata
-            LOGGER.info("waiting for more " + waitMore + " ms for client cache "
-                    + "to expire for immutable tables");
+
+        while(true) {
+            long waitMore = getWaitMoreTime(startWaitTime);
+            if (waitMore <= 0) {
+                isWaitComplete = true;
+                break;
+            }
             try {
-                startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+                // If the table is immutable, we need to wait for clients to purge
+                // their caches of table metadata
                 Thread.sleep(waitMore);
-                waited = true;
-            } catch (InterruptedException e) {
-                endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
-                waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+                isWaitComplete = true;
+            } catch(InterruptedException e) {
                 LOGGER.warning("Sleep before starting index rebuild is interrupted. "
                         + "Attempting to sleep again! " + e.getMessage());
             }
         }
+
         for (String dataTableFullName: immutableList) {
             try (Admin admin = queryServices.getAdmin()) {
                 HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
@@ -461,12 +461,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 tableList.size()), ",");
     }
 
-    private long getWaitMoreTime(long endWaitTime, long startWaitTime) {
+    private long getWaitMoreTime(long startWaitTime) {
         int waitTime = GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN+1;
-        if(test) {
-            return 1;
-        }
-        if(dryRun) {
+        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        if(test || dryRun) {
             return 0; //no wait
         }
         return (((waitTime) * 60000) - Math.abs(endWaitTime-startWaitTime));
