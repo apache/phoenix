@@ -86,6 +86,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
+    // Index verification type done by the index tool
+    public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
+
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
