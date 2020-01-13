@@ -24,7 +24,6 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
@@ -53,7 +52,6 @@ import javax.annotation.concurrent.GuardedBy;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -95,7 +93,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -122,7 +119,6 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -306,7 +302,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       for (int i = 0; blockingMemstoreSize > 0 && (region.getMemStoreHeapSize() + region.getMemStoreOffHeapSize()) > blockingMemstoreSize
                 && i < 30; i++) {
           try {
-              checkForRegionClosing();
+              checkForRegionClosingOrSplitting();
               Thread.sleep(100);
           } catch (InterruptedException e) {
               Thread.currentThread().interrupt();
@@ -357,7 +353,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * a high chance that flush might not proceed and memstore won't be freed up.
      * @throws IOException
      */
-    public void checkForRegionClosing() throws IOException {
+    public void checkForRegionClosingOrSplitting() throws IOException {
         synchronized (lock) {
             if(isRegionClosingOrSplitting) {
                 lock.notifyAll();

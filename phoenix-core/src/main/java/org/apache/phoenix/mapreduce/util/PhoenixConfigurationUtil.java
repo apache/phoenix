@@ -43,9 +43,9 @@ import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
-import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -150,6 +150,8 @@ public final class PhoenixConfigurationUtil {
     public static final String VERIFY_INDEX = "phoenix.mr.index.verifyIndex";
 
     public static final String ONLY_VERIFY_INDEX = "phoenix.mr.index.onlyVerifyIndex";
+
+    public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
 
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
@@ -576,6 +578,11 @@ public final class PhoenixConfigurationUtil {
         configuration.setBoolean(ONLY_VERIFY_INDEX, verify);
     }
 
+    public static void setIndexVerifyType(Configuration configuration, IndexTool.IndexVerifyType verifyType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -709,6 +716,12 @@ public final class PhoenixConfigurationUtil {
     public static boolean getOnlyVerifyIndex(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.getBoolean(ONLY_VERIFY_INDEX, false);
+    }
+
+    public static IndexTool.IndexVerifyType getIndexVerifyType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
+        return IndexTool.IndexVerifyType.fromValue(value);
     }
 
     public static boolean getSplitByStats(final Configuration configuration) {

@@ -97,6 +97,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EquiDepthStreamHistogram;
@@ -117,6 +118,42 @@ import com.google.common.collect.Lists;
  *
  */
 public class IndexTool extends Configured implements Tool {
+    public enum IndexVerifyType {
+        BEFORE("BEFORE"),
+        AFTER("AFTER"),
+        BOTH("BOTH"),
+        ONLY("ONLY"),
+        NONE("NONE");
+        private String value;
+        private byte[] valueBytes;
+
+        private IndexVerifyType(String value) {
+            this.value = value;
+            this.valueBytes = PVarchar.INSTANCE.toBytes(value);
+        }
+
+        public String getValue() {
+            return this.value;
+        }
+
+        public byte[] toBytes() {
+            return this.valueBytes;
+        }
+
+        public static IndexVerifyType fromValue(String value) {
+            for (IndexVerifyType verifyType: IndexVerifyType.values()) {
+                if (value.equals(verifyType.getValue())) {
+                    return verifyType;
+                }
+            }
+            throw new IllegalStateException("Invalid value: "+ value + " for " + IndexVerifyType.class);
+        }
+
+        public static IndexVerifyType fromValue(byte[] value) {
+            return fromValue(Bytes.toString(value));
+        }
+    }
+
     public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
     public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
     public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
@@ -141,8 +178,7 @@ public class IndexTool extends Configured implements Tool {
     private String dataTable;
     private String indexTable;
     private boolean isPartialBuild;
-    private boolean verify;
-    private boolean onlyVerify;
+    private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
     private String qDataTable;
     private String qIndexTable;
     private boolean useSnapshot;
@@ -168,12 +204,12 @@ public class IndexTool extends Configured implements Tool {
     private static final Option DIRECT_API_OPTION = new Option("direct", "direct", false,
             "This parameter is deprecated. Direct mode will be used whether it is set or not. Keeping it for backwards compatibility.");
 
-    private static final Option VERIFY_OPTION = new Option("v", "verify", false,
-            "To verify every index row is rebuilt correctly");
-
-    private static final Option ONLY_VERIFY_OPTION = new Option("ov", "only-verify", false,
-            "To verify every data table row has the corresponding index row with the correct content " +
-            "(without building the index table). If the verify option is set then the only-verify option will be ignored");
+    private static final Option VERIFY_OPTION = new Option("v", "verify", true,
+            "To verify every data row has a corresponding row. The accepted values are NONE, ONLY, BEFORE," +
+                    " AFTER, and BOTH. NONE is for no inline verification, which is also the default for this option. " +
+                    "ONLY is for verifying without rebuilding index rows. The rest for verifying before, after, and " +
+                    "both before and after rebuilding row. If the verification is done before rebuilding rows and " +
+                    "the correct index rows are not rebuilt. Currently supported values are NONE, ONLY and AFTER ");
 
     private static final double DEFAULT_SPLIT_SAMPLING_RATE = 10.0;
 
@@ -221,7 +257,6 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(PARTIAL_REBUILD_OPTION);
         options.addOption(DIRECT_API_OPTION);
         options.addOption(VERIFY_OPTION);
-        options.addOption(ONLY_VERIFY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
@@ -542,12 +577,7 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
-            if (verify) {
-                PhoenixConfigurationUtil.setVerifyIndex(configuration, true);
-            }
-            else if (onlyVerify) {
-                PhoenixConfigurationUtil.setOnlyVerifyIndex(configuration, true);
-            }
+            PhoenixConfigurationUtil.setIndexVerifyType(configuration, indexVerifyType);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
@@ -650,8 +680,14 @@ public class IndexTool extends Configured implements Tool {
             dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
-            verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
-            onlyVerify = cmdLine.hasOption(ONLY_VERIFY_OPTION.getOpt());
+            if (cmdLine.hasOption(VERIFY_OPTION.getOpt())) {
+                String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
+                indexVerifyType = IndexVerifyType.fromValue(value);
+                if (!(indexVerifyType == IndexVerifyType.NONE || indexVerifyType == IndexVerifyType.AFTER ||
+                        indexVerifyType == IndexVerifyType.ONLY)) {
+                    throw new IllegalStateException("Unsupported value for the verify option");
+                }
+            }
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
                 pDataTable = PhoenixRuntime.getTableNoCache(tempConn, qDataTable);

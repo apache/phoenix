@@ -30,7 +30,6 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -42,8 +41,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getOnlyVerifyIndex;
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getVerifyIndex;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
@@ -94,12 +91,8 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             try {
                 scan.setTimeRange(0, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
-                if (getVerifyIndex(configuration)) {
-                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY, TRUE_BYTES);
-                }
-                else if (getOnlyVerifyIndex(configuration)) {
-                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_ONLY_VERIFY, TRUE_BYTES);
-                }
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE,
+                        PhoenixConfigurationUtil.getIndexVerifyType(configuration).toBytes());
             } catch (IOException e) {
                 throw new SQLException(e);
             }
