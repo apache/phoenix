@@ -422,25 +422,25 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private void enableImmutableTables(ConnectionQueryServices queryServices,
             ArrayList<String> immutableList,
             long startWaitTime) {
-        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
-        long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
-        while (waitMore>0 && !isWaitComplete) {
-            // If the table is immutable, we need to wait for clients to purge
-            // their caches of table metadata
-            LOGGER.info("waiting for more " + waitMore + " ms for client cache "
-                    + "to expire for immutable tables");
+
+        while(true) {
+            long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+            long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+            if (waitMore <= 0) {
+                isWaitComplete = true;
+                break;
+            }
             try {
-                startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+                // If the table is immutable, we need to wait for clients to purge
+                // their caches of table metadata
                 Thread.sleep(waitMore);
                 isWaitComplete = true;
-            } catch (InterruptedException e) {
-                endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
-                waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
+            } catch(InterruptedException e) {
                 LOGGER.warning("Sleep before starting index rebuild is interrupted. "
                         + "Attempting to sleep again! " + e.getMessage());
-                isWaitComplete = false;
             }
         }
+
         for (String dataTableFullName: immutableList) {
             try (Admin admin = queryServices.getAdmin()) {
                 HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
