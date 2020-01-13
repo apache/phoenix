@@ -409,7 +409,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testIndexToolVerifyOption() throws Exception {
+    public void testIndexToolVerifyAfterOption() throws Exception {
         // This test is for building non-transactional global indexes with direct api
         if (localIndex || transactional || !directApi || useSnapshot) {
             return;
@@ -438,7 +438,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
             // Run the index MR job and verify that the index table rebuild fails
             runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, -1, true, false);
+                    null, -1, IndexTool.IndexVerifyType.AFTER);
             // The index tool output table should report that there is a missing index row
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
             byte[] expectedValueBytes = Bytes.toBytes("Missing index rows - Expected: 1 Actual: 0");
@@ -476,7 +476,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             // IndexTool will go through each data table row and record the mismatches in the output table
             // called PHOENIX_INDEX_TOOL
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, false, true);
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
             byte[] expectedValueBytes = Bytes.toBytes("Missing index rows - Expected: 1 Actual: 0");
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
@@ -488,15 +488,15 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             admin.deleteTable(indexToolOutputTable);
             // Run the index tool to populate the index while verifying rows
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, true, false);
+                    null, 0, IndexTool.IndexVerifyType.AFTER);
             // Corrupt one cell by writing directly into the index table
             conn.createStatement().execute("upsert into " + indexTableFullName + " values ('Phoenix', 1, 'B')");
             conn.commit();
             // Run the index tool using the only-verify option to detect this mismatch between the data and index table
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, false, true);
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
             cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            expectedValueBytes = Bytes.toBytes("Not matching cell value - 0:0:CODE - Expected: A - Actual: B");
+            expectedValueBytes = Bytes.toBytes("Not matching value for 0:0:CODE E:A A:B");
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     expectedValueBytes, 0, expectedValueBytes.length) == 0);
             admin.disableTable(indexToolOutputTable);
@@ -780,7 +780,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
                                             String dataTable, String indxTable, String tenantId,
-                                            boolean verify, boolean onlyVerify) {
+                                            IndexTool.IndexVerifyType verifyType) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -793,11 +793,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         if (directApi) {
             args.add("-direct");
         }
-        if (verify) {
-            args.add("-v"); // verify index rows inline
-        } else if (onlyVerify) {
-            args.add("-ov");
-        }
+        args.add("-v" + verifyType.getValue()); // verify index rows inline
+
         // Need to run this job in foreground for the test to be deterministic
         args.add("-runfg");
         if (useSnapshot) {
@@ -815,9 +812,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     public static String[] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
-            String dataTable, String indexTable, String tenantId, boolean verify, boolean onlyVerify) {
-        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable, tenantId, verify, onlyVerify);
-
+                                        String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType) {
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable, tenantId, verifyType);
         return args.toArray(new String[0]);
     }
 
@@ -856,27 +852,27 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     public static void runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
-            String dataTableName, String indexTableName, String... additionalArgs) throws Exception {
+                                    String dataTableName, String indexTableName, String... additionalArgs) throws Exception {
         runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, additionalArgs);
     }
 
     public static IndexTool runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
-            String dataTableName, String indexTableName, String tenantId, int expectedStatus,
-            String... additionalArgs) throws Exception {
+                                         String dataTableName, String indexTableName, String tenantId, int expectedStatus,
+                                         String... additionalArgs) throws Exception {
         return runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, tenantId, expectedStatus,
-                false, false, additionalArgs);
+                IndexTool.IndexVerifyType.NONE, additionalArgs);
     }
 
     public static IndexTool runIndexTool(boolean directApi, boolean useSnapshot, String schemaName,
                                          String dataTableName, String indexTableName, String tenantId,
-                                         int expectedStatus, boolean verify, boolean onlyVerify,
+                                         int expectedStatus, IndexTool.IndexVerifyType verifyType,
                                          String... additionalArgs) throws Exception {
         IndexTool indexingTool = new IndexTool();
         Configuration conf = new Configuration(getUtility().getConfiguration());
         conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         indexingTool.setConf(conf);
         final String[] cmdArgs = getArgValues(directApi, useSnapshot, schemaName, dataTableName,
-                indexTableName, tenantId, verify, onlyVerify);
+                indexTableName, tenantId, verifyType);
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.addAll(Arrays.asList(additionalArgs));
         int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));

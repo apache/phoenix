@@ -106,6 +106,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private IndexMaintainer indexMaintainer;
     private byte[] indexRowKey = null;
     private Table indexHTable = null;
+    private Table outputHTable = null;
+    private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     private boolean verify = false;
     private boolean onlyVerify = false;
     private Map<byte[], Put> indexKeyToDataPutMap;
@@ -145,23 +147,28 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         this.env = env;
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
-        if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY) != null ||
-                scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_ONLY_VERIFY) != null) {
-            verify = true;
-            if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_ONLY_VERIFY) != null) {
-                onlyVerify = true;
+        byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
+        if (valueBytes != null) {
+            verifyType = IndexTool.IndexVerifyType.fromValue(valueBytes);
+            if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.ONLY) {
+                verify = true;
+                if (verifyType == IndexTool.IndexVerifyType.ONLY) {
+                    onlyVerify = true;
+                }
+                indexHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
+                        env).getTable(TableName.valueOf(indexMaintainer.getIndexTableName()));
+                outputHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
+                        env).getTable(TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES));
+                indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+                pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
+                        new ThreadPoolBuilder("IndexVerify",
+                                env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
+                                DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
+                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+                tasks = new TaskBatch<>(DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS);
+                rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
+                        DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
             }
-            indexHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
-                    env).getTable(TableName.valueOf(indexMaintainer.getIndexTableName()));
-            indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-            pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
-                    new ThreadPoolBuilder("IndexVerify",
-                            env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
-                            DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
-                            INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
-            tasks = new TaskBatch<>(DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS);
-            rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
-                    DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
         }
     }
 
@@ -178,6 +185,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         innerScanner.close();
         if (verify) {
             this.pool.stop("IndexRebuildRegionScanner is closing");
+            indexHTable.close();
+            outputHTable.close();
         }
     }
 
@@ -230,7 +239,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
     private byte[] commitIfReady(byte[] uuidValue) throws IOException {
         if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-            ungroupedAggregateRegionObserver.checkForRegionClosing();
+            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
             ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
             uuidValue = ServerCacheClient.generateId();
             if (verify) {
@@ -283,15 +292,27 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
     private void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
                                            String errorMsg) {
-        try (Table hTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
-                env).getTable(TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME))) {
+        logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs,
+                errorMsg, null, null);
+
+    }
+
+    private void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
+                                           String errorMsg, byte[] expectedValue,  byte[] actualValue) {
+        final byte[] E_VALUE_PREFIX_BYTES = Bytes.toBytes(" E:");
+        final byte[] A_VALUE_PREFIX_BYTES = Bytes.toBytes(" A:");
+        final int PREFIX_LENGTH = 3;
+        final int TOTAL_PREFIX_LENGTH = 6;
+
+        try {
+            int longLength = Long.SIZE / Byte.SIZE;
             byte[] rowKey;
             if (dataRowKey != null) {
-                rowKey = new byte[Long.BYTES + dataRowKey.length];
+                rowKey = new byte[longLength + dataRowKey.length];
                 Bytes.putLong(rowKey, 0, scan.getTimeRange().getMax());
-                Bytes.putBytes(rowKey, Long.BYTES, dataRowKey, 0, dataRowKey.length);
+                Bytes.putBytes(rowKey, longLength, dataRowKey, 0, dataRowKey.length);
             } else {
-                rowKey = new byte[Long.BYTES];
+                rowKey = new byte[longLength];
                 Bytes.putLong(rowKey, 0, scan.getTimeRange().getMax());
             }
             Put put = new Put(rowKey);
@@ -310,9 +331,26 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 put.addColumn(IndexTool.OUTPUT_TABLE_COLUMN_FAMILY, IndexTool.INDEX_TABLE_TS_BYTES,
                         scanMaxTs, Bytes.toBytes(indexRowTs));
             }
-            put.addColumn(IndexTool.OUTPUT_TABLE_COLUMN_FAMILY, IndexTool.ERROR_MESSAGE_BYTES,
-                    scanMaxTs, Bytes.toBytes(errorMsg));
-            hTable.put(put);
+            byte[] errorMessageBytes;
+            if (expectedValue != null) {
+                errorMessageBytes = new byte[errorMsg.length() + expectedValue.length + actualValue.length +
+                        TOTAL_PREFIX_LENGTH];
+                Bytes.putBytes(errorMessageBytes, 0, Bytes.toBytes(errorMsg), 0, errorMsg.length());
+                int length = errorMsg.length();
+                Bytes.putBytes(errorMessageBytes, length, E_VALUE_PREFIX_BYTES, 0, PREFIX_LENGTH);
+                length += PREFIX_LENGTH;
+                Bytes.putBytes(errorMessageBytes, length, expectedValue, 0, expectedValue.length);
+                length += expectedValue.length;
+                Bytes.putBytes(errorMessageBytes, length, A_VALUE_PREFIX_BYTES, 0, PREFIX_LENGTH);
+                length += PREFIX_LENGTH;
+                Bytes.putBytes(errorMessageBytes, length, actualValue, 0, actualValue.length);
+
+            }
+            else {
+                errorMessageBytes = Bytes.toBytes(errorMsg);
+            }
+            put.addColumn(IndexTool.OUTPUT_TABLE_COLUMN_FAMILY, IndexTool.ERROR_MESSAGE_BYTES, scanMaxTs, errorMessageBytes);
+            outputHTable.put(put);
         } catch (IOException e) {
             exceptionMessage = "LogToIndexToolOutputTable failed " + e;
         }
@@ -351,8 +389,11 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             }
             String errorMsg = "Expected to find only empty column cell but got "
                     + indexRow.rawCells().length;
-            exceptionMessage = "Index verify failed - " + errorMsg + indexHTable.getName();
             logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
+            if (onlyVerify) {
+                return;
+            }
+            exceptionMessage = "Index verify failed - " + errorMsg + indexHTable.getName();
             throw new IOException(exceptionMessage);
         }
         else {
@@ -373,26 +414,25 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = indexRow.getColumnLatestCell(family, qualifier);
                 if (actualCell == null) {
-                    exceptionMessage = "Index verify failed - Missing cell " + indexHTable.getName();
-                    String errorMsg = " Missing cell - " + Bytes.toStringBinary(family) + ":" +
-                            Bytes.toStringBinary(qualifier);
+                    String errorMsg = " Missing cell " + Bytes.toString(family) + ":" +
+                            Bytes.toString(qualifier);
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
                     if (onlyVerify) {
                         return;
                     }
+                    exceptionMessage = "Index verify failed - Missing cell " + indexHTable.getName();
                     throw new IOException(exceptionMessage);
                 }
                 // Check all columns
                 if (!CellUtil.matchingValue(actualCell, expectedCell)) {
-                    exceptionMessage = "Index verify failed - Not matching cell value - " + indexHTable.getName();
-                    String errorMsg = "Not matching cell value - " + Bytes.toStringBinary(family) + ":" +
-                            Bytes.toStringBinary(qualifier) + " - Expected: " +
-                            Bytes.toStringBinary(CellUtil.cloneValue(expectedCell)) + " - Actual: " +
-                            Bytes.toStringBinary(CellUtil.cloneValue(actualCell));
-                    logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
+                    String errorMsg = "Not matching value for " + Bytes.toString(family) + ":" +
+                            Bytes.toString(qualifier);
+                    logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow),
+                            errorMsg, CellUtil.cloneValue(expectedCell), CellUtil.cloneValue(actualCell));
                     if (onlyVerify) {
                         return;
                     }
+                    exceptionMessage = "Index verify failed - Not matching cell value - " + indexHTable.getName();
                     throw new IOException(exceptionMessage);
                 }
                 cellCount++;
@@ -401,9 +441,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         if (cellCount != indexRow.rawCells().length) {
             String errorMsg = "Expected to find " + cellCount + " cells but got "
                     + indexRow.rawCells().length + " cells";
-            exceptionMessage = "Index verify failed - " + errorMsg + " - " + indexHTable.getName();
             logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
             if (!onlyVerify) {
+                exceptionMessage = "Index verify failed - " + errorMsg + " - " + indexHTable.getName();
                 throw new IOException(exceptionMessage);
             }
         }
@@ -525,7 +565,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
                 } while (hasMore && rowCount < pageSizeInRows);
                 if (!mutations.isEmpty() && !onlyVerify) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
+                    ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                     ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
                     if (verify) {
                         addToBeVerifiedIndexRows();
