@@ -42,6 +42,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,15 +54,12 @@ import com.google.common.collect.Lists;
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     private static final Log LOG = LogFactory.getLog(GlobalIndexCheckerIT.class);
     private final boolean async;
-    private final String tableDDLOptions;
-
+    private String tableDDLOptions;
+    private StringBuilder optionBuilder;
+    private final boolean encoded;
     public GlobalIndexCheckerIT(boolean async, boolean encoded) {
         this.async = async;
-        StringBuilder optionBuilder = new StringBuilder();
-        if (!encoded) {
-            optionBuilder.append(" COLUMN_ENCODED_BYTES=0 ");
-        }
-        this.tableDDLOptions = optionBuilder.toString();
+        this.encoded = encoded;
     }
 
     @BeforeClass
@@ -69,6 +67,15 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @Before
+    public void beforeTest(){
+        optionBuilder = new StringBuilder();
+        if (!encoded) {
+            optionBuilder.append(" COLUMN_ENCODED_BYTES=0");
+        }
+        this.tableDDLOptions = optionBuilder.toString();
     }
 
     @Parameters(
@@ -305,17 +312,8 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     public void testOnePhaseOverwrite() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             String indexTableName = generateUniqueName();
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
-                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
-            if (async) {
-                // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
-            }
+            createTableAndIndexes(conn, dataTableName, indexTableName);
             // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
             // update phase) and check that this does not impact the correctness (one overwrite)
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
@@ -385,21 +383,35 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    private void createTableAndIndexes(Connection conn, String dataTableName,
+                                       String indexTableName) throws Exception {
+        createTableAndIndexes(conn, dataTableName, indexTableName, 1);
+    }
+
+    private void createTableAndIndexes(Connection conn, String dataTableName,
+                                       String indexTableName, int indexVersions) throws Exception {
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
+                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") +
+            " VERSIONS=" + indexVersions);
+        conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
+                dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : "")+
+            " VERSIONS=" + indexVersions);
+        conn.commit();
+        if (async) {
+            // run the index MR job.
+            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
+            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+        }
+    }
+
     @Test
     public void testFailDataTableAndPostIndexRowUpdate() throws Exception {
-        String dataTableName = generateUniqueName();
-        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
-            conn.createStatement().execute("CREATE INDEX " + indexName + "1 on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-            conn.createStatement().execute("CREATE INDEX " + indexName + "2 on " +
-                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
-            if (async) {
-                // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "1");
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "2");
-            }
+            createTableAndIndexes(conn, dataTableName, indexName);
             // Configure IndexRegionObserver to fail the last two write phase (i.e., the data table update and post index update phase)
             // and check that this does not impact the correctness
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);

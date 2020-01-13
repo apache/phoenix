@@ -51,7 +51,7 @@ public class TransactionUtil {
     }
     
     public static boolean isTransactionalTimestamp(long ts) {
-        return ts >= MAX_NON_TX_TIMESTAMP;
+        return ts >= MAX_NON_TX_TIMESTAMP && ts != HConstants.LATEST_TIMESTAMP;
     }
     
     public static boolean isDelete(Cell cell) {

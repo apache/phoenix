@@ -184,7 +184,12 @@ public enum SQLExceptionCode {
      INVALID_REPLAY_AT(533, "42910", "Value of REPLAY_AT cannot be less than zero."),
      UNEQUAL_SCN_AND_BUILD_INDEX_AT(534, "42911", "If both specified, values of CURRENT_SCN and BUILD_INDEX_AT must be equal."),
      ONLY_INDEX_UPDATABLE_AT_SCN(535, "42912", "Only an index may be updated when the BUILD_INDEX_AT property is specified"),
-     /**
+     CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_TTL(537, "42914",
+         "Cannot use SCN to look further back in the past beyond the TTL"),
+     CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE(538, "42915",
+            "Cannot use SCN to look further back in the past beyond the configured max lookback age"),
+
+    /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
      *
