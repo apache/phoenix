@@ -207,10 +207,6 @@ public class IndexTool extends Configured implements Tool {
                     "both before and after rebuilding row. If the verification is done before rebuilding rows and " +
                     "the correct index rows are not rebuilt. Currently supported values are NONE, ONLY and AFTER ");
 
-    private static final Option ONLY_VERIFY_OPTION = new Option("ov", "only-verify", false,
-            "To verify every data table row has the corresponding index row with the correct content " +
-            "(without building the index table). If the verify option is set then the only-verify option will be ignored");
-
     private static final double DEFAULT_SPLIT_SAMPLING_RATE = 10.0;
 
     private static final Option SPLIT_INDEX_OPTION =
@@ -252,7 +248,6 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(PARTIAL_REBUILD_OPTION);
         options.addOption(DIRECT_API_OPTION);
         options.addOption(VERIFY_OPTION);
-        options.addOption(ONLY_VERIFY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
         options.addOption(SNAPSHOT_OPTION);
