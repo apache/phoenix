@@ -119,7 +119,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String inputFile;
 
     private boolean test = false;
-    private boolean waited = false;
+    private boolean isWaitComplete = false;
 
     public void setDryRun(boolean dryRun) {
         this.dryRun = dryRun;
@@ -138,7 +138,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public void setTest(boolean test) { this.test = test; }
-    public boolean getWaited() { return this.waited; }
+    public boolean getIsWaitComplete() { return this.isWaitComplete; }
     public boolean getDryRun() {
         return this.dryRun;
     }
@@ -397,7 +397,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private void handleFailure(ConnectionQueryServices queryServices,
             String dataTableFullName,
             ArrayList<String> tableList) {
-        LOGGER.info("Performing error handling to revert the steps taken during " +operation);
+        LOGGER.info("Performing error handling to revert the steps taken during " + operation);
         HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
         try (Admin admin = queryServices.getAdmin()) {
             upgrade = !upgrade;
@@ -424,7 +424,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             long startWaitTime) {
         long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
         long waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
-        while (waitMore>0) {
+        while (waitMore>0 && !isWaitComplete) {
             // If the table is immutable, we need to wait for clients to purge
             // their caches of table metadata
             LOGGER.info("waiting for more " + waitMore + " ms for client cache "
@@ -432,12 +432,13 @@ public class IndexUpgradeTool extends Configured implements Tool {
             try {
                 startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
                 Thread.sleep(waitMore);
-                waited = true;
+                isWaitComplete = true;
             } catch (InterruptedException e) {
                 endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
                 waitMore = getWaitMoreTime(endWaitTime, startWaitTime);
                 LOGGER.warning("Sleep before starting index rebuild is interrupted. "
                         + "Attempting to sleep again! " + e.getMessage());
+                isWaitComplete = false;
             }
         }
         for (String dataTableFullName: immutableList) {
