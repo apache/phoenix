@@ -125,13 +125,14 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
   }
 
-    private static boolean failPreIndexUpdatesForTesting = false;
-    private static boolean failPostIndexUpdatesForTesting = false;
-    private static boolean failDataTableUpdatesForTesting = false;
+  private static boolean ignoreIndexRebuildForTesting  = false;
+  private static boolean failPreIndexUpdatesForTesting = false;
+  private static boolean failPostIndexUpdatesForTesting = false;
+  private static boolean failDataTableUpdatesForTesting = false;
 
-  public static void setFailPreIndexUpdatesForTesting(boolean fail) {
-        failPreIndexUpdatesForTesting = fail;
-    }
+  public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
+
+  public static void setFailPreIndexUpdatesForTesting(boolean fail) { failPreIndexUpdatesForTesting = fail; }
 
   public static void setFailPostIndexUpdatesForTesting(boolean fail) { failPostIndexUpdatesForTesting = fail; }
 
@@ -796,8 +797,10 @@ public class IndexRegionObserver extends BaseRegionObserver {
 
   private void doPre(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context,
                      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      if (ignoreIndexRebuildForTesting && context.rebuild) {
+          return;
+      }
       long start = EnvironmentEdgeManager.currentTimeMillis();
-
       try {
           if (failPreIndexUpdatesForTesting) {
               throw new DoNotRetryIOException("Simulating the first (i.e., pre) index table write failure");
