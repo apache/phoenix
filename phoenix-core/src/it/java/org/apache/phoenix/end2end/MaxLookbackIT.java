@@ -136,7 +136,6 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             //wait for the lookback time. After this compactions should purge the deleted row
             Thread.sleep(MAX_LOOKBACK_AGE * 1000);
             long beforeSecondCompactSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-            assertRowExistsAtSCN(getUrl(), sql, beforeSecondCompactSCN, false);
             String notDeletedRowSql =
                 String.format("SELECT * FROM %s WHERE val1 = 'bc'", dataTableName);
             assertExplainPlan(conn, notDeletedRowSql, dataTableName, fullIndexName);
