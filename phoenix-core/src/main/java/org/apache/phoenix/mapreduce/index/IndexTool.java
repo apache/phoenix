@@ -201,11 +201,12 @@ public class IndexTool extends Configured implements Tool {
             "If specified, we avoid the bulk load (optional)");
 
     private static final Option VERIFY_OPTION = new Option("v", "verify", true,
-            "To verify every data row has a corresponding row. The accepted values are NONE, ONLY, BEFORE," +
-                    " AFTER, and BOTH. NONE is for no inline verification, which is also the default for this option. " +
-                    "ONLY is for verifying without rebuilding index rows. The rest for verifying before, after, and " +
-                    "both before and after rebuilding row. If the verification is done before rebuilding rows and " +
-                    "the correct index rows are not rebuilt. Currently supported values are NONE, ONLY and AFTER ");
+            "To verify every data row has a corresponding row of a global index. For other types of indexes, " +
+                    "this option will be silently ignored. The accepted values are NONE, ONLY, BEFORE,  AFTER, and BOTH. " +
+                    "NONE is for no inline verification, which is also the default for this option. ONLY is for " +
+                    "verifying without rebuilding index rows. The rest for verifying before, after, and both before " +
+                    "and after rebuilding row. If the verification is done before rebuilding rows and the correct " +
+                    "index rows will not be rebuilt");
 
     private static final double DEFAULT_SPLIT_SAMPLING_RATE = 10.0;
 
@@ -691,10 +692,6 @@ public class IndexTool extends Configured implements Tool {
             if (cmdLine.hasOption(VERIFY_OPTION.getOpt())) {
                 String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
                 indexVerifyType = IndexVerifyType.fromValue(value);
-                if (!(indexVerifyType == IndexVerifyType.NONE || indexVerifyType == IndexVerifyType.AFTER ||
-                        indexVerifyType == IndexVerifyType.ONLY)) {
-                    throw new IllegalStateException("Unsupported value for the verify option");
-                }
             }
             qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             try(Connection tempConn = ConnectionUtil.getInputConnection(configuration)) {
