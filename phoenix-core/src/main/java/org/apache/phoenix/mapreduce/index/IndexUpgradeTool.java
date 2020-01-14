@@ -103,6 +103,11 @@ public class IndexUpgradeTool extends Configured implements Tool {
             "[Optional]Whether or not synchronously rebuild the indexes; "
                     + "default rebuild asynchronous");
 
+    private static final Option INDEX_VERIFY_OPTION = new Option("v",
+            "verify",
+            true,
+            "[Optional] mode to run indexTool with verify options [BEFORE|AFTER|NONE|ONLY|BOTH]");
+
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
     private static final String GLOBAL_INDEX_ID = "#NA#";
@@ -117,6 +122,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String inputTables;
     private String logFile;
     private String inputFile;
+    private String verify = null;
 
     private boolean test = false;
     private boolean isWaitComplete = false;
@@ -138,10 +144,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public void setTest(boolean test) { this.test = test; }
+
     public boolean getIsWaitComplete() { return this.isWaitComplete; }
-    public boolean getDryRun() {
-        return this.dryRun;
-    }
+
+    public boolean getDryRun() { return this.dryRun; }
+
+    public String getVerify() { return verify; }
 
     public String getInputTables() {
         return this.inputTables;
@@ -252,7 +260,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
         options.addOption(HELP_OPTION);
         INDEX_SYNC_REBUILD_OPTION.setOptionalArg(true);
         options.addOption(INDEX_SYNC_REBUILD_OPTION);
-
+        INDEX_VERIFY_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_VERIFY_OPTION);
         return options;
     }
 
@@ -264,6 +273,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         inputFile = cmdLine.getOptionValue(TABLE_CSV_FILE_OPTION.getOpt());
         dryRun = cmdLine.hasOption(DRY_RUN_OPTION.getOpt());
         syncRebuild = cmdLine.hasOption(INDEX_SYNC_REBUILD_OPTION.getOpt());
+        verify = cmdLine.getOptionValue(INDEX_VERIFY_OPTION.getOpt());
     }
 
     @VisibleForTesting
@@ -692,7 +702,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return 0;
     }
 
-    private String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
+    public String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
             String outFile, String tenantId) {
         String args[] = { "-s", schema, "-dt", baseTable, "-it", indexName,
                 "-direct", "-op", outFile };
@@ -703,6 +713,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
         if (syncRebuild) {
             list.add("-runfg");
+        }
+        if(verify != null) {
+            list.add("-v");
+            list.add(verify);
         }
         return list.toArray(new String[list.size()]);
     }
