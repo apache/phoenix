@@ -83,25 +83,30 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     private static final Option OPERATION_OPTION = new Option("o", "operation",
             true,
-            "[Required]Operation to perform (upgrade/rollback)");
+            "[Required] Operation to perform (upgrade/rollback)");
     private static final Option TABLE_OPTION = new Option("tb", "table", true,
-            "[Required]Tables list ex. table1,table2");
+            "[Required] Tables list ex. table1,table2");
     private static final Option TABLE_CSV_FILE_OPTION = new Option("f", "file",
             true,
-            "[Optional]Tables list in a csv file");
+            "[Optional] Tables list in a csv file");
     private static final Option DRY_RUN_OPTION = new Option("d", "dry-run",
             false,
-            "[Optional]If passed this will output steps that will be executed");
+            "[Optional] If passed this will output steps that will be executed");
     private static final Option HELP_OPTION = new Option("h", "help",
             false, "Help");
     private static final Option LOG_FILE_OPTION = new Option("lf", "logfile",
             true,
-            "Log file path where the logs are written");
+            "[Optional] Log file path where the logs are written");
     private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr",
             "index-sync-rebuild",
             false,
-            "[Optional]Whether or not synchronously rebuild the indexes; "
+            "[Optional] Whether or not synchronously rebuild the indexes; "
                     + "default rebuild asynchronous");
+
+    private static final Option INDEX_VERIFY_OPTION = new Option("v",
+            "verify",
+            true,
+            "[Optional] mode to run indexTool with verify options");
 
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
@@ -117,6 +122,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String inputTables;
     private String logFile;
     private String inputFile;
+    private String verify;
 
     private boolean test = false;
     private boolean isWaitComplete = false;
@@ -138,10 +144,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public void setTest(boolean test) { this.test = test; }
+
     public boolean getIsWaitComplete() { return this.isWaitComplete; }
-    public boolean getDryRun() {
-        return this.dryRun;
-    }
+
+    public boolean getDryRun() { return this.dryRun; }
+
+    public String getVerify() { return this.verify; }
 
     public String getInputTables() {
         return this.inputTables;
@@ -152,7 +160,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public String getOperation() {
-        return operation;
+        return this.operation;
     }
 
     public IndexUpgradeTool(String mode, String tables, String inputFile,
@@ -252,7 +260,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
         options.addOption(HELP_OPTION);
         INDEX_SYNC_REBUILD_OPTION.setOptionalArg(true);
         options.addOption(INDEX_SYNC_REBUILD_OPTION);
-
+        INDEX_VERIFY_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_VERIFY_OPTION);
         return options;
     }
 
@@ -264,6 +273,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         inputFile = cmdLine.getOptionValue(TABLE_CSV_FILE_OPTION.getOpt());
         dryRun = cmdLine.hasOption(DRY_RUN_OPTION.getOpt());
         syncRebuild = cmdLine.hasOption(INDEX_SYNC_REBUILD_OPTION.getOpt());
+        verify = cmdLine.getOptionValue(INDEX_VERIFY_OPTION.getOpt());
     }
 
     @VisibleForTesting
@@ -692,7 +702,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return 0;
     }
 
-    private String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
+    public String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
             String outFile, String tenantId) {
         String args[] = { "-s", schema, "-dt", baseTable, "-it", indexName,
                 "-direct", "-op", outFile };
@@ -703,6 +713,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
         if (syncRebuild) {
             list.add("-runfg");
+        }
+        if(!Strings.isNullOrEmpty(verify)) {
+            list.add("-v");
+            list.add(verify);
         }
         return list.toArray(new String[list.size()]);
     }
