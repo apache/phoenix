@@ -24,6 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -37,17 +38,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
@@ -371,6 +379,24 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    public static class MutationCountingRegionObserver extends SimpleRegionObserver {
+        public static AtomicInteger mutationCount = new AtomicInteger(0);
+
+        public static void setMutationCount(int value) {
+            mutationCount.set(0);
+        }
+
+        public static int getMutationCount() {
+            return mutationCount.get();
+        }
+
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+                                   MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+            mutationCount.addAndGet(miniBatchOp.size());
+        }
+    }
+
     private Cell getErrorMessageFromIndexToolOutputTable(Connection conn, String dataTableFullName, String indexTableFullName)
             throws Exception {
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
@@ -406,6 +432,53 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
         assertTrue(dataTableNameCheck && indexTableNameCheck && errorMessageCell != null);
         return errorMessageCell;
+    }
+
+    @Test
+    public void testIndexToolVerifyBeforeAndBothOptions() throws Exception {
+        // This test is for building non-transactional global indexes with direct api
+        if (localIndex || transactional || !directApi || useSnapshot) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String schemaName = generateUniqueName();
+            String dataTableName = generateUniqueName();
+            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+            String indexTableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                    + tableDDLOptions);
+            conn.commit();
+            conn.createStatement().execute("CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName);
+            conn.commit();
+            // Insert a row
+            conn.createStatement().execute("upsert into " + viewFullName + " values (1, 'Phoenix', 12345)");
+            conn.commit();
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
+            TestUtil.addCoprocessor(conn, "_IDX_" + dataTableFullName, MutationCountingRegionObserver.class);
+            // Run the index MR job and verify that the index table rebuild succeeds
+            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER);
+            assertEquals(1, MutationCountingRegionObserver.getMutationCount());
+            MutationCountingRegionObserver.setMutationCount(0);
+            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should
+            // write any index rows
+            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.BEFORE);
+            assertEquals(0, MutationCountingRegionObserver.getMutationCount());
+            // The "-v BOTH" option should not write any index rows either
+            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.BOTH);
+            assertEquals(0, MutationCountingRegionObserver.getMutationCount());
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+            admin.disableTable(indexToolOutputTable);
+            admin.deleteTable(indexToolOutputTable);
+        }
     }
 
     @Test
