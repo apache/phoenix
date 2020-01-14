@@ -38,6 +38,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.collect.Sets;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -45,7 +46,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTableOutput;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
@@ -67,7 +67,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 
 /**
  * Tests for the {@link IndexScrutinyTool}
@@ -160,51 +159,6 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         // make sure row counts weren't modified by scrutiny
         assertEquals(numDataRows, countRows(conn, dataTableFullName));
         assertEquals(numIndexRows, countRows(conn, indexTableFullName));
-    }
-
-    @Test public void testScrutinyOnArrayTypes() throws Exception {
-        String dataTableName = generateUniqueName();
-        String indexTableName = generateUniqueName();
-        String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, VB VARBINARY)";
-        String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (VB)";
-        String upsertData = "UPSERT INTO %s VALUES (?, ?, ?)";
-        String upsertIndex = "UPSERT INTO %s (\"0:NAME\", \":ID\", \"0:VB\") values (?,?,?)";
-
-        try (Connection conn =
-                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
-            conn.createStatement().execute(String.format(dataTableDDL, dataTableName));
-            conn.createStatement().execute(String.format(indexTableDDL, indexTableName, dataTableName));
-            // insert two rows
-            PreparedStatement upsertDataStmt = conn.prepareStatement(String.format(upsertData, dataTableName));
-            upsertRow(upsertDataStmt, 1, "name-1", new byte[] {127, 0, 0, 1});
-            upsertRow(upsertDataStmt, 2, "name-2", new byte[] {127, 1, 0, 5});
-            conn.commit();
-
-            List<Job> completedJobs = runScrutiny(null, dataTableName, indexTableName);
-            Job job = completedJobs.get(0);
-            assertTrue(job.isSuccessful());
-            Counters counters = job.getCounters();
-            assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
-            assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
-
-            // Now insert a different varbinary row
-            upsertRow(upsertDataStmt, 3, "name-3", new byte[] {1, 1, 1, 1});
-            conn.commit();
-
-            PreparedStatement upsertIndexStmt = conn.prepareStatement(String.format(upsertIndex, indexTableName));
-            upsertIndexStmt.setString(1, "name-3");
-            upsertIndexStmt.setInt(2, 3);
-            upsertIndexStmt.setBytes(3, new byte[] {0, 0, 0, 1});
-            upsertIndexStmt.executeUpdate();
-            conn.commit();
-
-            completedJobs = runScrutiny(null, dataTableName, indexTableName);
-            job = completedJobs.get(0);
-            assertTrue(job.isSuccessful());
-            counters = job.getCounters();
-            assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
-            assertEquals(1, getCounterValue(counters, INVALID_ROW_COUNT));
-        }
     }
 
     /**
@@ -685,15 +639,6 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         stmt.setString(index++, name);
         stmt.setInt(index++, zip);
         stmt.setTimestamp(index++, new Timestamp(testTime));
-        stmt.executeUpdate();
-    }
-
-    private void upsertRow(PreparedStatement stmt, int id, String name, byte[] val) throws SQLException {
-        int index = 1;
-        // insert row
-        stmt.setInt(index++, id);
-        stmt.setString(index++, name);
-        stmt.setBytes(index++, val);
         stmt.executeUpdate();
     }
 
