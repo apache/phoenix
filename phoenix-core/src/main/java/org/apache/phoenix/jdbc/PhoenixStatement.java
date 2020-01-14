@@ -904,50 +904,62 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context, stmt);
+        }
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+        private class CustomMutationPlan extends BaseMutationPlan {
+
+            private final StatementContext context;
+            private final PhoenixStatement stmt;
+
+            private CustomMutationPlan(StatementContext context, PhoenixStatement stmt) {
+                super(context, ExecutableAddJarsStatement.this.getOperation());
+                this.context = context;
+                this.stmt = stmt;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("ADD JARS"));
+            }
+
+            @Override
+            public MutationState execute() throws SQLException {
+                String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps()
+                    .get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                if (dynamicJarsDir == null) {
+                    throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
+                        + " is not configured for placing the jars.");
                 }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ADD JARS"));
+                dynamicJarsDir =
+                  dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                Configuration conf = HBaseFactoryProvider.getConfigurationFactory()
+                    .getConfiguration();
+                Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                for (LiteralParseNode jarPath : getJarPaths()) {
+                    String jarPathStr = (String) jarPath.getValue();
+                    if (!jarPathStr.endsWith(".jar")) {
+                        throw new SQLException(jarPathStr + " is not a valid jar file path.");
+                    }
                 }
-
-                @Override
-                public MutationState execute() throws SQLException {
-                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
-                    if(dynamicJarsDir == null) {
-                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY+" is not configured for placing the jars.");
+                try {
+                    FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                    List<LiteralParseNode> jarPaths = getJarPaths();
+                    for (LiteralParseNode jarPath : jarPaths) {
+                        File f = new File((String) jarPath.getValue());
+                        fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
+                            dynamicJarsDir + f.getName()));
                     }
-                    dynamicJarsDir =
-                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
-                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
-                    for (LiteralParseNode jarPath : getJarPaths()) {
-                        String jarPathStr = (String)jarPath.getValue();
-                        if(!jarPathStr.endsWith(".jar")) {
-                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
-                        }
-                    }
-
-                    try {
-                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
-                        List<LiteralParseNode> jarPaths = getJarPaths();
-                        for (LiteralParseNode jarPath : jarPaths) {
-                            File f = new File((String) jarPath.getValue());
-                            fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
-                                    dynamicJarsDir + f.getName()));
-                        }
-                    } catch(IOException e) {
-                        throw new SQLException(e);
-                    }
-                    return new MutationState(0, 0, context.getConnection());
+                } catch (IOException e) {
+                    throw new SQLException(e);
                 }
-            };
-            
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
     
@@ -1012,46 +1024,58 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context, stmt);
+        }
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+        private class CustomMutationPlan extends BaseMutationPlan {
+
+            private final StatementContext context;
+            private final PhoenixStatement stmt;
+
+            private CustomMutationPlan(StatementContext context, PhoenixStatement stmt) {
+                super(context, ExecutableDeleteJarStatement.this.getOperation());
+                this.context = context;
+                this.stmt = stmt;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("DELETE JAR"));
+            }
+
+            @Override
+            public MutationState execute() throws SQLException {
+                String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps()
+                    .get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                if (dynamicJarsDir == null) {
+                    throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
+                            + " is not configured.");
                 }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("DELETE JAR"));
-                }
-
-                @Override
-                public MutationState execute() throws SQLException {
-                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
-                    if (dynamicJarsDir == null) {
-                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
-                                + " is not configured.");
+                dynamicJarsDir =
+                        dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                Configuration conf = HBaseFactoryProvider.getConfigurationFactory()
+                    .getConfiguration();
+                Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                try {
+                    FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                    String jarPathStr = (String)getJarPath().getValue();
+                    if(!jarPathStr.endsWith(".jar")) {
+                        throw new SQLException(jarPathStr + " is not a valid jar file path.");
                     }
-                    dynamicJarsDir =
-                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
-                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
-                    try {
-                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
-                        String jarPathStr = (String)getJarPath().getValue();
-                        if(!jarPathStr.endsWith(".jar")) {
-                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
-                        }
-                        Path p = new Path(jarPathStr);
-                        if(fs.exists(p)) {
-                            fs.delete(p, false);
-                        }
-                    } catch(IOException e) {
-                        throw new SQLException(e);
+                    Path p = new Path(jarPathStr);
+                    if(fs.exists(p)) {
+                        fs.delete(p, false);
                     }
-                    return new MutationState(0, 0, context.getConnection());
+                } catch(IOException e) {
+                    throw new SQLException(e);
                 }
-            };
-            
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
 
@@ -1298,37 +1322,47 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context);
+        }
 
-                @Override
-                public StatementContext getContext() {
-                    return context;
-                }
+        private class CustomMutationPlan extends BaseMutationPlan {
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
+            private final StatementContext context;
 
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
-                }
+            private CustomMutationPlan(StatementContext context) {
+                super(context, ExecutableAlterSessionStatement.this.getOperation());
+                this.context = context;
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
+            }
 
 
-                @Override
-                public MutationState execute() throws SQLException {
-                    Object consistency = getProps().get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
-                    if(consistency != null) {
-                        if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
-                            getContext().getConnection().setConsistency(Consistency.TIMELINE);
-                        } else {
-                        	getContext().getConnection().setConsistency(Consistency.STRONG);
-                        }
+            @Override
+            public MutationState execute() throws SQLException {
+                Object consistency = getProps()
+                    .get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
+                if(consistency != null) {
+                    if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
+                        getContext().getConnection().setConsistency(Consistency.TIMELINE);
+                    } else {
+                        getContext().getConnection().setConsistency(Consistency.STRONG);
                     }
-                    return new MutationState(0, 0, context.getConnection());
                 }
-            };
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
 
