@@ -179,6 +179,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -292,7 +293,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                 @Override
                     public PhoenixResultSet call() throws SQLException {
-                    final long startTime = System.currentTimeMillis();
+                    final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
                         
@@ -361,7 +362,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         // Regardless of whether the query was successfully handled or not, 
                         // update the time spent so far. If needed, we can separate out the
                         // success times and failure times.
-                        GLOBAL_QUERY_TIME.update(System.currentTimeMillis() - startTime);
+                        GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                     }
                 }
                 }, PhoenixContextExecutor.inContext());

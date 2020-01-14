@@ -678,7 +678,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throwConnectionClosedIfNullMetaData();
             PMetaData metaData = latestMetaData;
             PTable table;
-            long endTime = System.currentTimeMillis() + DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS;
+            long endTime = EnvironmentEdgeManager.currentTimeMillis() +
+                DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS;
             while (true) {
                 try {
                     try {
@@ -700,7 +701,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     } catch (TableNotFoundException e) {
                     }
-                    long waitTime = endTime - System.currentTimeMillis();
+                    long waitTime = endTime - EnvironmentEdgeManager.currentTimeMillis();
                     // We waited long enough - just remove the table from the cache
                     // and the next time it's used it'll be pulled over from the server.
                     if (waitTime <= 0) {
@@ -5188,7 +5189,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // iterate only up to whatever the current count is.
                         int numScanners = scannerQueue.size();
                         int renewed = 0;
-                        long start = System.currentTimeMillis();
+                        long start = EnvironmentEdgeManager.currentTimeMillis();
                         while (numScanners > 0) {
                             // It is guaranteed that this poll won't hang indefinitely because this is the
                             // only thread that removes items from the queue. Still adding a 1 ms timeout
@@ -5231,7 +5232,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                         if (renewed > 0) {
                             LOGGER.info("Renewed leases for " + renewed + " scanner/s in "
-                                    + (System.currentTimeMillis() - start) + " ms ");
+                                    + (EnvironmentEdgeManager.currentTimeMillis() - start) + " ms ");
                         }
                         connectionsQueue.offer(connRef);
                     }

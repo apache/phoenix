@@ -27,6 +27,7 @@ import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,14 +51,15 @@ class MultithreadedDiffer implements Callable<Void> {
      * @throws Exception
      */
     private void diffQuery() throws Exception {
-        Long start = System.currentTimeMillis();
+        Long start = EnvironmentEdgeManager.currentTimeMillis();
         Date startDate = Calendar.getInstance().getTime();
         String newCSV = queryVerifier.exportCSV(query);
         boolean verifyResult = queryVerifier.doDiff(query, newCSV);
         String explainPlan = pUtil.getExplainPlan(query);
         getThreadTime().getRunTimesInMs().add(new RunTime(
                         verifyResult == true ? PherfConstants.DIFF_PASS : PherfConstants.DIFF_FAIL,
-                        explainPlan, startDate, -1L, (int) (System.currentTimeMillis() - start)));
+                        explainPlan, startDate, -1L,
+            (int) (EnvironmentEdgeManager.currentTimeMillis() - start)));
     }
 
     /**
@@ -84,8 +86,9 @@ class MultithreadedDiffer implements Callable<Void> {
     public Void call() throws Exception {
         LOGGER.info("\n\nThread Starting " + t.getName() + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
-        Long start = System.currentTimeMillis();
-        for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
+        Long start = EnvironmentEdgeManager.currentTimeMillis();
+        for (long i = numberOfExecutions; (i > 0 &&
+            ((EnvironmentEdgeManager.currentTimeMillis() - start)
                 < executionDurationInMs)); i--) {
             try {
                 diffQuery();

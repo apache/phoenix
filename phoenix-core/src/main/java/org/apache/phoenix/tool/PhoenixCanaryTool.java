@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.RetryCounter;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,14 +81,15 @@ public class PhoenixCanaryTool extends Configured implements Tool {
 
         private void onCreate(Connection connection) {
             result.setTimestamp(getCurrentTimestamp());
-            result.setStartTime(System.currentTimeMillis());
+            result.setStartTime(EnvironmentEdgeManager.currentTimeMillis());
             this.connection = connection;
         }
 
         abstract void onExecute() throws Exception;
 
         private void onExit() {
-            result.setExecutionTime(System.currentTimeMillis() - result.getStartTime());
+            result.setExecutionTime(EnvironmentEdgeManager.currentTimeMillis() - 
+                result.getStartTime());
         }
 
         CanaryTestResult runTest(Connection connection) {
@@ -110,7 +112,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
         void onExecute() throws Exception {
             result.setTestName("upsertTable");
             // Insert data
-            timestamp = new Timestamp(System.currentTimeMillis());
+            timestamp = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
             String stmt = "UPSERT INTO " + FQ_TABLE_NAME
                     + "(mykey, mycolumn, insert_date) VALUES (?, ?, ?)";
             PreparedStatement ps = connection.prepareStatement(stmt);
@@ -315,7 +317,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
             // Dynamically load a class for sink
             sink = (Sink) ClassLoader.getSystemClassLoader().loadClass(logSinkClass).newInstance();
 
-            long startTime = System.currentTimeMillis();
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
             String connectionURL = (conString != null) ? conString :
                     "jdbc:phoenix:thin:serialization=PROTOBUF;url=" + hostName + ":" + port;
@@ -348,7 +350,7 @@ public class PhoenixCanaryTool extends Configured implements Tool {
                 }
             }, timeoutVal, TimeUnit.SECONDS, true);
 
-            long estimatedTime = System.currentTimeMillis() - startTime;
+            long estimatedTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
 
             appInfo.setExecutionTime(estimatedTime);
             appInfo.setSuccessful(true);

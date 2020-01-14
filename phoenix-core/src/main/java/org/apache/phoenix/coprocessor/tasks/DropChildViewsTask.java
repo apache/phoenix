@@ -19,6 +19,7 @@ package org.apache.phoenix.coprocessor.tasks;
 
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -66,7 +67,7 @@ public class DropChildViewsTask extends BaseTask {
                                 SYSTEM_CHILD_LINK_NAME_BYTES,
                                 env.getConfiguration()).getName());
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
-            } else if (System.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
+            } else if (EnvironmentEdgeManager.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
                 // skip this task as it has not been expired and its parent table has not been dropped yet
                 LOGGER.info("Skipping a child view drop task. " +
                         "The parent table has not been dropped yet : " +

@@ -1182,7 +1182,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         statsCollector.updateStatistic(region, scan);
                         LOGGER.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
-                                + ". Time: " + (System.currentTimeMillis() - startTime));
+                                + ". Time: " + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
                     }
                     if (compactionRunning) {
                         LOGGER.info("UPDATE STATISTICS stopped in between because major compaction was running for region "
