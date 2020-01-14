@@ -26,6 +26,7 @@ import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.phoenix.pherf.configuration.*;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
@@ -58,7 +59,7 @@ public class RulesApplier {
 
 
     public RulesApplier(XMLConfigParser parser) {
-        this(parser, System.currentTimeMillis());
+        this(parser, EnvironmentEdgeManager.currentTimeMillis());
     }
 
     public RulesApplier(XMLConfigParser parser, long seed) {
