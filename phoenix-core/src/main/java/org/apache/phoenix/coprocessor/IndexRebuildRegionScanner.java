@@ -110,8 +110,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private Table outputHTable = null;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     private boolean verify = false;
-    private boolean onlyVerify = false;
+    private boolean doNotFail = false;
     private Map<byte[], Put> indexKeyToDataPutMap;
+    private Map<byte[], Put> dataKeyToDataPutMap;
     private TaskRunner pool;
     private TaskBatch<Boolean> tasks;
     private String exceptionMessage;
@@ -140,6 +141,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
         if (!scan.isRaw()) {
+            // No need to deserialize index maintainers when the scan is raw. Raw scan is used by partial rebuilds
             List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
             indexMaintainer = maintainers.get(0);
         }
@@ -152,15 +154,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
         if (valueBytes != null) {
             verifyType = IndexTool.IndexVerifyType.fromValue(valueBytes);
-            if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.ONLY) {
+            if (verifyType != IndexTool.IndexVerifyType.NONE) {
                 verify = true;
-                if (verifyType == IndexTool.IndexVerifyType.ONLY) {
-                    onlyVerify = true;
-                }
+                // Create the following objects only for rebuilds by IndexTool
                 hTableFactory = ServerUtil.getDelegateHTableFactory(env, ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION);
                 indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
                 outputHTable = hTableFactory.getTable(new ImmutableBytesPtr(IndexTool.OUTPUT_TABLE_NAME_BYTES));
                 indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+                dataKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
                         new ThreadPoolBuilder("IndexVerify",
                                 env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
@@ -201,28 +202,31 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         m.setDurability(Durability.SKIP_WAL);
     }
 
-    private Delete generateDeleteMarkers(List<Cell> row) {
+    private Delete generateDeleteMarkers(Put put) {
         Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
-        if (row.size() == allColumns.size() + 1) {
+        int cellCount = put.size();
+        if (cellCount == allColumns.size() + 1) {
             // We have all the columns for the index table plus the empty column. So, no delete marker is needed
             return null;
         }
-        Set<ColumnReference> includedColumns = Sets.newLinkedHashSetWithExpectedSize(row.size());
+        Set<ColumnReference> includedColumns = Sets.newLinkedHashSetWithExpectedSize(cellCount);
         long ts = 0;
-        for (Cell cell : row) {
-            includedColumns.add(new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell)));
-            if (ts < cell.getTimestamp()) {
-                ts = cell.getTimestamp();
+        for (List<Cell> cells : put.getFamilyCellMap().values()) {
+            if (cells == null) {
+                break;
+            }
+            for (Cell cell : cells) {
+                includedColumns.add(new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell)));
+                if (ts < cell.getTimestamp()) {
+                    ts = cell.getTimestamp();
+                }
             }
         }
-        byte[] rowKey;
         Delete del = null;
         for (ColumnReference column : allColumns) {
             if (!includedColumns.contains(column)) {
                 if (del == null) {
-                    Cell cell = row.get(0);
-                    rowKey = CellUtil.cloneRow(cell);
-                    del = new Delete(rowKey);
+                    del = new Delete(put.getRow());
                 }
                 del.addColumns(column.getFamily(), column.getQualifier(), ts);
             }
@@ -238,15 +242,12 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         }
     }
 
-    private byte[] commitIfReady(byte[] uuidValue) throws IOException {
-        if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+    private byte[] commitIfReady(byte[] uuidValue, UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
+        if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
             ungroupedAggregateRegionObserver.checkForRegionClosing();
-            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutationList, blockingMemstoreSize);
             uuidValue = ServerCacheClient.generateId();
-            if (verify) {
-                addToBeVerifiedIndexRows();
-            }
-            mutations.clear();
+            mutationList.clear();
         }
         return uuidValue;
     }
@@ -367,10 +368,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return ts;
     }
 
-    private void verifySingleIndexRow(Result indexRow, final Put dataRow) throws IOException {
-        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
+    private long getMaxTimestamp(Put put) {
         long ts = 0;
-        for (List<Cell> cells : dataRow.getFamilyCellMap().values()) {
+        for (List<Cell> cells : put.getFamilyCellMap().values()) {
             if (cells == null) {
                 break;
             }
@@ -380,19 +380,25 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 }
             }
         }
+        return ts;
+    }
+
+    private boolean verifySingleIndexRow(Result indexRow, final Put dataRow) throws IOException {
+        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
+        long ts = getMaxTimestamp(dataRow);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null);
         if (indexPut == null) {
             // This means the index row does not have any covered columns. We just need to check if the index row
             // has only one cell (which is the empty column cell)
             if (indexRow.rawCells().length == 1) {
-                return;
+                return true;
             }
             String errorMsg = "Expected to find only empty column cell but got "
                     + indexRow.rawCells().length;
             logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
-            if (onlyVerify) {
-                return;
+            if (doNotFail) {
+                return false;
             }
             exceptionMessage = "Index verify failed - " + errorMsg + indexHTable.getName();
             throw new IOException(exceptionMessage);
@@ -418,8 +424,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     String errorMsg = " Missing cell " + Bytes.toString(family) + ":" +
                             Bytes.toString(qualifier);
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
-                    if (onlyVerify) {
-                        return;
+                    if (doNotFail) {
+                        return false;
                     }
                     exceptionMessage = "Index verify failed - Missing cell " + indexHTable.getName();
                     throw new IOException(exceptionMessage);
@@ -430,8 +436,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                             Bytes.toString(qualifier);
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow),
                             errorMsg, CellUtil.cloneValue(expectedCell), CellUtil.cloneValue(actualCell));
-                    if (onlyVerify) {
-                        return;
+                    if (doNotFail) {
+                        return false;
                     }
                     exceptionMessage = "Index verify failed - Not matching cell value - " + indexHTable.getName();
                     throw new IOException(exceptionMessage);
@@ -443,14 +449,16 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             String errorMsg = "Expected to find " + cellCount + " cells but got "
                     + indexRow.rawCells().length + " cells";
             logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
-            if (!onlyVerify) {
+            if (!doNotFail) {
                 exceptionMessage = "Index verify failed - " + errorMsg + " - " + indexHTable.getName();
                 throw new IOException(exceptionMessage);
             }
+            return false;
         }
+        return true;
     }
 
-    private void verifyIndexRows(ArrayList<KeyRange> keys) throws IOException {
+    private void verifyIndexRows(ArrayList<KeyRange> keys, Map<byte[], Put> perTaskDataKeyToDataPutMap) throws IOException {
         int expectedRowCount = keys.size();
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan indexScan = new Scan();
@@ -463,31 +471,57 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
                 Put dataPut = indexKeyToDataPutMap.get(result.getRow());
                 if (dataPut == null) {
-                    exceptionMessage = "Index verify failed - Missing data row - " + indexHTable.getName();
                     String errorMsg = "Missing data row";
                     logToIndexToolOutputTable(null, result.getRow(), 0, getMaxTimestamp(result), errorMsg);
-                    if (!onlyVerify) {
+                    if (!doNotFail) {
+                        exceptionMessage = "Index verify failed - Missing data row - " + indexHTable.getName();
                         throw new IOException(exceptionMessage);
                     }
                 }
-                verifySingleIndexRow(result, dataPut);
+                if (verifySingleIndexRow(result, dataPut)) {
+                    perTaskDataKeyToDataPutMap.remove(dataPut.getRow());
+                }
                 rowCount++;
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException(indexHTable.getName().toString(), t);
         }
         if (rowCount != expectedRowCount) {
-            String errorMsg = "Missing index rows - Expected: " + expectedRowCount +
-                    " Actual: " + rowCount;
+            for (Map.Entry<byte[], Put> entry : perTaskDataKeyToDataPutMap.entrySet()) {
+                String errorMsg = "Missing index row";
+                logToIndexToolOutputTable(entry.getKey(), null, getMaxTimestamp(entry.getValue()),
+                        0, errorMsg);
+                if (!doNotFail) {
                     exceptionMessage = "Index verify failed - " + errorMsg + " - " + indexHTable.getName();
-            logToIndexToolOutputTable(null, null, 0, 0, errorMsg);
-            if (!onlyVerify) {
-                throw new IOException(exceptionMessage);
+                    throw new IOException(exceptionMessage);
+                }
             }
         }
     }
 
-    private void addVerifyTask(final ArrayList<KeyRange> keys) {
+    private void rebuildIndexRows(UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
+        byte[] uuidValue = ServerCacheClient.generateId();
+        UngroupedAggregateRegionObserver.MutationList currentMutationList =
+                new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
+        for (Mutation mutation : mutationList) {
+            Put put = (Put) mutation;
+            currentMutationList.add(mutation);
+            setMutationAttributes(put, uuidValue);
+            uuidValue = commitIfReady(uuidValue, currentMutationList);
+            Delete deleteMarkers = generateDeleteMarkers(put);
+            if (deleteMarkers != null) {
+                setMutationAttributes(deleteMarkers, uuidValue);
+                currentMutationList.add(deleteMarkers);
+                uuidValue = commitIfReady(uuidValue, currentMutationList);
+            }
+        }
+        if (!currentMutationList.isEmpty()) {
+            ungroupedAggregateRegionObserver.checkForRegionClosing();
+            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, currentMutationList, blockingMemstoreSize);
+        }
+    }
+
+    private void addVerifyTask(final ArrayList<KeyRange> keys, final Map<byte[], Put> perTaskDataKeyToDataPutMap) {
         tasks.add(new Task<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -496,7 +530,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                         exceptionMessage = "Pool closed, not attempting to verify index rows! " + indexHTable.getName();
                         throw new IOException(exceptionMessage);
                     }
-                    verifyIndexRows(keys);
+                    verifyIndexRows(keys, perTaskDataKeyToDataPutMap);
+                    if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
+                        synchronized (dataKeyToDataPutMap) {
+                            dataKeyToDataPutMap.putAll(perTaskDataKeyToDataPutMap);
+                        }
+                    }
+                    perTaskDataKeyToDataPutMap.clear();
                 } catch (Exception e) {
                     throw e;
                 }
@@ -505,11 +545,81 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         });
     }
 
+    private void parallelizeIndexVerify() throws IOException {
+        addToBeVerifiedIndexRows();
+        ArrayList<KeyRange> keys = new ArrayList<>(rowCountPerTask);
+        Map<byte[], Put> perTaskDataKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        for (Map.Entry<byte[], Put> entry: indexKeyToDataPutMap.entrySet()) {
+            keys.add(PVarbinary.INSTANCE.getKeyRange(entry.getKey()));
+            perTaskDataKeyToDataPutMap.put(entry.getValue().getRow(), entry.getValue());
+            if (keys.size() == rowCountPerTask) {
+                addVerifyTask(keys, perTaskDataKeyToDataPutMap);
+                keys = new ArrayList<>(rowCountPerTask);
+                perTaskDataKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+            }
+        }
+        if (keys.size() > 0) {
+            addVerifyTask(keys, perTaskDataKeyToDataPutMap);
+        }
+        List<Boolean> taskResultList = null;
+        try {
+            LOGGER.debug("Waiting on index verify tasks to complete...");
+            taskResultList = this.pool.submitUninterruptible(tasks);
+        } catch (ExecutionException e) {
+            throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
+        } catch (EarlyExitFailure e) {
+            throw new RuntimeException("Stopped while waiting for batch, quitting!", e);
+        } finally {
+            tasks.getTasks().clear();
+        }
+        for (Boolean result : taskResultList) {
+            if (result == null) {
+                // there was a failure
+                throw new IOException(exceptionMessage);
+            }
+        }
+    }
+
+    private void verifyAndOrRebuildIndex() throws IOException {
+        if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.NONE) {
+            // For these options we start with rebuilding index rows
+            rebuildIndexRows(mutations);
+        }
+        if (verifyType == IndexTool.IndexVerifyType.NONE) {
+            return;
+        }
+        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH ||
+                verifyType == IndexTool.IndexVerifyType.ONLY) {
+            // For these options we start with verifying index rows
+            doNotFail = true; // Don't stop at the first mismatch
+            parallelizeIndexVerify();
+        }
+        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
+            // For these options, we have identified the rows to be rebuilt and now need to rebuild them
+            // At this point, dataKeyToDataPutMap includes mapping only for the rows to be rebuilt
+            mutations.clear();
+            for (Map.Entry<byte[], Put> entry: dataKeyToDataPutMap.entrySet()) {
+                mutations.add(entry.getValue());
+            }
+            rebuildIndexRows(mutations);
+        }
+
+        if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.BOTH) {
+            // We have rebuilt index row and now we need to verify them
+            doNotFail = false; // Stop at the first mismatch
+            indexKeyToDataPutMap.clear();
+            parallelizeIndexVerify();
+        }
+        indexKeyToDataPutMap.clear();
+    }
+
     @Override
     public boolean next(List<Cell> results) throws IOException {
         int rowCount = 0;
         region.startRegionOperation();
         try {
+            // Partial rebuilds by MetadataRegionObserver use raw scan. Inline verification is not supported for them
+            boolean partialRebuild = scan.isRaw();
             byte[] uuidValue = ServerCacheClient.generateId();
             synchronized (innerScanner) {
                 do {
@@ -522,55 +632,58 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                             if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
                                 if (put == null) {
                                     put = new Put(CellUtil.cloneRow(cell));
-                                    setMutationAttributes(put, uuidValue);
                                     mutations.add(put);
                                 }
                                 put.add(cell);
                             } else {
                                 if (del == null) {
                                     del = new Delete(CellUtil.cloneRow(cell));
-                                    setMutationAttributes(del, uuidValue);
                                     mutations.add(del);
                                 }
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (onlyVerify) {
-                            rowCount++;
-                            continue;
+                        if (partialRebuild) {
+                            if (put != null) {
+                                setMutationAttributes(put, uuidValue);
+                            }
+                            if (del != null) {
+                                setMutationAttributes(del, uuidValue);
+                            }
+                            uuidValue = commitIfReady(uuidValue, mutations);
                         }
-                        uuidValue = commitIfReady(uuidValue);
-                        if (!scan.isRaw()) {
-                            Delete deleteMarkers = generateDeleteMarkers(row);
+                        if (indexRowKey != null) {
+                            if (put != null) {
+                                setMutationAttributes(put, uuidValue);
+                            }
+                            Delete deleteMarkers = generateDeleteMarkers(put);
                             if (deleteMarkers != null) {
                                 setMutationAttributes(deleteMarkers, uuidValue);
                                 mutations.add(deleteMarkers);
-                                uuidValue = commitIfReady(uuidValue);
+                                uuidValue = commitIfReady(uuidValue, mutations);
                             }
-                        }
-                        if (indexRowKey != null) {
                             // GlobalIndexChecker passed the index row key. This is to build a single index row.
                             // Check if the data table row we have just scanned matches with the index row key.
                             // If not, there is no need to build the index row from this data table row,
                             // and just return zero row count.
                             if (checkIndexRow(indexRowKey, put)) {
                                 rowCount = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
-                            }
-                            else {
+                            } else {
                                 rowCount = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
                             }
                             break;
                         }
                         rowCount++;
                     }
-
                 } while (hasMore && rowCount < pageSizeInRows);
-                if (!mutations.isEmpty() && !onlyVerify) {
+            }
+            if (!partialRebuild && indexRowKey == null) {
+                verifyAndOrRebuildIndex();
+            }
+            else {
+                if (!mutations.isEmpty()) {
                     ungroupedAggregateRegionObserver.checkForRegionClosing();
                     ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
-                    if (verify) {
-                        addToBeVerifiedIndexRows();
-                    }
                 }
             }
         } catch (IOException e) {
@@ -579,42 +692,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             throw e;
         } finally {
             region.closeRegionOperation();
-        }
-        if (verify) {
-            if (onlyVerify) {
-                addToBeVerifiedIndexRows();
-            }
-            ArrayList<KeyRange> keys = new ArrayList<>(rowCountPerTask);
-            for (byte[] key : indexKeyToDataPutMap.keySet()) {
-                keys.add(PVarbinary.INSTANCE.getKeyRange(key));
-                if (keys.size() == rowCountPerTask) {
-                    addVerifyTask(keys);
-                    keys = new ArrayList<>(rowCountPerTask);
-                }
-            }
-            if (keys.size() > 0) {
-                addVerifyTask(keys);
-            }
-            List<Boolean> taskResultList = null;
-            try {
-                LOGGER.debug("Waiting on index verify tasks to complete...");
-                taskResultList = this.pool.submitUninterruptible(tasks);
-            } catch (ExecutionException e) {
-                throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
-            } catch (EarlyExitFailure e) {
-                throw new RuntimeException("Stopped while waiting for batch, quitting!", e);
-            }
-            finally {
-                indexKeyToDataPutMap.clear();
-                tasks.getTasks().clear();
-            }
-            for (Boolean result : taskResultList) {
-                if (result == null) {
-                    // there was a failure
-                    throw new IOException(exceptionMessage);
-                }
+            mutations.clear();
+            if (verify) {
+              indexKeyToDataPutMap.clear();
+              dataKeyToDataPutMap.clear();
             }
         }
+
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
         final Cell aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
                 SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
