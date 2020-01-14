@@ -80,6 +80,7 @@ import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.CostUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SQLCloseables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -561,7 +562,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                                 plan.getEstimatedSize(), hashExpressions, singleValueOnly, usePersistentCache,
                                 parent.delegate.getTableRef().getTable(), keyRangeRhsExpression,
                                 keyRangeRhsValues);
-                        long endTime = System.currentTimeMillis();
+                        long endTime = EnvironmentEdgeManager.currentTimeMillis();
                         boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
                         if (!isSet && (endTime
                                 - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {

@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -467,7 +468,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     for (int i = 0; i < paramMetaData.getParameterCount(); i++) {
                         stmt.setObject(i + 1, binds.get(bindsOffset + i));
                     }
-                    long start = System.currentTimeMillis();
+                    long start = EnvironmentEdgeManager.currentTimeMillis();
                     boolean isQuery = stmt.execute();
                     if (isQuery) {
                         ResultSet rs = stmt.getResultSet();
@@ -542,7 +543,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                         }
                     }
                     bindsOffset += paramMetaData.getParameterCount();
-                    double elapsedDuration = ((System.currentTimeMillis() - start) / 1000.0);
+                    double elapsedDuration = ((EnvironmentEdgeManager.currentTimeMillis() - start) / 1000.0);
                     out.println("Time: " + elapsedDuration + " sec(s)\n");
                     nStatements++;
                 } finally {
