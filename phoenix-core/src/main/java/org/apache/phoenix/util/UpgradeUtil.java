@@ -1716,7 +1716,7 @@ public class UpgradeUtil {
 
     private static void upgradeDescVarLengthRowKeys(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String schemaName, String tableName, boolean isTable, boolean bypassUpgrade) throws SQLException {
         String physicalName = SchemaUtil.getTableName(schemaName, tableName);
-        long currentTime = System.currentTimeMillis();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         String snapshotName = physicalName + "_" + currentTime;
         HBaseAdmin admin = null;
         if (isTable && !bypassUpgrade) {
@@ -2430,7 +2430,7 @@ public class UpgradeUtil {
     public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
         String tableString = SYSTEM_CATALOG_NAME;
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
-        String date = formatter.format(new Date(System.currentTimeMillis()));
+        String date = formatter.format(new Date(EnvironmentEdgeManager.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
         return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
     }

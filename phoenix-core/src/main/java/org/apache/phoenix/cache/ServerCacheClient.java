@@ -73,6 +73,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
@@ -137,7 +138,7 @@ public class ServerCacheClient {
                     QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
             this.id = id;
             this.servers = new HashMap();
-            long currentTime = System.currentTimeMillis();
+            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             for(HRegionLocation loc : servers) {
                 this.servers.put(loc, currentTime);
             }
@@ -186,7 +187,7 @@ public class ServerCacheClient {
             if(this.servers.containsKey(loc)) {
                 return false;
             } else {
-                this.servers.put(loc, System.currentTimeMillis());
+                this.servers.put(loc, EnvironmentEdgeManager.currentTimeMillis());
                 return true;
             }
         }
@@ -194,7 +195,7 @@ public class ServerCacheClient {
         public boolean isExpired(HRegionLocation loc) {
             if(this.servers.containsKey(loc)) {
                 Long time = this.servers.get(loc);
-                if(System.currentTimeMillis() - time > maxServerCacheTTL)
+                if(EnvironmentEdgeManager.currentTimeMillis() - time > maxServerCacheTTL)
                     return true; // cache was send more than maxTTL ms ago, expecting that it's expired
             } else {
                 return false; // should be on server yet.
