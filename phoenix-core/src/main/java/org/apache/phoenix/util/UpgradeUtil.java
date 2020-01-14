@@ -668,7 +668,7 @@ public class UpgradeUtil {
         Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             LOGGER.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
-            Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+            Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -687,7 +687,7 @@ public class UpgradeUtil {
                 // This is needed as a fix for https://issues.apache.org/jira/browse/PHOENIX-1401 
                 if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0) {
                     byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
-                    Cell seqNumKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+                    Cell seqNumKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -781,7 +781,7 @@ public class UpgradeUtil {
                             if (!success) {
                                 if (!committed) { // Try to recover by setting salting back to off, as we haven't successfully committed anything
                                     // Don't use Delete here as we'd never be able to change it again at this timestamp.
-                                    Cell unsaltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+                                    Cell unsaltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                             PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -1728,7 +1728,7 @@ public class UpgradeUtil {
 
     private static void upgradeDescVarLengthRowKeys(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String schemaName, String tableName, boolean isTable, boolean bypassUpgrade) throws SQLException {
         TableName physicalName = TableName.valueOf(SchemaUtil.getTableName(schemaName, tableName));
-        long currentTime = System.currentTimeMillis();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         String snapshotName = physicalName + "_" + currentTime;
         Admin admin = null;
         if (isTable && !bypassUpgrade) {
@@ -2439,7 +2439,7 @@ public class UpgradeUtil {
     public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
         String tableString = SYSTEM_CATALOG_NAME;
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
-        String date = formatter.format(new Date(System.currentTimeMillis()));
+        String date = formatter.format(new Date(EnvironmentEdgeManager.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
         return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
     }

@@ -1056,7 +1056,7 @@ public class MutationState implements SQLCloseable {
                     GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
                     mutationSizeBytes = calculateMutationSize(mutationList);
 
-                    startTime = System.currentTimeMillis();
+                    startTime = EnvironmentEdgeManager.currentTimeMillis();
                     child.addTimelineAnnotation("Attempt " + retryCount);
                     Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
                     while (itrListMutation.hasNext()) {
@@ -1128,7 +1128,7 @@ public class MutationState implements SQLCloseable {
                     child.stop();
                     child.stop();
                     shouldRetry = false;
-                    mutationCommitTime = System.currentTimeMillis() - startTime;
+                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
                     numFailedMutations = 0;
 
@@ -1140,7 +1140,7 @@ public class MutationState implements SQLCloseable {
                         estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSize(mutations);
                     }
                 } catch (Exception e) {
-                    mutationCommitTime = System.currentTimeMillis() - startTime;
+                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     long serverTimestamp = ServerUtil.parseServerTimestamp(e);
                     SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                     if (inferredE != null) {

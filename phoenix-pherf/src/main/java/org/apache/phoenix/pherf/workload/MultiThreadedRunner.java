@@ -30,6 +30,7 @@ import org.apache.phoenix.pherf.result.ResultManager;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
@@ -48,7 +49,7 @@ class MultiThreadedRunner implements Callable<Void> {
     private DataModelResult dataModelResult;
     private long numberOfExecutions;
     private long executionDurationInMs;
-    private static long lastResultWritten = System.currentTimeMillis() - 1000;
+    private static long lastResultWritten = EnvironmentEdgeManager.currentTimeMillis() - 1000;
     private final ResultManager resultManager;
     private final RulesApplier ruleApplier;
     private final Scenario scenario;
@@ -89,14 +90,14 @@ class MultiThreadedRunner implements Callable<Void> {
     public Void call() throws Exception {
         LOGGER.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
                 + numberOfExecutions + "times\n\n");
-        Long start = System.currentTimeMillis();
-        for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
+        Long start = EnvironmentEdgeManager.currentTimeMillis();
+        for (long i = numberOfExecutions; (i > 0 && ((EnvironmentEdgeManager.currentTimeMillis() - start)
                 < executionDurationInMs)); i--) {
             synchronized (workloadExecutor) {
                 timedQuery();
-                if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
+                if ((EnvironmentEdgeManager.currentTimeMillis() - lastResultWritten) > 1000) {
                     resultManager.write(dataModelResult, ruleApplier);
-                    lastResultWritten = System.currentTimeMillis();
+                    lastResultWritten = EnvironmentEdgeManager.currentTimeMillis();
                 }
             }
         }
@@ -127,7 +128,7 @@ class MultiThreadedRunner implements Callable<Void> {
         Connection conn = null;
         PreparedStatement statement = null;
         ResultSet rs = null;
-        Long start = System.currentTimeMillis();
+        Long start = EnvironmentEdgeManager.currentTimeMillis();
         Date startDate = Calendar.getInstance().getTime();
         String exception = null;
         long resultRowCount = 0;
@@ -170,7 +171,7 @@ class MultiThreadedRunner implements Callable<Void> {
             throw e;
         } finally {
             getThreadTime().getRunTimesInMs().add(new RunTime(exception, startDate, resultRowCount,
-                    (int) (System.currentTimeMillis() - start)));
+                    (int) (EnvironmentEdgeManager.currentTimeMillis() - start)));
 
             if (rs != null) rs.close();
             if (statement != null) statement.close();
