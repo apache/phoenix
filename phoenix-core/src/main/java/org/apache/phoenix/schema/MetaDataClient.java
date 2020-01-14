@@ -729,14 +729,46 @@ public class MetaDataClient {
     // 1. table is a system table that does not have a ROW_TIMESTAMP column OR
     // 2. table was already resolved as of that timestamp OR
     // 3. table does not have a ROW_TIMESTAMP column and age is less then UPDATE_CACHE_FREQUENCY
+    // 3a. Get the effective UPDATE_CACHE_FREQUENCY for checking the age in the following precedence order:
+    // Table-level property > Connection-level property > Default value.
     private boolean avoidRpcToGetTable(boolean alwaysHitServer, Long resolvedTimestamp,
             boolean systemTable, PTable table, PTableRef tableRef, long tableResolvedTimestamp) {
-        return table != null && !alwaysHitServer &&
-                (systemTable && table.getRowTimestampColPos() == -1 ||
-                        resolvedTimestamp == tableResolvedTimestamp ||
-                        (table.getRowTimestampColPos() == -1 &&
-                                connection.getMetaDataCache().getAge(tableRef) <
-                                        table.getUpdateCacheFrequency()));
+        if (table != null && !alwaysHitServer) {
+            if (systemTable && table.getRowTimestampColPos() == -1 ||
+                    resolvedTimestamp == tableResolvedTimestamp) {
+                return true;
+            }
+
+            final long effectiveUpdateCacheFreq;
+            final String ucfInfoForLogging; // Only used for logging purposes
+
+            // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
+            // i.e. explicitly set to 0. We should ideally be checking for something like
+            // hasUpdateCacheFrequency().
+            if (table.getUpdateCacheFrequency() != 0L) {
+                effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
+                ucfInfoForLogging = "table-level";
+            } else {
+                effectiveUpdateCacheFreq =
+                        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                                connection.getQueryServices().getProps().get(
+                                        QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+                ucfInfoForLogging = connection.getQueryServices().getProps().get(
+                        QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB) != null ?
+                        "connection-level" : "default";
+            }
+
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Using " + ucfInfoForLogging + " Update Cache Frequency (value = " +
+                        effectiveUpdateCacheFreq + "ms) for " + table.getName() +
+                        (table.getTenantId() != null ? ", Tenant ID: " + table.getTenantId() : ""));
+            }
+
+            return (table.getRowTimestampColPos() == -1 &&
+                    connection.getMetaDataCache().getAge(tableRef) <
+                            effectiveUpdateCacheFreq);
+        }
+        return false;
     }
 
     public MetaDataMutationResult updateCache(String schemaName) throws SQLException {
