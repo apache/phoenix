@@ -27,6 +27,7 @@ import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 
 public class CreateSchemaCompiler {
+
     private final PhoenixStatement statement;
 
     public CreateSchemaCompiler(PhoenixStatement statement) {
@@ -37,29 +38,44 @@ public class CreateSchemaCompiler {
         final PhoenixConnection connection = statement.getConnection();
         final StatementContext context = new StatementContext(statement);
         final MetaDataClient client = new MetaDataClient(connection);
+        return new CreateSchemaMutationPlan(context, create, client, connection);
+    }
 
-        return new BaseMutationPlan(context, create.getOperation()) {
+    private static class CreateSchemaMutationPlan extends BaseMutationPlan {
 
-            @Override
-            public MutationState execute() throws SQLException {
-                try {
-                    return client.createSchema(create);
-                } finally {
-                    if (client.getConnection() != connection) {
-                        client.getConnection().close();
-                    }
+        private final StatementContext context;
+        private final CreateSchemaStatement create;
+        private final MetaDataClient client;
+        private final PhoenixConnection connection;
+
+        private CreateSchemaMutationPlan(StatementContext context, CreateSchemaStatement create,
+                MetaDataClient client, PhoenixConnection connection) {
+            super(context, create.getOperation());
+            this.context = context;
+            this.create = create;
+            this.client = client;
+            this.connection = connection;
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+            try {
+                return client.createSchema(create);
+            } finally {
+                if (client.getConnection() != connection) {
+                    client.getConnection().close();
                 }
             }
+        }
 
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("CREATE SCHEMA"));
-            }
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+            return new ExplainPlan(Collections.singletonList("CREATE SCHEMA"));
+        }
 
-            @Override
-            public StatementContext getContext() {
-                return context;
-            }
-        };
+        @Override
+        public StatementContext getContext() {
+            return context;
+        }
     }
 }
