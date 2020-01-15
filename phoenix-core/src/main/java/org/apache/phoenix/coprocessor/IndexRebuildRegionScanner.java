@@ -367,10 +367,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return ts;
     }
 
-    private boolean verifySingleIndexRow(Result indexRow, final Put dataRow) throws IOException {
-        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
+    private long getMaxTimestamp(Put put) {
         long ts = 0;
-        for (List<Cell> cells : dataRow.getFamilyCellMap().values()) {
+        for (List<Cell> cells : put.getFamilyCellMap().values()) {
             if (cells == null) {
                 break;
             }
@@ -380,6 +379,12 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 }
             }
         }
+        return ts;
+    }
+
+    private boolean verifySingleIndexRow(Result indexRow, final Put dataRow) throws IOException {
+        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
+        long ts = getMaxTimestamp(dataRow);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null);
         if (indexPut == null) {
@@ -452,7 +457,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return true;
     }
 
-    private void verifyIndexRows(ArrayList<KeyRange> keys, Map<byte[], Put> perTaskRowKeyToDataPutMap) throws IOException {
+    private void verifyIndexRows(ArrayList<KeyRange> keys, Map<byte[], Put> perTaskDataKeyToDataPutMap) throws IOException {
         int expectedRowCount = keys.size();
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan indexScan = new Scan();
@@ -465,15 +470,15 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
                 Put dataPut = indexKeyToDataPutMap.get(result.getRow());
                 if (dataPut == null) {
-                    exceptionMessage = "Index verify failed - Missing data row - " + indexHTable.getName();
                     String errorMsg = "Missing data row";
                     logToIndexToolOutputTable(null, result.getRow(), 0, getMaxTimestamp(result), errorMsg);
                     if (!doNotFail) {
+                        exceptionMessage = "Index verify failed - Missing data row - " + indexHTable.getName();
                         throw new IOException(exceptionMessage);
                     }
                 }
                 if (verifySingleIndexRow(result, dataPut)) {
-                    perTaskRowKeyToDataPutMap.remove(dataPut.getRow());
+                    perTaskDataKeyToDataPutMap.remove(dataPut.getRow());
                 }
                 rowCount++;
             }
@@ -481,12 +486,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             ServerUtil.throwIOException(indexHTable.getName().toString(), t);
         }
         if (rowCount != expectedRowCount) {
-            String errorMsg = "Missing index rows - Expected: " + expectedRowCount +
-                    " Actual: " + rowCount;
+            for (Map.Entry<byte[], Put> entry : perTaskDataKeyToDataPutMap.entrySet()) {
+                String errorMsg = "Missing index row";
+                logToIndexToolOutputTable(entry.getKey(), null, getMaxTimestamp(entry.getValue()),
+                        0, errorMsg);
+                if (!doNotFail) {
                     exceptionMessage = "Index verify failed - " + errorMsg + " - " + indexHTable.getName();
-            logToIndexToolOutputTable(null, null, 0, 0, errorMsg);
-            if (!doNotFail) {
-                throw new IOException(exceptionMessage);
+                    throw new IOException(exceptionMessage);
+                }
             }
         }
     }
@@ -513,7 +520,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         }
     }
 
-    private void addVerifyTask(final ArrayList<KeyRange> keys, final Map<byte[], Put> perTaskRowKeyToDataPutMap) {
+    private void addVerifyTask(final ArrayList<KeyRange> keys, final Map<byte[], Put> perTaskDataKeyToDataPutMap) {
         tasks.add(new Task<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -522,13 +529,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                         exceptionMessage = "Pool closed, not attempting to verify index rows! " + indexHTable.getName();
                         throw new IOException(exceptionMessage);
                     }
-                    verifyIndexRows(keys, perTaskRowKeyToDataPutMap);
+                    verifyIndexRows(keys, perTaskDataKeyToDataPutMap);
                     if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
                         synchronized (dataKeyToDataPutMap) {
-                            dataKeyToDataPutMap.putAll(perTaskRowKeyToDataPutMap);
+                            dataKeyToDataPutMap.putAll(perTaskDataKeyToDataPutMap);
                         }
                     }
-                    perTaskRowKeyToDataPutMap.clear();
+                    perTaskDataKeyToDataPutMap.clear();
                 } catch (Exception e) {
                     throw e;
                 }
