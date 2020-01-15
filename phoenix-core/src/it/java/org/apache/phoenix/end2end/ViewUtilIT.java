@@ -37,6 +37,9 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
@@ -59,7 +62,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         byte[] tenantIdInBytes = new byte[0];
         String fullTableName = schema + "." + generateUniqueName();
         String secondLevelViewName = schema + "." + generateUniqueName();
-        String thirdLevelViewName4 = schema + "." + generateUniqueName();
+        String thirdLevelViewName = schema + "." + generateUniqueName();
         String leafViewName1 = schema + "." + generateUniqueName();
         String leafViewName2 = schema + "." + generateUniqueName();
 
@@ -73,9 +76,9 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     String.format(viewDDLQuery, leafViewName1, secondLevelViewName));
             conn.createStatement().execute(
-                    String.format(viewDDLQuery, thirdLevelViewName4, secondLevelViewName));
+                    String.format(viewDDLQuery, thirdLevelViewName, secondLevelViewName));
             conn.createStatement().execute(
-                    String.format(viewDDLQuery, leafViewName2, thirdLevelViewName4));
+                    String.format(viewDDLQuery, leafViewName2, thirdLevelViewName));
 
             try (PhoenixConnection phoenixConnection =
                     DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
@@ -83,32 +86,37 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                         SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                 phoenixConnection.getQueryServices().getProps()).getName());
 
-                assertEquals(true, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(fullTableName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(fullTableName).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(true, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(secondLevelViewName).getBytes(StandardCharsets.UTF_8)
+                        SchemaUtil.getTableNameFromFullName(secondLevelViewName).
+                                getBytes(StandardCharsets.UTF_8)
                         , System.currentTimeMillis()));
-                assertEquals(true, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(thirdLevelViewName4).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(thirdLevelViewName).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(false, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertFalse(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(leafViewName1).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(leafViewName1).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(false, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertFalse(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(leafViewName2).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(leafViewName2).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
             }
         }
     }
 
     @Test
-    public void testHasChildViewsInTenantViewCase() throws Exception{
+    public void testHasChildViewsInTenantViewCase() throws Exception {
         String tenantId = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -126,14 +134,14 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String tenantViewIndex = viewName2 + "_INDEX";
         String tenantViewOnGlobalView = schema + "." + generateUniqueName();
 
-        String multiTenantTableDDL = "CREATE TABLE " + multiTenantTableName + "(TENANT_ID CHAR(10) NOT NULL, " +
-                "ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))" +
-                " MULTI_TENANT=true";
-        String globalViewDDL = "CREATE VIEW " + globalViewName + "(PK1 BIGINT, PK2 BIGINT) AS SELECT * FROM "
-                + multiTenantTableName + " WHERE NUM > -1";
+        String multiTenantTableDDL = "CREATE TABLE " + multiTenantTableName +
+                "(TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT " +
+                "CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
+        String globalViewDDL = "CREATE VIEW " + globalViewName + "(PK1 BIGINT, PK2 BIGINT) " +
+                "AS SELECT * FROM " + multiTenantTableName + " WHERE NUM > -1";
         String viewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
-        String viewIndexDDL = "CREATE INDEX " + tenantViewIndex + " ON " + tenantViewOnMultiTenantTable2 +
-                "(NUM DESC) INCLUDE (ID)";
+        String viewIndexDDL = "CREATE INDEX " + tenantViewIndex + " ON " +
+                tenantViewOnMultiTenantTable2 + "(NUM DESC) INCLUDE (ID)";
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(multiTenantTableDDL);
@@ -155,27 +163,30 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                         SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                 phoenixConnection.getQueryServices().getProps()).getName());
 
-                assertEquals(true, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         emptyTenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(multiTenantTableName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(multiTenantTableName).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(true, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         emptyTenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(globalViewName).getBytes(StandardCharsets.UTF_8)
+                        SchemaUtil.getTableNameFromFullName(globalViewName).
+                                getBytes(StandardCharsets.UTF_8)
                         , System.currentTimeMillis()));
-                assertEquals(false, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertFalse(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
                         SchemaUtil.getTableNameFromFullName(tenantViewOnMultiTenantTable1).
                                 getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(false, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertFalse(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
                         SchemaUtil.getTableNameFromFullName(tenantViewOnMultiTenantTable2).
                                 getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
-                assertEquals(false, ViewUtil.hasChildViews(catalogOrChildTable,
+                assertFalse(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(tenantViewOnGlobalView).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(tenantViewOnGlobalView).
+                                getBytes(StandardCharsets.UTF_8),
                         System.currentTimeMillis()));
             }
         }
@@ -206,33 +217,37 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     String.format(viewDDLQuery, leafViewName2, middleLevelViewName));
 
-            try (PhoenixConnection phoenixConnection =
-                         DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+            try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
+                    props).unwrap(PhoenixConnection.class)) {
                 Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                         SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                 phoenixConnection.getQueryServices().getProps()).getName());
 
                 TableViewFinderResult result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(fullTableName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(fullTableName).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(NUMBER_OF_VIEWS, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(middleLevelViewName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(middleLevelViewName).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(2, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(leafViewName1).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(leafViewName1).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(0, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(leafViewName2).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(leafViewName2).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(0, result.getLinks().size());
             }
@@ -260,9 +275,9 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String tenant2LeafViewName = schema + "." + generateUniqueName();
         int NUMBER_OF_VIEWS = 3;
 
-        String multiTenantTableDDL = "CREATE TABLE " + multiTenantTableName + "(TENANT_ID CHAR(10) NOT NULL, " +
-                "ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))" +
-                " MULTI_TENANT=true";
+        String multiTenantTableDDL = "CREATE TABLE " + multiTenantTableName +
+                "(TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT " +
+                "CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
         String viewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -270,43 +285,49 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
 
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps1)) {
                 tenantConn.createStatement().execute(
-                        String.format(viewDDL, tenant1MiddleLevelViewOnMultiTenantTable, multiTenantTableName));
+                        String.format(viewDDL, tenant1MiddleLevelViewOnMultiTenantTable,
+                                multiTenantTableName));
                 tenantConn.createStatement().execute(
-                        String.format(viewDDL, tenant1LeafViewName, tenant1MiddleLevelViewOnMultiTenantTable));
+                        String.format(viewDDL, tenant1LeafViewName,
+                                tenant1MiddleLevelViewOnMultiTenantTable));
             }
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps2)) {
                 tenantConn.createStatement().execute(
                         String.format(viewDDL, tenant2LeafViewName, multiTenantTableName));
             }
 
-            try (PhoenixConnection phoenixConnection =
-                         DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+            try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
+                    props).unwrap(PhoenixConnection.class)) {
                 Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
                         SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                                 phoenixConnection.getQueryServices().getProps()).getName());
 
                 TableViewFinderResult result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, emptyTenantIdInBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(multiTenantTableName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(multiTenantTableName).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(NUMBER_OF_VIEWS, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantId1InBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(tenant1MiddleLevelViewOnMultiTenantTable).
+                        SchemaUtil.getTableNameFromFullName(
+                                tenant1MiddleLevelViewOnMultiTenantTable).
                                 getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(1, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantId1InBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(tenant1LeafViewName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(tenant1LeafViewName).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(0, result.getLinks().size());
 
                 result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantId2InBytes, schemaInBytes,
-                        SchemaUtil.getTableNameFromFullName(tenant2LeafViewName).getBytes(StandardCharsets.UTF_8),
+                        SchemaUtil.getTableNameFromFullName(tenant2LeafViewName).
+                                getBytes(StandardCharsets.UTF_8),
                         PTable.LinkType.CHILD_TABLE, result);
                 assertEquals(0, result.getLinks().size());
             }
