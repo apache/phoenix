@@ -276,7 +276,7 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
-            //increment by 10 min to make sure we don't "look back" past table creation
+            //increment to make sure we don't "look back" past table creation
             injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
             populateTable(dataTableName);
             createIndex(dataTableName, indexName, versions);
