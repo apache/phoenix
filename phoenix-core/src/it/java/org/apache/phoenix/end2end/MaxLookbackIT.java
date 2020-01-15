@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-
 import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -28,9 +27,10 @@ import org.apache.hadoop.hbase.protobuf.generated.AdminProtos;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -59,10 +59,31 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 @NeedsOwnMiniClusterTest
 public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
     private static final Log LOG = LogFactory.getLog(MaxLookbackIT.class);
-    private static final int MAX_LOOKBACK_AGE = 10;
+    private static final int MAX_LOOKBACK_AGE = 15;
     private static final int ROWS_POPULATED = 2;
+    public static final int WAIT_AFTER_TABLE_CREATION_MILLIS = 1;
     private String tableDDLOptions;
     private StringBuilder optionBuilder;
+    ManualEnvironmentEdge injectEdge;
+    private int ttl;
+
+    private class ManualEnvironmentEdge extends EnvironmentEdge {
+        // Sometimes 0 ts might have a special value, so lets start with 1
+        protected long value = 1L;
+
+        public void setValue(long newValue) {
+            value = newValue;
+        }
+
+        public void incrementValue(long addedValue) {
+            value += addedValue;
+        }
+
+        @Override
+        public long currentTime() {
+            return this.value;
+        }
+    }
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -74,29 +95,34 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
 
     @Before
     public void beforeTest(){
+        EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
         this.tableDDLOptions = optionBuilder.toString();
+        ttl = 0;
+        injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(injectEdge);
     }
 
     @Test
     public void testTooLowSCNWithMaxLookbackAge() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String dataTableName = generateUniqueName();
-            String indexStem = generateUniqueName();
-            createTableAndIndexes(conn, dataTableName, indexStem);
-            //need to sleep long enough for the SCN to still find the syscat row for the table
-            Thread.sleep(MAX_LOOKBACK_AGE * 1000 + 1000);
-            Properties props = new Properties();
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(EnvironmentEdgeManager.currentTime() - (MAX_LOOKBACK_AGE + 1) * 1000));
-            try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
-                connscn.createStatement().executeQuery("select * from " + dataTableName);
-            } catch (SQLException se) {
-                SQLExceptionCode code =
-                    SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE;
-                TestUtil.assertSqlExceptionCode(code, se);
-                return;
-            }
+        String dataTableName = generateUniqueName();
+        createTable(dataTableName);
+        //increase long enough to make sure we can find the syscat row for the table
+        injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+        populateTable(dataTableName);
+        long populateTime = EnvironmentEdgeManager.currentTimeMillis();
+        injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+            Long.toString(populateTime));
+        try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
+            connscn.createStatement().executeQuery("select * from " + dataTableName);
+        } catch (SQLException se) {
+            SQLExceptionCode code =
+                SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE;
+            TestUtil.assertSqlExceptionCode(code, se);
+            return;
         }
         Assert.fail("We should have thrown an exception for the too-early SCN");
     }
@@ -105,60 +131,70 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            String indexStem = generateUniqueName();
-            createTableAndIndexes(conn, dataTableName, indexStem);
-            String fullIndexName = indexStem + "1";
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
             TableName dataTable = TableName.valueOf(dataTableName);
-            TableName indexTable = TableName.valueOf(fullIndexName);
-            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
-            assertTableHasTtl(conn, indexTable, Integer.MAX_VALUE);
-            long beforeDeleteSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-            Thread.sleep(1); //make sure we delete at a different ts
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            TableName indexTable = TableName.valueOf(indexName);
+            //make sure we're after the inserts have been committed
+            injectEdge.incrementValue(1);
+            long beforeDeleteSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(10); //make sure we delete at a different ts
             Statement stmt = conn.createStatement();
             stmt.execute("DELETE FROM " + dataTableName + " WHERE " + " id = 'a'");
             Assert.assertEquals(1, stmt.getUpdateCount());
             conn.commit();
             //select stmt to get row we deleted
-            String sql = String.format("SELECT * FROM %s WHERE val1 = 'ab'", dataTableName);
-            assertExplainPlan(conn, sql, dataTableName, fullIndexName);
+            String sql = String.format("SELECT * FROM %s WHERE id = 'a'", dataTableName);
+            String indexSql = String.format("SELECT * FROM %s WHERE val1 = 'ab'", dataTableName);
             int rowsPlusDeleteMarker = ROWS_POPULATED;
-            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
             flush(dataTable);
             flush(indexTable);
-            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
-            long beforeFirstCompactSCN = EnvironmentEdgeManager.currentTime();
-            Thread.sleep(1);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
+            long beforeFirstCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(1); //new ts for major compaction
+            majorCompact(dataTable, beforeFirstCompactSCN);
             majorCompact(indexTable, beforeFirstCompactSCN);
+            assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
             assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
-            assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
             //wait for the lookback time. After this compactions should purge the deleted row
-            Thread.sleep(MAX_LOOKBACK_AGE * 1000);
-            long beforeSecondCompactSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            long beforeSecondCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
             String notDeletedRowSql =
+                String.format("SELECT * FROM %s WHERE id = 'b'", dataTableName);
+            String notDeletedIndexRowSql =
                 String.format("SELECT * FROM %s WHERE val1 = 'bc'", dataTableName);
-            assertExplainPlan(conn, notDeletedRowSql, dataTableName, fullIndexName);
             assertRowExistsAtSCN(getUrl(), notDeletedRowSql, beforeSecondCompactSCN, true);
-            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
+            assertRowExistsAtSCN(getUrl(), notDeletedIndexRowSql, beforeSecondCompactSCN, true);
             assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
             conn.createStatement().execute("upsert into " + dataTableName +
                 " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
-            majorCompact(indexTable, beforeSecondCompactSCN);
             majorCompact(dataTable, beforeSecondCompactSCN);
+            majorCompact(indexTable, beforeSecondCompactSCN);
+            //should still be ROWS_POPULATED because we added one and deleted one
             assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
+
             //deleted row should be gone, but not deleted row should still be there.
             assertRowExistsAtSCN(getUrl(), sql, beforeSecondCompactSCN, false);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeSecondCompactSCN, false);
             assertRowExistsAtSCN(getUrl(), notDeletedRowSql, beforeSecondCompactSCN, true);
-            //1 deleted row should be gone
-            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
+            assertRowExistsAtSCN(getUrl(), notDeletedIndexRowSql, beforeSecondCompactSCN, true);
+
         }
     }
 
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
-        int ttl = 10;
+        ttl = 20;
         optionBuilder.append("TTL=" + ttl);
         tableDDLOptions = optionBuilder.toString();
         Configuration conf = getUtility().getConfiguration();
@@ -168,42 +204,67 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            String indexStem = generateUniqueName();
-            createTableAndIndexes(conn, dataTableName, indexStem);
-            long afterFirstInsertSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            //increment to make sure we don't "look back" past table creation
+            injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            injectEdge.incrementValue(1);
+            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             TableName dataTable = TableName.valueOf(dataTableName);
+            TableName indexTable = TableName.valueOf(indexName);
             assertTableHasTtl(conn, dataTable, ttl);
-            String fullIndexName = indexStem + "1";
-            TableName indexTable = TableName.valueOf(fullIndexName);
             assertTableHasTtl(conn, indexTable, ttl);
-
             //first make sure we inserted correctly
-            String sql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
-            assertExplainPlan(conn, sql, dataTableName, fullIndexName);
+            String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
+            String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
             assertRowExistsAtSCN(getUrl(),sql, afterFirstInsertSCN, true);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
             int originalRowCount = 2;
+            assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             //force a flush
+            flush(dataTable);
             flush(indexTable);
             //flush shouldn't have changed it
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            long timeToAdvance = (MAX_LOOKBACK_AGE * 1000) -
+                (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            if (timeToAdvance > 0) {
+                injectEdge.incrementValue(timeToAdvance);
+            }
+            //make sure it's still on disk
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            injectEdge.incrementValue(1); //get a new timestamp for compaction
+            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
+            //nothing should have been purged by this major compaction
+            assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             //now wait the TTL
-            Thread.sleep((ttl +1) * 1000);
-            long afterTTLExpiresSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-            assertExplainPlan(conn, sql, dataTableName, fullIndexName);
-            //make sure we can't see it after expiration from masking
-            assertRowExistsAtSCN(getUrl(), sql, afterTTLExpiresSCN, false);
-            //but it's still on disk
-            assertRawRowCount(conn, indexTable, originalRowCount);
-            long beforeMajorCompactSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-            majorCompact(indexTable, beforeMajorCompactSCN);
+            timeToAdvance = (ttl * 1000) -
+                (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            if (timeToAdvance > 0) {
+                injectEdge.incrementValue(timeToAdvance);
+            }
+            //make sure that we can compact away the now-expired rows
+            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
+            //note that before HBase 1.4, we don't have HBASE-17956
+            // and this will always return 0 whether it's still on-disk or not
+            assertRawRowCount(conn, dataTable, 0);
             assertRawRowCount(conn, indexTable, 0);
         } finally{
             conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
         }
     }
 
-    @Test
+    @Test(timeout=60000)
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
         int versions = 2;
         optionBuilder.append("VERSIONS=" + versions);
@@ -213,51 +274,57 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         String thirdValue = "ghi";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            String indexStem = generateUniqueName();
-            createTableAndIndexes(conn, dataTableName, indexStem, versions);
-            long afterInsertSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            //increment to make sure we don't "look back" past table creation
+            injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, versions);
+            injectEdge.incrementValue(1); //increment by 1 so we can see our write
+            long afterInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             //make sure table and index metadata is set up right for versions
             TableName dataTable = TableName.valueOf(dataTableName);
+            TableName indexTable = TableName.valueOf(indexName);
             assertTableHasVersions(conn, dataTable, versions);
-            String fullIndexName = indexStem + "1";
-            TableName indexTable = TableName.valueOf(fullIndexName);
             assertTableHasVersions(conn, indexTable, versions);
             //check query optimizer is doing what we expect
             String dataTableSelectSql =
                 String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
             String indexTableSelectSql =
                 String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
-            assertExplainPlan(conn, indexTableSelectSql, dataTableName, fullIndexName);
+            assertExplainPlan(conn, indexTableSelectSql, dataTableName, indexName);
             //make sure the data was inserted correctly in the first place
             assertRowHasExpectedValueAtSCN(getUrl(), dataTableSelectSql, afterInsertSCN, firstValue);
             assertRowHasExpectedValueAtSCN(getUrl(), indexTableSelectSql, afterInsertSCN, firstValue);
             //force first update to get a distinct ts
-            Thread.sleep(1);
+            injectEdge.incrementValue(1);
             updateColumn(conn, dataTableName, "id", "a", "val2", secondValue);
-            long afterFirstUpdateSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(1); //now make update visible
+            long afterFirstUpdateSCN = EnvironmentEdgeManager.currentTimeMillis();
             //force second update to get a distinct ts
-            Thread.sleep(1);
+            injectEdge.incrementValue(1);
             updateColumn(conn, dataTableName, "id", "a", "val2", thirdValue);
-            long afterSecondUpdateSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(1);
+            long afterSecondUpdateSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(1);
             //check to make sure we can see all three versions at the appropriate times
             String[] allValues = {firstValue, secondValue, thirdValue};
             long[] allSCNs = {afterInsertSCN, afterFirstUpdateSCN, afterSecondUpdateSCN};
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-
             flush(dataTable);
             flush(indexTable);
             //after flush, check to make sure we can see all three versions at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-            majorCompact(dataTable, afterSecondUpdateSCN);
-            majorCompact(indexTable, afterSecondUpdateSCN);
+            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
             //after major compaction, check to make sure we can see all three versions
             // at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-            Thread.sleep(MAX_LOOKBACK_AGE * 1000);
-            long afterLookbackAgeSCN = org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            long afterLookbackAgeSCN = EnvironmentEdgeManager.currentTimeMillis();
             majorCompact(dataTable, afterLookbackAgeSCN);
             majorCompact(indexTable, afterLookbackAgeSCN);
             //empty column, 1 version of val 1, 3 versions of val2, 1 version of val3 = 6
@@ -293,13 +360,6 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    public static void assertExplainPlan(Connection conn, String selectSql,
-                                         String dataTableFullName, String indexTableFullName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
-    }
-
     private void assertMultiVersionLookbacks(String dataTableSelectSql,
                                              String[] values, long[] scns)
         throws Exception {
@@ -318,33 +378,39 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
     }
 
-    private void createTableAndIndexes(Connection conn, String dataTableName,
-                                       String indexTableName) throws Exception {
-        createTableAndIndexes(conn, dataTableName, indexTableName, 1);
+    private void createTable(String tableName) throws SQLException {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String createSql = "create table " + tableName +
+                " (id varchar(10) not null primary key, val1 varchar(10), " +
+                "val2 varchar(10), val3 varchar(10))" + tableDDLOptions;
+            conn.createStatement().execute(createSql);
+            conn.commit();
+        }
+    }
+    private void populateTable(String tableName) throws SQLException {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
+            conn.commit();
+        }
     }
 
-    private void createTableAndIndexes(Connection conn, String dataTableName,
-                                       String indexTableName, int indexVersions) throws Exception {
-        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
-            dataTableName + " (val1) include (val2, val3)" +
-            " VERSIONS=" + indexVersions);
-        conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
-            dataTableName + " (val2) include (val1, val3)" +
-            " VERSIONS=" + indexVersions);
-        conn.commit();
+    private void createIndex(String dataTableName, String indexTableName, int indexVersions)
+        throws SQLException {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                dataTableName + " (val1) include (val2, val3)" +
+                " VERSIONS=" + indexVersions);
+            conn.commit();
+        }
     }
 
-    private void populateTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String createSql = "create table " + tableName +
-            " (id varchar(10) not null primary key, val1 varchar(10), " +
-            "val2 varchar(10), val3 varchar(10))" + tableDDLOptions;
-        conn.createStatement().execute(createSql);
-        conn.createStatement().execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
-        conn.commit();
-        conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
-        conn.commit();
-        conn.close();
+    public static void assertExplainPlan(Connection conn, String selectSql,
+                                         String dataTableFullName, String indexTableFullName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+        IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
     }
+
 }
