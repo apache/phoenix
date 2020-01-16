@@ -43,6 +43,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseIOException;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -59,14 +60,14 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
 import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
-
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
@@ -573,6 +574,72 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             expectedValueBytes = Bytes.toBytes("Not matching value for 0:0:CODE E:A A:B");
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     expectedValueBytes, 0, expectedValueBytes.length) == 0);
+            admin.disableTable(indexToolOutputTable);
+            admin.deleteTable(indexToolOutputTable);
+        }
+    }
+
+    @Test
+    public void testIndexToolVerifyWithExpiredIndexRows() throws Exception {
+        if (localIndex || transactional || !directApi || useSnapshot) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) COLUMN_ENCODED_BYTES=0");
+            // Insert a row
+            conn.createStatement()
+                    .execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
+            conn.commit();
+            conn.createStatement()
+                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC",
+                        indexTableName, dataTableFullName));
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+                IndexTool.IndexVerifyType.ONLY);
+            Cell cell =
+                    getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
+                        indexTableFullName);
+            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
+            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(),
+                cell.getValueLength(), expectedValueBytes, 0, expectedValueBytes.length) == 0);
+
+            // Run the index tool to populate the index while verifying rows
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+                IndexTool.IndexVerifyType.AFTER);
+
+            // Set ttl of index table ridiculously low so that all data is expired
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            TableName indexTable = TableName.valueOf(indexTableFullName);
+            HColumnDescriptor desc = admin.getTableDescriptor(indexTable).getColumnFamilies()[0];
+            desc.setTimeToLive(1);
+            admin.modifyColumn(indexTable, desc);
+            Thread.sleep(1000);
+            Pair<Integer, Integer> status = admin.getAlterStatus(indexTable);
+            int retry = 0;
+            while (retry < 20 && status.getFirst() != 0) {
+                Thread.sleep(2000);
+                status = admin.getAlterStatus(indexTable);
+            }
+            assertTrue(status.getFirst() == 0);
+
+            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+            admin.disableTable(indexToolOutputTable);
+            admin.deleteTable(indexToolOutputTable);
+            // Run the index tool using the only-verify option, verify it gives no mismatch
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+                IndexTool.IndexVerifyType.ONLY);
+            Scan scan = new Scan();
+            Table hIndexToolTable =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices()
+                            .getTable(indexToolOutputTable.getName());
+            Result r = hIndexToolTable.getScanner(scan).next();
+            assertTrue(r == null);
             admin.disableTable(indexToolOutputTable);
             admin.deleteTable(indexToolOutputTable);
         }
