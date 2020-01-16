@@ -39,6 +39,7 @@ public class IndexUpgradeToolTest {
     private static final String INPUT_LIST = "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3";
     private final boolean upgrade;
     private static final String DUMMY_STRING_VALUE = "anyValue";
+    private static final String DUMMY_VERIFY_VALUE = "someVerifyValue";
     private IndexUpgradeTool indexUpgradeTool=null;
     private String outputFile;
 
@@ -50,7 +51,7 @@ public class IndexUpgradeToolTest {
     public void setup() {
         outputFile = "/tmp/index_upgrade_" + UUID.randomUUID().toString();
         String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
-                INPUT_LIST, "-lf", outputFile, "-d", "-v", DUMMY_STRING_VALUE};
+                INPUT_LIST, "-lf", outputFile, "-d", "-v", DUMMY_VERIFY_VALUE};
         indexUpgradeTool = new IndexUpgradeTool();
         CommandLine cmd = indexUpgradeTool.parseOptions(args);
         indexUpgradeTool.initializeTool(cmd);
@@ -70,14 +71,14 @@ public class IndexUpgradeToolTest {
             return;
         }
         Assert.assertEquals("value passed with verify option does not match with provided value",
-                DUMMY_STRING_VALUE, indexUpgradeTool.getVerify());
+                DUMMY_VERIFY_VALUE, indexUpgradeTool.getVerify());
         String [] values = indexUpgradeTool.getIndexToolArgValues(DUMMY_STRING_VALUE,
                 DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
         List<String> argList =  Arrays.asList(values);
-        Assert.assertTrue(argList.contains(DUMMY_STRING_VALUE));
+        Assert.assertTrue(argList.contains(DUMMY_VERIFY_VALUE));
         Assert.assertTrue(argList.contains("-v"));
         Assert.assertEquals("verify option and value are not passed consecutively", 1,
-                argList.indexOf(DUMMY_STRING_VALUE) - argList.indexOf("-v"));
+                argList.indexOf(DUMMY_VERIFY_VALUE) - argList.indexOf("-v"));
     }
 
     @Parameters(name ="IndexUpgradeToolTest_mutable={1}")
