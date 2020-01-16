@@ -17,16 +17,26 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
+import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
+import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
+import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
+
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -46,6 +56,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -74,16 +85,9 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
-import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
-import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
-import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
-import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
@@ -119,6 +123,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
     private RegionCoprocessorEnvironment env;
     private HTableFactory hTableFactory;
+    private int indexTableTTL;
 
     IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                                final RegionCoprocessorEnvironment env,
@@ -159,6 +164,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 // Create the following objects only for rebuilds by IndexTool
                 hTableFactory = ServerUtil.getDelegateHTableFactory(env, ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION);
                 indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+                indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
                 outputHTable = hTableFactory.getTable(new ImmutableBytesPtr(IndexTool.OUTPUT_TABLE_NAME_BYTES));
                 indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
@@ -413,6 +419,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 indexMaintainer.getEmptyKeyValueQualifier(), ts, VERIFIED_BYTES);
         int cellCount = 0;
+        long currentTime = EnvironmentEdgeManager.currentTime();
         for (List<Cell> cells : indexPut.getFamilyCellMap().values()) {
             if (cells == null) {
                 break;
@@ -422,6 +429,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = indexRow.getColumnLatestCell(family, qualifier);
                 if (actualCell == null) {
+                    // Check if cell expired as per the current server's time and data table ttl
+                    // Index table should have the same ttl as the data table, hence we might not
+                    // get a value back from index if it has already expired between our rebuild and
+                    // verify
+                    // TODO: have a metric to update for these cases
+                    if (isTimestampBeforeTTL(currentTime, expectedCell.getTimestamp())) {
+                        continue;
+                    }
                     String errorMsg = " Missing cell " + Bytes.toString(family) + ":" +
                             Bytes.toString(qualifier);
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
@@ -487,6 +502,20 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         } catch (Throwable t) {
             ServerUtil.throwIOException(indexHTable.getName().toString(), t);
         }
+        // Check if any expected rows from index(which we didn't get) are already expired due to TTL
+        // TODO: metrics for expired rows
+        if (!perTaskDataKeyToDataPutMap.isEmpty()) {
+            Iterator<Entry<byte[], Put>> itr = perTaskDataKeyToDataPutMap.entrySet().iterator();
+            long currentTime = EnvironmentEdgeManager.currentTime();
+            while(itr.hasNext()) {
+                Entry<byte[], Put> entry = itr.next();
+                long ts = getMaxTimestamp(entry.getValue());
+                if (isTimestampBeforeTTL(currentTime, ts)) {
+                    itr.remove();
+                    rowCount++;
+                }
+            }
+        }
         if (rowCount != expectedRowCount) {
             for (Map.Entry<byte[], Put> entry : perTaskDataKeyToDataPutMap.entrySet()) {
                 String errorMsg = "Missing index row";
@@ -498,6 +527,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 }
             }
         }
+    }
+
+    private boolean isTimestampBeforeTTL(long currentTime, long tsToCheck) {
+        if (indexTableTTL == HConstants.FOREVER) {
+            return false;
+        }
+        return tsToCheck < (currentTime - (long) indexTableTTL * 1000);
     }
 
     private void rebuildIndexRows(UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
