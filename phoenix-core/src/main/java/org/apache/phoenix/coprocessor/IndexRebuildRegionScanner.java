@@ -187,6 +187,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         innerScanner.close();
         if (verify) {
             this.pool.stop("IndexRebuildRegionScanner is closing");
+            hTableFactory.shutdown();
             indexHTable.close();
             outputHTable.close();
         }
