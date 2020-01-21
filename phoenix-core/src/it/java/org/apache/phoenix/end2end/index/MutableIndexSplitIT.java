@@ -135,9 +135,12 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         List<RegionInfo> regionsOfUserTable = null;
         for(int i = 0; i <=1; i++) {
             boolean split = false;
-            for (int j = 0; j < 60 && !split; j++) {
+            for (int j = 0; j < 150 && !split; j++) {
                 try {
                     if (localIndex) {
+                        //With Hbase 2.2 the local index splits trigger longCompactions, and have
+                        //to wait for an RS_COMPACTED_FILES_DISCHARGER run before the second split
+                        //is successful
                         admin.split(TableName.valueOf(tableName),
                                 ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
                     } else {

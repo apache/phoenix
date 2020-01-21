@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+  <version>5.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -40,6 +40,9 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.2.1</module>
+    <module>phoenix-hbase-compat-2.1.6</module>
+    <module>phoenix-hbase-compat-2.0.1</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
@@ -68,15 +71,19 @@
   </scm>
 
   <properties>
+    <!-- The HBase compatibility module that that will be included in
+    the shaded JARs and the assembly -->
+    <hbase.profile>2.0</hbase.profile>
+    <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
+
+    <!-- Hadoop Version -->
+    <hadoop.version>3.0.0</hadoop.version>
+
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
-
-    <!-- Hadoop Versions -->
-    <hbase.version>2.0.1</hbase.version>
-    <hadoop.version>3.0.0</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
@@ -115,6 +122,7 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
+    <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -132,6 +140,11 @@
   <build>
     <pluginManagement>
       <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+        </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
@@ -369,6 +382,54 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>check-hbase-compatibility</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <evaluateBeanshell>
+                 <condition>
+                   import java.util.regex.Pattern;
+                   import java.lang.Integer;
+
+                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                   versionMatcher = versionPattern.matcher("${hbase.version}");
+                   versionMatcher.find();
+
+                   hbaseMajor = Integer.parseInt(versionMatcher.group(1));
+                   hbaseMinor = Integer.parseInt(versionMatcher.group(2));
+                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
+
+                   hbaseMajor == 2 &amp;&amp; (
+                     ("${hbase.compat.version}".equals("2.0.1")
+                       &amp;&amp; hbaseMinor == 0
+                       &amp;&amp; hbasePatch &gt;=1
+                       &amp;&amp; hbasePatch &lt;=4)
+                     || ("${hbase.compat.version}".equals("2.0.1")
+                       &amp;&amp; hbaseMinor == 1
+                       &amp;&amp; hbasePatch &gt;=1
+                       &amp;&amp; hbasePatch &lt;=2)
+                     || ("${hbase.compat.version}".equals("2.1.6")
+                       &amp;&amp; hbaseMinor == 1
+                       &amp;&amp; hbasePatch &gt;=6)
+                     || ("${hbase.compat.version}".equals("2.2.1")
+                       &amp;&amp; hbaseMinor == 2
+                       &amp;&amp; hbasePatch &gt;=1)
+                   )
+                   </condition>
+                  </evaluateBeanshell>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>3.1.0</version>
         <executions>
@@ -511,7 +572,21 @@
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
-
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <!-- HBase dependencies -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -586,6 +661,11 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-endpoint</artifactId>
+        <version>${hbase.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1030,6 +1110,92 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <!-- See BUILDING.md for profile selection-->
+    <!-- 2.0 support should probably be removed for the 5.1 release -->
+    <profile>
+      <id>phoenix-hbase-compat-2.0.1-default</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>2.0</hbase.profile>
+        <hbase.compat.version>2.0.1</hbase.compat.version>
+        <!-- this is currently set to 2.0.1 to match the non-modular version -->
+        <hbase.version>2.0.1</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.0.1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.0</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>2.0</hbase.profile>
+        <hbase.compat.version>2.0.1</hbase.compat.version>
+        <hbase.version>2.0.4</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.1.6</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.1</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>2.1</hbase.profile>
+        <hbase.compat.version>2.1.6</hbase.compat.version>
+        <!-- Update to latest before release -->
+        <hbase.version>2.1.8</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.2.1</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.2</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>2.2</hbase.profile>
+        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <!-- Update to latest before release -->
+        <hbase.version>2.2.3</hbase.version>
+      </properties>
     </profile>
   </profiles>
 
