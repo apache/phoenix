@@ -994,6 +994,15 @@
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
       </dependency>
+      
+      <!-- do not commit, workaround for eclipse profile handling definciencies -->
+<!--       <dependency> -->
+<!--           <groupId>org.apache.phoenix</groupId> -->
+<!--           <artifactId>phoenix-hbase-compat-2.2.1</artifactId> -->
+<!--           <version>${project.version}</version> -->
+<!--       </dependency> -->
+      
+      
     </dependencies>
   </dependencyManagement>
 
@@ -1025,6 +1034,80 @@
                 <goals>
                   <goal>sign</goal>
                 </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>hbase201</id>
+      <activation>
+        <property>
+        <name>hbase.version</name>
+        <value>2.0.1</value>
+      </property>
+      </activation>
+      <modules>
+        <module>phoenix-hbase-compat-2.0</module>
+      </modules>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.0</artifactId>
+          <version>${project.version}</version>
+      </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>hbase201</classifier>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>hbase222</id>
+      <activation>
+      <property>
+        <name>hbase.version</name>
+        <value>2.2.2</value>
+      </property>
+      </activation>
+      <modules>
+        <module>phoenix-hbase-compat-2.2.1</module>
+      </modules>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+          <version>${project.version}</version>
+      </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>hbase222</classifier>
+                </configuration>
               </execution>
             </executions>
           </plugin>

@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -179,7 +180,7 @@ public class PhoenixKeyValueUtil {
         long size = 0;
         for (Entry<byte [], List<Cell>> entry : m.getFamilyCellMap().entrySet()) {
             for (Cell c : entry.getValue()) {
-                size += org.apache.hadoop.hbase.KeyValueUtil.length(c);
+                size += CompatUtil.getCellSerializedSize(c);
             }
         }
         return size;

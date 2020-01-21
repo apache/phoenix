@@ -634,4 +634,28 @@
           </plugin>
       </plugins>
   </reporting>
+  
+    <profiles>
+      <profile>
+      <id>hbase201</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.0</artifactId>
+          <version>${project.version}</version>
+      </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hbase222</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+          <version>${project.version}</version>
+      </dependency>
+      </dependencies>
+    </profile>
+    
+  </profiles>
 </project>
