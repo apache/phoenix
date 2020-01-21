@@ -143,7 +143,7 @@ public class SCNIT extends ParallelStatsDisabledIT {
 		try (Connection conn = DriverManager.getConnection(getUrl())) {
 			conn.createStatement()
 					.execute(String.format("CREATE TABLE %s" +
-						"(k VARCHAR PRIMARY KEY, v VARCHAR) %s", fullTableName, ddlOptions));
+						"(k VARCHAR PRIMARY KEY, f.v VARCHAR) %s", fullTableName, ddlOptions));
 			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','aa')");
 			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('b','bb')");
 			conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('c','cc')");
