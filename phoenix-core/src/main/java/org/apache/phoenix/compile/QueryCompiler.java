@@ -191,10 +191,13 @@ public class QueryCompiler {
             //we can have a tableRef with an empty table, such as with sequences
             if (tableQualifier.length > 0) {
                 HTableDescriptor td = conn.getQueryServices().getTableDescriptor(tableQualifier);
-                HColumnDescriptor cd = td.getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+                HColumnDescriptor[] cds = td.getColumnFamilies();
                 now = EnvironmentEdgeManager.currentTimeMillis();
-                if (now - cd.getTimeToLive() * 1000L > scn) {
-                    scnTooOldTableRefs.add(tableRef);
+                if (cds.length > 0){
+                    //Phoenix only allows a single table level TTL, so any CF will do
+                    if (now - cds[0].getTimeToLive() * 1000L > scn) {
+                        scnTooOldTableRefs.add(tableRef);
+                    }
                 }
             }
         }
