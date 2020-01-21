@@ -130,7 +130,7 @@ public class OffsetCell implements Cell {
 
     @Override
     public int getSerializedSize() {
-        return cell.getSerializedSize();
+        return cell.getSerializedSize() - offset;
     }
 
 }
