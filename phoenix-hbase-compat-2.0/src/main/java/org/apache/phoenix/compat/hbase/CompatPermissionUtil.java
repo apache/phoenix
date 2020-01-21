@@ -18,12 +18,7 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.AuthUtil;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.access.AccessChecker;
@@ -31,35 +26,30 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.TableAuthManager;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class CompatPermissionUtil {
-    
+
     public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
-        if(accessChecker.getAuthManager() != null) {
+        if (accessChecker.getAuthManager() != null) {
             TableAuthManager.release(accessChecker.getAuthManager());
         }
     }
-    
-    public static boolean implies(UserPermission userPermission, Permission.Action action) {
-        return userPermission.implies(action);
-    }
-    
+
     public static String getUserFromUP(UserPermission userPermission) {
         return Bytes.toString(userPermission.getUser());
     }
-    
+
     public static Permission getPermissionFromUP(UserPermission userPermission) {
         return userPermission;
     }
 
-    public static boolean userHasAccess(AccessChecker accessChecker, User user, TableName table, Permission.Action action) {
+    public static boolean userHasAccess(AccessChecker accessChecker, User user, TableName table,
+            Permission.Action action) {
         return accessChecker.getAuthManager().userHasAccess(user, table, action);
     }
 
-    public static boolean groupHasAccess(AccessChecker accessChecker, String group, TableName table, Permission.Action action) {
+    public static boolean groupHasAccess(AccessChecker accessChecker, String group, TableName table,
+            Permission.Action action) {
         return accessChecker.getAuthManager().groupHasAccess(group, table, action);
     }
 }
