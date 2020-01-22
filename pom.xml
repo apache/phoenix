@@ -1064,6 +1064,7 @@
             <artifactId>maven-jar-plugin</artifactId>
             <executions>
               <execution>
+                <id>jar</id>
                 <phase>package</phase>
                 <goals>
                   <goal>jar</goal>
@@ -1072,6 +1073,17 @@
                   <classifier>hbase201</classifier>
                 </configuration>
               </execution>
+              <execution>
+                <id>test-jar</id>
+	            <phase>prepare-package
+	            </phase>
+	            <goals>
+	              <goal>test-jar</goal>
+	            </goals>
+	            <configuration>
+	              <classifier>tests-hbase201</classifier>
+	            </configuration>
+	          </execution>
             </executions>
           </plugin>
         </plugins>
@@ -1101,6 +1113,7 @@
             <artifactId>maven-jar-plugin</artifactId>
             <executions>
               <execution>
+                <id>jar</id>
                 <phase>package</phase>
                 <goals>
                   <goal>jar</goal>
@@ -1109,6 +1122,17 @@
                   <classifier>hbase222</classifier>
                 </configuration>
               </execution>
+              <execution>
+                <id>test-jar</id>
+	            <phase>prepare-package
+	            </phase>
+	            <goals>
+	              <goal>test-jar</goal>
+	            </goals>
+	            <configuration>
+	              <classifier>tests-hbase222</classifier>
+	            </configuration>
+	          </execution>
             </executions>
           </plugin>
         </plugins>

@@ -482,4 +482,32 @@
 			</plugin>
 		</plugins>
 	</build>
+	    <profiles>
+      <profile>
+      <id>hbase201</id>
+      <dependencies>
+        <dependency>
+			<groupId>org.apache.phoenix</groupId>
+			<artifactId>phoenix-core</artifactId>
+			<type>test-jar</type>
+			<classifier>tests-hbase222</classifier>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>hbase222</id>
+      <dependencies>
+         <dependency>
+			<groupId>org.apache.phoenix</groupId>
+			<artifactId>phoenix-core</artifactId>
+			<type>test-jar</type>
+			<classifier>tests-hbase201</classifier>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+      </dependencies>
+    </profile>
+    </profiles>
 </project>
