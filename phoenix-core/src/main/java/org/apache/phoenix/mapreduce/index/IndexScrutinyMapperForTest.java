@@ -28,13 +28,13 @@ public class IndexScrutinyMapperForTest extends IndexScrutinyMapper {
         long delta;
 
         public ScrutinyTestClock(long delta) {
-            initialTime = EnvironmentEdgeManager.currentTimeMillis() + delta;
+            initialTime = System.currentTimeMillis() + delta;
             this.delta = delta;
         }
 
         @Override
         public long currentTime() {
-            return EnvironmentEdgeManager.currentTimeMillis() + delta;
+            return System.currentTimeMillis() + delta;
         }
     }
 
