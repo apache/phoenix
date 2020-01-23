@@ -1238,7 +1238,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     public List<PeekingResultIterator> getIterators() throws SQLException {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
-                    ScanUtil.getCustomAnnotations(scan)));
+                    ScanUtil.getCustomAnnotations(scan)) + "on table " + context.getCurrentTable().getTable().getName());
         }
         boolean isReverse = ScanUtil.isReversed(scan);
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
