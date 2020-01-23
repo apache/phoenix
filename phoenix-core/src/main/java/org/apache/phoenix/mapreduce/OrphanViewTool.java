@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -842,7 +843,7 @@ public class OrphanViewTool extends Configured implements Tool {
                 }
             }
             Properties props = new Properties();
-            long scn = System.currentTimeMillis() - ageMs;
+            long scn = EnvironmentEdgeManager.currentTimeMillis() - ageMs;
             props.setProperty("CurrentSCN", Long.toString(scn));
             connection = ConnectionUtil.getInputConnection(configuration, props);
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
