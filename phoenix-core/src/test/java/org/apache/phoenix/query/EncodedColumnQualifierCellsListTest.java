@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
+import org.apache.phoenix.util.NamedDelegateCell;
 import org.junit.Test;
 
 public class EncodedColumnQualifierCellsListTest {
@@ -312,8 +313,8 @@ public class EncodedColumnQualifierCellsListTest {
         final Cell invalidCell = array[5];
         String validCellName = "Valid Cell";
         String invalidCellName = "Invalid Cell";
-        Cell validReplacementCell = new DelegateCell(validCell, validCellName);
-        Cell invalidReplacementCell = new DelegateCell(invalidCell, invalidCellName);
+        Cell validReplacementCell = new NamedDelegateCell(validCell, validCellName);
+        Cell invalidReplacementCell = new NamedDelegateCell(invalidCell, invalidCellName);
         int i = 0;
         while (itr.hasNext()) {
             Cell c = itr.next();
@@ -474,113 +475,5 @@ public class EncodedColumnQualifierCellsListTest {
         list.add(KeyValueUtil.createFirstOnRow(row, cf, FOUR_BYTE_QUALIFIERS.encode(14)));
         list.add(KeyValueUtil.createFirstOnRow(row, cf, FOUR_BYTE_QUALIFIERS.encode(11)));
     }
-    
-    private class DelegateCell implements Cell {
-        private final Cell delegate;
-        private final String name;
-        public DelegateCell(Cell delegate, String name) {
-            this.delegate = delegate;
-            this.name = name;
-        }
 
-        @Override
-        public int getValueOffset() {
-            return delegate.getValueOffset();
-        }
-
-        @Override
-        public int getValueLength() {
-            return delegate.getValueLength();
-        }
-
-        @Override
-        public byte[] getValueArray() {
-            return delegate.getValueArray();
-        }
-
-        @Override
-        public byte getTypeByte() {
-            return delegate.getTypeByte();
-        }
-
-        @Override
-        public long getTimestamp() {
-            return delegate.getTimestamp();
-        }
-
-        @Override
-        public int getTagsOffset() {
-            return delegate.getTagsOffset();
-        }
-
-        @Override
-        public byte[] getTagsArray() {
-            return delegate.getTagsArray();
-        }
-
-        @Override
-        public int getRowOffset() {
-            return delegate.getRowOffset();
-        }
-
-        @Override
-        public short getRowLength() {
-            return delegate.getRowLength();
-        }
-
-        @Override
-        public byte[] getRowArray() {
-            return delegate.getRowArray();
-        }
-
-        @Override
-        public int getQualifierOffset() {
-            return delegate.getQualifierOffset();
-        }
-
-        @Override
-        public int getQualifierLength() {
-            return delegate.getQualifierLength();
-        }
-
-        @Override
-        public byte[] getQualifierArray() {
-            return delegate.getQualifierArray();
-        }
-
-        @Override
-        public int getFamilyOffset() {
-            return delegate.getFamilyOffset();
-        }
-
-        @Override
-        public byte getFamilyLength() {
-            return delegate.getFamilyLength();
-        }
-
-        @Override
-        public byte[] getFamilyArray() {
-            return delegate.getFamilyArray();
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-
-        @Override
-        public long getSequenceId() {
-            return delegate.getSequenceId();
-        }
-
-        @Override
-        public int getTagsLength() {
-            return delegate.getTagsLength();
-        }
-
-        @Override
-        public Type getType() {
-            return delegate.getType();
-        }
-    }
 }
