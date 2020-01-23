@@ -464,12 +464,14 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
          return userPermissions;
        }
 
+     //FIXME This seems to have no effect at all
      private void getUserDefinedPermissions(final TableName tableName,
              final List<UserPermission> userPermissions) throws IOException {
           User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
               @Override
               public List<UserPermission> run() throws Exception {
-                  final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
+                 //FIXME We are masking the parameter list that we are supposed to add to
+                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                  try (Connection connection =
                          ConnectionFactory.createConnection(((CoprocessorEnvironment) env).getConfiguration())) {
                       for (MasterObserver service : getAccessControllers()) {
@@ -575,7 +577,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         if (perms != null) {
             if (hbaseAccessControllerEnabled 
-                    && CompatPermissionUtil.userHasAccess(accessChecker, user, table, action)) {
+                    && CompatPermissionUtil.authorizeUserTable(accessChecker, user, table, action)) {
                 return true;
             }
             List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName());
@@ -589,10 +591,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
               for (String group : groupNames) {
                 List<UserPermission> groupPerms =
                         getPermissionForUser(perms, (AuthUtil.toGroupEntry(group)));
-                if (hbaseAccessControllerEnabled && 
-                        CompatPermissionUtil.groupHasAccess(accessChecker, group, table, action)) {
-                    return true;
-                }
                 if (groupPerms != null) for (UserPermission permissionForUser : groupPerms) {
                     if (CompatPermissionUtil.getPermissionFromUP(permissionForUser).implies(action)) { return true; }
                 }

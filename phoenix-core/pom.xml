@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+    <version>5.1.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-core</artifactId>
   <name>Phoenix Core</name>
@@ -634,28 +634,4 @@
           </plugin>
       </plugins>
   </reporting>
-  
-    <profiles>
-      <profile>
-      <id>hbase201</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.0</artifactId>
-          <version>${project.version}</version>
-      </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hbase222</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
-          <version>${project.version}</version>
-      </dependency>
-      </dependencies>
-    </profile>
-    
-  </profiles>
 </project>

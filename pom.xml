@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+  <version>5.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -40,6 +40,8 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.2</module>
+    <module>phoenix-hbase-compat-2.0</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
@@ -77,6 +79,9 @@
     <!-- Hadoop Versions -->
     <hbase.version>2.0.1</hbase.version>
     <hadoop.version>3.0.0</hadoop.version>
+
+    <!-- Default hbase-compat version -->
+    <hbase.compat.version>2.0</hbase.compat.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
@@ -511,7 +516,16 @@
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
-
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.2</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <!-- HBase dependencies -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1040,103 +1054,41 @@
         </plugins>
       </build>
     </profile>
+    <!-- Choose which hbase compatibility module we compile, test, and shade against.
+    Shouldn't have an effect on the generated code and artifacts apart from the contents of the the shaded jars
+    When specifying a non-default compatibility module, you also have to specify a
+    compatible hbase.version i.e mvn clean install -P phoenix-hbase-compat-2.2 -Dhbase.version=2.2.3
+    -->
     <profile>
-      <id>hbase201</id>
+      <id>phoenix-hbase-compat-2.0</id>
       <activation>
+        <activeByDefault>true</activeByDefault>
         <property>
-        <name>hbase.version</name>
-        <value>2.0.1</value>
-      </property>
+          <name>hbase.compat.version</name>
+          <value>2.0</value>
+        </property>
       </activation>
-      <modules>
-        <module>phoenix-hbase-compat-2.0</module>
-      </modules>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
           <artifactId>phoenix-hbase-compat-2.0</artifactId>
-          <version>${project.version}</version>
-      </dependency>
+        </dependency>
       </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-jar-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>jar</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>jar</goal>
-                </goals>
-                <configuration>
-                  <classifier>hbase201</classifier>
-                </configuration>
-              </execution>
-              <execution>
-                <id>test-jar</id>
-	            <phase>prepare-package
-	            </phase>
-	            <goals>
-	              <goal>test-jar</goal>
-	            </goals>
-	            <configuration>
-	              <classifier>tests-hbase201</classifier>
-	            </configuration>
-	          </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
     <profile>
-      <id>hbase222</id>
+      <id>phoenix-hbase-compat-2.2</id>
       <activation>
-      <property>
-        <name>hbase.version</name>
-        <value>2.2.2</value>
-      </property>
+        <property>
+          <name>hbase.compat.version</name>
+          <value>2.2</value>
+        </property>
       </activation>
-      <modules>
-        <module>phoenix-hbase-compat-2.2.1</module>
-      </modules>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
-          <version>${project.version}</version>
-      </dependency>
+          <artifactId>phoenix-hbase-compat-2.2</artifactId>
+        </dependency>
       </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-jar-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>jar</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>jar</goal>
-                </goals>
-                <configuration>
-                  <classifier>hbase222</classifier>
-                </configuration>
-              </execution>
-              <execution>
-                <id>test-jar</id>
-	            <phase>prepare-package
-	            </phase>
-	            <goals>
-	              <goal>test-jar</goal>
-	            </goals>
-	            <configuration>
-	              <classifier>tests-hbase222</classifier>
-	            </configuration>
-	          </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
   </profiles>
 

@@ -26,11 +26,11 @@
 <!--   <parent> -->
 <!--     <groupId>org.apache.phoenix</groupId> -->
 <!--     <artifactId>phoenix</artifactId> -->
-<!--     <version>5.1.0-HBase-2.0-SNAPSHOT</version> -->
+<!--     <version>5.1.0-SNAPSHOT</version> -->
 <!--   </parent> -->
 <groupId>org.apache.phoenix</groupId>
-  <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
-  <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+  <artifactId>phoenix-hbase-compat-2.2</artifactId>
+  <version>5.1.0-SNAPSHOT</version>
   <name>Phoenix Hbase 2.2.1+ support</name>
   <description>Phoenix Hbase 2.2.1+ support</description>
 

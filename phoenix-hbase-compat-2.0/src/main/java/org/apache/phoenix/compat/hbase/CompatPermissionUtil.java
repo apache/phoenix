@@ -43,13 +43,20 @@ public class CompatPermissionUtil {
         return userPermission;
     }
 
-    public static boolean userHasAccess(AccessChecker accessChecker, User user, TableName table,
+    public static boolean authorizeUserTable(AccessChecker accessChecker, User user, TableName table,
             Permission.Action action) {
-        return accessChecker.getAuthManager().userHasAccess(user, table, action);
+        if(accessChecker.getAuthManager().userHasAccess(user, table, action)) {
+            return true;
+        }
+        String[] groupNames = user.getGroupNames();
+        if (groupNames != null) {
+          for (String group : groupNames) {
+            if(accessChecker.getAuthManager().groupHasAccess(group, table, action)) {
+                return true;
+            }
+          }
+        }
+        return false;
     }
 
-    public static boolean groupHasAccess(AccessChecker accessChecker, String group, TableName table,
-            Permission.Action action) {
-        return accessChecker.getAuthManager().groupHasAccess(group, table, action);
-    }
 }

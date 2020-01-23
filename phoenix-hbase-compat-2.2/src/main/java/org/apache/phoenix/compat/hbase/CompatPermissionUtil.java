@@ -39,17 +39,10 @@ public class CompatPermissionUtil {
         return userPermission.getPermission();
     }
 
-    public static boolean userHasAccess(AccessChecker accessChecker, User user, TableName table,
+    public static boolean authorizeUserTable(AccessChecker accessChecker, User user, TableName table,
             Permission.Action action) {
         // This also checks for group access
         return accessChecker.getAuthManager().authorizeUserTable(user, table, action);
     }
 
-    public static boolean groupHasAccess(AccessChecker accessChecker, String group, TableName table,
-            Permission.Action action) {
-        // We are calling it only after userHasAccess() has failed.
-        // In Hbase 2.2+, userHasAccess has already checked for group access, so no point in
-        // repeating
-        return false;
-    }
 }
