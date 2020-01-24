@@ -17,31 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.UUID;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -88,8 +65,39 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
@@ -188,8 +196,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testWithSetNull() throws Exception {
-        // This test is for building non-transactional mutable global indexes with direct api
-        if (localIndex || transactional || !mutable || !directApi || useSnapshot) {
+        // This test is for building non-transactional global indexes with direct api
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         // This tests the cases where a column having a null value is overwritten with a not null value and vice versa;
@@ -331,10 +339,20 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    private void dropIndexToolTables(Connection conn) throws Exception {
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+        admin.disableTable(indexToolOutputTable);
+        admin.deleteTable(indexToolOutputTable);
+        TableName indexToolResultTable = TableName.valueOf(IndexTool.RESULT_TABLE_NAME_BYTES);
+        admin.disableTable(indexToolResultTable);
+        admin.deleteTable(indexToolResultTable);
+    }
+
     @Test
     public void testBuildSecondaryIndexAndScrutinize() throws Exception {
         // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         String schemaName = generateUniqueName();
@@ -365,8 +383,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(stmtString2);
 
             // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
 
@@ -375,10 +399,21 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                 upsertRow(stmt1, i);
             }
             conn.commit();
-            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
             assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(2 * NROWS, actualRowCount);
+            dropIndexToolTables(conn);
         }
     }
 
@@ -411,8 +446,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         boolean dataTableNameCheck = false;
         boolean indexTableNameCheck = false;
         Cell errorMessageCell = null;
-        Result result = scanner.next();
-        if (result != null) {
+        for (Result result = scanner.next(); result != null; result = scanner.next()) {
             for (Cell cell : result.rawCells()) {
                 assertTrue(Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
                         IndexTool.OUTPUT_TABLE_COLUMN_FAMILY, 0,
@@ -440,7 +474,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testIndexToolVerifyBeforeAndBothOptions() throws Exception {
         // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -477,17 +511,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BOTH);
             assertEquals(0, MutationCountingRegionObserver.getMutationCount());
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
+            dropIndexToolTables(conn);
         }
     }
 
     @Test
     public void testIndexToolVerifyAfterOption() throws Exception {
         // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -521,17 +552,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     expectedValueBytes, 0, expectedValueBytes.length) == 0);
             IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
+            dropIndexToolTables(conn);
         }
     }
 
     @Test
     public void testIndexToolOnlyVerifyOption() throws Exception {
         // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         String schemaName = generateUniqueName();
@@ -552,16 +580,13 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             // IndexTool will go through each data table row and record the mismatches in the output table
             // called PHOENIX_INDEX_TOOL
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.ONLY);
+                    null, -1, IndexTool.IndexVerifyType.ONLY);
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
             byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     expectedValueBytes, 0, expectedValueBytes.length) == 0);
             // Delete the output table for the next test
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
+            dropIndexToolTables(conn);
             // Run the index tool to populate the index while verifying rows
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
@@ -570,19 +595,19 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             // Run the index tool using the only-verify option to detect this mismatch between the data and index table
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.ONLY);
+                    null, -1, IndexTool.IndexVerifyType.ONLY);
             cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
             expectedValueBytes = Bytes.toBytes("Not matching value for 0:0:CODE E:A A:B");
             assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     expectedValueBytes, 0, expectedValueBytes.length) == 0);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
+            dropIndexToolTables(conn);
         }
     }
 
     @Test
     public void testIndexToolVerifyWithExpiredIndexRows() throws Exception {
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        // This test is for building non-transactional global indexes with direct api
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         String schemaName = generateUniqueName();
@@ -601,7 +626,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement()
                     .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC",
                         indexTableName, dataTableFullName));
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, -1,
                 IndexTool.IndexVerifyType.ONLY);
             Cell cell =
                     getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
@@ -636,8 +661,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                             .getTable(indexToolOutputTable.getName());
             Result r = hIndexToolTable.getScanner(scan).next();
             assertTrue(r == null);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
+            dropIndexToolTables(conn);
         }
     }
 
@@ -729,7 +753,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testSecondaryGlobalIndexFailure() throws Exception {
         // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot) {
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
             return;
         }
         String schemaName = generateUniqueName();
