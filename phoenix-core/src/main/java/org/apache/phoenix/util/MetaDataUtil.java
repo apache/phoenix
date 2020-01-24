@@ -762,12 +762,10 @@ public class MetaDataUtil {
      * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        ClusterConnection hcon = null;
-
-        try {
-            hcon = (ClusterConnection)ConnectionFactory.createConnection(conf);
+        try (ClusterConnection hcon =
+                (ClusterConnection) ConnectionFactory.createConnection(conf)) {
             List<HRegionLocation> locations = hcon.locateRegions(
-                org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
+              org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
             for (HRegionLocation loc : locations) {
                 try {
@@ -784,17 +782,9 @@ public class MetaDataUtil {
                 }
             }
         } catch (IOException ex) {
-            LOGGER.warn("tableRegionsOnline failed due to:" + ex);
+            LOGGER.warn("tableRegionsOnline failed due to:", ex);
             return false;
-        } finally {
-            if (hcon != null) {
-                try {
-                    hcon.close();
-                } catch (IOException ignored) {
-                }
-            }
         }
-
         return true;
     }
 
