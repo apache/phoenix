@@ -346,7 +346,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedClassifierName>HBase-${hbase.compat.version}</shadedClassifierName>
+              <shadedClassifierName>${hbase.compat.version.string}</shadedClassifierName>
               <shadedArtifactAttached>true</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
@@ -383,7 +383,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedClassifierName>HBase-${hbase.compat.version}-embedded</shadedClassifierName>
+              <shadedClassifierName>${hbase.compat.version.string}-embedded</shadedClassifierName>
               <shadedArtifactAttached>true</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>

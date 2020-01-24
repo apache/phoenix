@@ -29,6 +29,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 
 public class CompatPermissionUtil {
 
+    private CompatPermissionUtil() {
+        //Nott to be instantiated
+    }
+
     public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
         if (accessChecker.getAuthManager() != null) {
             TableAuthManager.release(accessChecker.getAuthManager());

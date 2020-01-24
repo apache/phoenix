@@ -27,9 +27,9 @@
       <directory>${project.basedir}/../phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-client-${project.version}-HBase-${hbase.compat.version}.jar</include>
+        <include>phoenix-client-${project.version}-${hbase.compat.version.string}.jar</include>
         <!-- deprecated jar name, which we now have a symlink for -->
-        <include>phoenix-${project.version}-HBase-${hbase.compat.version}-client.jar</include>
+        <include>phoenix-${project.version}-${hbase.compat.version.string}-client.jar</include>
       </includes>
     </fileSet>
     <fileSet>
@@ -62,6 +62,14 @@
     </fileSet>
     <fileSet>
       <directory>${project.basedir}/../phoenix-pherf/target/</directory>
+      <outputDirectory>lib</outputDirectory>
+      <includes>
+        <include>phoenix-*.jar</include>
+      </includes>
+      <fileMode>0644</fileMode>
+    </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-hbase-compat-${hbase.compat.version}/target/</directory>
       <outputDirectory>lib</outputDirectory>
       <includes>
         <include>phoenix-*.jar</include>

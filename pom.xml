@@ -40,8 +40,8 @@
   </organization>
 
   <modules>
-    <module>phoenix-hbase-compat-2.2</module>
-    <module>phoenix-hbase-compat-2.0</module>
+    <module>phoenix-hbase-compat-2.2.1</module>
+    <module>phoenix-hbase-compat-2.0.1</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
@@ -76,12 +76,13 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
 
-    <!-- Hadoop Versions -->
-    <hbase.version>2.0.1</hbase.version>
-    <hadoop.version>3.0.0</hadoop.version>
-
     <!-- Default hbase-compat version -->
-    <hbase.compat.version>2.0</hbase.compat.version>
+    <hbase.compat.version>2.0.1</hbase.compat.version>
+    <hbase.compat.version.string>hbase-${hbase.compat.version}</hbase.compat.version.string>
+
+    <!-- Hadoop Versions -->
+    <hbase.version>${hbase.compat.version}</hbase.version>
+    <hadoop.version>3.0.0</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
@@ -518,12 +519,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.0</artifactId>
+        <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.2</artifactId>
+        <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- HBase dependencies -->
@@ -1008,15 +1009,6 @@
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
       </dependency>
-      
-      <!-- do not commit, workaround for eclipse profile handling definciencies -->
-<!--       <dependency> -->
-<!--           <groupId>org.apache.phoenix</groupId> -->
-<!--           <artifactId>phoenix-hbase-compat-2.2.1</artifactId> -->
-<!--           <version>${project.version}</version> -->
-<!--       </dependency> -->
-      
-      
     </dependencies>
   </dependencyManagement>
 
@@ -1060,33 +1052,47 @@
     compatible hbase.version i.e mvn clean install -P phoenix-hbase-compat-2.2 -Dhbase.version=2.2.3
     -->
     <profile>
-      <id>phoenix-hbase-compat-2.0</id>
+      <id>phoenix-hbase-compat-2.0.1-default</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
         <property>
-          <name>hbase.compat.version</name>
-          <value>2.0</value>
+          <name>!hbase.compat.version</name>
         </property>
       </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.0</artifactId>
+          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
         </dependency>
       </dependencies>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-2.2</id>
+      <id>phoenix-hbase-compat-2.0.1</id>
       <activation>
+        <activeByDefault>true</activeByDefault>
         <property>
           <name>hbase.compat.version</name>
-          <value>2.2</value>
+          <value>2.0.1</value>
         </property>
       </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.2</artifactId>
+          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.2.1</id>
+      <activation>
+        <property>
+          <name>hbase.compat.version</name>
+          <value>2.2.1</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
         </dependency>
       </dependencies>
     </profile>

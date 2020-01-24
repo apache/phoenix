@@ -27,6 +27,10 @@ import org.apache.hadoop.hbase.security.access.UserPermission;
 
 public class CompatPermissionUtil {
 
+    private CompatPermissionUtil() {
+        //Not to be instantiated
+    }
+
     public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
         accessChecker.stop();
     }

@@ -52,8 +52,8 @@
               <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>phoenix-client-${project.version}-HBase-${hbase.compat.version}.jar</argument>
-                <argument>phoenix-${project.version}-HBase-${hbase.compat.version}-client.jar</argument>
+                <argument>phoenix-client-${project.version}-${hbase.compat.version.string}.jar</argument>
+                <argument>phoenix-${project.version}-${hbase.compat.version.string}-client.jar</argument>
               </arguments>
             </configuration>
           </execution>
@@ -81,7 +81,7 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}-Hbase-${hbase.compat.version}</finalName>
+            <finalName>phoenix-${project.version}-${hbase.compat.version.string}</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
