@@ -143,7 +143,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                 @SuppressWarnings("deprecation")
                 @Override
                 public Void call() throws Exception {
-                    Table table = null;
                     // this may have been queued, so another task infront of us may have failed, so we should
                     // early exit, if that's the case
                     throwFailureIfDone();
@@ -176,9 +175,10 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                         else {
                             factory = retryingFactory;
                         }
-                        table = factory.getTable(tableReference.get());
-                        throwFailureIfDone();
-                        table.batch(mutations, null);
+                        try (Table table = factory.getTable(tableReference.get())) {
+                            throwFailureIfDone();
+                            table.batch(mutations, null);
+                        }
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
                     } catch (IOException e) {
@@ -187,11 +187,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
                         throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
-                    }
-                    finally{
-                        if (table != null) {
-                            table.close();
-                        }
                     }
                     return null;
                 }
