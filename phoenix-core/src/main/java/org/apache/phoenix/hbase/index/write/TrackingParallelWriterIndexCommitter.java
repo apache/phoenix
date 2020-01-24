@@ -157,7 +157,6 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 @SuppressWarnings("deprecation")
                 @Override
                 public Boolean call() throws Exception {
-                    Table table = null;
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();
@@ -190,19 +189,16 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         else {
                             factory = retryingFactory;
                         }
-                        table = factory.getTable(tableReference.get());
-                        throwFailureIfDone();
-                        table.batch(mutations, null);
+                        try (Table table = factory.getTable(tableReference.get())) {
+                            throwFailureIfDone();
+                            table.batch(mutations, null);
+                        }
                     } catch (InterruptedException e) {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
                         throw e;
                     } catch (Exception e) {
                         throw e;
-                    } finally {
-                        if (table != null) {
-                            table.close();
-                        }
                     }
                     return Boolean.TRUE;
                 }
