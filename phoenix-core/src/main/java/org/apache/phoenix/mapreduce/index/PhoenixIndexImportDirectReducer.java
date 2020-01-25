@@ -22,6 +22,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
@@ -50,7 +51,7 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getInde
  */
 public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
-    private boolean calledOnce = false;
+    private AtomicBoolean calledOnce = new AtomicBoolean(false);
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
 
@@ -103,13 +104,9 @@ public class PhoenixIndexImportDirectReducer extends
             throws IOException, InterruptedException
 
     {
-        synchronized (this) {
-            if (calledOnce) {
-                return;
-            }
-            calledOnce = true;
+        if (!calledOnce.compareAndSet(false, true)) {
+            return;
         }
-
         IndexTool.IndexVerifyType verifyType = getIndexVerifyType(context.getConfiguration());
         if (verifyType != IndexTool.IndexVerifyType.NONE) {
             updateCounters(verifyType, context);

@@ -674,7 +674,6 @@ public class IndexTool extends Configured implements Tool {
         if (!admin.tableExists(TableName.valueOf(OUTPUT_TABLE_NAME))) {
             HTableDescriptor tableDescriptor = new
                     HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
-            tableDescriptor.setValue("DISABLE_TABLE_SOR", "true");
             tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
             HColumnDescriptor columnDescriptor = new HColumnDescriptor(OUTPUT_TABLE_COLUMN_FAMILY);
             tableDescriptor.addFamily(columnDescriptor);
@@ -683,7 +682,6 @@ public class IndexTool extends Configured implements Tool {
         if (!admin.tableExists(TableName.valueOf(RESULT_TABLE_NAME))) {
             HTableDescriptor tableDescriptor = new
                     HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
-            tableDescriptor.setValue("DISABLE_TABLE_SOR", "true");
             tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
             HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
             tableDescriptor.addFamily(columnDescriptor);
