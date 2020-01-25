@@ -70,19 +70,22 @@
   </scm>
 
   <properties>
+    <!-- The HBase compatibility module that that will be included in the shaded JARs and the assembly -->
+    <hbase.compat.version>2.0.1</hbase.compat.version>
+    <hbase.compat.version.string>hbase-${hbase.compat.version}</hbase.compat.version.string>
+
+    <!-- The HBase version that will be included in the shaded JARs, and that tests will be run with.
+    Defaults to the minimum HBase version supported by the chosen compatibility module -->
+    <hbase.version>${hbase.compat.version}</hbase.version>
+
+    <!-- Hadoop Version -->
+    <hadoop.version>3.0.0</hadoop.version>
+
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
-
-    <!-- Default hbase-compat version -->
-    <hbase.compat.version>2.0.1</hbase.compat.version>
-    <hbase.compat.version.string>hbase-${hbase.compat.version}</hbase.compat.version.string>
-
-    <!-- Hadoop Versions -->
-    <hbase.version>${hbase.compat.version}</hbase.version>
-    <hadoop.version>3.0.0</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
@@ -1046,10 +1049,9 @@
         </plugins>
       </build>
     </profile>
-    <!-- Choose which hbase compatibility module we compile, test, and shade against.
-    Shouldn't have an effect on the generated code and artifacts apart from the contents of the the shaded jars
-    When specifying a non-default compatibility module, you also have to specify a
-    compatible hbase.version i.e mvn clean install -P phoenix-hbase-compat-2.2 -Dhbase.version=2.2.3
+    <!--
+    Do not specify the compatibility profiles directly, set hbase.compat.version instead.
+    e.g. mvn clean install -Dhbase.compat.version=2.2.1
     -->
     <profile>
       <id>phoenix-hbase-compat-2.0.1-default</id>
