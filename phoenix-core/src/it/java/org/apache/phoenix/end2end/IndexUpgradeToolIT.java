@@ -19,76 +19,121 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+
+@RunWith(Parameterized.class)
 public class IndexUpgradeToolIT extends BaseTest {
 
     public static final String
             VERIFY_COUNT_ASSERT_MESSAGE = "view-index count in system table doesn't match";
+    private final boolean multiTenant;
+    private String tenantId = null;
+
+    public IndexUpgradeToolIT(boolean multiTenant) {
+        this.multiTenant = multiTenant;
+    }
+
+    @Parameters(name="isMultiTenant = {0}")
+    public static synchronized Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {
+                { true },{ false }
+        });
+    }
+
+    @BeforeClass
+    public static void setup() throws Exception {
+        Map<String, String> props = Collections.emptyMap();
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     @Test
     public void verifyViewAndViewIndexes() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
-        Map<String, String> props = Collections.emptyMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-
-        try (Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (multiTenant) {
+            tenantId = generateUniqueName();
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             prepareForTest(conn, schemaName, tableName);
-            IndexUpgradeTool iut = new IndexUpgradeTool();
-            String viewQuery = iut.getViewSql(tableName, schemaName);
+            String viewQuery = IndexUpgradeTool.getViewSql(tableName, schemaName);
             ResultSet rs = conn.createStatement().executeQuery(viewQuery);
             int countViews = 0;
             List<String> views = new ArrayList<>();
-            List<Integer> indexCount = new ArrayList<>();
+            List<String> tenants = new ArrayList<>();
             while (rs.next()) {
                 views.add(rs.getString(1));
+                if(multiTenant) {
+                    Assert.assertNotNull(rs.getString(2));
+                }
+                tenants.add(rs.getString(2));
                 countViews++;
             }
             Assert.assertEquals("view count in system table doesn't match", 2, countViews);
+
             for (int i = 0; i < views.size(); i++) {
                 String viewName = SchemaUtil.getTableNameFromFullName(views.get(i));
-                String viewIndexQuery = iut.getViewIndexesSql(viewName, schemaName, null);
+                String viewIndexQuery = IndexUpgradeTool.getViewIndexesSql(viewName, schemaName,
+                        tenants.get(i));
                 rs = conn.createStatement().executeQuery(viewIndexQuery);
                 int indexes = 0;
                 while (rs.next()) {
                     indexes++;
                 }
-                indexCount.add(indexes);
+                Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 2-i, indexes);
             }
-            Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 2, (int) indexCount.get(0));
-            Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 1, (int) indexCount.get(1));
         }
     }
 
     private void prepareForTest(Connection conn, String schemaName, String tableName)
             throws SQLException {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        conn.createStatement().execute("CREATE TABLE "+fullTableName+" (id bigint NOT NULL "
-                + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)");
+        Connection globalConn = conn;
+        if (multiTenant) {
+            Properties prop = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            globalConn = DriverManager.getConnection(getUrl(), prop);
+        }
+        globalConn.createStatement().execute("CREATE TABLE " + fullTableName + " (" + (
+                multiTenant ? "TENANT_ID VARCHAR(15) NOT NULL, " : "") + "id bigint NOT NULL,"
+                + " a.name varchar, sal bigint, address varchar CONSTRAINT PK_1 PRIMARY KEY "
+                + "(" + (multiTenant ? "TENANT_ID, " : "") + "ID)) "
+                + (multiTenant ? "MULTI_TENANT=true" : ""));
 
         for (int i = 0; i<2; i++) {
             String view = generateUniqueName();
             String fullViewName = SchemaUtil.getTableName(schemaName, view);
-            conn.createStatement().execute("CREATE VIEW "+ fullViewName+ " (view_column varchar)"
+            conn.createStatement().execute("CREATE VIEW "+ fullViewName
                     + " AS SELECT * FROM " +fullTableName + " WHERE a.name = 'a'");
             for(int j=i; j<2; j++) {
                 String index = generateUniqueName();
                 conn.createStatement().execute("CREATE INDEX " + index + " ON "
-                        + fullViewName + " (view_column)");
+                        + fullViewName + " (address)");
             }
         }
     }
