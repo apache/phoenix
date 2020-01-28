@@ -69,7 +69,9 @@
       <fileMode>0644</fileMode>
     </fileSet>
     <fileSet>
-      <directory>${project.basedir}/../phoenix-hbase-compat-${hbase.compat.version}/target/</directory>
+      <directory>
+        ${project.basedir}/../phoenix-hbase-compat-${hbase.compat.version}/target/
+      </directory>
       <outputDirectory>lib</outputDirectory>
       <includes>
         <include>phoenix-*.jar</include>

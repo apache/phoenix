@@ -138,8 +138,9 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
             for (int j = 0; j < 150 && !split; j++) {
                 try {
                     if (localIndex) {
-                        //With Hbase 2.2 the local index splits trigger longCompactions, and have to wait for an
-                        //RS_COMPACTED_FILES_DISCHARGER run before the second split is successful
+                        //With Hbase 2.2 the local index splits trigger longCompactions, and have
+                        //to wait for an RS_COMPACTED_FILES_DISCHARGER run before the second split
+                        //is successful
                         admin.split(TableName.valueOf(tableName),
                                 ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
                     } else {

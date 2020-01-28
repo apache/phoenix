@@ -92,7 +92,8 @@ public class PermissionsCacheIT extends BasePermissionsIT {
                     AccessControlLists.readPermissions(data, conf);
             assertTrue("User permissions not found in cache:",
                 userPermissions.containsKey(regularUser1.getName()));
-            List<? extends Permission> tablePermissions = userPermissions.get(regularUser1.getName());
+            List<? extends Permission> tablePermissions =
+                    userPermissions.get(regularUser1.getName());
             for (Permission tablePerm : tablePermissions) {
                 assertTrue("Table create permission don't exist", tablePerm.implies(Action.CREATE));
             }

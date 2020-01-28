@@ -204,16 +204,18 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 if (permissionForUser != null) {
                     for (UserPermission userPermission : permissionForUser) {
                         for (Action action : Arrays.asList(requiredActions)) {
-                            if (!CompatPermissionUtil.getPermissionFromUP(userPermission).implies(action)) {
+                            if (!CompatPermissionUtil.getPermissionFromUP(userPermission)
+                                    .implies(action)) {
                                 requireAccess.add(action);
                             }
                         }
                     }
                     if (!requireAccess.isEmpty()) {
                         for (UserPermission userPermission : permissionForUser) {
-                            accessExists.addAll(Arrays.asList(CompatPermissionUtil.getPermissionFromUP(userPermission).getActions()));
+                            accessExists.addAll(Arrays.asList(
+                                CompatPermissionUtil.getPermissionFromUP(
+                                        userPermission).getActions()));
                         }
-
                     }
                 } else {
                     requireAccess.addAll(Arrays.asList(requiredActions));
@@ -289,7 +291,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                                 CompatPermissionUtil.getUserFromUP(userPermission));
                             for (Action action : requiredActionsOnTable) {
                                 boolean haveAccess=false;
-                                if (CompatPermissionUtil.getPermissionFromUP(userPermission).implies(action)) {
+                                if (CompatPermissionUtil.getPermissionFromUP(userPermission)
+                                        .implies(action)) {
                                     if (permsToTable == null) {
                                         requireAccess.add(action);
                                     } else {

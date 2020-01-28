@@ -117,8 +117,9 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                     result = scanner.next();
                 }
                 if (result == null || result.isEmpty()) {
-                    List<RegionInfo> mergeRegions = CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
-                        region.getRegionInfo().getRegionName());
+                    List<RegionInfo> mergeRegions =
+                            CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
+                                region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.isEmpty()){
                         return reader;
                     }
@@ -139,7 +140,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                             return reader;
                         }
                     } else {
-                        for (RegionInfo mergeRegion : mergeRegions.subList(1, mergeRegions.size())) {
+                        for (RegionInfo mergeRegion :
+                                mergeRegions.subList(1, mergeRegions.size())) {
                             if (Bytes.compareTo(mergeRegion.getStartKey(), splitRow) == 0) {
                                 childRegion = mergeRegion;
                                 regionStartKeyInHFile = mergeRegion.getStartKey();
