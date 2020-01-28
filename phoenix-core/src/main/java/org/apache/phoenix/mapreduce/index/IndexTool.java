@@ -157,6 +157,9 @@ public class IndexTool extends Configured implements Tool {
     public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
     public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
     public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+    public final static String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
+    public final static byte[] RESULT_TABLE_NAME_BYTES = Bytes.toBytes(RESULT_TABLE_NAME);
+    public final static byte[] RESULT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
     public final static String DATA_TABLE_NAME = "DTName";
     public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
     public static String INDEX_TABLE_NAME = "ITName";
@@ -171,6 +174,30 @@ public class IndexTool extends Configured implements Tool {
     public final static byte[] INDEX_TABLE_TS_BYTES = Bytes.toBytes(INDEX_TABLE_TS);
     public static String ERROR_MESSAGE = "Error";
     public final static byte[] ERROR_MESSAGE_BYTES = Bytes.toBytes(ERROR_MESSAGE);
+    public static String  SCAN_STOP_ROW_KEY = "StopRowKey";
+    public final static byte[] SCAN_STOP_ROW_KEY_BYTES = Bytes.toBytes(SCAN_STOP_ROW_KEY);
+    public static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
+    public final static byte[] SCANNED_DATA_ROW_COUNT_BYTES = Bytes.toBytes(SCANNED_DATA_ROW_COUNT);
+    public static String REBUILT_INDEX_ROW_COUNT = "RebuiltIndexRowCount";
+    public final static byte[] REBUILT_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(REBUILT_INDEX_ROW_COUNT);
+    public static String BEFORE_REBUILD_VALID_INDEX_ROW_COUNT = "BeforeRebuildValidIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT);
+    public static String BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT = "BeforeRebuildExpiredIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT);
+    public static String BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT = "BeforeRebuildMissingIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT);
+    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT = "BeforeRebuildInvalidIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT);
+    public static String AFTER_REBUILD_VALID_INDEX_ROW_COUNT = "AfterValidExpiredIndexRowCount";
+    public final static byte[] AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_VALID_INDEX_ROW_COUNT);
+    public static String AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT = "AfterRebuildExpiredIndexRowCount";
+    public final static byte[] AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT);
+    public static String AFTER_REBUILD_MISSING_INDEX_ROW_COUNT = "AfterRebuildMissingIndexRowCount";
+    public final static byte[] AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT);
+    public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT = "AfterRebuildInvalidIndexRowCount";
+    public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT);
+    public static String  VERIFICATION_PHASE = "Phase";
+    public final static byte[] VERIFICATION_PHASE_BYTES = Bytes.toBytes(VERIFICATION_PHASE);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
@@ -331,7 +358,7 @@ public class IndexTool extends Configured implements Tool {
         formatter.printHelp("help", options);
         System.exit(exitCode);
     }
-    
+
     class JobFactory {
         Connection connection;
         Configuration configuration;
@@ -641,18 +668,25 @@ public class IndexTool extends Configured implements Tool {
         return job;
     }
 
-    private void createIndexToolOutputTable(Connection connection) throws Exception {
+    private void createIndexToolTables(Connection connection) throws Exception {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
         Admin admin = queryServices.getAdmin();
-        if (admin.tableExists(TableName.valueOf(OUTPUT_TABLE_NAME))) {
-            return;
+        if (!admin.tableExists(TableName.valueOf(OUTPUT_TABLE_NAME))) {
+            HTableDescriptor tableDescriptor = new
+                    HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
+            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
+            HColumnDescriptor columnDescriptor = new HColumnDescriptor(OUTPUT_TABLE_COLUMN_FAMILY);
+            tableDescriptor.addFamily(columnDescriptor);
+            admin.createTable(tableDescriptor);
         }
-        HTableDescriptor tableDescriptor = new
-                HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
-        tableDescriptor.setValue(ColumnFamilyDescriptorBuilder.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-        HColumnDescriptor columnDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY);
-        tableDescriptor.addFamily(columnDescriptor);
-        admin.createTable(tableDescriptor);
+        if (!admin.tableExists(TableName.valueOf(RESULT_TABLE_NAME))) {
+            HTableDescriptor tableDescriptor = new
+                    HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
+            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
+            HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
+            tableDescriptor.addFamily(columnDescriptor);
+            admin.createTable(tableDescriptor);
+        }
     }
 
     @Override
@@ -699,7 +733,7 @@ public class IndexTool extends Configured implements Tool {
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
-            createIndexToolOutputTable(connection);
+            createIndexToolTables(connection);
             
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
