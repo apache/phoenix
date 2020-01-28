@@ -434,7 +434,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     }
 
     @Override
-    public boolean isFilterDone() { return hasMore; }
+    public boolean isFilterDone() { return false; }
 
     private void logToIndexToolResultTable() throws IOException {
         long scanMaxTs = scan.getTimeRange().getMax();
@@ -957,6 +957,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
+        Cell lastCell = null;
         int rowCount = 0;
         region.startRegionOperation();
         try {
@@ -968,6 +969,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     List<Cell> row = new ArrayList<Cell>();
                     hasMore = innerScanner.nextRaw(row);
                     if (!row.isEmpty()) {
+                        lastCell = row.get(0);
                         Put put = null;
                         Delete del = null;
                         for (Cell cell : row) {
@@ -1039,8 +1041,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             }
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
-        final Cell aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
-                SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+        final Cell aggKeyValue;
+        if (lastCell == null) {
+            aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+        } else {
+            aggKeyValue = KeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+        }
         results.add(aggKeyValue);
         return hasMore;
     }
