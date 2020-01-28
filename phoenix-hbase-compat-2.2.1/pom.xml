@@ -26,8 +26,8 @@
 <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
   <version>5.1.0-SNAPSHOT</version>
-  <name>Phoenix Hbase 2.2.1+ support</name>
-  <description>Phoenix Hbase 2.2.1+ support</description>
+  <name>Phoenix Hbase 2.2.1 compatibility</name>
+  <description>Compatibility module for HBase 2.2.1+</description>
 
   <build>
     <plugins>

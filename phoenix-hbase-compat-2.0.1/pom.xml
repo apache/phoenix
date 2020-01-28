@@ -27,8 +27,8 @@
   <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
   <version>5.1.0-SNAPSHOT</version>
   
-  <name>Phoenix Hbase 2.0.1 - 2.1 support</name>
-  <description>Phoenix Hbase 2.0.1 - 2.1 support</description>
+  <name>Phoenix Hbase 2.0.1 compatibility</name>
+  <description>Compatibility module for HBase 2.0.1 - 2.0.4 and 2.1.0 - 2.1.1</description>
 
   <build>
     <plugins>
