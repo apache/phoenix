@@ -440,7 +440,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         for (int i = startIndex; i < sourceValues.size(); i++) {
             Object targetValue = targetValues.get(i);
             Object sourceValue = sourceValues.get(i);
-            if (targetValue != null) {
+            if (sourceValue == null && targetValue == null) {
+                continue;
+            } else if (sourceValue != null && targetValue != null) {
                 if (sourceValue.getClass().isArray()) {
                     if (compareArrayTypes(sourceValue, targetValue)) {
                         continue;
@@ -450,10 +452,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                         continue;
                     }
                 }
-                context.getCounter(PhoenixScrutinyJobCounters.BAD_COVERED_COL_VAL_COUNT)
-                        .increment(1);
-                return false;
-            }
+            } 
+            context.getCounter(PhoenixScrutinyJobCounters.BAD_COVERED_COL_VAL_COUNT).increment(1);
+            return false;
         }
         return true;
     }
