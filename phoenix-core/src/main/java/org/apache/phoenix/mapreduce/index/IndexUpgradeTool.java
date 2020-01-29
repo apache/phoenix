@@ -363,6 +363,9 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     private long executeToolForImmutableTables(ConnectionQueryServices queryServices,
             ArrayList<String> immutableList) {
+        if (immutableList.isEmpty()) {
+            return 0;
+        }
         LOGGER.info("Started " + operation + " for immutable tables");
         for (String dataTableFullName : immutableList) {
             try (Admin admin = queryServices.getAdmin()) {
@@ -385,6 +388,9 @@ public class IndexUpgradeTool extends Configured implements Tool {
             ConnectionQueryServices queryServices,
             Configuration conf,
             ArrayList<String> mutableTables) {
+        if (mutableTables.isEmpty()) {
+            return;
+        }
         LOGGER.info("Started " + operation + " for mutable tables");
         for (String dataTableFullName : mutableTables) {
             try (Admin admin = queryServices.getAdmin()) {
