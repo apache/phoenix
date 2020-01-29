@@ -766,7 +766,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     @VisibleForTesting
     public static String getViewSql(String tableName, String schemaName) {
-       return "SELECT DISTINCT COLUMN_FAMILY, COLUMN_NAME FROM "
+        //column_family has the view name and column_name has the Tenant ID
+        return "SELECT DISTINCT COLUMN_FAMILY, COLUMN_NAME FROM "
                 + "SYSTEM.CHILD_LINK "
                 + "WHERE TABLE_NAME = \'" + tableName + "\'"
                 + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"

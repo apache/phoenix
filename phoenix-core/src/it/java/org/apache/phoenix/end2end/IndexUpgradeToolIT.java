@@ -84,18 +84,17 @@ public class IndexUpgradeToolIT extends BaseTest {
             prepareForTest(conn, schemaName, tableName);
             String viewQuery = IndexUpgradeTool.getViewSql(tableName, schemaName);
             ResultSet rs = conn.createStatement().executeQuery(viewQuery);
-            int countViews = 0;
             List<String> views = new ArrayList<>();
             List<String> tenants = new ArrayList<>();
             while (rs.next()) {
+                //1st column has the view name and 2nd column has the Tenant ID
                 views.add(rs.getString(1));
                 if(multiTenant) {
                     Assert.assertNotNull(rs.getString(2));
                 }
                 tenants.add(rs.getString(2));
-                countViews++;
             }
-            Assert.assertEquals("view count in system table doesn't match", 2, countViews);
+            Assert.assertEquals("view count in system table doesn't match", 2, views.size());
 
             for (int i = 0; i < views.size(); i++) {
                 String viewName = SchemaUtil.getTableNameFromFullName(views.get(i));
@@ -106,6 +105,7 @@ public class IndexUpgradeToolIT extends BaseTest {
                 while (rs.next()) {
                     indexes++;
                 }
+                // first (i=0) TSV has 2 indexes, and second(i=1) TSV has 1 index.
                 Assert.assertEquals(VERIFY_COUNT_ASSERT_MESSAGE, 2-i, indexes);
             }
         }
