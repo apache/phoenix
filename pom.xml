@@ -70,12 +70,13 @@
   </scm>
 
   <properties>
-    <!-- The HBase compatibility module that that will be included in the shaded JARs and the assembly -->
+    <!-- The HBase compatibility module that that will be included in
+    the shaded JARs and the assembly -->
     <hbase.compat.version>2.0.1</hbase.compat.version>
     <hbase.compat.version.string>hbase-${hbase.compat.version}</hbase.compat.version.string>
 
-    <!-- The HBase version that will be included in the shaded JARs, and that tests will be run with.
-    Defaults to the minimum HBase version supported by the chosen compatibility module -->
+    <!-- The HBase version that will be included in the shaded JARs, and that tests will be run
+    with. Defaults to the minimum HBase version supported by the chosen compatibility module -->
     <hbase.version>${hbase.compat.version}</hbase.version>
 
     <!-- Hadoop Version -->

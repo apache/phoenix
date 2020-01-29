@@ -33,8 +33,10 @@ public class CompatUtil {
         //Not to be instantiated
     }
 
-    public static List<RegionInfo> getMergeRegions(Connection conn, byte[] regionName) throws IOException {
-        Pair<RegionInfo, RegionInfo> regionPair =  MetaTableAccessor.getRegionsFromMergeQualifier(conn,regionName);
+    public static List<RegionInfo> getMergeRegions(Connection conn, byte[] regionName) 
+            throws IOException {
+        Pair<RegionInfo, RegionInfo> regionPair = 
+                MetaTableAccessor.getRegionsFromMergeQualifier(conn,regionName);
         List<RegionInfo> regionList = new ArrayList<RegionInfo>(2);
         regionList.add(regionPair.getFirst());
         regionList.add(regionPair.getSecond());

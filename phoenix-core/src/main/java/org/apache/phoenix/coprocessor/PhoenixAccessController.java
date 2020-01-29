@@ -79,6 +79,9 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.authorizeUserTable;
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getUserFromUP;
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getPermissionFromUP;
 
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
@@ -204,8 +207,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 if (permissionForUser != null) {
                     for (UserPermission userPermission : permissionForUser) {
                         for (Action action : Arrays.asList(requiredActions)) {
-                            if (!CompatPermissionUtil.getPermissionFromUP(userPermission)
-                                    .implies(action)) {
+                            if (!getPermissionFromUP(userPermission).implies(action)) {
                                 requireAccess.add(action);
                             }
                         }
@@ -213,8 +215,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     if (!requireAccess.isEmpty()) {
                         for (UserPermission userPermission : permissionForUser) {
                             accessExists.addAll(Arrays.asList(
-                                CompatPermissionUtil.getPermissionFromUP(
-                                        userPermission).getActions()));
+                                getPermissionFromUP(userPermission).getActions()));
                         }
                     }
                 } else {
@@ -288,16 +289,15 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             Set<Action> requireAccess = new HashSet<Action>();
                             Set<Action> accessExists = new HashSet<Action>();
                             List<UserPermission> permsToTable = getPermissionForUser(permissionsOnTheTable,
-                                CompatPermissionUtil.getUserFromUP(userPermission));
+                                getUserFromUP(userPermission));
                             for (Action action : requiredActionsOnTable) {
                                 boolean haveAccess=false;
-                                if (CompatPermissionUtil.getPermissionFromUP(userPermission)
-                                        .implies(action)) {
+                                if (getPermissionFromUP(userPermission).implies(action)) {
                                     if (permsToTable == null) {
                                         requireAccess.add(action);
                                     } else {
                                         for (UserPermission permToTable : permsToTable) {
-                                            if (CompatPermissionUtil.getPermissionFromUP(permToTable).implies(action)) {
+                                            if (getPermissionFromUP(permToTable).implies(action)) {
                                                 haveAccess=true;
                                             }
                                         }
@@ -310,19 +310,21 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             if (permsToTable != null) {
                                 // Append access to already existing access for the user
                                 for (UserPermission permToTable : permsToTable) {
-                                    accessExists.addAll(Arrays.asList(CompatPermissionUtil.getPermissionFromUP(permToTable).getActions()));
+                                    accessExists.addAll(Arrays.asList(
+                                        getPermissionFromUP(permToTable).getActions()));
                                 }
                             }
                             if (!requireAccess.isEmpty()) {
-                                if(AuthUtil.isGroupPrincipal(CompatPermissionUtil.getUserFromUP(userPermission))){
-                                    AUDITLOG.warn("Users of GROUP:" + CompatPermissionUtil.getUserFromUP(userPermission)
+                                if(AuthUtil.isGroupPrincipal(getUserFromUP(userPermission))){
+                                    AUDITLOG.warn("Users of GROUP:" + getUserFromUP(userPermission)
                                             + " will not have following access " + requireAccess
                                             + " to the newly created index " + toTable
                                             + ", Automatic grant is not yet allowed on Groups");
                                     continue;
                                 }
-                                handleRequireAccessOnDependentTable(request, CompatPermissionUtil.getUserFromUP(userPermission),
-                                        toTable, toTable.getNameAsString(), requireAccess, accessExists);
+                                handleRequireAccessOnDependentTable(request,
+                                    getUserFromUP(userPermission), toTable,
+                                    toTable.getNameAsString(), requireAccess, accessExists);
                             }
                         }
                     }
@@ -338,7 +340,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // permissions for same users
             List<UserPermission> permissions = new ArrayList<>();
             for (UserPermission p : perms) {
-                if (CompatPermissionUtil.getUserFromUP(p).equals(user)){
+                if (getUserFromUP(p).equals(user)){
                      permissions.add(p);
                 }
             }
@@ -549,7 +551,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User user = getActiveUser();
         AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
-        
+
         for (Action permission : permissions) {
              if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
                 result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
@@ -580,13 +582,14 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         if (perms != null) {
             if (hbaseAccessControllerEnabled 
-                    && CompatPermissionUtil.authorizeUserTable(accessChecker, user, table, action)) {
+                    && authorizeUserTable(accessChecker, user, table, action)) {
                 return true;
             }
-            List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName());
+            List<UserPermission> permissionsForUser = 
+                    getPermissionForUser(perms, user.getShortName());
             if (permissionsForUser != null) {
                 for (UserPermission permissionForUser : permissionsForUser) {
-                    if (CompatPermissionUtil.getPermissionFromUP(permissionForUser).implies(action)) { return true; }
+                    if (getPermissionFromUP(permissionForUser).implies(action)) { return true; }
                 }
             }
             String[] groupNames = user.getGroupNames();
@@ -595,7 +598,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 List<UserPermission> groupPerms =
                         getPermissionForUser(perms, (AuthUtil.toGroupEntry(group)));
                 if (groupPerms != null) for (UserPermission permissionForUser : groupPerms) {
-                    if (CompatPermissionUtil.getPermissionFromUP(permissionForUser).implies(action)) { return true; }
+                    if (getPermissionFromUP(permissionForUser).implies(action)) { return true; }
                 }
               }
             }

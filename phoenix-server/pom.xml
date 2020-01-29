@@ -94,7 +94,9 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <finalName>phoenix-${project.version}-${hbase.compat.version.string}-server</finalName>
+                <finalName>
+                  phoenix-${project.version}-${hbase.compat.version.string}-server
+                </finalName>
                 <shadedArtifactAttached>false</shadedArtifactAttached>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>

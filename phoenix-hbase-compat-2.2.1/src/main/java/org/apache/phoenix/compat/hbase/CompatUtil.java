@@ -31,7 +31,8 @@ public class CompatUtil {
         //Not to be instantiated
     }
 
-    public static List<RegionInfo> getMergeRegions(Connection conn, byte[] regionName) throws IOException {
+    public static List<RegionInfo> getMergeRegions(Connection conn, byte[] regionName) 
+            throws IOException {
         return MetaTableAccessor.getMergeRegions(conn, regionName);
     }
 

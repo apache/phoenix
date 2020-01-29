@@ -43,8 +43,8 @@ public class CompatPermissionUtil {
         return userPermission.getPermission();
     }
 
-    public static boolean authorizeUserTable(AccessChecker accessChecker, User user, TableName table,
-            Permission.Action action) {
+    public static boolean authorizeUserTable(AccessChecker accessChecker, User user, 
+            TableName table, Permission.Action action) {
         // This also checks for group access
         return accessChecker.getAuthManager().authorizeUserTable(user, table, action);
     }
