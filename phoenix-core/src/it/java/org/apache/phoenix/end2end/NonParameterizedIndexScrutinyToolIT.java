@@ -88,6 +88,57 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
             counters = job.getCounters();
             assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
             assertEquals(1, getCounterValue(counters, INVALID_ROW_COUNT));
+
+            // Have source null
+            upsertRow(upsertDataStmt, 4, "name-4", null);
+            conn.commit();
+
+            upsertIndexStmt.setString(1, "name-4");
+            upsertIndexStmt.setInt(2, 4);
+            upsertIndexStmt.setBytes(3, new byte[] {0, 0, 1, 1});
+            upsertIndexStmt.executeUpdate();
+            conn.commit();
+
+            completedJobs = runScrutiny(null, dataTableName, indexTableName);
+            job = completedJobs.get(0);
+            assertTrue(job.isSuccessful());
+            counters = job.getCounters();
+            assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
+            assertEquals(2, getCounterValue(counters, INVALID_ROW_COUNT));
+
+            // Have target null
+            upsertRow(upsertDataStmt, 5, "name-5", new byte[] {0, 1, 1, 1});
+            conn.commit();
+
+            upsertIndexStmt.setString(1, "name-5");
+            upsertIndexStmt.setInt(2, 5);
+            upsertIndexStmt.setBytes(3, null);
+            upsertIndexStmt.executeUpdate();
+            conn.commit();
+
+            completedJobs = runScrutiny(null, dataTableName, indexTableName);
+            job = completedJobs.get(0);
+            assertTrue(job.isSuccessful());
+            counters = job.getCounters();
+            assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
+            assertEquals(3, getCounterValue(counters, INVALID_ROW_COUNT));
+
+            // Have both of them null
+            upsertRow(upsertDataStmt, 6, "name-6", null);
+            conn.commit();
+
+            upsertIndexStmt.setString(1, "name-6");
+            upsertIndexStmt.setInt(2, 6);
+            upsertIndexStmt.setBytes(3, null);
+            upsertIndexStmt.executeUpdate();
+            conn.commit();
+
+            completedJobs = runScrutiny(null, dataTableName, indexTableName);
+            job = completedJobs.get(0);
+            assertTrue(job.isSuccessful());
+            counters = job.getCounters();
+            assertEquals(3, getCounterValue(counters, VALID_ROW_COUNT));
+            assertEquals(3, getCounterValue(counters, INVALID_ROW_COUNT));
         }
     }
 
