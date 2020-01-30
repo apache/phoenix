@@ -128,7 +128,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     case DeleteColumn:
       // similar to deleteFamily, all the newer deletes/puts would have been seen at this point, so
       // we can safely replace the more recent delete column with the more recent one
-      this.coveringDelete.pointDelete = null;
+      this.coveringDelete.reset();
       this.coveringDelete.deleteColumn = nextKV;
       return ReturnCode.SKIP;
     case Delete:

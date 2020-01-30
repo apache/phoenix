@@ -117,6 +117,70 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
+    public void testIndexUpdatesAfterDeleteWithRebuild() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName
+                    + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))"
+                    + tableDDLOptions);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
+            conn.commit();
+            conn.createStatement().execute(
+                "upsert into " + dataTableName + " (id, val2, val3) values ('a', 'abc', 'abcd')");
+            conn.commit();
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " + dataTableName
+                    + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * from " + indexTableName);
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testIndexUpdatesAfterDelete() throws Exception {
+        if (async) return;
+        if (encoded) return;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName
+                    + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))"
+                    + tableDDLOptions);
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " + dataTableName
+                    + " (val1) include (val2, val3)");
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " (id, val1, val2, val3) values ('a', null, 'abc', 'abcd')");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * from " + indexTableName);
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testFailPostIndexDeleteUpdate() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
