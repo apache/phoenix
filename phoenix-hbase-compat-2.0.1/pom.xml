@@ -28,7 +28,6 @@
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
   <version>5.1.0-SNAPSHOT</version>
-  
   <name>Phoenix Hbase 2.0.1 compatibility</name>
   <description>Compatibility module for HBase 2.0.1 - 2.0.4 and 2.1.0 - 2.1.1</description>
 
@@ -38,9 +37,9 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-eclipse-plugin</artifactId>
+        <version>2.9</version>
         <configuration>
           <buildcommands>
-            <buildcommand>org.jamon.project.templateBuilder</buildcommand>
             <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
           </buildcommands>
         </configuration>
@@ -48,12 +47,6 @@
       <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
-            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
-          </excludes>
-        </configuration>
       </plugin>
     </plugins>
   </build>
