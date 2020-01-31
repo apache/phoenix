@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -40,11 +41,11 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
-import org.apache.phoenix.util.MetaDataUtil;
 
 /**
  *
@@ -65,7 +66,7 @@ import org.apache.phoenix.util.MetaDataUtil;
  */
 public abstract class MetaDataProtocol extends MetaDataService {
     public static final int PHOENIX_MAJOR_VERSION = 4;
-    public static final int PHOENIX_MINOR_VERSION = 15;
+    public static final int PHOENIX_MINOR_VERSION = 16;
     public static final int PHOENIX_PATCH_NUMBER = 0;
     public static final int PHOENIX_VERSION =
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
@@ -144,6 +145,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     }
     
     public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER;
+    public static final List<String> COMPATIBLE_CLIENT_VERSIONS = 
+            Arrays.asList("4.14.3-HBase-1.3", "4.15.0-HBase-1.3");
      
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need

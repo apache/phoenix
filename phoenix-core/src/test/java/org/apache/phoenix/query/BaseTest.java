@@ -436,6 +436,10 @@ public abstract class BaseTest {
         }
         return url;
     }
+    
+    protected static String getZkUrl() {
+    	return QueryUtil.getZKUrl(new Properties(), config);
+    }
 
     /**
      * Set up the test hbase cluster.

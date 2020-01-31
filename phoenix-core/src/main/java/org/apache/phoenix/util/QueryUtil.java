@@ -375,6 +375,7 @@ public final class QueryUtil {
             throws SQLException {
         return getConnectionUrl(props, conf, null);
     }
+    
     /**
      * @return connection url using the various properties set in props and conf.
      */
@@ -406,6 +407,20 @@ public final class QueryUtil {
             url += PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
         }
         return url;
+    }
+    
+    public static String getZKUrl(Properties props, Configuration conf) {
+    	// read the hbase properties from the configuration
+        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, 
+            HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
+        // Build the ZK quorum server string with "server:clientport" list, separated by ','
+        final String server = 
+                getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
+        String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, 
+            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
+        
+        return new PhoenixEmbeddedDriver.ConnectionInfo(server, 
+            port, znodeParent, null, null).toString();
     }
     
     private static int getInt(String key, int defaultValue, Properties props, Configuration conf) {
