@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -44,7 +43,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class MinAggregateFunction extends DelegateConstantToCountAggregateFunction {
     public static final String NAME = "MIN";
 
-    public MinAggregateFunction() throws SQLException {
+    public MinAggregateFunction() {
     }
 
     public MinAggregateFunction(List<Expression> childExpressions) {

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -47,12 +46,9 @@ import org.apache.phoenix.util.SchemaUtil;
 @BuiltInFunction(name=CountAggregateFunction.NAME, args= {@Argument()} )
 public class CountAggregateFunction extends SingleAggregateFunction {
     public static final String NAME = "COUNT";
-//    STAR is never used so I commented it out
-//    public static final List<Expression> STAR = Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).build());
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
     
-    public CountAggregateFunction() throws SQLException {
-        super();
+    public CountAggregateFunction(){
     }
     
     public CountAggregateFunction(List<Expression> childExpressions) {

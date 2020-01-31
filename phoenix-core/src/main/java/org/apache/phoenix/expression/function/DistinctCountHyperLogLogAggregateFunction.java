@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.function;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -67,7 +66,7 @@ public class DistinctCountHyperLogLogAggregateFunction extends DistinctCountAggr
     public static final int NormalSetPrecision = 16;
     public static final int SparseSetPrecision = 25;
     
-    public DistinctCountHyperLogLogAggregateFunction() throws SQLException {
+    public DistinctCountHyperLogLogAggregateFunction() {
     }
     
     public DistinctCountHyperLogLogAggregateFunction(List<Expression> childExpressions){

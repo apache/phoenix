@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -49,7 +48,7 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
     public final static byte[] ZERO = PLong.INSTANCE.toBytes(0L);
     public final static byte[] ONE = PLong.INSTANCE.toBytes(1L);
     
-    public DistinctCountAggregateFunction() throws SQLException {
+    public DistinctCountAggregateFunction() {
     }
 
     public DistinctCountAggregateFunction(List<Expression> childExpressions) {

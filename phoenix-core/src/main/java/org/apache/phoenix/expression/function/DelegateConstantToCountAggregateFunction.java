@@ -40,7 +40,7 @@ abstract public class DelegateConstantToCountAggregateFunction extends SingleAgg
     private static final ImmutableBytesWritable ZERO = new ImmutableBytesWritable(PLong.INSTANCE.toBytes(0L));
     private CountAggregateFunction delegate;
     
-    public DelegateConstantToCountAggregateFunction() throws SQLException {
+    public DelegateConstantToCountAggregateFunction() {
     }
     
     public DelegateConstantToCountAggregateFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {

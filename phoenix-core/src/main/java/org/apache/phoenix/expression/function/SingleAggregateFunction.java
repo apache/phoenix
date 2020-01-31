@@ -46,7 +46,16 @@ import org.apache.phoenix.schema.types.PDataType;
 abstract public class SingleAggregateFunction extends AggregateFunction {
     protected boolean isConstant;
     private Aggregator aggregator;
-    
+    private static List<Expression> DEFAULT_EXPRESSION_LIST = null;
+
+    static {
+        try {
+            DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).build());
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Sort aggregate functions with nullable fields last. This allows us not to have to store trailing null values.
      * Within non-nullable/nullable groups, put fixed width values first since we can access those more efficiently
@@ -82,8 +91,8 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
         }
     };
     
-    protected SingleAggregateFunction() throws SQLException {
-        this(Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).build()), true);
+    protected SingleAggregateFunction() {
+        this(DEFAULT_EXPRESSION_LIST, true);
     }
 
     public SingleAggregateFunction(List<Expression> children) {

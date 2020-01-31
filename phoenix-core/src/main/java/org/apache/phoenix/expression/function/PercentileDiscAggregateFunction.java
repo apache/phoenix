@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -46,7 +45,7 @@ public class PercentileDiscAggregateFunction extends DistinctValueWithCountAggre
 
 	public static final String NAME = "PERCENTILE_DISC";
 
-	public PercentileDiscAggregateFunction() throws SQLException {
+	public PercentileDiscAggregateFunction() {
 	}
 
 	public PercentileDiscAggregateFunction(List<Expression> childern) {

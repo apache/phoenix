@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -35,7 +34,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 public class DistinctValueAggregateFunction extends DistinctValueWithCountAggregateFunction {
     public static final String NAME = "COLLECTDISTINCT";
     
-    public DistinctValueAggregateFunction() throws SQLException {
+    public DistinctValueAggregateFunction() {
     }
     
     public DistinctValueAggregateFunction(List<Expression> children) {
