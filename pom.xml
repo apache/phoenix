@@ -72,12 +72,12 @@
   <properties>
     <!-- The HBase compatibility module that that will be included in
     the shaded JARs and the assembly -->
-    <hbase.compat.version>2.0.1</hbase.compat.version>
-    <hbase.compat.version.string>hbase-${hbase.compat.version}</hbase.compat.version.string>
+    <hbase.profile>2.0.1</hbase.profile>
+    <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
 
     <!-- The HBase version that will be included in the shaded JARs, and that tests will be run
     with. Defaults to the minimum HBase version supported by the chosen compatibility module -->
-    <hbase.version>${hbase.compat.version}</hbase.version>
+    <hbase.version>${hbase.profile}</hbase.version>
 
     <!-- Hadoop Version -->
     <hadoop.version>3.0.0</hadoop.version>
@@ -1056,14 +1056,14 @@
       </build>
     </profile>
     <!--
-    Do not specify the compatibility profiles directly, set hbase.compat.version instead.
-    e.g. mvn clean install -Dhbase.compat.version=2.2.1
+    Do not specify the compatibility profiles directly, set hbase.profile instead.
+    e.g. mvn clean install -Dhbase.profile=2.2.1
     -->
     <profile>
       <id>phoenix-hbase-compat-2.0.1-default</id>
       <activation>
         <property>
-          <name>!hbase.compat.version</name>
+          <name>!hbase.profile</name>
         </property>
       </activation>
       <dependencies>
@@ -1078,7 +1078,7 @@
       <activation>
         <activeByDefault>true</activeByDefault>
         <property>
-          <name>hbase.compat.version</name>
+          <name>hbase.profile</name>
           <value>2.0.1</value>
         </property>
       </activation>
@@ -1093,7 +1093,7 @@
       <id>phoenix-hbase-compat-2.2.1</id>
       <activation>
         <property>
-          <name>hbase.compat.version</name>
+          <name>hbase.profile</name>
           <value>2.2.1</value>
         </property>
       </activation>

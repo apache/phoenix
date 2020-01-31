@@ -53,10 +53,10 @@
               <arguments>
                 <argument>-fnsv</argument>
                 <argument>
-                  phoenix-client-${project.version}-${hbase.compat.version.string}.jar
+                  phoenix-client-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
-                  phoenix-${project.version}-${hbase.compat.version.string}-client.jar
+                  phoenix-${project.version}-${hbase.profile.string}-client.jar
                 </argument>
               </arguments>
             </configuration>
@@ -85,7 +85,7 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}-${hbase.compat.version.string}</finalName>
+            <finalName>phoenix-${project.version}-${hbase.profile.string}</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
