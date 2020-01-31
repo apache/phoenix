@@ -1487,20 +1487,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return MetaDataUtil.decodeHasIndexWALCodec(serverVersion);
     }
 
-    private static boolean isCompatible(Long serverVersion) {
-        if (serverVersion == null) {
-            return false;
-        }
-        return MetaDataUtil.areClientAndServerCompatible(serverVersion);
-    }
 
     private void checkClientServerCompatibility(byte[] metaTable) throws SQLException,
             AccessDeniedException {
-        StringBuilder buf = new StringBuilder("Newer Phoenix clients can't communicate with older "
-                + "Phoenix servers. The following servers require an updated "
-                + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
-                + " to be put in the classpath of HBase: ");
-        boolean isIncompatible = false;
+        StringBuilder errorMessage = new StringBuilder();
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
         long systemCatalogTimestamp = Long.MAX_VALUE;
@@ -1553,11 +1543,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 long serverJarVersion = versionResponse.getVersion();
                 isTableNamespaceMappingEnabled |= MetaDataUtil.decodeTableNamespaceMappingEnabled(serverJarVersion);
 
-                if (!isCompatible(serverJarVersion)) {
-                    isIncompatible = true;
-                    HRegionLocation name = regionMap.get(result.getKey());
-                    buf.append(name);
-                    buf.append(';');
+                MetaDataUtil.ClientServerCompatibility compatibility = MetaDataUtil.areClientAndServerCompatible(serverJarVersion);
+                if (!compatibility.getIsCompatible()) {
+                    if (compatibility.getErrorCode() == SQLExceptionCode.OUTDATED_JARS.getErrorCode()) {
+                        HRegionLocation name = regionMap.get(result.getKey());
+                        errorMessage.append("Newer Phoenix clients can't communicate with older "
+                                + "Phoenix servers. Client version: "
+                                + MetaDataProtocol.CURRENT_CLIENT_VERSION
+                                + "; Server version: "
+                                + getServerVersion(serverJarVersion)
+                                + " The following servers require an updated "
+                                + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
+                                + " to be put in the classpath of HBase: ");
+                        errorMessage.append(name);
+                        errorMessage.append(';');
+                    } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
+                        errorMessage.append("Major version of client is less than that of the server. Client version: "
+                                + MetaDataProtocol.CURRENT_CLIENT_VERSION
+                                + "; Server version: "
+                                + getServerVersion(serverJarVersion));
+                    }
                 }
                 hasIndexWALCodec &= hasIndexWALCodec(serverJarVersion);
                 if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(serverJarVersion)) {
@@ -1569,6 +1574,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (versionResponse.hasSystemCatalogTimestamp()) {
                     systemCatalogTimestamp = systemCatalogTimestamp < versionResponse.getSystemCatalogTimestamp() ?
                       systemCatalogTimestamp: versionResponse.getSystemCatalogTimestamp();
+                }
+
+                if (compatibility.getErrorCode() != 0) {
+                    if (compatibility.getErrorCode() == SQLExceptionCode.OUTDATED_JARS.getErrorCode()) {
+                        errorMessage.setLength(errorMessage.length()-1);
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.OUTDATED_JARS).setMessage(errorMessage.toString()).build().buildException();
+                    } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setMessage(errorMessage.toString()).build().buildException();
+                    }
                 }
             }
             if (isTableNamespaceMappingEnabled != SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
@@ -1588,13 +1602,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        if (isIncompatible) {
-            buf.setLength(buf.length()-1);
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OUTDATED_JARS).setMessage(buf.toString()).build().buildException();
-        }
+
         if (systemCatalogTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
             throw new UpgradeRequiredException(systemCatalogTimestamp);
         }
+    }
+
+    private String getServerVersion(long serverJarVersion) {
+        return (VersionUtil.decodeMajorVersion(MetaDataUtil.decodePhoenixVersion(serverJarVersion)) + "."
+                + VersionUtil.decodeMinorVersion(MetaDataUtil.decodePhoenixVersion(serverJarVersion)) + "."
+                + VersionUtil.decodePatchVersion(MetaDataUtil.decodePhoenixVersion(serverJarVersion)));
     }
 
     /**
