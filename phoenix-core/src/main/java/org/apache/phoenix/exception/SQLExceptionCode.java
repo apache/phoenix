@@ -422,7 +422,8 @@ public enum SQLExceptionCode {
     UNABLE_TO_UPDATE_PARENT_TABLE(1143, "XCL43", "Error Updating the parent table"),
     UNABLE_TO_DELETE_CHILD_LINK(1144, "XCL44", "Error deleting parent-child link (Link type=" +
             PTable.LinkType.CHILD_TABLE + ") for view"),
-
+    TABLE_NOT_IN_REGION(1145, "XCL45", "Modifying this table is not allowed. "
+    + "Table not in this region."),
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */
@@ -588,4 +589,5 @@ public enum SQLExceptionCode {
         }
         return code;
     }
+
 }
