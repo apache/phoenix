@@ -438,7 +438,47 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             return true;
         }
 
+        /**
+         *  An index row is composed of cells with the same timestamp. However, if there are multiple versions of an
+         *  index row, HBase can return an index row with cells from multiple versions, and thus it can return cells
+         *  with different timestamps. This happens if the version of the row we are reading does not have a value
+         *  (i.e., effectively has null value) for a column whereas an older version has a value for the column.
+         *  In this case, we need to remove the older cells for correctness.
+         */
+        private void removeOlderCells(List<Cell> cellList) {
+            Iterator<Cell> cellIterator = cellList.iterator();
+            if (!cellIterator.hasNext()) {
+                return;
+            }
+            Cell cell = cellIterator.next();
+            long maxTs = cell.getTimestamp();
+            long ts;
+            boolean allTheSame = true;
+            while (cellIterator.hasNext()) {
+                cell = cellIterator.next();
+                ts = cell.getTimestamp();
+                if (ts != maxTs) {
+                    if (ts > maxTs) {
+                        maxTs = ts;
+                    }
+                    allTheSame = false;
+                }
+            }
+            if (allTheSame) {
+                return;
+            }
+            cellIterator = cellList.iterator();
+            while (cellIterator.hasNext()) {
+                cell = cellIterator.next();
+                if (cell.getTimestamp() != maxTs) {
+                    cellIterator.remove();
+                }
+            }
+        }
+
+
         private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) throws IOException {
+            removeOlderCells(cellList);
             long cellListSize = cellList.size();
             Cell cell = null;
             if (cellListSize == 0) {
@@ -485,7 +525,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
          */
         private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
             metricsSource.incrementIndexInspections();
-
             Cell cell = cellList.get(0);
             if (verifyRowAndRemoveEmptyColumn(cellList)) {
                 return true;
@@ -493,7 +532,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 long repairStart = EnvironmentEdgeManager.currentTimeMillis();
 
                 byte[] rowKey = CellUtil.cloneRow(cell);
-                long ts = getMaxTimestamp(cellList);
+                long ts = cellList.get(0).getTimestamp();
                 cellList.clear();
 
                 try {
