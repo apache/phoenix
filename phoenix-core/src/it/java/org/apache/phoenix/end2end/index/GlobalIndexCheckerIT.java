@@ -269,6 +269,44 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
+    public void testUnverifiedValuesAreNotVisible() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions);
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+
+            // Configure IndexRegionObserver to fail the data write phase
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab','abc', 'abcd')");
+            commitWithException(conn);
+            // The above upsert will create an unverified index row
+            // Configure IndexRegionObserver to allow the data write phase
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            // Insert the same row with missing value for val3
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab','abc')");
+            conn.commit();
+            // At this moment val3 in the data table row has null value
+            String selectSql = "SELECT val3 from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that we do not read from the unverified row
+            assertTrue(rs.next());
+            assertEquals(null, rs.getString(1));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
+        }
+    }
+
+    @Test
     public void testOnePhaseOverwiteFollowingTwoPhaseWrite() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
