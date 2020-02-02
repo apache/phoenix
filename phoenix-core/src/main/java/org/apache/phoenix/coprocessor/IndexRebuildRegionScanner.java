@@ -504,38 +504,6 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         m.setDurability(Durability.SKIP_WAL);
     }
 
-    private Delete generateDeleteMarkers(Put put) {
-        Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
-        int cellCount = put.size();
-        if (cellCount == allColumns.size() + 1) {
-            // We have all the columns for the index table. So, no delete marker is needed
-            return null;
-        }
-        Set<ColumnReference> includedColumns = Sets.newLinkedHashSetWithExpectedSize(cellCount);
-        long ts = 0;
-        for (List<Cell> cells : put.getFamilyCellMap().values()) {
-            if (cells == null) {
-                break;
-            }
-            for (Cell cell : cells) {
-                includedColumns.add(new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell)));
-                if (ts < cell.getTimestamp()) {
-                    ts = cell.getTimestamp();
-                }
-            }
-        }
-        Delete del = null;
-        for (ColumnReference column : allColumns) {
-            if (!includedColumns.contains(column)) {
-                if (del == null) {
-                    del = new Delete(put.getRow());
-                }
-                del.addColumns(column.getFamily(), column.getQualifier(), ts);
-            }
-        }
-        return del;
-    }
-
     private byte[] commitIfReady(byte[] uuidValue, UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
         if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
             ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
@@ -546,10 +514,10 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return uuidValue;
     }
 
-    private class SimpleValueGetter implements ValueGetter {
+    public static class SimpleValueGetter implements ValueGetter {
         final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
         final Put put;
-        SimpleValueGetter (final Put put) {
+        public SimpleValueGetter(final Put put) {
             this.put = put;
         }
         @Override
@@ -896,12 +864,6 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             currentMutationList.add(mutation);
             setMutationAttributes(put, uuidValue);
             uuidValue = commitIfReady(uuidValue, currentMutationList);
-            Delete deleteMarkers = generateDeleteMarkers(put);
-            if (deleteMarkers != null) {
-                setMutationAttributes(deleteMarkers, uuidValue);
-                currentMutationList.add(deleteMarkers);
-                uuidValue = commitIfReady(uuidValue, currentMutationList);
-            }
         }
         if (!currentMutationList.isEmpty()) {
             ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
@@ -1005,12 +967,6 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                         if (indexRowKey != null) {
                             if (put != null) {
                                 setMutationAttributes(put, uuidValue);
-                            }
-                            Delete deleteMarkers = generateDeleteMarkers(put);
-                            if (deleteMarkers != null) {
-                                setMutationAttributes(deleteMarkers, uuidValue);
-                                mutations.add(deleteMarkers);
-                                uuidValue = commitIfReady(uuidValue, mutations);
                             }
                             // GlobalIndexChecker passed the index row key. This is to build a single index row.
                             // Check if the data table row we have just scanned matches with the index row key.
