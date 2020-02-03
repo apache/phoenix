@@ -369,7 +369,7 @@
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
                     <exclude>LICENSE.*</exclude>
-                    <exclude>NOTICE.*</exclude>
+                    <exclude>NOTICE*</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -405,7 +405,7 @@
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
                     <exclude>LICENSE.*</exclude>
-                    <exclude>NOTICE.*</exclude>
+                    <exclude>NOTICE*</exclude>
                   </excludes>
                 </filter>
               </filters>
