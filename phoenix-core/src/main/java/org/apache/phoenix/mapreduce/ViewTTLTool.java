@@ -44,8 +44,8 @@ import java.sql.Connection;
 import java.util.Properties;
 
 
-public class ViewTtlTool extends Configured implements Tool {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ViewTtlTool.class);
+public class ViewTTLTool extends Configured implements Tool {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLTool.class);
 
     public static final String RUNNING_FOR_DELETE_ALL_VIEWS_STRING = "RUNNING_FOR_DELETE_ALL_VIEWS";
 
@@ -256,7 +256,7 @@ public class ViewTtlTool extends Configured implements Tool {
         this.job = Job.getInstance(getConf(),getJobName() +  System.currentTimeMillis());
         PhoenixMapReduceUtil.setInput(job, this);
 
-        job.setJarByClass(ViewTtlTool.class);
+        job.setJarByClass(ViewTTLTool.class);
         job.setMapperClass(ViewTTLDeleteJobMapper.class);
         job.setMapOutputKeyClass(NullWritable.class);
         job.setMapOutputValueClass(NullWritable.class);
@@ -271,7 +271,7 @@ public class ViewTtlTool extends Configured implements Tool {
     public int runJob() {
         try {
             if (isForeground) {
-                LOGGER.info("Running ViewTTLTool in Foreground. " +
+                LOGGER.info("Running ViewTTLTool in foreground. " +
                         "Runs full table scans. This may take a long time!");
                 return (job.waitForCompletion(true)) ? 0 : 1;
             } else {
@@ -308,7 +308,7 @@ public class ViewTtlTool extends Configured implements Tool {
     }
 
     public static void main(final String[] args) throws Exception {
-        int result = ToolRunner.run(new ViewTtlTool(), args);
+        int result = ToolRunner.run(new ViewTTLTool(), args);
         System.exit(result);
     }
 }

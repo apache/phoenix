@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.phoenix.mapreduce.util.PhoenixViewTtlUtil;
 import org.apache.phoenix.query.BaseTest;
 import org.junit.Test;
 
@@ -31,7 +30,7 @@ public class ViewTTLToolTest extends BaseTest {
 
     @Test
     public void testParseInput() {
-        ViewTtlTool tool = new ViewTtlTool();
+        ViewTTLTool tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-a"});
 
         assertEquals("NORMAL", tool.getJobPriority());
@@ -40,7 +39,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(null, tool.getBaseTableName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-t", tableName});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -48,7 +47,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(tableName, tool.getBaseTableName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-v", viewName, "-i",tenantId });
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -56,7 +55,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(null, tool.getBaseTableName());
         assertEquals(tenantId, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-t", tableName, "-p", "0"});
         assertEquals("VERY_HIGH", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -64,7 +63,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(tableName, tool.getBaseTableName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-t", tableName, "-p", "-1"});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -72,7 +71,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(tableName, tool.getBaseTableName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-t", tableName, "-p", "DSAFDAS"});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -80,7 +79,7 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(tableName, tool.getBaseTableName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTtlTool();
+        tool = new ViewTTLTool();
         tool.parseArgs(new String[] {"-i", tenantId});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -91,15 +90,15 @@ public class ViewTTLToolTest extends BaseTest {
 
     @Test (expected = IllegalStateException.class)
     public void testBothViewAndTableHaveBeenSet() {
-        ViewTtlTool tool;
-        tool = new ViewTtlTool();
+        ViewTTLTool tool;
+        tool = new ViewTTLTool();
         tool.parseOptions(new String[] {"-t", tableName, "-v", viewName});
     }
 
     @Test (expected = IllegalStateException.class)
     public void testNoInputParam() {
-        ViewTtlTool tool;
-        tool = new ViewTtlTool();
+        ViewTTLTool tool;
+        tool = new ViewTTLTool();
         tool.parseOptions(new String[] {});
     }
 }

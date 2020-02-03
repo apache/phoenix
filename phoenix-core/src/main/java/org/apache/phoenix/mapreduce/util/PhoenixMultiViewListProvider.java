@@ -20,6 +20,6 @@ package org.apache.phoenix.mapreduce.util;
 import org.apache.hadoop.conf.Configuration;
 import java.util.List;
 
-public interface PhoenixMultiViewDeletionInputStrategy {
-    List<ViewInfoWritable> getViewsWithTTL(Configuration configuration);
+public interface PhoenixMultiViewListProvider {
+    List<ViewInfoWritable> getPhoenixMultiViewList(Configuration configuration);
 }

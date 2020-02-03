@@ -25,9 +25,9 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.phoenix.mapreduce.util.DefaultPhoenixMultiViewDeletionInputStrategy;
+import org.apache.phoenix.mapreduce.util.DefaultPhoenixMultiViewListProvider;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixMultiViewDeletionInputStrategy;
+import org.apache.phoenix.mapreduce.util.PhoenixMultiViewListProvider;
 import org.apache.phoenix.mapreduce.util.DefaultMultiViewSplitStrategy;
 import org.apache.phoenix.mapreduce.util.ViewInfoWritable;
 import org.apache.phoenix.mapreduce.util.MultiViewSplitStrategy;
@@ -47,14 +47,14 @@ public class PhoenixMultiViewInputFormat<T extends Writable> extends InputFormat
         List<InputSplit> listOfInputSplit = new ArrayList<>();
         try {
             final Configuration configuration = context.getConfiguration();
-            Class<?> defaultViewTtlDeletionInputStrategyClazz = DefaultPhoenixMultiViewDeletionInputStrategy.class;
+            Class<?> defaultViewTtlDeletionInputStrategyClazz = DefaultPhoenixMultiViewListProvider.class;
             if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_INPUT_STRATEGY_CLAZZ) != null) {
                 defaultViewTtlDeletionInputStrategyClazz = Class.forName(
                         configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_INPUT_STRATEGY_CLAZZ));
             }
-            PhoenixMultiViewDeletionInputStrategy phoenixMultiViewDeletionInputStrategy =
-                    (PhoenixMultiViewDeletionInputStrategy) defaultViewTtlDeletionInputStrategyClazz.newInstance();
-            List<ViewInfoWritable> viewsWithTTL = phoenixMultiViewDeletionInputStrategy.getViewsWithTTL(configuration);
+            PhoenixMultiViewListProvider phoenixMultiViewListProvider =
+                    (PhoenixMultiViewListProvider) defaultViewTtlDeletionInputStrategyClazz.newInstance();
+            List<ViewInfoWritable> viewsWithTTL = phoenixMultiViewListProvider.getPhoenixMultiViewList(configuration);
 
             Class<?> defaultViewTtlDeletionSplitStrategyClazz = DefaultMultiViewSplitStrategy.class;
             if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_SPLIT_STRATEGY_CLAZZ) != null) {

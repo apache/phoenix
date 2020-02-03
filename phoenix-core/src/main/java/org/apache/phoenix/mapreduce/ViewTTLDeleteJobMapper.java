@@ -89,7 +89,8 @@ public class ViewTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTracker
             }
 
         } catch (SQLException e) {
-            LOGGER.error(e.getErrorCode() + e.getSQLState(), e.getStackTrace());
+            LOGGER.error("Mapper got an exception while deleting expired rows : "
+                    + e.getErrorCode() + e.getSQLState(), e.getStackTrace());
         }
     }
 
@@ -103,7 +104,7 @@ public class ViewTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTracker
         List<PTable> allIndexesOnView = view.getIndexes();
 
         for (PTable viewIndexTable : allIndexesOnView) {
-            deleteIfExpiredStatement = "SELECT count(*) FROM " + value.getViewName();
+            deleteIfExpiredStatement = "SELECT /*+ INDEX */ count(*) FROM " + value.getViewName();
             deletingExpiredRows(connection, viewIndexTable, Long.valueOf(value.getViewTtl()),
                     deleteIfExpiredStatement, config);
         }

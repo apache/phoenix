@@ -24,20 +24,27 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.PrefixFilter;
+import org.apache.hadoop.hbase.filter.RowFilter;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.mapreduce.ViewTtlTool;
+import org.apache.phoenix.mapreduce.ViewTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixViewTtlUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
 
+import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 
-public class ViewTtlToolIT extends ParallelStatsDisabledIT {
+public class ViewTTLToolIT extends ParallelStatsDisabledIT {
 
     private final int NUMBER_OF_UPSERT_ROWS = 1000;
     private final long VIEW_TTL_EXPIRE_IN_A_MILLISECOND = 1;
@@ -84,9 +91,21 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
     }
 
     private void verifyGlobalTableNumberOfRows(String tableName, int expectedRows) throws Exception {
-        Table table  = HBaseFactoryProvider.getHConnectionFactory().createConnection(config).getTable(tableName);
-        assertEquals(expectedRows, getRowCount(table, new Scan()));
-        table.close();
+        try (Table table  = HBaseFactoryProvider.getHConnectionFactory().createConnection(config).getTable(tableName)) {
+            assertEquals(expectedRows, getRowCount(table, new Scan()));
+        }
+    }
+
+    private void verifyIndexTableNumberOfRowsForATenant(String tableName, String tenantId, int expectedRows) throws Exception {
+        try (Table table  = HBaseFactoryProvider.getHConnectionFactory().createConnection(config).getTable(tableName)) {
+            String regrex = ".*" + tenantId + ".*";
+            Filter filter = new RowFilter(CompareFilter.CompareOp.EQUAL, new RegexStringComparator(regrex));
+            Scan scan = new Scan();
+            scan.setFilter(filter);
+            assertEquals(expectedRows, getRowCount(table,scan));
+        } catch (Exception e) {
+            throw e;
+        }
     }
 
     private void verifyMultiTenantTableNumberOfRows(String tableName, String prefix, int expectedRows) throws Exception {
@@ -148,7 +167,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             createViewAndUpsertData(tenant2Connection, fullTableName, fullViewName2, VIEW_TTL_EXPIRE_IN_A_DAY);
 
             tenant2Connection.createStatement().execute(
-                    "CREATE INDEX " + indexView + " ON " + fullViewName2 + "(NUM DESC) INCLUDE (ID)");
+                    "CREATE INDEX " + indexView + " ON " + fullViewName2 + "(NUM) INCLUDE (ID)");
 
             // before running MR deleting job, all rows should be present in multi tenant table.
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS);
@@ -156,7 +175,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
 
             // running MR job to delete expired rows.
-            ViewTtlTool viewTtlTool = new ViewTtlTool();
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
             viewTtlTool.setConf(conf);
             int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
@@ -176,7 +195,6 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             // MR job should delete rows from multi-tenant table and index table for tenant2.
             verifyGlobalTableNumberOfRows(indexTable, 0);
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0);
-
         }
     }
 
@@ -213,7 +231,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS);
 
             // running MR job to delete expired rows.
-            ViewTtlTool viewTtlTool = new ViewTtlTool();
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
             viewTtlTool.setConf(conf);
             int status = viewTtlTool.run(new String[]{"-runfg","-a"});
@@ -288,7 +306,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             createViewAndUpsertData(tenant2Connection, fullTable12, schema1 + "." + viewName2, VIEW_TTL_EXPIRE_IN_A_DAY);
 
             tenant2Connection.createStatement().execute(
-                    "CREATE INDEX " + indexView + " ON " + schema1 + "." + viewName2 + "(NUM DESC) INCLUDE (ID)");
+                    "CREATE INDEX " + indexView + " ON " + schema1 + "." + viewName2 + "(NUM) INCLUDE (ID)");
 
             verifyMultiTenantTableNumberOfRows(fullTable11, tenant1, NUMBER_OF_UPSERT_ROWS);
             verifyMultiTenantTableNumberOfRows(fullTable11, tenant2, NUMBER_OF_UPSERT_ROWS);
@@ -298,7 +316,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
             verifyGlobalTableNumberOfRows(globalTable, NUMBER_OF_UPSERT_ROWS);
 
-            ViewTtlTool viewTtlTool = new ViewTtlTool();
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
             viewTtlTool.setConf(conf);
 
@@ -363,7 +381,7 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS);
 
             // running MR job to delete expired rows.
-            ViewTtlTool viewTtlTool = new ViewTtlTool();
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
             viewTtlTool.setConf(conf);
             int status = viewTtlTool.run(new String[]{"-runfg", "-v", fullViewName});
@@ -379,6 +397,58 @@ public class ViewTtlToolIT extends ParallelStatsDisabledIT {
             //should delete expired rows for tenant2 but not tenant1
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS);
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0);
+        }
+    }
+
+    @Test
+    public void testDeleteExpiredRowsWithMultiIndexTableCase() throws Exception {
+        /*
+            Multi index tables existed on based table, but it only deletes expired rows.
+         */
+        String baseTable = generateUniqueName();
+        String tenant1 = generateUniqueName();
+        String tenant2 = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+
+        String indexView1 = viewName1 + "_IDX";
+        String indexView2 = viewName2 + "_IDX";
+
+        try (Connection globalConn = DriverManager.getConnection(getUrl());
+             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+
+            createMultiTenantTable(globalConn, baseTable);
+            createViewAndUpsertData(tenant1Connection, baseTable, viewName1, VIEW_TTL_EXPIRE_IN_A_DAY);
+            createViewAndUpsertData(tenant2Connection, baseTable, viewName2, VIEW_TTL_EXPIRE_IN_A_DAY);
+
+            tenant1Connection.createStatement().execute(
+                    "CREATE INDEX " + indexView1 + " ON " + viewName1 + "(NUM) INCLUDE (ID)");
+
+            tenant2Connection.createStatement().execute(
+                    "CREATE INDEX " + indexView2 + " ON " + viewName2 + "(NUM) INCLUDE (ID)");
+
+            // before running MR deleting job, all rows should be present in multi tenant table.
+            verifyMultiTenantTableNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS);
+            verifyMultiTenantTableNumberOfRows(baseTable, tenant2, NUMBER_OF_UPSERT_ROWS);
+
+            verifyIndexTableNumberOfRowsForATenant("_IDX_" + baseTable,
+                    tenant1, NUMBER_OF_UPSERT_ROWS);
+            verifyIndexTableNumberOfRowsForATenant("_IDX_" + baseTable,
+                    tenant2, NUMBER_OF_UPSERT_ROWS);
+
+            // alter the view ttl and all rows should expired immediately.
+            alterViewTtl(tenant2Connection, viewName2, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
+
+            // running MR job to delete expired rows.
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            viewTtlTool.setConf(conf);
+            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            assertEquals(0, status);
+
+            verifyMultiTenantTableNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS);
+            verifyMultiTenantTableNumberOfRows(baseTable, tenant2, 0);
         }
     }
 }

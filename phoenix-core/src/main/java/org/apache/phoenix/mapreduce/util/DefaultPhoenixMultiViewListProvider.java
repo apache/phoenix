@@ -34,10 +34,10 @@ import java.util.List;
 import java.util.Properties;
 
 
-public class DefaultPhoenixMultiViewDeletionInputStrategy implements PhoenixMultiViewDeletionInputStrategy {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultPhoenixMultiViewDeletionInputStrategy.class);
+public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewListProvider {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultPhoenixMultiViewListProvider.class);
 
-    public List<ViewInfoWritable> getViewsWithTTL(Configuration configuration) {
+    public List<ViewInfoWritable> getPhoenixMultiViewList(Configuration configuration) {
         List<ViewInfoWritable> viewInfoWritables = new ArrayList<>();
         String query = getFetchViewQuery(configuration);
         try (PhoenixConnection connection = (PhoenixConnection)

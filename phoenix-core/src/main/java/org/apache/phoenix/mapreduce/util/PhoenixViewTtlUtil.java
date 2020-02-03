@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import org.apache.phoenix.mapreduce.ViewTtlTool;
+import org.apache.phoenix.mapreduce.ViewTTLTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -56,7 +56,7 @@ public class PhoenixViewTtlUtil {
     public static String constructViewMetadataQueryBasedOnView(String fullName, String tenantId) {
         String query = SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY;
 
-        if (fullName.equals(ViewTtlTool.RUNNING_FOR_DELETE_ALL_VIEWS_STRING)) {
+        if (fullName.equals(ViewTTLTool.RUNNING_FOR_DELETE_ALL_VIEWS_STRING)) {
             return query;
         }
 
