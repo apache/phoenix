@@ -26,10 +26,10 @@
     <version>21</version>
   </parent>
   <groupId>org.apache.phoenix</groupId>
-  <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+  <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
   <version>5.1.0-SNAPSHOT</version>
-  <name>Phoenix Hbase 2.0.1 compatibility</name>
-  <description>Compatibility module for HBase 2.0.1 - 2.0.4 and 2.1.0 - 2.1.1</description>
+  <name>Phoenix Hbase 2.1.6 compatibility</name>
+  <description>Compatibility module for HBase 2.1.6+</description>
 
   <build>
     <plugins>
@@ -56,7 +56,7 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-endpoint</artifactId>
-        <version>2.0.1</version>
+        <version>2.1.6</version>
         <scope>provided</scope>
       </dependency>
   </dependencies>

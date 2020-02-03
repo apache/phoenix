@@ -20,7 +20,7 @@ package org.apache.phoenix.compat.hbase;
 import org.apache.hadoop.hbase.Cell;
 
 public class OffsetCell implements Cell {
-    
+
     private Cell cell;
     private int offset;
 

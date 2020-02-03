@@ -491,6 +491,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- override Omid's dependency version -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-endpoint</artifactId>
+      <version>${hbase.version}</version>
+   </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-annotations</artifactId>
