@@ -78,7 +78,7 @@ public class CachedLocalTable implements LocalHBaseState {
                getMutationTimestampWhenAllCellTimestampIsSame(mutation);
         List<Cell> newCells = new ArrayList<Cell>();
         for(Cell cell : cells) {
-            if(cell.getTimestamp() < timestamp ) {
+            if(cell.getTimestamp() <= timestamp ) {
                 newCells.add(cell);
             }
         }

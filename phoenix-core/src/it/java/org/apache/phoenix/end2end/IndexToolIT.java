@@ -238,6 +238,80 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
+    public void testIncorrectRebuild() throws Exception {
+        // This test is for building non-transactional mutable global indexes with direct api
+        if (localIndex || transactional || !mutable || !directApi || useSnapshot) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("create table " + dataTableFullName +
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10)) COLUMN_ENCODED_BYTES=0");
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableFullName + " (val1) include (val2, val3)" );
+            //insert a full row
+            conn.createStatement().execute("upsert into " + dataTableFullName + " values ('a', 'ab', 'efgh', 'abcd')");
+            Thread.sleep(1000);
+
+            // insert a partial row
+            conn.createStatement().execute("upsert into " + dataTableFullName + " (id, val3) values ('a', 'uvwx')");
+            Thread.sleep(1000);
+            //insert a full row
+            conn.createStatement().execute("upsert into " + dataTableFullName + " values ('a', 'ab', 'efgh', 'yuio')");
+            Thread.sleep(1000);
+            //insert a partial row
+            conn.createStatement().execute("upsert into " + dataTableFullName + " (id, val3) values ('a', 'asdf')");
+
+            //truncate index table
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Admin admin = queryServices.getAdmin();
+            TableName tableName = TableName.valueOf(indexTableFullName);
+            admin.disableTable(tableName);
+            admin.truncateTable(tableName, false);
+
+            //rebuild index
+            runIndexTool(true, false, schemaName, dataTableName, indexTableName);
+
+            //assert
+            Scan scan = new Scan();
+            scan.setRaw(true);
+            scan.setMaxVersions(10);
+            HTable indexTable = new HTable(getUtility().getConfiguration(), indexTableFullName);
+            HTable dataTable = new HTable(getUtility().getConfiguration(), dataTableFullName);
+
+            long dataFullRowTS = 0;
+            ResultScanner rs = dataTable.getScanner(scan);
+            for (Result r : rs) {
+                for (Cell c : r.listCells()) {
+                    String column = new String(CellUtil.cloneQualifier(c));
+                    String value = new String(CellUtil.cloneValue(c));
+                    if (column.equalsIgnoreCase("VAL3") && value.equalsIgnoreCase("yuio")) {
+                        dataFullRowTS = c.getTimestamp();
+                    }
+                }
+            }
+
+            rs = indexTable.getScanner(scan);
+            for (Result r : rs) {
+                for (Cell c : r.listCells()) {
+                    long indexTS = c.getTimestamp();
+                    String column = new String(CellUtil.cloneQualifier(c));
+                    if (column.equalsIgnoreCase("0:VAL3") && indexTS == dataFullRowTS) {
+                        String value = new String(CellUtil.cloneValue(c));
+                        assertEquals("yuio", value); // if the ts is from full rebuild row , value should also be from full rebuild row
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     public void testSecondaryIndex() throws Exception {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
