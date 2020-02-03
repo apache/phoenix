@@ -44,10 +44,13 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -74,6 +77,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -238,7 +242,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testIncorrectRebuild() throws Exception {
+    public void testIncludedColumnRebuild() throws Exception {
         // This test is for building non-transactional mutable global indexes with direct api
         if (localIndex || transactional || !mutable || !directApi || useSnapshot) {
             return;
@@ -252,63 +256,92 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             conn.createStatement().execute("create table " + dataTableFullName +
-                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10)) COLUMN_ENCODED_BYTES=0");
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), "
+                    + "val3 varchar(10)) COLUMN_ENCODED_BYTES=0");
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableFullName + " (val1) include (val2, val3)" );
             //insert a full row
-            conn.createStatement().execute("upsert into " + dataTableFullName + " values ('a', 'ab', 'efgh', 'abcd')");
-            Thread.sleep(1000);
-
+            conn.createStatement().execute("upsert into " + dataTableFullName
+                    + " values ('a', 'ab', 'efgh', 'abcd')");
             // insert a partial row
-            conn.createStatement().execute("upsert into " + dataTableFullName + " (id, val3) values ('a', 'uvwx')");
-            Thread.sleep(1000);
+            conn.createStatement().execute("upsert into " + dataTableFullName
+                    + " (id, val3) values ('a', 'uvwx')");
             //insert a full row
-            conn.createStatement().execute("upsert into " + dataTableFullName + " values ('a', 'ab', 'efgh', 'yuio')");
-            Thread.sleep(1000);
+            conn.createStatement().execute("upsert into " + dataTableFullName
+                    + " values ('a', 'ab', 'efgh', 'yuio')");
             //insert a partial row
-            conn.createStatement().execute("upsert into " + dataTableFullName + " (id, val3) values ('a', 'asdf')");
-
+            conn.createStatement().execute("upsert into " + dataTableFullName
+                    + " (id, val3) values ('a', 'asdf')");
+            //assert before truncate
+            assertIfIndexRowIsCorrect(conn, indexTableFullName, dataTableFullName, indexTableName);
             //truncate index table
-            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices
+                    queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
             Admin admin = queryServices.getAdmin();
             TableName tableName = TableName.valueOf(indexTableFullName);
             admin.disableTable(tableName);
             admin.truncateTable(tableName, false);
-
             //rebuild index
             runIndexTool(true, false, schemaName, dataTableName, indexTableName);
+            //assert at hbase level
+            assertIfIndexRowIsCorrect(conn, indexTableFullName, dataTableFullName, indexTableName);
+        }
+    }
 
-            //assert
-            Scan scan = new Scan();
-            scan.setRaw(true);
-            scan.setMaxVersions(10);
-            HTable indexTable = new HTable(getUtility().getConfiguration(), indexTableFullName);
-            HTable dataTable = new HTable(getUtility().getConfiguration(), dataTableFullName);
+    private void assertIfIndexRowIsCorrect(Connection conn, String indexTableFullName, String dataTableFullName, String indexTableName) throws Exception {
+        //assert at hbase level
+        Scan scan = new Scan();
+        scan.setRaw(true);
+        scan.setMaxVersions(10);
+        HTable indexTable = new HTable(getUtility().getConfiguration(), indexTableFullName);
+        HTable dataTable = new HTable(getUtility().getConfiguration(), dataTableFullName);
 
-            long dataFullRowTS = 0;
-            ResultScanner rs = dataTable.getScanner(scan);
-            for (Result r : rs) {
-                for (Cell c : r.listCells()) {
-                    String column = new String(CellUtil.cloneQualifier(c));
-                    String value = new String(CellUtil.cloneValue(c));
-                    if (column.equalsIgnoreCase("VAL3") && value.equalsIgnoreCase("yuio")) {
-                        dataFullRowTS = c.getTimestamp();
-                    }
-                }
-            }
+        long dataFullRowTS = 0;
 
-            rs = indexTable.getScanner(scan);
-            for (Result r : rs) {
-                for (Cell c : r.listCells()) {
-                    long indexTS = c.getTimestamp();
-                    String column = new String(CellUtil.cloneQualifier(c));
-                    if (column.equalsIgnoreCase("0:VAL3") && indexTS == dataFullRowTS) {
-                        String value = new String(CellUtil.cloneValue(c));
-                        assertEquals("yuio", value); // if the ts is from full rebuild row , value should also be from full rebuild row
-                    }
+        ResultScanner rs = dataTable.getScanner(scan);
+
+        for (Result r : rs) {
+            byte [] rowKey = r.getRow();
+            Cell expectedCell = getExpectedCell(rowKey,"VAL3", "yuio",
+                    EnvironmentEdgeManager.currentTimeMillis());
+            for (Cell actualCell : r.listCells()) {
+                if (CellUtil.matchingColumn(expectedCell, actualCell)
+                        && CellUtil.matchingValue(expectedCell, actualCell)) {
+                    dataFullRowTS = actualCell.getTimestamp();
                 }
             }
         }
+
+        rs = indexTable.getScanner(scan);
+        for (Result r : rs) {
+            byte [] rowKey = r.getRow();
+            Cell expectedIndexCell = getExpectedCell(rowKey,"0:VAL3", "yuio", dataFullRowTS);
+            for (Cell actualCell : r.listCells()) {
+                if (CellUtil.matchingColumn(expectedIndexCell, actualCell)
+                        && CellUtil.matchingTimestamp(expectedIndexCell, actualCell)) {
+                    // if the ts is from full row,
+                    // value should also be from full row
+                    assertTrue(CellUtil.matchingValue(expectedIndexCell, actualCell));
+                }
+            }
+        }
+
+        //assert at phoenix level
+        ResultSet pResultSet = conn.createStatement().executeQuery(
+                "SELECT /*+ INDEX("+dataTableFullName + " " + indexTableName + ") */ * "
+                        + "FROM "+dataTableFullName);
+        assertTrue(pResultSet.next());
+        assertEquals("a", pResultSet.getString(1));
+        assertEquals("ab", pResultSet.getString(2));
+        assertEquals("efgh", pResultSet.getString(3));
+        assertEquals("asdf", pResultSet.getString(4));
+        assertFalse(pResultSet.next());
+    }
+
+    private Cell getExpectedCell(byte [] rowKey, String qualifier, String value, long timestamp) {
+        return CellUtil.createCell(rowKey, HConstants.EMPTY_BYTE_ARRAY,
+                Bytes.toBytes(qualifier), timestamp,
+                KeyValue.Type.Put.getCode(), Bytes.toBytes(value));
     }
 
     @Test
