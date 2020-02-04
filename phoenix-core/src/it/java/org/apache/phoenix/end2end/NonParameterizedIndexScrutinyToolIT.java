@@ -23,6 +23,7 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyMapperForTest;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -144,32 +145,75 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
 
     @Test
     public void testScrutinyOnRowsNearExpiry() throws Exception {
+        String schema = generateUniqueName();
         String dataTableName = generateUniqueName();
         String indexTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schema, dataTableName);
         String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, "
                 + "ZIP INTEGER) TTL="+TEST_TABLE_TTL;
         String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP)";
         String upsertData = "UPSERT INTO %s VALUES (?, ?, ?)";
-        int initialDelta = -5000; //insert row with 5 secs before current timestamp
         IndexScrutinyMapperForTest.ScrutinyTestClock
-                testClock = new IndexScrutinyMapperForTest.ScrutinyTestClock(initialDelta);
+                testClock = new IndexScrutinyMapperForTest.ScrutinyTestClock(0);
 
         try (Connection conn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
-            conn.createStatement().execute(String.format(dataTableDDL, dataTableName));
+            conn.createStatement().execute(String.format(dataTableDDL, dataTableFullName));
             conn.createStatement().execute(String.format(indexTableDDL, indexTableName,
-                    dataTableName));
+                    dataTableFullName));
             // insert two rows
             PreparedStatement
                     upsertDataStmt = conn.prepareStatement(String.format(upsertData,
-                    dataTableName));
+                    dataTableFullName));
 
             EnvironmentEdgeManager.injectEdge(testClock);
             upsertRow(upsertDataStmt, 1, "name-1", 98051);
             upsertRow(upsertDataStmt, 2, "name-2", 98052);
             conn.commit();
 
-            List<Job> completedJobs = runScrutiny(null, dataTableName, indexTableName);
+            List<Job> completedJobs = runScrutiny(schema, dataTableName, indexTableName);
+            Job job = completedJobs.get(0);
+            assertTrue(job.isSuccessful());
+            Counters counters = job.getCounters();
+            assertEquals(2, getCounterValue(counters, EXPIRED_ROW_COUNT));
+            assertEquals(0, getCounterValue(counters, VALID_ROW_COUNT));
+            assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
+        }
+    }
+
+    @Test
+    public void testScrutinyOnRowsNearExpiry_viewIndex() throws Exception {
+        String schemaName = "S"+generateUniqueName();
+        String dataTableName = "T"+generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName,dataTableName);
+        String viewIndexName = "VI"+generateUniqueName();
+        String viewName = "V"+generateUniqueName();
+        String viewFullName = SchemaUtil.getTableName(schemaName,viewName);
+        String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, "
+                + "ZIP INTEGER) TTL="+TEST_TABLE_TTL;
+        String viewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
+        String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP)";
+        String upsertData = "UPSERT INTO %s VALUES (?, ?, ?)";
+        IndexScrutinyMapperForTest.ScrutinyTestClock
+                testClock = new IndexScrutinyMapperForTest.ScrutinyTestClock(0);
+
+        try (Connection conn =
+                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(String.format(dataTableDDL, dataTableFullName));
+            conn.createStatement().execute(String.format(viewDDL, viewFullName, dataTableFullName));
+            conn.createStatement().execute(String.format(indexTableDDL, viewIndexName,
+                    viewFullName));
+            // insert two rows
+            PreparedStatement
+                    upsertDataStmt = conn.prepareStatement(String.format(upsertData,
+                    viewFullName));
+
+            EnvironmentEdgeManager.injectEdge(testClock);
+            upsertRow(upsertDataStmt, 1, "name-1", 98051);
+            upsertRow(upsertDataStmt, 2, "name-2", 98052);
+            conn.commit();
+
+            List<Job> completedJobs = runScrutiny(schemaName, viewName, viewIndexName);
             Job job = completedJobs.get(0);
             assertTrue(job.isSuccessful());
             Counters counters = job.getCounters();
