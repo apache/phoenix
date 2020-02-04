@@ -17,7 +17,9 @@ limitations under the License.
 
 ![logo](http://phoenix.apache.org/images/logo.png)
 
-<b>[Apache Phoenix](http://phoenix.apache.org/)</b> is a SQL skin over HBase delivered as a client-embedded JDBC driver targeting low latency queries over HBase data. Visit the Apache Phoenix website <b>[here](http://phoenix.apache.org/)</b>.
+<b>[Apache Phoenix](http://phoenix.apache.org/)</b> is a SQL skin over HBase delivered as a
+client-embedded JDBC driver targeting low latency queries over HBase data. Visit the Apache
+Phoenix website <b>[here](http://phoenix.apache.org/)</b>.
 
 
 Building Apache Phoenix
@@ -45,11 +47,11 @@ HBase version compatibility
 ---------------------------
 
 As Phoenix uses *limited public* HBase APIs, which sometimes change even within a minor release,
-Phoenix may not build or work with older releases of HBase, or ones that were released after Phoenix,
-even within the same HBase minor release.
+Phoenix may not build or work with older releases of HBase, or ones that were released after
+Phoenix, even within the same HBase minor release.
 
-By default, Phoenix will be built for the latest supported HBase 2.x release. You can specify the targeted
-HBase minor release by setting the `hbase.profile` system property for maven.
+By default, Phoenix will be built for the latest supported HBase 2.x release. You can specify the
+targeted HBase minor release by setting the `hbase.profile` system property for maven.
 
 You can also specify the exact HBase release to build Phoenix with by by additionally
 setting the `hbase.version` system property.
@@ -58,8 +60,8 @@ setting the `hbase.version` system property.
  * `mvn clean install -Dhbase.profile=2.1` will use the latest known supported HBase 2.1 release
  * `mvn clean install -Dhbase.profile=2.1 -Dhbase.version=2.1.7` will build with HBase 2.1.7
 
-*Note that the above reflects the intended behaviour for the 5.1 release. In the current development
-releases, we default to building with the old HBase 2.0.3 release.*
+*Note that the above reflects the intended behaviour for the 5.1 release. In the current
+development releases, we default to building with the old HBase 2.0.1 release.*
 
 Importing into eclipse
 ----------------------
