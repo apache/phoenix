@@ -289,7 +289,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             Set<Action> requireAccess = new HashSet<Action>();
                             Set<Action> accessExists = new HashSet<Action>();
                             List<UserPermission> permsToTable = getPermissionForUser(permissionsOnTheTable,
-                                getUserFromUP(userPermission));
+                                    getUserFromUP(userPermission));
                             for (Action action : requiredActionsOnTable) {
                                 boolean haveAccess=false;
                                 if (getPermissionFromUP(userPermission).implies(action)) {
@@ -323,8 +323,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                                     continue;
                                 }
                                 handleRequireAccessOnDependentTable(request,
-                                    getUserFromUP(userPermission), toTable,
-                                    toTable.getNameAsString(), requireAccess, accessExists);
+                                        getUserFromUP(userPermission), toTable,
+                                        toTable.getNameAsString(), requireAccess, accessExists);
                             }
                         }
                     }

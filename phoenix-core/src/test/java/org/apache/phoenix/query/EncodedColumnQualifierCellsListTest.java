@@ -475,6 +475,4 @@ public class EncodedColumnQualifierCellsListTest {
         list.add(KeyValueUtil.createFirstOnRow(row, cf, FOUR_BYTE_QUALIFIERS.encode(14)));
         list.add(KeyValueUtil.createFirstOnRow(row, cf, FOUR_BYTE_QUALIFIERS.encode(11)));
     }
-    
-
 }

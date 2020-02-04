@@ -397,7 +397,7 @@
                    import java.util.regex.Pattern;
                    import java.lang.Integer;
 
-                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)");
+                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
                    versionMatcher = versionPattern.matcher("${hbase.version}");
                    versionMatcher.find();
 
@@ -652,6 +652,11 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-endpoint</artifactId>
+        <version>${hbase.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1098,6 +1103,7 @@
       </build>
     </profile>
     <!-- See BUILDING.md for profile selection-->
+    <!-- 2.0 support should probably be removed for the 5.1 release -->
     <profile>
       <id>phoenix-hbase-compat-2.0.1-default</id>
       <activation>
@@ -1114,7 +1120,8 @@
       <properties>
         <hbase.profile>2.0</hbase.profile>
         <hbase.compat.version>2.0.1</hbase.compat.version>
-        <hbase.version>2.0.4</hbase.version>
+        <!-- this is currently set to 2.0.1 to match the non-modular version -->
+        <hbase.version>2.0.1</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1139,7 +1146,7 @@
       </properties>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-2.0.6</id>
+      <id>phoenix-hbase-compat-2.1.6</id>
       <activation>
         <activeByDefault>true</activeByDefault>
         <property>
@@ -1156,6 +1163,7 @@
       <properties>
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
+        <!-- Update to latest before release -->
         <hbase.version>2.1.8</hbase.version>
       </properties>
     </profile>
@@ -1176,6 +1184,7 @@
       <properties>
         <hbase.profile>2.2</hbase.profile>
         <hbase.compat.version>2.2.1</hbase.compat.version>
+        <!-- Update to latest before release -->
         <hbase.version>2.2.3</hbase.version>
       </properties>
     </profile>
