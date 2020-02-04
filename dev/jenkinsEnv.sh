@@ -24,7 +24,7 @@ export FINDBUGS_HOME=/home/jenkins/tools/findbugs/latest
 export CLOVER_HOME=/home/jenkins/tools/clover/latest
 export MAVEN_HOME=/home/jenkins/tools/maven/latest
 
-export PATH=$PATH:$JAVA_HOME/bin:$ANT_HOME/bin:
+export PATH=$PATH:$JAVA_HOME/bin:$ANT_HOME/bin:$MAVEN_HOME/bin
 export MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx3100M -XX:-UsePerfData -XX:MaxPermSize=256m"}"
 
 ulimit -n

@@ -682,9 +682,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null);
         if (indexPut == null) {
-            String errorMsg = "Empty index update";
-            logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
-            return false;
+            // This means the data row does not have any covered column values
+            indexPut = new Put(indexRow.getRow());
         }
         else {
             // Remove the empty column prepared by Index codec as we need to change its value
@@ -718,6 +717,10 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow), errorMsg);
                     return false;
                 }
+                if (actualCell.getTimestamp() < ts) {
+                    // Skip older cells since a Phoenix index row is composed of cells with the same timestamp
+                    continue;
+                }
                 // Check all columns
                 if (!CellUtil.matchingValue(actualCell, expectedCell)) {
                     String errorMsg = "Not matching value for " + Bytes.toString(family) + ":" +
@@ -725,9 +728,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow),
                             errorMsg, CellUtil.cloneValue(expectedCell), CellUtil.cloneValue(actualCell));
                     return false;
-                } else if (!CellUtil.matchingTimestamp(actualCell, expectedCell)) {
+                } else if (actualCell.getTimestamp() != ts) {
                     String errorMsg = "Not matching timestamp for " + Bytes.toString(family) + ":" +
-                            Bytes.toString(qualifier) + " E: " + expectedCell.getTimestamp() + " A: " +
+                            Bytes.toString(qualifier) + " E: " + ts + " A: " +
                             actualCell.getTimestamp();
                     logToIndexToolOutputTable(dataRow.getRow(), indexRow.getRow(), ts, getMaxTimestamp(indexRow),
                             errorMsg, null, null);
