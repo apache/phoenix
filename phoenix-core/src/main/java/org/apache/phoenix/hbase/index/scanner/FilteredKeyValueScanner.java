@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
+import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 
 /**
@@ -94,7 +95,12 @@ public class FilteredKeyValueScanner implements ReseekableScanner {
                 break;
             // use a seek hint to find out where we should go
             case SEEK_NEXT_USING_HINT:
-                delegate.seek(KeyValueUtil.ensureKeyValue(filter.getNextCellHint(peeked)));
+                Cell nextCellHint = filter.getNextCellHint(peeked);
+                if (nextCellHint == KeyValue.LOWESTKEY) {
+                    delegate.next();
+                } else {
+                    delegate.seek(KeyValueUtil.ensureKeyValue(nextCellHint));
+                }
             }
         }
     }

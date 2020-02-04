@@ -908,7 +908,50 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           store.triggerMajorCompaction();
           store.compactRecentForTestingAssumingDefaultPolicy(1);
       }
-  }
+    }
+
+    @Test
+    public void testUpsertingDeletedRowWithNullCoveredColumn() throws Exception {
+        testUpsertingDeletedRowWithNullCoveredColumn(false);
+    }
+
+    @Test
+    public void testUpsertingDeletedRowWithNullCoveredColumnMultiCfs() throws Exception {
+        testUpsertingDeletedRowWithNullCoveredColumn(true);
+    }
+
+    public void testUpsertingDeletedRowWithNullCoveredColumn(boolean multiCf) throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String columnFamily1 = "cf1";
+        String columnFamily2 = "cf2";
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        try (Connection conn = getConnection()) {
+            conn.createStatement()
+                    .execute("create table " + fullTableName + " (id integer primary key, "
+                            + (multiCf ? columnFamily1 + "." : "") + "f varchar, "
+                            + (multiCf ? columnFamily2 + "." : "") + "s varchar)"
+                            + tableDDLOptions);
+            conn.createStatement()
+                    .execute("create " + (localIndex ? "LOCAL" : "") + " index " + indexName
+                            + " on " + fullTableName + " (" + (multiCf ? columnFamily1 + "." : "")
+                            + "f) include (" + (multiCf ? columnFamily2 + "." : "") + "s)");
+            conn.createStatement()
+                    .execute("upsert into " + fullTableName + " values (1, 'foo', 'bar')");
+            conn.commit();
+            conn.createStatement().execute("delete from  " + fullTableName + " where id = 1");
+            conn.commit();
+            conn.createStatement()
+                    .execute("upsert into  " + fullTableName + " values (1, null, 'bar')");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + fullIndexName);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(2));
+            assertEquals(null, rs.getString(1));
+            assertEquals("bar", rs.getString(3));
+        }
+    }
 
   /**
    * PHOENIX-4988
