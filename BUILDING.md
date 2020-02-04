@@ -31,12 +31,12 @@ Building from source
 On first setup, you may need to run `$ mvn install -DskipTests`
 to install the local jars. This is a side-effect of multi-module maven projects
 
-To re-generate the antlr based files:
+To re-generate the antlr based files:  
 `$ mvn process-sources`
 
-To build the jars and the assembly tarball:
+To build the jars and the assembly tarball:  
 `$ mvn package`
-and optionally, to just skip all the tests and build the jars:
+and optionally, to just skip all the tests and build the jars:  
 `$ mvn package -DskipTests`
 
 Note: javadocs are generated in target/apidocs
@@ -69,17 +69,17 @@ Use the m2e eclipse plugin and do Import->Maven Project and just pick the root '
 Running the tests
 -----------------
 
-All tests
+All tests  
 `$ mvn clean test`
 
 Findbugs
 --------
 
-Findbugs report is generated in /target/site
+Findbugs report is generated in /target/site  
 `$ mvn site`
 
 Generate Apache Web Site
 ------------------------
 
-checkout https://svn.apache.org/repos/asf/phoenix
+checkout https://svn.apache.org/repos/asf/phoenix  
 `$ build.sh`
