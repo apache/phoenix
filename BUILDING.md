@@ -59,6 +59,11 @@ setting the `hbase.version` system property.
  * `mvn clean install` will build the for the latest known supported HBase 2.x relese
  * `mvn clean install -Dhbase.profile=2.1` will use the latest known supported HBase 2.1 release
  * `mvn clean install -Dhbase.profile=2.1 -Dhbase.version=2.1.7` will build with HBase 2.1.7
+ 
+Phoenix verifies the specified `hbase.profile` and `hbase.version` properties, and will reject
+combinations that are known not to work. You may disable this verification by adding
+`-Denforcer.skip=true` to the maven command line. (You should only do this if you are using a 
+non-Apache HBase release that modifies the version number in a way that Phoenix cannot parse)
 
 *Note that the above reflects the intended behaviour for the 5.1 release. In the current
 development releases, we default to building with the old HBase 2.0.1 release.*
