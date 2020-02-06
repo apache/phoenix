@@ -96,9 +96,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void verifyIndexTableNumberOfRowsForATenant(String tableName, String tenantId, int expectedRows) throws Exception {
+    private void verifyIndexTableNumberOfRowsForATenant(String tableName, String regrex, int expectedRows) throws Exception {
         try (Table table  = HBaseFactoryProvider.getHConnectionFactory().createConnection(config).getTable(tableName)) {
-            String regrex = ".*" + tenantId + ".*";
             Filter filter = new RowFilter(CompareFilter.CompareOp.EQUAL, new RegexStringComparator(regrex));
             Scan scan = new Scan();
             scan.setFilter(filter);
@@ -249,7 +248,6 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
 
             // MR job should delete rows from the multi-tenant table
             verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0);
-
         }
     }
 
@@ -401,11 +399,9 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testDeleteExpiredRowsWithMultiIndexTableCase() throws Exception {
-        /*
-            Multi index tables existed on based table, but it only deletes expired rows.
-         */
+    public void testDeleteExpiredRowsWForMultiTenantOnAnIndexTableCase() throws Exception {
         String baseTable = generateUniqueName();
+        String indexTable = "_IDX_" + baseTable;
         String tenant1 = generateUniqueName();
         String tenant2 = generateUniqueName();
         String viewName1 = generateUniqueName();
@@ -432,10 +428,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyMultiTenantTableNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS);
             verifyMultiTenantTableNumberOfRows(baseTable, tenant2, NUMBER_OF_UPSERT_ROWS);
 
-            verifyIndexTableNumberOfRowsForATenant("_IDX_" + baseTable,
-                    tenant1, NUMBER_OF_UPSERT_ROWS);
-            verifyIndexTableNumberOfRowsForATenant("_IDX_" + baseTable,
-                    tenant2, NUMBER_OF_UPSERT_ROWS);
+            verifyIndexTableNumberOfRowsForATenant(indexTable,
+                    ".*" + tenant1 + ".*", NUMBER_OF_UPSERT_ROWS);
+            verifyIndexTableNumberOfRowsForATenant(indexTable,
+                    ".*" + tenant2 + ".*", NUMBER_OF_UPSERT_ROWS);
 
             // alter the view ttl and all rows should expired immediately.
             alterViewTtl(tenant2Connection, viewName2, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
@@ -447,8 +443,103 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
-            verifyMultiTenantTableNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS);
-            verifyMultiTenantTableNumberOfRows(baseTable, tenant2, 0);
+            verifyIndexTableNumberOfRowsForATenant(indexTable, ".*" + tenant1 + ".*", NUMBER_OF_UPSERT_ROWS);
+            verifyIndexTableNumberOfRowsForATenant(indexTable, ".*" + tenant2 + ".*", 0);
+        }
+    }
+
+    @Test
+    public void testDeleteExpiredRowsForATenantHasMultiViewsOnAnIndexTableCase() throws Exception {
+        String baseTable = generateUniqueName();
+        String indexTable = "_IDX_" + baseTable;
+        String tenant = generateUniqueName();
+        tenant = "xyz";
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        String viewName3 = generateUniqueName();
+
+        String indexView1 = viewName1 + "_IDX";
+        String indexView2 = viewName2 + "_IDX";
+        String indexView3 = viewName3 + "_IDX";
+
+        try (Connection globalConn = DriverManager.getConnection(getUrl());
+             Connection tenantConnection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant)) {
+
+            String ddl = "CREATE TABLE " + baseTable + "(TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, " +
+                    "AGE BIGINT NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID, AGE)) MULTI_TENANT=true";
+            globalConn.createStatement().execute(ddl);
+
+            ddl = "CREATE VIEW " + viewName1 + " AS SELECT * FROM " + baseTable + " WHERE ID = 'A' VIEW_TTL= " + VIEW_TTL_EXPIRE_IN_A_DAY;
+            tenantConnection.createStatement().execute(ddl);
+
+            ddl = "CREATE VIEW " + viewName2 + " AS SELECT * FROM " + baseTable + " WHERE ID = 'B' VIEW_TTL= " + VIEW_TTL_EXPIRE_IN_A_DAY;
+            tenantConnection.createStatement().execute(ddl);
+
+            ddl = "CREATE VIEW " + viewName3 + " AS SELECT * FROM " + baseTable + " WHERE ID = 'C'";
+            tenantConnection.createStatement().execute(ddl);
+
+            for (int i = 0; i < NUMBER_OF_UPSERT_ROWS; i++) {
+                PreparedStatement stmt = tenantConnection.prepareStatement(
+                        "UPSERT INTO " + viewName1 + " (AGE, NUM) VALUES(?,?)");
+                stmt.setInt(1, i);
+                stmt.setInt(2, i);
+                stmt.execute();
+                stmt.close();
+            }
+            tenantConnection.commit();
+
+            for (int i = 0; i < NUMBER_OF_UPSERT_ROWS; i++) {
+                PreparedStatement stmt = tenantConnection.prepareStatement(
+                        "UPSERT INTO " + viewName2 + " (AGE, NUM) VALUES(?,?)");
+                stmt.setInt(1, i);
+                stmt.setInt(2, i);
+                stmt.execute();
+                stmt.close();
+            }
+            tenantConnection.commit();
+
+            for (int i = 0; i < NUMBER_OF_UPSERT_ROWS; i++) {
+                PreparedStatement stmt = tenantConnection.prepareStatement(
+                        "UPSERT INTO " + viewName3 + " (AGE, NUM) VALUES(?,?)");
+                stmt.setInt(1, i);
+                stmt.setInt(2, i);
+                stmt.execute();
+                stmt.close();
+            }
+            tenantConnection.commit();
+
+            tenantConnection.createStatement().execute(
+                    "CREATE INDEX " + indexView1 + " ON " + viewName1 + "(NUM) INCLUDE (AGE)");
+            tenantConnection.createStatement().execute(
+                    "CREATE INDEX " + indexView2 + " ON " + viewName2 + "(NUM) INCLUDE (AGE)");
+            tenantConnection.createStatement().execute(
+                    "CREATE INDEX " + indexView3 + " ON " + viewName3 + "(NUM) INCLUDE (AGE)");
+
+            verifyIndexTableNumberOfRowsForATenant(indexTable, ".*" + tenant + ".*", NUMBER_OF_UPSERT_ROWS * 3);
+
+            alterViewTtl(tenantConnection, viewName1, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
+
+            // running MR job to delete expired rows.
+            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            viewTtlTool.setConf(conf);
+            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            assertEquals(0, status);
+
+            verifyIndexTableNumberOfRowsForATenant(indexTable, ".*" + tenant + ".*", NUMBER_OF_UPSERT_ROWS * 2);
+            String query = "SELECT COUNT(*) FROM %s";
+
+            ResultSet rs = tenantConnection.createStatement().executeQuery(String.format(query, indexView1));
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+
+            rs = tenantConnection.createStatement().executeQuery(String.format(query, indexView2));
+            assertTrue(rs.next());
+            assertEquals(NUMBER_OF_UPSERT_ROWS, rs.getInt(1));
+
+            rs = tenantConnection.createStatement().executeQuery(String.format(query, indexView3));
+            assertTrue(rs.next());
+            assertEquals(NUMBER_OF_UPSERT_ROWS, rs.getInt(1));
         }
     }
 }
