@@ -440,13 +440,17 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         long scanMaxTs = scan.getTimeRange().getMax();
         byte[] keyPrefix = Bytes.toBytes(Long.toString(scanMaxTs));
         byte[] regionName = Bytes.toBytes(region.getRegionInfo().getRegionNameAsString());
-        byte[] rowKey = new byte[keyPrefix.length + regionName.length];
-        // The row key for the result table is the max timestamp of the scan + the table region name
+        // The row key for the result table is the max timestamp of the scan + the table region name + scan start row
+        // + scan stop row
+        byte[] rowKey = new byte[keyPrefix.length + regionName.length + scan.getStartRow().length +
+                scan.getStopRow().length];
         Bytes.putBytes(rowKey, 0, keyPrefix, 0, keyPrefix.length);
         Bytes.putBytes(rowKey, keyPrefix.length, regionName, 0, regionName.length);
+        Bytes.putBytes(rowKey, keyPrefix.length + regionName.length, scan.getStartRow(), 0,
+                scan.getStartRow().length);
+        Bytes.putBytes(rowKey, keyPrefix.length + regionName.length + scan.getStartRow().length,
+                scan.getStopRow(), 0, scan.getStopRow().length);
         Put put = new Put(rowKey);
-        put.addColumn(RESULT_TABLE_COLUMN_FAMILY, IndexTool.SCAN_STOP_ROW_KEY_BYTES,
-                scanMaxTs, scan.getStopRow());
         put.addColumn(RESULT_TABLE_COLUMN_FAMILY, SCANNED_DATA_ROW_COUNT_BYTES,
                 scanMaxTs, Bytes.toBytes(Long.toString(verificationResult.scannedDataRowCount)));
         put.addColumn(RESULT_TABLE_COLUMN_FAMILY, REBUILT_INDEX_ROW_COUNT_BYTES,

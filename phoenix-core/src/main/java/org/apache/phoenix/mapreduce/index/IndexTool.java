@@ -172,8 +172,6 @@ public class IndexTool extends Configured implements Tool {
     public final static byte[] INDEX_TABLE_TS_BYTES = Bytes.toBytes(INDEX_TABLE_TS);
     public static String ERROR_MESSAGE = "Error";
     public final static byte[] ERROR_MESSAGE_BYTES = Bytes.toBytes(ERROR_MESSAGE);
-    public static String  SCAN_STOP_ROW_KEY = "StopRowKey";
-    public final static byte[] SCAN_STOP_ROW_KEY_BYTES = Bytes.toBytes(SCAN_STOP_ROW_KEY);
     public static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
     public final static byte[] SCANNED_DATA_ROW_COUNT_BYTES = Bytes.toBytes(SCANNED_DATA_ROW_COUNT);
     public static String REBUILT_INDEX_ROW_COUNT = "RebuiltIndexRowCount";
