@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
-import static org.apache.hadoop.hbase.HColumnDescriptor.REPLICATION_SCOPE;
 import static org.apache.hadoop.hbase.HColumnDescriptor.KEEP_DELETED_CELLS;
+import static org.apache.hadoop.hbase.HColumnDescriptor.REPLICATION_SCOPE;
+import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -67,8 +68,8 @@ import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
 import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.moveChildLinks;
-import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
+import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
@@ -108,7 +109,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -160,8 +160,8 @@ import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
+import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -275,13 +275,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -3455,11 +3455,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 conn.close();
             }
         }
-        // Add these columns one at a time, each with different timestamps so that if folks
-        // have
-        // run the upgrade code already for a snapshot, we'll still enter this block (and do
-        // the
-        // parts we haven't yet done).
+        // Add these columns one at a time so that if folks have run the upgrade code
+        // already for a snapshot, we'll still enter this block (and do the parts we 
+        // haven't yet done). 
+        // Add each column with different timestamp else the code assumes that the
+        // table is already modified at that timestamp resulting in not updating the
+        // second column with same timestamp
         if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
             columnsToAdd = PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " "
               + PBoolean.INSTANCE.getSqlTypeName();
@@ -3601,6 +3602,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0,
                     PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE + " "
                             + PInteger.INSTANCE.getSqlTypeName());
+        }
+        if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0) {
+            metaConnection = addColumnsIfNotExists(
+                metaConnection,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 1,
+                PhoenixDatabaseMetaData.VIEW_TTL + " "
+                        + PInteger.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(
+                metaConnection,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
+                PhoenixDatabaseMetaData.VIEW_TTL_HWM + " "
+                        + PInteger.INSTANCE.getSqlTypeName());
         }
         return metaConnection;
     }
