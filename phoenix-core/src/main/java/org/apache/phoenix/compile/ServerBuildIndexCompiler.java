@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import java.sql.SQLException;
-import java.util.Collections;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -31,12 +28,17 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
+
+import java.sql.SQLException;
+import java.util.Collections;
 
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.IndexUtil.addEmptyColumnToScan;
@@ -96,16 +98,7 @@ public class ServerBuildIndexCompiler {
                 throw new IllegalArgumentException(
                         "ServerBuildIndexCompiler does not support global indexes on transactional tables");
             }
-            // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
-            // However, in this case, we need to project all of the data columns that contribute to the index.
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
-            for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                    scan.addFamily(columnRef.getFamily());
-                } else {
-                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                }
-            }
             IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(index), plan.getContext().getConnection());
             // Set the scan attributes that UngroupedAggregateRegionObserver will switch on.
             // For local indexes, the BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO attribute, and
@@ -116,11 +109,21 @@ public class ServerBuildIndexCompiler {
             // that will be passed as a mutation attribute for the scanned mutations that will be applied on
             // the index table possibly remotely
             if (index.getIndexType() == PTable.IndexType.LOCAL) {
+                // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
+                // However, in this case, we need to project all of the data columns that contribute to the index.
+                for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
+                    if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                        scan.addFamily(columnRef.getFamily());
+                    } else {
+                        scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+                    }
+                }
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
             } else {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 addEmptyColumnToScan(scan, indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
             }
             if (dataTable.isTransactional()) {

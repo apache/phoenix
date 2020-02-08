@@ -23,6 +23,8 @@ import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -81,6 +83,7 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -421,7 +424,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-    public static long getTimestamp(Mutation m) throws IOException {
+    public static long getTimestamp(Mutation m) {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
                 return cell.getTimestamp();
@@ -474,7 +477,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
   }
 
   /**
-   * When there are multiple put mutations on the data same row within the same batch, this method merged them into
+   * When there are multiple put mutations on the data same row within the same batch, this method merges them into
    * one mutation.
    */
   private void mergePendingPutMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -486,19 +489,21 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           }
           Mutation m = miniBatchOp.getOperation(i);
           // skip this mutation if we aren't enabling indexing
-          if (this.builder.isEnabled(m)) {
-              // Unless we're replaying edits to rebuild the index, we update the time stamp
-              // of the data table to prevent overlapping time stamps (which prevents index
-              // inconsistencies as this case isn't handled correctly currently).
-              setTimestamp(m, now);
-              if (m instanceof Put) {
-                  ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
-                  Integer opIndex = pendingPuts.get(rowKeyPtr);
-                  pendingPuts.put(rowKeyPtr, i);
-                  if (opIndex != null) {
-                      merge((Put) m, (Put) miniBatchOp.getOperation(opIndex));
-                      miniBatchOp.setOperationStatus(opIndex, NOWRITE);
-                  }
+          if (!this.builder.isEnabled(m)) {
+              continue;
+          }
+          // Unless we're replaying edits to rebuild the index, we update the time stamp
+          // of the data table to prevent overlapping time stamps (which prevents index
+          // inconsistencies as this case isn't handled correctly currently).
+          setTimestamp(m, now);
+          if (m instanceof Put) {
+              ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
+              Integer opIndex = pendingPuts.get(rowKeyPtr);
+              pendingPuts.put(rowKeyPtr, i);
+              if (opIndex != null) {
+                  merge((Put) m, (Put) miniBatchOp.getOperation(opIndex));
+                  miniBatchOp.setOperationStatus(opIndex, NOWRITE);
+                  pendingPuts.remove(opIndex);
               }
           }
       }
@@ -506,7 +511,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
   /**
    * When there are delete and put mutations on the data same row within the same batch, this method applies deletes
-   * on put mutations, that is effectively merge them.
+   * on put mutations, that is, effectively merges them.
    */
   private void applyPendingDeleteMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                            BatchMutateContext context,
@@ -519,37 +524,43 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (!this.builder.isEnabled(m)) {
               continue;
           }
-          if (m instanceof Delete) {
-              ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
-              Integer opIndex = pendingPuts.get(rowKeyPtr);
-              Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
-              if (opIndex != null || mergedRow != null) {
-                  Put put = (Put) miniBatchOp.getOperation(opIndex);
-                  for (List<Cell> cells : m.getFamilyCellMap().values()) {
-                      for (Cell cell : cells) {
-                          switch (cell.getType()) {
-                              case DeleteFamily:
-                              case DeleteFamilyVersion:
-                                  if (put != null)
-                                      put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
-                                  if (mergedRow != null)
-                                      mergedRow.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
-                                  break;
-                              case DeleteColumn:
-                              case Delete:
-                                  if (put != null)
-                                      removeColumn(put, cell);
-                                  if (mergedRow != null)
-                                      removeColumn(mergedRow, cell);
+          if (!(m instanceof Delete)) {
+              continue;
+          }
+          ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
+          Integer opIndex = pendingPuts.get(rowKeyPtr);
+          Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
+          if (opIndex == null && mergedRow == null) {
+              continue;
+          }
+          Put put = (opIndex != null) ? (Put) miniBatchOp.getOperation(opIndex) : null;
+          for (List<Cell> cells : m.getFamilyCellMap().values()) {
+              for (Cell cell : cells) {
+                  switch (cell.getType()) {
+                      case DeleteFamily:
+                      case DeleteFamilyVersion:
+                          if (put != null) {
+                              put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
                           }
-                          if (put != null && put.getFamilyCellMap().size() == 0) {
-                              pendingPuts.remove(rowKeyPtr);
-                              miniBatchOp.setOperationStatus(opIndex, NOWRITE);
+                          if (put != mergedRow) {
+                              mergedRow.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
                           }
-                          if (mergedRow != null && mergedRow.getFamilyCellMap().size() == 0) {
-                              context.mergedRowStates.remove(rowKeyPtr);
+                          break;
+                      case DeleteColumn:
+                      case Delete:
+                          if (put != null) {
+                              removeColumn(put, cell);
                           }
-                      }
+                          if (put != mergedRow) {
+                              removeColumn(mergedRow, cell);
+                          }
+                  }
+                  if (put != null && put.getFamilyCellMap().size() == 0) {
+                      pendingPuts.remove(rowKeyPtr);
+                      miniBatchOp.setOperationStatus(opIndex, NOWRITE);
+                  }
+                  if (mergedRow != null && mergedRow.getFamilyCellMap().size() == 0) {
+                      context.mergedRowStates.remove(rowKeyPtr);
                   }
               }
           }
@@ -562,40 +573,39 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
   private Collection<? extends Mutation> mergeMutations(ObserverContext<RegionCoprocessorEnvironment> c,
                                                         MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                                         BatchMutateContext context,
-                                                        long now, boolean rebuild) throws IOException {
-      if (!rebuild) {
-          if (context.rowsToLock.size() == 0) {
-              return null;
+                                                        long now) throws IOException {
+      if (context.rowsToLock.size() == 0) {
+          return null;
+      }
+      Map<ImmutableBytesPtr, Integer> pendingPuts = new HashMap<>(miniBatchOp.size());
+      mergePendingPutMutations(miniBatchOp, pendingPuts, now);
+      getCurrentRowStates(c, context);
+      context.mergedRowStates = new HashMap<ImmutableBytesPtr, Put>(miniBatchOp.size());
+      // Merge pending put mutations with current row states into new merged states
+      for (Integer i = 0; i < miniBatchOp.size(); i++) {
+          if (miniBatchOp.getOperationStatus(i) == IGNORE || miniBatchOp.getOperationStatus(i) == NOWRITE) {
+              continue;
           }
-          Map<ImmutableBytesPtr, Integer> pendingPuts = new HashMap<>(miniBatchOp.size());
-          mergePendingPutMutations(miniBatchOp, pendingPuts, now);
-          getCurrentRowStates(c, context);
-          context.mergedRowStates = new HashMap<ImmutableBytesPtr, Put>(miniBatchOp.size());
-          // Merge pending put mutations with current row states into new merged states
-          for (Integer i = 0; i < miniBatchOp.size(); i++) {
-              if (miniBatchOp.getOperationStatus(i) == IGNORE || miniBatchOp.getOperationStatus(i) == NOWRITE) {
-                  continue;
-              }
-              Mutation m = miniBatchOp.getOperation(i);
-              if (this.builder.isEnabled(m)) {
-                  if (m instanceof Put) {
-                      ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
-                      Put currentRow = context.currentRowStates.get(rowKeyPtr);
-                      Put mergedRow;
-                      if (currentRow != null) {
-                          mergedRow = mergeNew((Put) m, currentRow);
-                      }
-                      else {
-                          mergedRow = new Put((Put)m);
-                      }
-                      context.mergedRowStates.put(rowKeyPtr, mergedRow);
-                  }
-              }
+          Mutation m = miniBatchOp.getOperation(i);
+          if (!this.builder.isEnabled(m)) {
+              continue;
           }
-          // Apply delete mutations on the pending put mutations and merged row states
-          applyPendingDeleteMutations(miniBatchOp, context, pendingPuts);
+          if (m instanceof Put) {
+              ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
+              Put currentRow = context.currentRowStates.get(rowKeyPtr);
+              Put mergedRow;
+              if (currentRow != null) {
+                  mergedRow = mergeNew((Put) m, currentRow);
+              }
+              else {
+                  mergedRow = (Put)m;
+              }
+              context.mergedRowStates.put(rowKeyPtr, mergedRow);
+          }
       }
 
+      // Apply delete mutations on the pending put mutations and merged row states
+      applyPendingDeleteMutations(miniBatchOp, context, pendingPuts);
       Collection<Mutation> pendingMutations = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
       // Add put mutations into the collection first. This ordering of puts first and then deletes is important for
       // obtaining correct index updates
@@ -604,11 +614,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (m instanceof Put) {
               if (miniBatchOp.getOperationStatus(i) != IGNORE &&
                       miniBatchOp.getOperationStatus(i) != NOWRITE && this.builder.isEnabled(m)) {
-                  // No need to write the table mutations when we're rebuilding
-                  // the index as they're already written and just being replayed.
-                  if (rebuild) {
-                      miniBatchOp.setOperationStatus(i, NOWRITE);
-                  }
                   pendingMutations.add(m);
               }
           }
@@ -619,15 +624,63 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (m instanceof Delete) {
               if (miniBatchOp.getOperationStatus(i) != IGNORE &&
                       miniBatchOp.getOperationStatus(i) != NOWRITE && this.builder.isEnabled(m)) {
-                  if (rebuild) {
-                      miniBatchOp.setOperationStatus(i, NOWRITE);
-                  }
                   pendingMutations.add(m);
               }
           }
       }
       return pendingMutations;
   }
+
+  /**
+   * This is to reorder the mutations in ascending order by the tuple of row key, timestamp and mutation type where
+   * delete comes before put
+   */
+  public static final Comparator<Mutation> MUTATION_COMPARATOR = new Comparator<Mutation>() {
+      @Override
+      public int compare(Mutation o1, Mutation o2) {
+        int result = Bytes.compareTo(o1.getRow(), o2.getRow());
+        if (result != 0) {
+            return result;
+        }
+        long ts1 = getTimestamp(o1);
+        long ts2 = getTimestamp(o2);
+        if (ts1 < ts2) {
+            return -1;
+        }
+        if (ts1 > ts2) {
+            return 1;
+        }
+        if (o1 instanceof Delete && o2 instanceof Put) {
+            return -1;
+        }
+        if (o1 instanceof Put && o2 instanceof Delete) {
+            return 1;
+        }
+        return 0;
+      }
+    };
+
+    /**
+     *  Group the cells within a mutation based on their timestamps and create a separate mutation for each group
+     */
+    private Collection<? extends Mutation> splitMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                                          BatchMutateContext context) throws IOException {
+        List<Mutation> pendingMutations = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+                continue;
+            }
+            Mutation m = miniBatchOp.getOperation(i);
+            if (this.builder.isEnabled(m)) {
+                pendingMutations.add(m);
+                miniBatchOp.setOperationStatus(i, NOWRITE);
+            }
+        }
+        pendingMutations = (List<Mutation>) IndexManagementUtil.flattenMutationsByTimestamp(pendingMutations);
+        // Reorder the mutations on the same row so that delete comes before put when they have the same timestamp
+        Collections.sort(pendingMutations, MUTATION_COMPARATOR);
+        return pendingMutations;
+    }
 
   public static void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
       List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
@@ -708,28 +761,75 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
     }
 
     /**
-     * Generate the index updates from the mutations without considering the previous row state. This method is called
-     * when to rebuild index rows from the existing data table rows. This method is used only for global indexes
+     * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
+     * state with the pending row mutation for index rebuild. This method is called only for global indexes.
+     * pendingMutations is a sorted list of data table mutations that are used to replay index table mutations.
+     * This list is sorted in ascending order by the tuple of row key, timestamp and mutation type where delete comes
+     * before put.
      */
-    private void prepareIndexMutationsForIndexRebuild(BatchMutateContext context,
-                                                      List<IndexMaintainer> maintainers,
-                                                      Collection<? extends Mutation> pendingMutations) throws IOException {
-        for (IndexMaintainer indexMaintainer : maintainers) {
-            HTableInterfaceReference hTableInterfaceReference =
-                    new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-            for (Mutation mutation : pendingMutations) {
-                ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
-                ValueGetter valueGetter = new IndexRebuildRegionScanner.SimpleValueGetter((Put) mutation);
-                Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, valueGetter,
-                        rowKeyPtr, getMaxTimestamp(mutation), null, null);
+    private void prepareIndexMutationsForRebuild(BatchMutateContext context, IndexMaintainer indexMaintainer,
+                                       Collection<? extends Mutation> pendingMutations) throws IOException {
+        Put currentRow = null;
+        HTableInterfaceReference hTableInterfaceReference =
+                new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+        for (Mutation mutation : pendingMutations) {
+            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
+            ValueGetter currentRowVG = null;
+            if (currentRow != null && Bytes.compareTo(mutation.getRow(), currentRow.getRow()) != 0) {
+                currentRow = null;
+            }
+            currentRowVG = (currentRow == null) ? null : new IndexRebuildRegionScanner.SimpleValueGetter(currentRow);
+            long ts = getTimestamp(mutation);
+            if (mutation instanceof Put) {
+                Put mergedRow = (currentRow == null) ? new Put((Put)mutation) : mergeNew((Put)mutation, currentRow);
+                ValueGetter mergedRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(mergedRow);
+                Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+                        mergedRowVG, rowKeyPtr, ts, null, null);
                 if (indexPut == null) {
-                    byte[] indexRowKey = indexMaintainer.buildRowKey(valueGetter, rowKeyPtr,
+                    // No covered column. Just prepare an index row with the empty column
+                    byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
                             null, null, HConstants.LATEST_TIMESTAMP);
                     indexPut = new Put(indexRowKey);
                 }
                 indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-                            indexMaintainer.getEmptyKeyValueQualifier(), getMaxTimestamp(mutation), VERIFIED_BYTES);
-                context.indexUpdates.put(hTableInterfaceReference, new Pair<>((Mutation)indexPut, mutation.getRow()));
+                        indexMaintainer.getEmptyKeyValueQualifier(), ts, EMPTY_COLUMN_VALUE_BYTES);
+                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(indexPut, mutation.getRow()));
+                // Delete the current index row if the new index key is different than the current one
+                if (currentRow != null) {
+                    byte[] currentIndexRowKey = indexMaintainer.buildRowKey(currentRowVG, rowKeyPtr,
+                            null, null, HConstants.LATEST_TIMESTAMP);
+                    if (Bytes.compareTo(indexPut.getRow(), currentIndexRowKey) != 0) {
+                        Delete del = new Delete(currentIndexRowKey, ts);
+                        context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                    }
+                }
+                // For the next iteration, mergedRow would represent the current row state
+                currentRow = mergedRow;
+            } else {
+                if (currentRow != null) {
+                    Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentRowVG,
+                            rowKeyPtr, getCollection(mutation), ts, null, null);
+                    if (del != null) {
+                        context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                    }
+                    for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+                        for (Cell cell : cells) {
+                            switch (cell.getType()) {
+                                case DeleteFamily:
+                                case DeleteFamilyVersion:
+                                    currentRow.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
+                                    break;
+                                case DeleteColumn:
+                                case Delete:
+                                    removeColumn(currentRow, cell);
+                            }
+                        }
+                        if (currentRow.getFamilyCellMap().size() == 0) {
+                            currentRow = null;
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -742,24 +842,29 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                                        BatchMutateContext context,
                                        List<IndexMaintainer> maintainers,
                                        Collection<? extends Mutation> pendingMutations) throws IOException {
+        byte[] regionStartKey = c.getEnvironment().getRegion().getRegionInfo().getStartKey();
+        byte[] regionEndKey = c.getEnvironment().getRegion().getRegionInfo().getEndKey();
+        List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = new ArrayList<>(maintainers.size());
         for (IndexMaintainer indexMaintainer : maintainers) {
             HTableInterfaceReference hTableInterfaceReference =
                     new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-            byte[] regionStartKey = null;
-            byte[] regionEndKey = null;
-            if (indexMaintainer.isLocalIndex()) {
-                regionStartKey = c.getEnvironment().getRegion().getRegionInfo().getStartKey();
-                regionEndKey = c.getEnvironment().getRegion().getRegionInfo().getEndKey();
-            }
-            for (Mutation mutation : pendingMutations) {
-                ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
-                Put currentRow = context.currentRowStates.get(rowKeyPtr);
-                ValueGetter currentRowVG = (currentRow == null) ? null :
+            indexTables.add(new Pair<>(indexMaintainer, hTableInterfaceReference));
+        }
+        for (Mutation mutation : pendingMutations) {
+            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
+            Put currentRow = context.currentRowStates.get(rowKeyPtr);
+            ValueGetter currentRowVG = null;
+            if (currentRow != null) {
+                currentRowVG = (currentRow == null) ? null :
                         new IndexRebuildRegionScanner.SimpleValueGetter(currentRow);
-                long ts = getTimestamp(mutation);
-                if (mutation instanceof Put) {
-                    Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
-                    ValueGetter mergedRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(mergedRow);
+            }
+            long ts = getTimestamp(mutation);
+            if (mutation instanceof Put) {
+                Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
+                ValueGetter mergedRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(mergedRow);
+                for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
+                    IndexMaintainer indexMaintainer = pair.getFirst();
+                    HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                             mergedRowVG, rowKeyPtr, ts, regionStartKey, regionEndKey);
                     if (indexPut == null) {
@@ -780,8 +885,12 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                             context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
                         }
                     }
-                } else {
-                    if (currentRow != null) {
+                }
+            } else {
+                if (currentRow != null) {
+                    for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
+                        IndexMaintainer indexMaintainer = pair.getFirst();
+                        HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
                         Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentRowVG,
                                 rowKeyPtr, getCollection(mutation), ts, regionStartKey, regionEndKey);
                         if (del != null) {
@@ -809,9 +918,8 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           // get the index updates for all elements in this batch
           context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
           if (context.rebuild) {
-              prepareIndexMutationsForIndexRebuild(context, maintainers, pendingMutations);
-          }
-          else {
+              prepareIndexMutationsForRebuild(context, maintainers.get(0), pendingMutations);
+          } else {
               prepareIndexMutations(c, context, maintainers, pendingMutations);
           }
           current.addTimelineAnnotation("Built index updates, doing preStep");
@@ -829,6 +937,12 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                   // add the VERIFIED cell, which is the empty cell
                   Mutation m = update.getFirst();
                   if (context.rebuild) {
+                      if (m instanceof Put) {
+                          long ts = getMaxTimestamp(m);
+                          // Remove the empty column prepared by Index codec as we need to change its value
+                          removeEmptyColumn(m, emptyCF, emptyCQ);
+                          ((Put) m).addColumn(emptyCF, emptyCQ, ts, VERIFIED_BYTES);
+                      }
                       context.preIndexUpdates.put(hTableInterfaceReference, m);
                   } else {
                       if (m instanceof Put) {
@@ -916,6 +1030,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
        * while determining the index updates
        */
       long now;
+      Collection<? extends Mutation> pendingMutations;
       if (!context.rebuild) {
           populateRowsToLock(miniBatchOp, context);
           lockRows(context);
@@ -923,12 +1038,15 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
           // concurrent updates
           populatePendingRows(context);
+          // Merge all the updates for a single row into a single update to be processed
+          pendingMutations = mergeMutations(c, miniBatchOp, context, now);
       }
       else {
           now = EnvironmentEdgeManager.currentTimeMillis();
+          // Group cells within a mutation based on cell timestamps and create a separate mutation for each group
+          pendingMutations = splitMutations(miniBatchOp, context);
       }
-      // First merge all the updates for a single row into a single update to be processed
-      Collection<? extends Mutation> pendingMutations = mergeMutations(c, miniBatchOp, context, now, context.rebuild);
+
       // early exit if it turns out we don't have any edits
       if (pendingMutations == null || pendingMutations.isEmpty()) {
           return;

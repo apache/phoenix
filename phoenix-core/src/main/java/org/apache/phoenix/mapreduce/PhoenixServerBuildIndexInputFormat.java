@@ -92,7 +92,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
 
             try {
                 scan.setTimeRange(0, scn);
-                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE,
                         PhoenixConfigurationUtil.getIndexVerifyType(configuration).toBytes());
             } catch (IOException e) {

@@ -46,7 +46,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -99,7 +98,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
@@ -369,6 +367,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private int indexTableTTL;
     private VerificationResult verificationResult;
     private boolean isBeforeRebuilt = true;
+    boolean partialRebuild = false;
+    long singleRowRebuildReturnCode;
 
     IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                                final RegionCoprocessorEnvironment env,
@@ -378,6 +378,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
             pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
                     QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+        }
+        else {
+            partialRebuild = true;
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         mutations = new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
@@ -390,17 +393,17 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             useProto = false;
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
-        if (!scan.isRaw()) {
-            // No need to deserialize index maintainers when the scan is raw. Raw scan is used by partial rebuilds
-            List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
-            indexMaintainer = maintainers.get(0);
-        }
+        List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+        indexMaintainer = maintainers.get(0);
         this.scan = scan;
         this.innerScanner = innerScanner;
         this.region = region;
         this.env = env;
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
+        if (indexRowKey != null) {
+            setReturnCodeForSingleRowRebuild();
+        }
         byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
         if (valueBytes != null) {
             verificationResult = new VerificationResult();
@@ -424,6 +427,29 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                                 INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
                 rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                         DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
+            }
+        }
+    }
+
+    private void setReturnCodeForSingleRowRebuild() throws IOException {
+        try (RegionScanner scanner = region.getScanner(scan)) {
+            List<Cell> row = new ArrayList<>();
+            scanner.next(row);
+            // Check if the data table row we have just scanned matches with the index row key.
+            // If not, there is no need to build the index row from this data table row,
+            // and just return zero row count.
+            if (row.isEmpty()) {
+                singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue();
+            } else {
+                Put put = new Put(CellUtil.cloneRow(row.get(0)));
+                for (Cell cell : row) {
+                    put.add(cell);
+                }
+                if (checkIndexRow(indexRowKey, put)) {
+                    singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
+                } else {
+                    singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
+                }
             }
         }
     }
@@ -860,9 +886,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         UngroupedAggregateRegionObserver.MutationList currentMutationList =
                 new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
         for (Mutation mutation : mutationList) {
-            Put put = (Put) mutation;
             currentMutationList.add(mutation);
-            setMutationAttributes(put, uuidValue);
+            setMutationAttributes(mutation, uuidValue);
             uuidValue = commitIfReady(uuidValue, currentMutationList);
         }
         if (!currentMutationList.isEmpty()) {
@@ -925,12 +950,17 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
+        if (indexRowKey != null && singleRowRebuildReturnCode == 0) {
+            byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(0));
+            final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+            results.add(aggKeyValue);
+            return false;
+        }
         Cell lastCell = null;
         int rowCount = 0;
         region.startRegionOperation();
         try {
-            // Partial rebuilds by MetadataRegionObserver use raw scan. Inline verification is not supported for them
-            boolean partialRebuild = scan.isRaw();
             byte[] uuidValue = ServerCacheClient.generateId();
             synchronized (innerScanner) {
                 do {
@@ -964,21 +994,6 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                             }
                             uuidValue = commitIfReady(uuidValue, mutations);
                         }
-                        if (indexRowKey != null) {
-                            if (put != null) {
-                                setMutationAttributes(put, uuidValue);
-                            }
-                            // GlobalIndexChecker passed the index row key. This is to build a single index row.
-                            // Check if the data table row we have just scanned matches with the index row key.
-                            // If not, there is no need to build the index row from this data table row,
-                            // and just return zero row count.
-                            if (checkIndexRow(indexRowKey, put)) {
-                                rowCount = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
-                            } else {
-                                rowCount = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
-                            }
-                            break;
-                        }
                         rowCount++;
                     }
                 } while (hasMore && rowCount < pageSizeInRows);
@@ -1001,6 +1016,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
               indexKeyToDataPutMap.clear();
               dataKeyToDataPutMap.clear();
             }
+        }
+        if (indexRowKey != null) {
+            rowCount = (int) singleRowRebuildReturnCode;
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
         final Cell aggKeyValue;
