@@ -136,6 +136,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonObject;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
@@ -1959,7 +1960,7 @@ public class MetaDataClient {
         }
     }
 
-    public PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
+    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
             IndexType indexType, Date asyncCreatedDate,
@@ -2964,18 +2965,11 @@ public class MetaDataClient {
                     isNamespaceMapped, parent);
             MutationCode code = result.getMutationCode();
             if (code != MutationCode.TABLE_NOT_FOUND) {
-                if(code == MutationCode.TABLE_ALREADY_EXISTS) {
-                    if(result.getTable() != null){
-                        addTableToCache(result);
-                    }
-                    if(statement.ifNotExists()) {
-                        throw new TableAlreadyExistsException(schemaName, tableName, result.getTable());
-                    }
+                boolean mutationResult =  handleCreateTableMutationCode(result, code, statement,
+                        schemaName, tableName, parent);
+                if(mutationResult)
                     return null;
-                }
-                handleCreateTableMutationCode(result, code, statement, schemaName, tableName, parent);
             }
-
             // If the parent table of the view has the auto partition sequence name attribute,
             // set the view statement and relevant partition column attributes correctly
             if (parent!=null && parent.getAutoPartitionSeqName()!=null) {
@@ -3074,16 +3068,27 @@ public class MetaDataClient {
         }
     }
 
-    private void handleCreateTableMutationCode(MetaDataMutationResult result, MutationCode code,
+    @VisibleForTesting
+    public boolean handleCreateTableMutationCode(MetaDataMutationResult result, MutationCode code,
                  CreateTableStatement statement, String schemaName, String tableName,
                  PTable parent) throws SQLException {
         switch(code) {
+            case TABLE_ALREADY_EXISTS:
+                if(result.getTable() != null) {
+                    addTableToCache(result);
+                }
+                if(!statement.ifNotExists()) {
+                    throw new TableAlreadyExistsException(schemaName, tableName, result.getTable());
+                }
+                return true;
             case NEWER_TABLE_FOUND:
                 // Add table to ConnectionQueryServices so it's cached, but don't add
                 // it to this connection as we can't see it.
                 if (!statement.ifNotExists()) {
-                    throw new NewerTableAlreadyExistsException(schemaName, tableName, result.getTable());
+                    throw new NewerTableAlreadyExistsException(schemaName, tableName,
+                            result.getTable());
                 }
+                return false;
             case UNALLOWED_TABLE_MUTATION:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -3091,6 +3096,8 @@ public class MetaDataClient {
                 addTableToCache(result);
                 throw new ConcurrentTableMutationException(schemaName, tableName);
             case AUTO_PARTITION_SEQUENCE_NOT_FOUND:
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_PARTITION_SEQUENCE_UNDEFINED)
+                       .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             case CANNOT_COERCE_AUTO_PARTITION_ID:
             case UNABLE_TO_CREATE_CHILD_LINK:
             case PARENT_TABLE_NOT_FOUND:
@@ -3104,7 +3111,7 @@ public class MetaDataClient {
             default:
                 // Cannot use SQLExecptionInfo here since not all mutation codes have their
                 // corresponding codes in the enum SQLExceptionCode
-                throw new SQLException("Exception occurred while creating table Mutation code:"
+                throw new SQLException("Exception occurred while creating table Mutation code, "
                         + code.toString());
         }
     }

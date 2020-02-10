@@ -7,48 +7,45 @@ import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Test;
-import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashMap;
-import static junit.framework.Assert.fail;
 import static junit.framework.TestCase.assertEquals;
-import static org.mockito.Matchers.any;
+import static junit.framework.TestCase.assertTrue;
+import static junit.framework.TestCase.fail;
 
 public class MetaDataClientTest extends BaseConnectionlessQueryTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClientTest.class);
 
     @Test
-    public void testCreateTable() throws SQLException {
+    public void TestHandleCreateTableMutationCode() throws SQLException {
         String schema = generateUniqueName();
         String baseTable = generateUniqueName();
         PhoenixConnection phxConn = (PhoenixConnection) DriverManager.getConnection(getUrl());
-        MetaDataClient client = new MetaDataClient(phxConn);
-        MetaDataClient spyClient = Mockito.spy(client);
+        MetaDataClient mockClient = new MetaDataClient(phxConn);
         MetaDataProtocol.MetaDataMutationResult result = new MetaDataProtocol.MetaDataMutationResult(
             MetaDataProtocol.MutationCode.TABLE_NOT_IN_REGION ,new PSchema(schema),
             EnvironmentEdgeManager.currentTimeMillis());
+        //Testing the case when Mutation code thrown from sever is not handled by MetaDataClient
+        MetaDataProtocol.MetaDataMutationResult result1 = new MetaDataProtocol.MetaDataMutationResult(
+                MetaDataProtocol.MutationCode.NO_PK_COLUMNS ,new PSchema(schema),
+                EnvironmentEdgeManager.currentTimeMillis());
         String ddlFormat = "CREATE TABLE " + schema + "." + baseTable + " " +
             "(A VARCHAR PRIMARY KEY, B BIGINT, C VARCHAR)";
         CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddlFormat)).parseStatement();
 
         try {
-            Mockito.when(spyClient.getCreateTableMutationResult(Mockito.anyList(),
-                any(PTable.ViewType.class),Mockito.anyBoolean(), Mockito.anyList(),
-                any(PTableType.class), Mockito.anyMap(), Mockito.anyList(), any(byte[][].class),
-                Mockito.anyBoolean(), any(PTable.class))).thenReturn(result);
-            spyClient.createTableInternal(stmt, null, null, null,null, PDataType.fromLiteral("BIGINT"),
-               null, null, false, null, null, new HashMap<>(), new HashMap<>());
+            mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt, schema, baseTable, null);
             fail();
         } catch (SQLException e) {
-            LOGGER.debug("Exception:" + e.getMessage());
-            assertEquals(e.getErrorCode(), SQLExceptionCode.TABLE_NOT_IN_REGION.getErrorCode());
+            assertEquals(SQLExceptionCode.TABLE_NOT_IN_REGION.getErrorCode(),e.getErrorCode());
         }
+        try {
+            mockClient.handleCreateTableMutationCode(result1, result1.getMutationCode(), stmt, schema, baseTable, null);
+        } catch (SQLException e) {
+            assertTrue(e.getMessage().contains("NO_PK_COLUMNS"));
+        }
+
     }
 
 }
