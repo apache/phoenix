@@ -47,17 +47,14 @@
 		<dependency>
 			<groupId>com.googlecode.java-diff-utils</groupId>
 			<artifactId>diffutils</artifactId>
-			<version>1.2.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
-			<version>3.3.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-math3</artifactId>
-			<version>3.3</version>
 		</dependency>
     <dependency>
       <groupId>commons-cli</groupId>
@@ -73,18 +70,15 @@
 		<dependency>
 			<groupId>com.jcabi</groupId>
 			<artifactId>jcabi-jdbc</artifactId>
-			<version>0.15</version>
 		</dependency>
 		<dependency>
 			<groupId>org.hamcrest</groupId>
 			<artifactId>hamcrest-junit</artifactId>
-			<version>1.0.0.0</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.github.stefanbirkner</groupId>
 			<artifactId>system-rules</artifactId>
-			<version>1.8.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
@@ -118,12 +112,10 @@
 		<dependency>
 			<groupId>jakarta.activation</groupId>
 			<artifactId>jakarta.activation-api</artifactId>
-			<version>1.2.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jaxb</groupId>
 			<artifactId>jaxb-runtime</artifactId>
-			<version>2.3.2</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
