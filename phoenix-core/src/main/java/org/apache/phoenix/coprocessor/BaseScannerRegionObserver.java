@@ -62,6 +62,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 
+
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     private static final Log LOG = LogFactory.getLog(BaseScannerRegionObserver.class);
 
@@ -109,9 +110,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
-    public static final String VIEW_TTL = "_ViewTTL";
-    public static final String MASK_VIEW_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
-    public static final String DELETE_VIEW_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
