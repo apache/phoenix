@@ -430,7 +430,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                 return cell.getTimestamp();
             }
         }
-        return 0;
+        throw new IllegalStateException("No cell found");
     }
 
   private static void removeColumn(Put put, Cell deleteCell) {
@@ -442,8 +442,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       Iterator<Cell> cellIterator = cellList.iterator();
       while (cellIterator.hasNext()) {
           Cell cell = cellIterator.next();
-          if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                  deleteCell.getQualifierArray(), deleteCell.getQualifierOffset(), deleteCell.getQualifierLength()) == 0) {
+          if (CellUtil.matchingQualifier(cell, deleteCell)) {
               cellIterator.remove();
               if (cellList.isEmpty()) {
                   put.getFamilyCellMap().remove(family);
@@ -499,12 +498,12 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (m instanceof Put) {
               ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
               Integer opIndex = pendingPuts.get(rowKeyPtr);
-              pendingPuts.put(rowKeyPtr, i);
               if (opIndex != null) {
                   merge((Put) m, (Put) miniBatchOp.getOperation(opIndex));
                   miniBatchOp.setOperationStatus(opIndex, NOWRITE);
                   pendingPuts.remove(opIndex);
               }
+              pendingPuts.put(rowKeyPtr, i);
           }
       }
   }
@@ -567,6 +566,19 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
+  private void populateMutationList(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                    Collection<Mutation> mutationList, boolean isPut) {
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+          Mutation m = miniBatchOp.getOperation(i);
+          if ((isPut && m instanceof Put) || (!isPut && m instanceof Delete)) {
+              if (miniBatchOp.getOperationStatus(i) != IGNORE &&
+                      miniBatchOp.getOperationStatus(i) != NOWRITE && this.builder.isEnabled(m)) {
+                  mutationList.add(m);
+              }
+          }
+      }
+  }
+
   /**
    * * Merges the mutations on the same row
    */
@@ -593,13 +605,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (m instanceof Put) {
               ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
               Put currentRow = context.currentRowStates.get(rowKeyPtr);
-              Put mergedRow;
-              if (currentRow != null) {
-                  mergedRow = mergeNew((Put) m, currentRow);
-              }
-              else {
-                  mergedRow = (Put)m;
-              }
+              Put mergedRow = (currentRow != null) ? mergeNew((Put) m, currentRow) : (Put)m;
               context.mergedRowStates.put(rowKeyPtr, mergedRow);
           }
       }
@@ -609,25 +615,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       Collection<Mutation> pendingMutations = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
       // Add put mutations into the collection first. This ordering of puts first and then deletes is important for
       // obtaining correct index updates
-      for (int i = 0; i < miniBatchOp.size(); i++) {
-          Mutation m = miniBatchOp.getOperation(i);
-          if (m instanceof Put) {
-              if (miniBatchOp.getOperationStatus(i) != IGNORE &&
-                      miniBatchOp.getOperationStatus(i) != NOWRITE && this.builder.isEnabled(m)) {
-                  pendingMutations.add(m);
-              }
-          }
-      }
+      populateMutationList(miniBatchOp, pendingMutations, true);
       // Add delete mutations into the collection (after the put mutations if any)
-      for (int i = 0; i < miniBatchOp.size(); i++) {
-          Mutation m = miniBatchOp.getOperation(i);
-          if (m instanceof Delete) {
-              if (miniBatchOp.getOperationStatus(i) != IGNORE &&
-                      miniBatchOp.getOperationStatus(i) != NOWRITE && this.builder.isEnabled(m)) {
-                  pendingMutations.add(m);
-              }
-          }
-      }
+      populateMutationList(miniBatchOp, pendingMutations, false);
       return pendingMutations;
   }
 
@@ -902,6 +892,13 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         }
     }
 
+    /**
+     * This method prepares unverified index mutations which are applied to index tables before the data table is
+     * updated. In the three phase update approach, in phase 1, the status of existing index rows is set to "unverified"
+     * (these rows will be deleted from the index table in phase 3), and/or new put mutations are added with the
+     * unverified status. In phase 2, data table mutations are applied. In phase 3, the status for an index table row is
+     * either set to "verified" or the row is deleted.
+     */
     private void preparePreIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
                                           MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                           BatchMutateContext context,
@@ -934,7 +931,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                       new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
               List <Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
               for (Pair<Mutation, byte[]> update : updates) {
-                  // add the VERIFIED cell, which is the empty cell
+                  // Add an empty column cell with the verify status
                   Mutation m = update.getFirst();
                   if (context.rebuild) {
                       if (m instanceof Put) {
