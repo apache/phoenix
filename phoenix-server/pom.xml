@@ -147,6 +147,7 @@
                             <exclude>META-INF/license/*</exclude>
                             <exclude>LICENSE.*</exclude>
                             <exclude>NOTICE.*</exclude>
+                            <exclude>NOTICE</exclude>
                         </excludes>
                     </filter>
                 </filters>

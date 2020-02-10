@@ -369,8 +369,11 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
+                    <exclude>META-INF/NOTICE</exclude>
                     <exclude>LICENSE.*</exclude>
                     <exclude>NOTICE.*</exclude>
+                    <exclude>NOTICE</exclude>
+                    <exclude>README*</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -405,8 +408,11 @@
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/license/*</exclude>
+                    <exclude>META-INF/NOTICE</exclude>
                     <exclude>LICENSE.*</exclude>
                     <exclude>NOTICE.*</exclude>
+                    <exclude>NOTICE</exclude>
+                    <exclude>README*</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -426,7 +432,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
-      <version>1.7.7</version>
     </dependency>
   </dependencies>
 </project>
