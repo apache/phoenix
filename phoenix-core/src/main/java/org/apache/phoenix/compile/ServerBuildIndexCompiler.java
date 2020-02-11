@@ -99,6 +99,15 @@ public class ServerBuildIndexCompiler {
                         "ServerBuildIndexCompiler does not support global indexes on transactional tables");
             }
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
+            // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
+            // However, in this case, we need to project all of the data columns that contribute to the index.
+            for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
+                if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                    scan.addFamily(columnRef.getFamily());
+                } else {
+                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+                }
+            }
             IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(index), plan.getContext().getConnection());
             // Set the scan attributes that UngroupedAggregateRegionObserver will switch on.
             // For local indexes, the BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO attribute, and
@@ -109,15 +118,6 @@ public class ServerBuildIndexCompiler {
             // that will be passed as a mutation attribute for the scanned mutations that will be applied on
             // the index table possibly remotely
             if (index.getIndexType() == PTable.IndexType.LOCAL) {
-                // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
-                // However, in this case, we need to project all of the data columns that contribute to the index.
-                for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                    if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                        scan.addFamily(columnRef.getFamily());
-                    } else {
-                        scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                    }
-                }
                 scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
             } else {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));

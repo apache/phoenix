@@ -465,13 +465,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
   private Put mergeNew(Put current, Put previous) throws IOException {
       Put next = new Put(current);
-      for (List<Cell> cells : previous.getFamilyCellMap().values()) {
-          for (Cell cell : cells) {
-              if (!current.has(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell))) {
-                  next.add(cell);
-              }
-          }
-      }
+      merge(next, previous);
       return next;
   }
 

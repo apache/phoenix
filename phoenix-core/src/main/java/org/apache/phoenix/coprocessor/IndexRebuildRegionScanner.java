@@ -46,6 +46,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NavigableSet;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -369,6 +370,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private boolean isBeforeRebuilt = true;
     boolean partialRebuild = false;
     long singleRowRebuildReturnCode;
+    Map<byte[], NavigableSet<byte[]>> familyMap;
 
     IndexRebuildRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                                final RegionCoprocessorEnvironment env,
@@ -396,6 +398,11 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
         indexMaintainer = maintainers.get(0);
         this.scan = scan;
+        familyMap = scan.getFamilyMap();
+        if (familyMap.isEmpty()) {
+            familyMap = null;
+        }
+
         this.innerScanner = innerScanner;
         this.region = region;
         this.env = env;
@@ -948,6 +955,19 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         verificationResult.add(nextVerificationResult);
     }
 
+    private boolean isColumnIncluded(Cell cell) {
+        byte[] family = CellUtil.cloneFamily(cell);
+        if (!familyMap.containsKey(family)) {
+            return false;
+        }
+        NavigableSet<byte[]> set = familyMap.get(family);
+        if (set == null || set.isEmpty()) {
+            return true;
+        }
+        byte[] qualifier = CellUtil.cloneQualifier(cell);
+        return set.contains(qualifier);
+    }
+
     @Override
     public boolean next(List<Cell> results) throws IOException {
         if (indexRowKey != null && singleRowRebuildReturnCode == 0) {
@@ -967,11 +987,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     List<Cell> row = new ArrayList<Cell>();
                     hasMore = innerScanner.nextRaw(row);
                     if (!row.isEmpty()) {
-                        lastCell = row.get(0);
+                        lastCell = row.get(0); // lastCell is any cell from the last visited row
                         Put put = null;
                         Delete del = null;
                         for (Cell cell : row) {
                             if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                                if (!partialRebuild && familyMap != null && !isColumnIncluded(cell)) {
+                                    continue;
+                                }
                                 if (put == null) {
                                     put = new Put(CellUtil.cloneRow(cell));
                                     mutations.add(put);
