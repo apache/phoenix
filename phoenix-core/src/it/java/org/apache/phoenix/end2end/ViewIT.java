@@ -410,7 +410,72 @@ public class ViewIT extends SplitSystemCatalogIT {
                     "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER " + fullIndexName1 + " [1,100] - [2,109]\n" + 
                     "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
         }
-    }    
+    }
+
+    @Test
+    public void testCreateChildViewWithBaseTableLocalIndex() throws Exception {
+        testCreateChildViewWithBaseTableIndex(true);
+    }
+
+    @Test
+    public void testCreateChildViewWithBaseTableGlobalIndex() throws Exception {
+        testCreateChildViewWithBaseTableIndex(false);
+    }
+
+    public void testCreateChildViewWithBaseTableIndex(boolean localIndex) throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String indexName = "I_" + generateUniqueName();
+        String fullChildViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql =
+                    "CREATE TABLE " + fullTableName
+                            + " (ID INTEGER NOT NULL PRIMARY KEY, HOST VARCHAR(10), FLAG BOOLEAN)";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE VIEW " + fullViewName
+                            + " (COL1 INTEGER, COL2 INTEGER, COL3 INTEGER, COL4 INTEGER) AS SELECT * FROM "
+                            + fullTableName + " WHERE ID > 5";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + "(HOST)";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullViewName
+                            + " WHERE COL1 > 2";
+            conn.createStatement().execute(sql);
+            // Sanity upserts in baseTable, view, child view
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (1, 'host1', TRUE)");
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (5, 'host5', FALSE)");
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (7, 'host7', TRUE)");
+            conn.commit();
+            // View is not updateable
+            try {
+                conn.createStatement().executeUpdate("upsert into " + fullViewName
+                        + " (ID, HOST, FLAG, COL1) values (7, 'host7', TRUE, 1)");
+                fail();
+            } catch (Exception e) {
+            }
+            // Check view inherits index, but child view doesn't
+            PTable table = PhoenixRuntime.getTable(conn, fullViewName);
+            assertEquals(1, table.getIndexes().size());
+            table = PhoenixRuntime.getTable(conn, fullChildViewName);
+            assertEquals(0, table.getIndexes().size());
+
+            ResultSet rs =
+                    conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from " + fullViewName);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+        }
+    }
 
     @Test
     public void testCreateViewDefinesPKColumn() throws Exception {
