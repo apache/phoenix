@@ -18,7 +18,7 @@ import static junit.framework.TestCase.fail;
 public class MetaDataClientTest extends BaseConnectionlessQueryTest {
 
     @Test
-    public void TestHandleCreateTableMutationCode() throws SQLException {
+    public void testHandleCreateTableMutationCode() throws SQLException {
         String schema = generateUniqueName();
         String baseTable = generateUniqueName();
         PhoenixConnection phxConn = (PhoenixConnection) DriverManager.getConnection(getUrl());
@@ -35,13 +35,15 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
         CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddlFormat)).parseStatement();
 
         try {
-            mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt, schema, baseTable, null);
+            mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt,
+                    schema, baseTable, null);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TABLE_NOT_IN_REGION.getErrorCode(),e.getErrorCode());
         }
         try {
-            mockClient.handleCreateTableMutationCode(result1, result1.getMutationCode(), stmt, schema, baseTable, null);
+            mockClient.handleCreateTableMutationCode(result1, result1.getMutationCode(), stmt,
+                    schema, baseTable, null);
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains("NO_PK_COLUMNS"));
         }
