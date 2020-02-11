@@ -56,4 +56,9 @@ final class MetricsStopWatch {
         }
         return 0;
     }
+
+    @com.google.common.annotations.VisibleForTesting
+    final boolean getMetricsEnabled(){
+        return isMetricsEnabled;
+    }
 }
