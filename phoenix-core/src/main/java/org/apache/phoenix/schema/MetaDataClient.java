@@ -2967,8 +2967,9 @@ public class MetaDataClient {
             if (code != MutationCode.TABLE_NOT_FOUND) {
                 boolean mutationResult =  handleCreateTableMutationCode(result, code, statement,
                         schemaName, tableName, parent);
-                if(mutationResult)
+                if(mutationResult) {
                     return null;
+                }
             }
             // If the parent table of the view has the auto partition sequence name attribute,
             // set the view statement and relevant partition column attributes correctly
@@ -3090,8 +3091,7 @@ public class MetaDataClient {
                 }
                 return false;
             case UNALLOWED_TABLE_MUTATION:
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
-                       .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                throwsSQLExceptionUtil("CANNOT_MUTATE_TABLE",schemaName,tableName);
             case CONCURRENT_TABLE_MUTATION:
                 addTableToCache(result);
                 throw new ConcurrentTableMutationException(schemaName, tableName);
