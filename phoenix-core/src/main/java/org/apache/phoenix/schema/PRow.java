@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +48,7 @@ public interface PRow {
      * @throws ConstraintViolationException if row data violates schema
      * constraint
      */
-    public List<Mutation> toRowMutations();
+    public List<Mutation> toRowMutations() throws SQLException;
     
     /**
      * Set a column value in the row

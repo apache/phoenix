@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -381,7 +382,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
           return viewIndexIdType;
       }
 
-        public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
+        public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) throws SQLException {
           MetaDataMutationResult result = new MetaDataMutationResult();
           result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
           result.mutationTime = proto.getMutationTime();

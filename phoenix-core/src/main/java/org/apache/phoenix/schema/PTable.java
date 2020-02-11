@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
 import java.io.DataOutputStream;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -748,7 +749,7 @@ public interface PTable extends PMetaDataEntity {
     boolean isImmutableRows();
 
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
-    IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
+    IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) throws SQLException;
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();

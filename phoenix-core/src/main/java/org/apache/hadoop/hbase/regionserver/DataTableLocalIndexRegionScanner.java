@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,6 +44,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ServerUtil;
+
 /*
  * Scanner to read data store and regenerate the local index data
  */
@@ -91,7 +93,11 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
     public boolean next(List<Cell> results) throws IOException {
         List<Cell> dataTableResults = new ArrayList<Cell>();
         boolean next = super.next(dataTableResults);
-        addMutations(dataTableResults);
+        try {
+            addMutations(dataTableResults);
+        } catch (SQLException e) {
+            throw new IOException(e.getMessage());
+        }
         if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)||!next) {
             region.batchMutate(mutationList.toArray(new Mutation[mutationList.size()]));
             mutationList.clear();
@@ -99,7 +105,7 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
         return next;
     }
 
-    private void addMutations(List<Cell> dataTableResults) throws IOException {
+    private void addMutations(List<Cell> dataTableResults) throws IOException, SQLException {
         if (!dataTableResults.isEmpty()) {
             result.setKeyValues(dataTableResults);
             for (IndexMaintainer maintainer : indexMaintainers) {

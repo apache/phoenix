@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -43,10 +44,18 @@ import org.apache.phoenix.schema.types.PDataType;
  * @since 0.1
  */
 abstract public class SingleAggregateFunction extends AggregateFunction {
-    private static final List<Expression> DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
     protected boolean isConstant;
     private Aggregator aggregator;
-    
+    private static List<Expression> DEFAULT_EXPRESSION_LIST = null;
+
+    static {
+        try {
+            DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).build());
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Sort aggregate functions with nullable fields last. This allows us not to have to store trailing null values.
      * Within non-nullable/nullable groups, put fixed width values first since we can access those more efficiently
@@ -158,7 +167,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
     }
 
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public final <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         SingleAggregateFunction function = getDelegate();
         List<T> l = acceptChildren(visitor, visitor.visitEnter(function));
         T t = visitor.visitLeave(function, l);

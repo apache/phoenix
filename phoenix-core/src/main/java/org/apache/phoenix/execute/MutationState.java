@@ -517,7 +517,7 @@ public class MutationState implements SQLCloseable {
 
     private Iterator<Pair<PTable, List<Mutation>>> addRowMutations(final TableRef tableRef,
             final MultiRowMutationState values, final long mutationTimestamp, final long serverTimestamp,
-            boolean includeAllIndexes, final boolean sendAll) {
+            boolean includeAllIndexes, final boolean sendAll) throws SQLException {
         final PTable table = tableRef.getTable();
         final List<PTable> indexList = includeAllIndexes ? 
                 Lists.newArrayList(IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())) : 
@@ -608,7 +608,7 @@ public class MutationState implements SQLCloseable {
 
     private void generateMutations(final TableRef tableRef, final long mutationTimestamp, final long serverTimestamp,
             final MultiRowMutationState values, final List<Mutation> mutationList,
-            final List<Mutation> mutationsPertainingToIndex) {
+            final List<Mutation> mutationsPertainingToIndex) throws SQLException {
         final PTable table = tableRef.getTable();
         boolean tableWithRowTimestampCol = table.getRowTimestampColPos() != -1;
         Iterator<Map.Entry<ImmutableBytesPtr, RowMutationState>> iterator = values.entrySet().iterator();
@@ -675,20 +675,20 @@ public class MutationState implements SQLCloseable {
      * 
      * @return list of HBase mutations for uncommitted data.
      */
-    public Iterator<Pair<byte[], List<Mutation>>> toMutations(Long timestamp) {
+    public Iterator<Pair<byte[], List<Mutation>>> toMutations(Long timestamp) throws SQLException {
         return toMutations(false, timestamp);
     }
 
-    public Iterator<Pair<byte[], List<Mutation>>> toMutations() {
+    public Iterator<Pair<byte[], List<Mutation>>> toMutations() throws SQLException {
         return toMutations(false, null);
     }
 
-    public Iterator<Pair<byte[], List<Mutation>>> toMutations(final boolean includeMutableIndexes) {
+    public Iterator<Pair<byte[], List<Mutation>>> toMutations(final boolean includeMutableIndexes) throws SQLException {
         return toMutations(includeMutableIndexes, null);
     }
 
     public Iterator<Pair<byte[], List<Mutation>>> toMutations(final boolean includeMutableIndexes,
-            final Long tableTimestamp) {
+            final Long tableTimestamp) throws SQLException {
         final Iterator<Map.Entry<TableRef, MultiRowMutationState>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) { return Collections.emptyIterator(); }
         Long scn = connection.getSCN();
@@ -698,7 +698,7 @@ public class MutationState implements SQLCloseable {
             private Map.Entry<TableRef, MultiRowMutationState> current = iterator.next();
             private Iterator<Pair<byte[], List<Mutation>>> innerIterator = init();
 
-            private Iterator<Pair<byte[], List<Mutation>>> init() {
+            private Iterator<Pair<byte[], List<Mutation>>> init() throws SQLException {
                 final Iterator<Pair<PTable, List<Mutation>>> mutationIterator =
                         addRowMutations(current.getKey(), current.getValue(),
                                 mutationTimestamp, serverTimestamp, includeMutableIndexes, true);
@@ -731,7 +731,11 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (!innerIterator.hasNext()) {
                     current = iterator.next();
-                    innerIterator = init();
+                    try {
+                        innerIterator = init();
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
                 }
                 return innerIterator.next();
             }

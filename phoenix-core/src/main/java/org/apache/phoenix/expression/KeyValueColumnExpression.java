@@ -20,6 +20,7 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -125,7 +126,7 @@ public class KeyValueColumnExpression extends ColumnExpression {
     }
 
     @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         return visitor.visit(this);
     }
 

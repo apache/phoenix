@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 
@@ -68,7 +69,7 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     }
 
     @Override
-    public Iterator<Expression> visitEnter(ComparisonExpression node) {
+    public Iterator<Expression> visitEnter(ComparisonExpression node) throws SQLException {
         return null;
     }
 

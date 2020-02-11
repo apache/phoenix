@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -49,7 +50,7 @@ public interface Expression extends PDatum, Writable {
      * Means of traversing expression tree through visitor.
      * @param visitor
      */
-    <T> T accept(ExpressionVisitor<T> visitor);
+    <T> T accept(ExpressionVisitor<T> visitor) throws SQLException;
     
     /**
      * @return the child expressions

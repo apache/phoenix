@@ -52,9 +52,9 @@ public class ArrayToStringFunctionTest {
 
     private static void test(PhoenixArray array, PDataType arrayDataType, Integer arrMaxLen, Integer arrScale, String delimiter, String nullString, String expected, SortOrder arraySortOrder, SortOrder delimiterSortOrder, SortOrder nullStringSortOrder) throws SQLException {
         LiteralExpression arrayLiteral, delimiterLiteral, nullStringLiteral;
-        arrayLiteral = LiteralExpression.newConstant(array, arrayDataType, arrMaxLen, arrScale, arraySortOrder, Determinism.ALWAYS);
-        delimiterLiteral = LiteralExpression.newConstant(delimiter, PVarchar.INSTANCE, null, null, delimiterSortOrder, Determinism.ALWAYS);
-        nullStringLiteral = LiteralExpression.newConstant(nullString, PVarchar.INSTANCE, null, null, nullStringSortOrder, Determinism.ALWAYS);
+        arrayLiteral = new LiteralExpression.Builder().setValue(array).setDataType(arrayDataType).setMaxLength(arrMaxLen).setScale(arrScale).setSortOrder(arraySortOrder).setDeterminism(Determinism.ALWAYS).build();
+        delimiterLiteral = new LiteralExpression.Builder().setValue(delimiter).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        nullStringLiteral = new LiteralExpression.Builder().setValue(nullString).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
         testExpression(arrayLiteral, delimiterLiteral, nullStringLiteral, expected);
     }
 

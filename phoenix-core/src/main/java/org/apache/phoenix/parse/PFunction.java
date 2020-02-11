@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -238,7 +239,7 @@ public class PFunction implements PMetaDataEntity {
       }
 
     public static PFunction createFromProto(
-            org.apache.phoenix.coprocessor.generated.PFunctionProtos.PFunction function) {
+            org.apache.phoenix.coprocessor.generated.PFunctionProtos.PFunction function) throws SQLException {
         PName tenantId = null;
         if(function.hasTenantId()){
           tenantId = PNameFactory.newName(function.getTenantId().toByteArray());
@@ -261,9 +262,13 @@ public class PFunction implements PMetaDataEntity {
             String minValue = arg.hasMinValue()?arg.getMinValue():null;
             String maxValue = arg.hasMaxValue()?arg.getMaxValue():null;
             args.add(new FunctionArgument(argType, isArrayType, isConstant,
-                    defaultValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(defaultValue))).getValue()),
-                    minValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(minValue))).getValue()),
-                    maxValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(dataType.toObject(maxValue))).getValue())));
+                    defaultValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
+                            .toObject(defaultValue))).getValue()).build(),
+                    minValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
+                            .toObject(minValue))).getValue()).build(),
+                    maxValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
+                            .toObject(maxValue))).getValue()).build()));
+
         }
         return new PFunction(tenantId, functionName, args, returnType, className, jarPath,
                 timeStamp, false, function.hasIsReplace() ? true : false);

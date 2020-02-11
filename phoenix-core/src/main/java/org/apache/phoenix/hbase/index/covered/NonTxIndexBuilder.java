@@ -10,6 +10,8 @@
 package org.apache.phoenix.hbase.index.covered;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 
@@ -43,7 +45,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
     }
 
     @Override
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData indexMetaData, LocalHBaseState localHBaseState) throws IOException {
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData indexMetaData, LocalHBaseState localHBaseState) throws IOException, SQLException {
     	// create a state manager, so we can manage each batch
         LocalTableState state = new LocalTableState(localHBaseState, mutation);
         // build the index updates for each group
@@ -74,7 +76,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      * 
      * @throws IOException
      */
-    private void batchMutationAndAddUpdates(IndexUpdateManager manager, LocalTableState state, Mutation m, IndexMetaData indexMetaData) throws IOException {
+    private void batchMutationAndAddUpdates(IndexUpdateManager manager, LocalTableState state, Mutation m, IndexMetaData indexMetaData) throws IOException, SQLException {
         // The cells of a mutation are broken up into time stamp batches prior to this call (in Indexer).
         long ts = m.getFamilyCellMap().values().iterator().next().iterator().next().getTimestamp();
         Batch batch = new Batch(ts);
@@ -122,7 +124,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      * @throws IOException
      */
     private boolean addMutationsForBatch(IndexUpdateManager updateMap, Batch batch, LocalTableState state,
-            IndexMetaData indexMetaData) throws IOException {
+            IndexMetaData indexMetaData) throws IOException, SQLException {
 
         // need a temporary manager for the current batch. It should resolve any conflicts for the
         // current batch. Essentially, we can get the case where a batch doesn't change the current
@@ -145,7 +147,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
     }
 
     private long addUpdateForGivenTimestamp(long ts, LocalTableState state, IndexUpdateManager updateMap, IndexMetaData indexMetaData)
-            throws IOException {
+            throws IOException, SQLException {
         state.setCurrentTimestamp(ts);
         ts = addCurrentStateMutationsForBatch(updateMap, state, indexMetaData);
         return ts;
@@ -176,7 +178,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      * @throws IOException
      */
     private long addCurrentStateMutationsForBatch(IndexUpdateManager updateMap, LocalTableState state, IndexMetaData indexMetaData)
-            throws IOException {
+            throws IOException, SQLException {
 
         // get the index updates for this current batch
         Iterable<IndexUpdate> upserts = codec.getIndexUpserts(state, indexMetaData, env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey());

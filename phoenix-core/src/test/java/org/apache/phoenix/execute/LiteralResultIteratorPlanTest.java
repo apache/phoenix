@@ -99,6 +99,9 @@ public class LiteralResultIteratorPlanTest {
  };
     PTable table = createProjectedTableFromLiterals(RELATION[0]).getTable();
 
+    public LiteralResultIteratorPlanTest() throws SQLException {
+    }
+
     @Test
     public void testLiteralResultIteratorPlanWithOffset() throws SQLException {
         Object[][] expected = new Object[][] {
@@ -161,7 +164,7 @@ public class LiteralResultIteratorPlanTest {
         for (Object[] row : RELATION) {
             Expression[] exprs = new Expression[row.length];
             for (int i = 0; i < row.length; i++) {
-                exprs[i] = LiteralExpression.newConstant(row[i]);
+                exprs[i] = new LiteralExpression.Builder().setValue(row[i]).build();
             }
             TupleProjector projector = new TupleProjector(exprs);
             tuples.add(projector.projectResults(baseTuple));
@@ -171,11 +174,11 @@ public class LiteralResultIteratorPlanTest {
                 RowProjector.EMPTY_PROJECTOR, limit, offset, OrderBy.EMPTY_ORDER_BY, null);
     }
 
-    private TableRef createProjectedTableFromLiterals(Object[] row) {
+    private TableRef createProjectedTableFromLiterals(Object[] row) throws SQLException {
         List<PColumn> columns = Lists.<PColumn> newArrayList();
         for (int i = 0; i < row.length; i++) {
             String name = ParseNodeFactory.createTempAlias();
-            Expression expr = LiteralExpression.newConstant(row[i]);
+            Expression expr = new LiteralExpression.Builder().setValue(row[i]).build();
             PName colName = PNameFactory.newName(name);
             columns.add(new PColumnImpl(PNameFactory.newName(name),
                     PNameFactory.newName(VALUE_COLUMN_FAMILY), expr.getDataType(), expr.getMaxLength(),

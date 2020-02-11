@@ -46,7 +46,6 @@ public class PercentileContAggregateFunction extends DistinctValueWithCountAggre
     public static final String NAME = "PERCENTILE_CONT";
 
     public PercentileContAggregateFunction() {
-        
     }
     
     public PercentileContAggregateFunction(List<Expression> childern) {

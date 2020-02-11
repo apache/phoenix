@@ -72,7 +72,8 @@ public class ExpressionUtil {
         if (expression.evaluate(null, ptr) && ptr.getLength() != 0) {
             value = type.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), type, expression.getSortOrder(), expression.getMaxLength(), expression.getScale());
         }
-        return LiteralExpression.newConstant(value, type, expression.getDeterminism());
+        return new LiteralExpression.Builder().setValue(value).setDataType(type)
+                .setDeterminism(expression.getDeterminism()).build();
     }
 
     public static boolean isNull(Expression expression, ImmutableBytesWritable ptr) {
@@ -80,7 +81,8 @@ public class ExpressionUtil {
     }
 
     public static LiteralExpression getNullExpression(Expression expression) throws SQLException {
-        return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
+        return new LiteralExpression.Builder().setDataType(expression.getDataType())
+                .setDeterminism(expression.getDeterminism()).build();
     }
     
     public static boolean evaluatesToTrue(Expression expression) {
@@ -109,7 +111,7 @@ public class ExpressionUtil {
      * @param whereExpression
      * @return
      */
-    public static boolean isColumnExpressionConstant(ColumnExpression columnExpression, Expression whereExpression) {
+    public static boolean isColumnExpressionConstant(ColumnExpression columnExpression, Expression whereExpression) throws SQLException {
         if(whereExpression == null) {
             return false;
         }
@@ -150,7 +152,7 @@ public class ExpressionUtil {
          * </pre>
          */
         @Override
-        public Iterator<Expression> visitEnter(ComparisonExpression comparisonExpression) {
+        public Iterator<Expression> visitEnter(ComparisonExpression comparisonExpression) throws SQLException {
             if(rhsConstantCount > 1) {
                 return null;
             }

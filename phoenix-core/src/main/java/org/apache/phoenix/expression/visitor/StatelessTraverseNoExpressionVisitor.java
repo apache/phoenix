@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.compile.SequenceValueExpression;
@@ -52,7 +53,7 @@ import org.apache.phoenix.expression.function.SingleAggregateFunction;
 public class StatelessTraverseNoExpressionVisitor<E> extends TraverseNoExpressionVisitor<E> {
 
     @Override
-    public E visitLeave(AndExpression node, List<E> l) {
+    public E visitLeave(AndExpression node, List<E> l) throws SQLException {
         return null;
     }
 

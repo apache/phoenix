@@ -213,7 +213,7 @@ public class OrderPreservingTracker {
             this.inputOrderBy = inputOrderBy;
         }
 
-        public void track(List<TrackOrderByCell> trackOrderByCells) {
+        public void track(List<TrackOrderByCell> trackOrderByCells) throws SQLException {
             for(TrackOrderByCell trackOrderByCell : trackOrderByCells) {
                 doTrack(trackOrderByCell.expression,
                         trackOrderByCell.isAscending,
@@ -221,7 +221,7 @@ public class OrderPreservingTracker {
             }
         }
 
-        private void doTrack(Expression expression, Boolean isAscending, Boolean isNullsLast) {
+        private void doTrack(Expression expression, Boolean isAscending, Boolean isNullsLast) throws SQLException {
             if (!isOrderPreserving) {
                return;
             }
@@ -283,7 +283,7 @@ public class OrderPreservingTracker {
             return ImmutableList.copyOf(this.orderPreservingTrackInfos.subList(0, orderPreservingColumnCountToUse));
         }
 
-        public boolean isOrderPreserving() {
+        public boolean isOrderPreserving() throws SQLException {
             if (!isOrderPreserving) {
                 return false;
             }
@@ -326,7 +326,7 @@ public class OrderPreservingTracker {
             return isOrderPreserving;
         }
 
-        private boolean hasEqualityConstraints(int startPos, int endPos) {
+        private boolean hasEqualityConstraints(int startPos, int endPos) throws SQLException {
             ScanRanges ranges = context.getScanRanges();
             // If a GROUP BY is being done, then the rows are ordered according to the GROUP BY key,
             // not by the original row key order of the table (see PHOENIX-3451).
@@ -402,7 +402,7 @@ public class OrderPreservingTracker {
         return this.selectedTrackOrderByContext.getOrderPreservingTrackInfos();
     }
 
-    public boolean isOrderPreserving() {
+    public boolean isOrderPreserving() throws SQLException {
         if(this.selectedTrackOrderByContext != null) {
             throw new IllegalStateException("isOrderPreserving should be called only once");
         }
@@ -479,11 +479,11 @@ public class OrderPreservingTracker {
         }
 
         @Override
-        public Boolean visit(KeyValueColumnExpression keyValueColumnExpression) {
+        public Boolean visit(KeyValueColumnExpression keyValueColumnExpression) throws SQLException {
             return ExpressionUtil.isColumnExpressionConstant(keyValueColumnExpression, whereExpression);
         }
          @Override
-        public Boolean visit(ProjectedColumnExpression projectedColumnExpression) {
+        public Boolean visit(ProjectedColumnExpression projectedColumnExpression) throws SQLException {
             return ExpressionUtil.isColumnExpressionConstant(projectedColumnExpression, whereExpression);
         }
     }

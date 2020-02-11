@@ -23,6 +23,7 @@ import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCOD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
@@ -176,7 +177,7 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
     }
     
     @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         //FIXME: this is ugly but can't think of a good solution.
         if (visitor instanceof ViewWhereExpressionVisitor) {
             return visitor.visit(this);

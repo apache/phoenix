@@ -285,8 +285,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
             Expression rhsExpression, List<Expression> rhsValues, 
             ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);        
-        
+            return new LiteralExpression.Builder().setValue(false).setDataType(PBoolean.INSTANCE)
+                    .setDeterminism(Determinism.ALWAYS).build();
+
         rhsValues.add(0, lhsExpression);
         
         return InListExpression.create(rhsValues, false, ptr, rowKeyOrderOptimizable);
@@ -450,7 +451,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                             ColumnProjector columnProjector = projector.getColumnProjector(i);
                             PDataType type = columnProjector.getExpression().getDataType();
                             Object value = columnProjector.getValue(tuple, type, ptr);
-                            expressions.add(LiteralExpression.newConstant(value, type));
+                            expressions.add(new LiteralExpression.Builder().setValue(value).setDataType(type).build());
                         }
                         Expression expression = new RowValueConstructorExpression(expressions, true);
                         baseType = expression.getDataType();

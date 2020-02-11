@@ -18,6 +18,7 @@
 package org.apache.phoenix.filter;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.util.Writables;
@@ -36,7 +37,7 @@ public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilt
     public MultiCQKeyValueComparisonFilter() {
     }
 
-    public MultiCQKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) {
+    public MultiCQKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) throws SQLException {
         super(expression, allCFs, essentialCF);
     }
 

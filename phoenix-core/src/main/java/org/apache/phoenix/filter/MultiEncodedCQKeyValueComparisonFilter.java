@@ -24,6 +24,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.BitSet;
 import java.util.NoSuchElementException;
 import java.util.TreeSet;
@@ -94,7 +95,7 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
     
     public MultiEncodedCQKeyValueComparisonFilter() {}
 
-    public MultiEncodedCQKeyValueComparisonFilter(Expression expression, QualifierEncodingScheme scheme, boolean allCFs, byte[] essentialCF) {
+    public MultiEncodedCQKeyValueComparisonFilter(Expression expression, QualifierEncodingScheme scheme, boolean allCFs, byte[] essentialCF) throws SQLException {
         super(expression);
         checkArgument(scheme != NON_ENCODED_QUALIFIERS, "Filter can only be used for encoded qualifiers");
         this.encodingScheme = scheme;
@@ -172,7 +173,7 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
 
     }
     
-    private void initFilter(Expression expression) {
+    private void initFilter(Expression expression) throws SQLException {
         cfSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
         final BitSet expressionQualifiers = new BitSet(20);
         final Pair<Integer, Integer> range = new Pair<>();
@@ -348,7 +349,11 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
         } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
             ServerUtil.throwIOException("MultiEncodedCQKeyValueComparisonFilter failed during writing", t);
         }
-        initFilter(expression);
+        try {
+            initFilter(expression);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
     
     @Override

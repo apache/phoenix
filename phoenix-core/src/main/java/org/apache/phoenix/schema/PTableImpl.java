@@ -1193,7 +1193,7 @@ public class PTableImpl implements PTable {
        }
 
         @Override
-        public List<Mutation> toRowMutations() {
+        public List<Mutation> toRowMutations() throws SQLException {
             List<Mutation> mutations = new ArrayList<Mutation>(3);
             if (deleteRow != null) {
                 // Include only deleteRow mutation if present because it takes precedence over all others
@@ -1218,7 +1218,7 @@ public class PTableImpl implements PTable {
                         for (PColumn column : columns) {
                             if (columnToValueMap.containsKey(column)) {
                                 int colIndex = qualifierEncodingScheme.decode(column.getColumnQualifierBytes())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                                colValues[colIndex] = new LiteralExpression(columnToValueMap.get(column));
+                                colValues[colIndex] = new LiteralExpression.Builder().setByteValue(columnToValueMap.get(column)).build();
                             }
                         }
                         
@@ -1492,7 +1492,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) throws SQLException {
         if (indexMaintainer == null) {
             indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
         }

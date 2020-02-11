@@ -141,8 +141,10 @@ public class FunctionParseNode extends CompoundParseNode {
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {
-                moreChildren.add(LiteralExpression.newConstant(null, args[i].allowedTypes.length == 0 ? null :
-                    PDataTypeFactory.getInstance().instanceFromClass(args[i].allowedTypes[0]), Determinism.ALWAYS));
+                moreChildren.add(new LiteralExpression.Builder().setDataType(args[i].allowedTypes.length == 0 ? null :
+                    PDataTypeFactory.getInstance().instanceFromClass(args[i].allowedTypes[0]))
+                        .setDeterminism(Determinism.ALWAYS).build());
+
             }
             children = moreChildren;
         }
@@ -179,16 +181,18 @@ public class FunctionParseNode extends CompoundParseNode {
                     // based on the function argument annonation set the parameter meta data.
                     if (child.getDataType() == null) {
                         if (allowedTypes.length > 0) {
-                            context.getBindManager().addParamMetaData(bindNode, LiteralExpression.newConstant(null, PDataTypeFactory.getInstance().instanceFromClass(
-                                allowedTypes[0]), Determinism.ALWAYS));
+                            context.getBindManager().addParamMetaData(bindNode, new LiteralExpression.Builder()
+                                    .setDataType(PDataTypeFactory.getInstance().instanceFromClass(
+                                allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build());
                         }
                     } else { // Use expression as is, since we already have the data type set
                         context.getBindManager().addParamMetaData(bindNode, child);
                     }
                 } else if (allowedTypes.length > 0) {
                     // Switch null type with typed null
-                    children.set(i, LiteralExpression.newConstant(null, PDataTypeFactory.getInstance().instanceFromClass(
-                            allowedTypes[0]), Determinism.ALWAYS));
+                    children.set(i, new LiteralExpression.Builder().setDataType(PDataTypeFactory.getInstance().instanceFromClass(
+                            allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build());
+
                 }
             } else {
                 validateFunctionArguement(info, i, child);
@@ -479,16 +483,16 @@ public class FunctionParseNode extends CompoundParseNode {
                 SQLParser parser = new SQLParser(strValue);
                 try {
                     LiteralParseNode node = parser.parseLiteral();
-                    LiteralExpression defaultValue = LiteralExpression.newConstant(node.getValue(), PDataTypeFactory.getInstance().instanceFromClass(
-                        allowedTypes[0]), Determinism.ALWAYS);
+                    LiteralExpression defaultValue = new LiteralExpression.Builder().setValue(node.getValue()).setDataType(PDataTypeFactory.getInstance().instanceFromClass(
+                        allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build();
                     if (this.getAllowedTypes().length > 0) {
                         for (Class<? extends PDataType> type : this.getAllowedTypes()) {
                             if (defaultValue.getDataType() == null || defaultValue.getDataType().isCoercibleTo(
                                 PDataTypeFactory.getInstance().instanceFromClass(type),
                                 node.getValue())) {
-                                return LiteralExpression.newConstant(node.getValue(),
-                                    PDataTypeFactory.getInstance().instanceFromClass(type),
-                                    Determinism.ALWAYS);
+                                return new LiteralExpression.Builder().setValue(node.getValue())
+                                    .setDataType(PDataTypeFactory.getInstance().instanceFromClass(type))
+                                    .setDeterminism(Determinism.ALWAYS).build();
                             }
                         }
                         throw new IllegalStateException("Unable to coerce default value " + strValue + " to any of the allowed types of " + Arrays.toString(this.getAllowedTypes()));

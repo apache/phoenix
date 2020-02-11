@@ -20,12 +20,14 @@ package org.apache.phoenix.expression;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JavaPattern;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 
 public class StringBasedLikeExpression extends LikeExpression {
 
+    @VisibleForTesting //TODO: Christine added this for testing purposes
     public StringBasedLikeExpression() {
     }
 

@@ -20,6 +20,7 @@ package org.apache.phoenix.expression;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.io.WritableUtils;
@@ -97,7 +98,7 @@ public abstract class BaseSingleExpression extends BaseExpression {
     }
 
     @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) throws SQLException {
         List<T> l = acceptChildren(visitor, null);
         if (l.isEmpty()) {
             return visitor.defaultReturn(this, l);

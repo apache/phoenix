@@ -19,6 +19,7 @@ package org.apache.phoenix.filter;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -48,14 +49,14 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     public SingleKeyValueComparisonFilter() {
     }
 
-    public SingleKeyValueComparisonFilter(Expression expression) {
+    public SingleKeyValueComparisonFilter(Expression expression) throws SQLException {
         super(expression);
         init();
     }
 
     protected abstract int compare(byte[] cfBuf, int cfOffset, int cfLength, byte[] cqBuf, int cqOffset, int cqLength);
 
-    private void init() {
+    private void init() throws SQLException {
         TraverseAllExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
             @Override
             public Void visit(KeyValueColumnExpression expression) {
@@ -131,7 +132,11 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
-        init();
+        try {
+            init();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

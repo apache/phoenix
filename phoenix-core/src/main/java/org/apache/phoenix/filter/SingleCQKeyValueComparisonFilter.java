@@ -18,6 +18,7 @@
 package org.apache.phoenix.filter;
 
 import java.io.IOException;
+import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -36,7 +37,7 @@ public class SingleCQKeyValueComparisonFilter extends SingleKeyValueComparisonFi
     public SingleCQKeyValueComparisonFilter() {
     }
 
-    public SingleCQKeyValueComparisonFilter(Expression expression) {
+    public SingleCQKeyValueComparisonFilter(Expression expression) throws SQLException {
         super(expression);
     }
 

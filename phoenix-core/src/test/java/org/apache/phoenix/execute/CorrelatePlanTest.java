@@ -238,7 +238,7 @@ public class CorrelatePlanTest {
         for (Object[] row : rows) {
             Expression[] exprs = new Expression[row.length];
             for (int i = 0; i < row.length; i++) {
-                exprs[i] = LiteralExpression.newConstant(row[i]);
+                exprs[i] = new LiteralExpression.Builder().setValue(row[i]).build();
             }
             TupleProjector projector = new TupleProjector(exprs);
             tuples.add(projector.projectResults(baseTuple));
@@ -249,11 +249,12 @@ public class CorrelatePlanTest {
     }
 
 
-    private TableRef createProjectedTableFromLiterals(Object[] row) {
+    private TableRef createProjectedTableFromLiterals(Object[] row) throws SQLException {
         List<PColumn> columns = Lists.<PColumn>newArrayList();
         for (int i = 0; i < row.length; i++) {
             String name = ParseNodeFactory.createTempAlias();
-            Expression expr = LiteralExpression.newConstant(row[i]);
+            Expression expr = null;
+            expr = new LiteralExpression.Builder().setValue(row[i]).build();
             PName colName = PNameFactory.newName(name);
             columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(VALUE_COLUMN_FAMILY),
                     expr.getDataType(), expr.getMaxLength(), expr.getScale(), expr.isNullable(),

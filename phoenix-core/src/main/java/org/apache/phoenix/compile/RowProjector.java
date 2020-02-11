@@ -118,7 +118,7 @@ public class RowProjector {
         this.isProjectDynColsInWildcardQueries = isProjectDynColsInWildcardQueries;
     }
 
-    public RowProjector cloneIfNecessary() {
+    public RowProjector cloneIfNecessary() throws SQLException {
         if (!cloneRequired) {
             return this;
         }

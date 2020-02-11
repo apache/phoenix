@@ -46,9 +46,9 @@ public class RegexpReplaceFunctionTest {
     private String testExpression(String srcStr, String patternStr, String replaceStr,
             SortOrder sortOrder) throws SQLException {
         Expression srcExp, patternExp, replaceExp;
-        srcExp = LiteralExpression.newConstant(srcStr, TYPE, sortOrder);
-        patternExp = LiteralExpression.newConstant(patternStr, TYPE, sortOrder);
-        replaceExp = LiteralExpression.newConstant(replaceStr, TYPE, sortOrder);
+        srcExp = new LiteralExpression.Builder().setValue(srcStr).setDataType(TYPE).setSortOrder(sortOrder).build();
+        patternExp = new LiteralExpression.Builder().setValue(patternStr).setDataType(TYPE).setSortOrder(sortOrder).build();
+        replaceExp = new LiteralExpression.Builder().setValue(replaceStr).setDataType(TYPE).setSortOrder(sortOrder).build();
         List<Expression> expressions = Lists.newArrayList(srcExp, patternExp, replaceExp);
         String res1, res2;
         res1 = evalExp(new ByteBasedRegexpReplaceFunction(expressions));

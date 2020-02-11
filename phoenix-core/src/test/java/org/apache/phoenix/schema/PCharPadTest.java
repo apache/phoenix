@@ -37,7 +37,7 @@ import org.junit.Test;
 public class PCharPadTest {
 
     public void test(String value, PDataType dataType, int length, SortOrder sortOrder, byte[] result) throws SQLException {
-        LiteralExpression expr = LiteralExpression.newConstant(value, dataType, sortOrder);
+        LiteralExpression expr = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(sortOrder).build();
         ImmutableBytesPtr ptr = new ImmutableBytesPtr(expr.getBytes());
         dataType.pad(ptr, length, sortOrder);
         String resultValue = (String) dataType.toObject(ptr, dataType, sortOrder);
@@ -117,7 +117,7 @@ public class PCharPadTest {
         List<byte[]> ascOrderedInputs = new ArrayList<>(inputs.length);
         SortOrder sortOrder = SortOrder.ASC;
         for (String input : inputs) {
-            LiteralExpression expr = LiteralExpression.newConstant(input, dataType, sortOrder);
+            LiteralExpression expr = new LiteralExpression.Builder().setValue(input).setDataType(dataType).setSortOrder(sortOrder).build();
             ImmutableBytesPtr ptr = new ImmutableBytesPtr(expr.getBytes());
             dataType.pad(ptr, 8, sortOrder);
             ascOrderedInputs.add(ptr.copyBytes());
@@ -132,7 +132,7 @@ public class PCharPadTest {
         List<byte[]> descOrderedInputs = new ArrayList<>(inputs.length);
         sortOrder = SortOrder.DESC;
         for (String input : inputs) {
-            LiteralExpression expr = LiteralExpression.newConstant(input, dataType, sortOrder);
+            LiteralExpression expr = new LiteralExpression.Builder().setValue(input).setDataType(dataType).setSortOrder(sortOrder).build();
             ImmutableBytesPtr ptr = new ImmutableBytesPtr(expr.getBytes());
             dataType.pad(ptr, 8, sortOrder);
             descOrderedInputs.add(ptr.copyBytes());

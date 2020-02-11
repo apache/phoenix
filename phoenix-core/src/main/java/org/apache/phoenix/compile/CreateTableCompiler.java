@@ -263,7 +263,7 @@ public class CreateTableCompiler {
         }
 
         @Override
-        public Iterator<Expression> visitEnter(ComparisonExpression node) {
+        public Iterator<Expression> visitEnter(ComparisonExpression node) throws SQLException {
             if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() 
             		&& node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS ) {
                 return Iterators.singletonIterator(node.getChildren().get(0));

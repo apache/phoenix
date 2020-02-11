@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -30,7 +31,7 @@ import org.apache.phoenix.schema.types.PDataType;
  */
 abstract public class FirstLastValueBaseFunction extends DelegateConstantToCountAggregateFunction {
 
-    public FirstLastValueBaseFunction() {
+    public FirstLastValueBaseFunction() throws SQLException {
     }
 
     public FirstLastValueBaseFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {

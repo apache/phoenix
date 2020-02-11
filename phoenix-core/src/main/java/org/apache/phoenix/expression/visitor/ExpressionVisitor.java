@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 
@@ -64,7 +65,7 @@ public interface ExpressionVisitor<E> {
     public Iterator<Expression> defaultIterator(Expression node);
     
     public Iterator<Expression> visitEnter(AndExpression node);
-    public E visitLeave(AndExpression node, List<E> l);
+    public E visitLeave(AndExpression node, List<E> l) throws SQLException;
     
     public Iterator<Expression> visitEnter(OrExpression node);
     public E visitLeave(OrExpression node, List<E> l);
@@ -72,7 +73,7 @@ public interface ExpressionVisitor<E> {
     public Iterator<Expression> visitEnter(ScalarFunction node);
     public E visitLeave(ScalarFunction node, List<E> l);
     
-    public Iterator<Expression> visitEnter(ComparisonExpression node);
+    public Iterator<Expression> visitEnter(ComparisonExpression node) throws SQLException;
     public E visitLeave(ComparisonExpression node, List<E> l);
 
     public Iterator<Expression> visitEnter(LikeExpression node);
@@ -117,9 +118,9 @@ public interface ExpressionVisitor<E> {
     public E visit(CorrelateVariableFieldAccessExpression node);
     public E visit(LiteralExpression node);
     public E visit(RowKeyColumnExpression node);
-    public E visit(KeyValueColumnExpression node);
+    public E visit(KeyValueColumnExpression node) throws SQLException;
     public E visit(SingleCellColumnExpression node);
-    public E visit(ProjectedColumnExpression node);
+    public E visit(ProjectedColumnExpression node) throws SQLException;
     public E visit(SequenceValueExpression node);
     
 	public Iterator<Expression> visitEnter(StringConcatExpression node);

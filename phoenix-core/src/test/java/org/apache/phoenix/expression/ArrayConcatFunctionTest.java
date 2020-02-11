@@ -75,8 +75,8 @@ public class ArrayConcatFunctionTest {
 
     private static void test(PhoenixArray array1, PhoenixArray array2, PDataType array1DataType, Integer arr1MaxLen, Integer arr1Scale, PDataType array2DataType, Integer arr2MaxLen, Integer arr2Scale, PhoenixArray expected, SortOrder array1SortOrder, SortOrder array2SortOrder) throws SQLException {
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(array1, array1DataType, arr1MaxLen, arr1Scale, array1SortOrder, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(array2, array2DataType, arr2MaxLen, arr2Scale, array2SortOrder, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(array1).setDataType(array1DataType).setMaxLength(arr1MaxLen).setScale(arr1Scale).setSortOrder(array1SortOrder).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(array2).setDataType(array2DataType).setMaxLength(arr2MaxLen).setScale(arr2Scale).setSortOrder(array2SortOrder).setDeterminism(Determinism.ALWAYS).build();
         testExpression(array1Literal, array2Literal, expected);
     }
 
@@ -634,8 +634,8 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr1 = new PhoenixArray(base, o1);
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(arr1).setDataType(type).setSortOrder(SortOrder.ASC).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(arr2).setDataType(type).setSortOrder(SortOrder.ASC).setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
         expressions.add(array2Literal);
 
@@ -656,8 +656,8 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr1 = new PhoenixArray(base, o1);
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(arr1).setDataType(type).setSortOrder(SortOrder.ASC).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(arr2).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
         expressions.add(array2Literal);
 
@@ -678,8 +678,8 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr1 = new PhoenixArray(base, o1);
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(arr1).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(arr2).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
         expressions.add(array2Literal);
 
@@ -700,8 +700,8 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr1 = new PhoenixArray(base, o1);
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.ASC, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(arr1).setDataType(type).setSortOrder(SortOrder.ASC).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(arr2).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
         expressions.add(array2Literal);
 
@@ -722,8 +722,8 @@ public class ArrayConcatFunctionTest {
         PhoenixArray arr1 = new PhoenixArray(base, o1);
         PhoenixArray arr2 = new PhoenixArray(base, o2);
         LiteralExpression array1Literal, array2Literal;
-        array1Literal = LiteralExpression.newConstant(arr1, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
-        array2Literal = LiteralExpression.newConstant(arr2, type, null, null, SortOrder.DESC, Determinism.ALWAYS);
+        array1Literal = new LiteralExpression.Builder().setValue(arr1).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
+        array2Literal = new LiteralExpression.Builder().setValue(arr2).setDataType(type).setSortOrder(SortOrder.DESC).setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList((Expression) array1Literal);
         expressions.add(array2Literal);
 

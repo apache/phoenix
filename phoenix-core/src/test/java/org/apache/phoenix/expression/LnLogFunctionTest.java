@@ -50,15 +50,13 @@ import com.google.common.collect.Lists;
  * Unit tests for {@link LnFunction} and {@link LogFunction}
  */
 public class LnLogFunctionTest {
-    private static final Expression THREE = LiteralExpression.newConstant(3);
-    private static final Expression DEFAULT_VALUE = LiteralExpression.newConstant(10.0);
 
     private static boolean testExpression(LiteralExpression literal, LiteralExpression literal2,
             LiteralExpression literal3, double exptForLn, double exptForLog10, double exptForLog3)
             throws SQLException {
         List<Expression> expressionsLn = Lists.newArrayList((Expression) literal);
-        List<Expression> expressionsLog10 = Lists.newArrayList(literal2, DEFAULT_VALUE);
-        List<Expression> expressionsLog3 = Lists.newArrayList(literal3, THREE);
+        List<Expression> expressionsLog10 = Lists.newArrayList(literal2, new LiteralExpression.Builder().setValue(10.0).build());
+        List<Expression> expressionsLog3 = Lists.newArrayList(literal3, new LiteralExpression.Builder().setValue(3).build());
 
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -94,14 +92,14 @@ public class LnLogFunctionTest {
     private static void test(Number value, PNumericType dataType, double exptForLn,
             double exptForLog10, double exptForLog3) throws SQLException {
         LiteralExpression literal, literal2, literal3;
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        literal2 = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        literal3 = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
         boolean ret1 =
                 testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        literal2 = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        literal3 = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         boolean ret2 =
                 testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
         assertEquals(ret1, ret2);

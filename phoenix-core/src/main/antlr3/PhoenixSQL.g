@@ -380,7 +380,7 @@ package org.apache.phoenix.parse;
 
 // Used to incrementally parse a series of semicolon-terminated SQL statement
 // Note than unlike the rule below an EOF is not expected at the end.
-nextStatement returns [BindableStatement ret]
+nextStatement returns [BindableStatement ret] throws SQLException
     :  s=oneStatement {
     		try {
     			$ret = s;
@@ -392,7 +392,7 @@ nextStatement returns [BindableStatement ret]
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
-statement returns [BindableStatement ret]
+statement returns [BindableStatement ret] throws SQLException
     :   s=oneStatement {
         		try {
     			$ret = s;
@@ -408,7 +408,7 @@ query returns [SelectStatement ret]
     ;
 
 // Parses a single SQL statement (expects an EOF after the select statement).
-oneStatement returns [BindableStatement ret]
+oneStatement returns [BindableStatement ret]  throws SQLException
 @init{ contextStack.push(new ParseContext()); }
     :  (s=select_node
     |	s=upsert_node
@@ -444,7 +444,7 @@ oneStatement returns [BindableStatement ret]
     ;
 finally{ contextStack.pop(); }
     
-explain_node returns [BindableStatement ret]
+explain_node returns [BindableStatement ret] throws SQLException
     :   EXPLAIN q=oneStatement {$ret=factory.explain(q);}
     ;
 
@@ -617,7 +617,7 @@ trace_node returns [TraceStatement ret]
     ;
 
 // Parse a create function statement.
-create_function_node returns [CreateFunctionStatement ret]
+create_function_node returns [CreateFunctionStatement ret] throws SQLException
     :   CREATE (OR replace=REPLACE)? (temp=TEMPORARY)? FUNCTION function=identifier 
        (LPAREN args=zero_or_more_data_types RPAREN)
        RETURNS r=identifier AS (className= jar_path)
@@ -1073,17 +1073,17 @@ zero_or_more_expressions returns [List<ParseNode> ret]
     :  (v = expression {$ret.add(v);})?  (COMMA v = expression {$ret.add(v);} )*
 ;
 
-zero_or_more_data_types returns [List<FunctionArgument> ret]
+zero_or_more_data_types returns [List<FunctionArgument> ret] throws SQLException
 @init{ret = new ArrayList<FunctionArgument>(); }
     : (fa = function_argument {$ret.add(fa);})? (COMMA fa = function_argument {$ret.add(fa);})* 
 	;
 
-function_argument returns [FunctionArgument ret]
+function_argument returns [FunctionArgument ret] throws SQLException
 	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = expression)? (MINVALUE EQ minv = expression)?  (MAXVALUE EQ maxv = expression)? 
-	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
-    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
-    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
-    maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue()));})
+	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null,
+	  dv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)dv).getValue()).build(),
+      minv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)minv).getValue()).build(),
+      maxv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)maxv).getValue()).build());})
 	;
 
 value_expression_list returns [List<ParseNode> ret]

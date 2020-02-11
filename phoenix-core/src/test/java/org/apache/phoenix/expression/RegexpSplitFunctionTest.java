@@ -48,8 +48,8 @@ public class RegexpSplitFunctionTest {
     private String[] testExpression(String srcStr, String patternStr, SortOrder sortOrder)
             throws SQLException {
         Expression srcExp, patternExp;
-        srcExp = LiteralExpression.newConstant(srcStr, TYPE, sortOrder);
-        patternExp = LiteralExpression.newConstant(patternStr, TYPE, sortOrder);
+        srcExp = new LiteralExpression.Builder().setValue(srcStr).setDataType(TYPE).setSortOrder(sortOrder).build();
+        patternExp = new LiteralExpression.Builder().setValue(patternStr).setDataType(TYPE).setSortOrder(sortOrder).build();
         List<Expression> expressions = Lists.newArrayList(srcExp, patternExp);
         String[] res1, res2;
         res1 = evalExp(new ByteBasedRegexpSplitFunction(expressions));

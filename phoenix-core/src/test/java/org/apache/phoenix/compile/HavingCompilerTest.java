@@ -93,7 +93,10 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         Date date = new Date(System.currentTimeMillis());
         List<Object> binds = Arrays.<Object>asList(date);
         Expressions expressions = compileStatement(query,binds);
-        Expression w = constantComparison(CompareOp.GREATER, RoundDateExpression.create(Arrays.asList(A_DATE,LiteralExpression.newConstant("hour"),LiteralExpression.newConstant(1))), date);
+        Expression w = constantComparison(CompareOp.GREATER, RoundDateExpression.create(Arrays.asList(A_DATE,
+                new LiteralExpression.Builder().setValue("hour").build(),
+                new LiteralExpression.Builder().setValue(1).build())), date);
+
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }

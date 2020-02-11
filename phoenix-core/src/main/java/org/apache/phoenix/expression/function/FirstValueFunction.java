@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -42,7 +43,7 @@ public class FirstValueFunction extends FirstLastValueBaseFunction {
 
     public static final String NAME = "FIRST_VALUE";
 
-    public FirstValueFunction() {
+    public FirstValueFunction() throws SQLException {
     }
 
     public FirstValueFunction(List<Expression> childExpressions) {

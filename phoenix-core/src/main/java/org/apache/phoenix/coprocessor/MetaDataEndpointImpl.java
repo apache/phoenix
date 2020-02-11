@@ -939,10 +939,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         maxValueKv.getValueLength());
         FunctionArgument arg =
                 new FunctionArgument(type.getString(), isArrayType, isConstant,
-                        defaultValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(defaultValue)).getValue()),
-                        minValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(minValue)).getValue()),
-                        maxValue == null ? null : LiteralExpression.newConstant((new LiteralParseNode(maxValue)).getValue()),
-                        argPosition);
+                        defaultValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(defaultValue))
+                                .getValue()).build(),
+                        minValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(minValue))
+                                .getValue()).build(),
+                        maxValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(maxValue))
+                                .getValue()).build(), argPosition);
+
         arguments.add(arg);
     }
 

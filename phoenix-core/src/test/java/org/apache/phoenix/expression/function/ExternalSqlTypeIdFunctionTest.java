@@ -37,9 +37,8 @@ public class ExternalSqlTypeIdFunctionTest {
 
     @Test
     public void testEvaluate() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PInteger.INSTANCE.getSqlType(), PInteger.INSTANCE);
-
+        Expression inputArg = new LiteralExpression.Builder().setValue(PInteger.INSTANCE.getSqlType())
+                .setDataType(PInteger.INSTANCE).build();
         Object returnValue = executeFunction(inputArg);
 
         assertEquals(Types.INTEGER, returnValue);
@@ -47,9 +46,8 @@ public class ExternalSqlTypeIdFunctionTest {
 
     @Test
     public void testEvaluateArrayType() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
-
+        Expression inputArg = new LiteralExpression.Builder().setValue(PIntegerArray.INSTANCE.getSqlType())
+                .setDataType(PInteger.INSTANCE).build();
         Object returnValue = executeFunction(inputArg);
 
         assertEquals(Types.ARRAY, returnValue);
@@ -57,8 +55,8 @@ public class ExternalSqlTypeIdFunctionTest {
 
     @Test
     public void testClone() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
+        Expression inputArg = new LiteralExpression.Builder().setValue(PIntegerArray.INSTANCE.getSqlType())
+                .setDataType(PInteger.INSTANCE).build();
         List<Expression> args = Lists.newArrayList(inputArg);
         ExternalSqlTypeIdFunction externalIdFunction =
                 new ExternalSqlTypeIdFunction(args);
