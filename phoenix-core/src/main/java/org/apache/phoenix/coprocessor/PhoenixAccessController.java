@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.CompoundConfiguration;
@@ -44,8 +45,8 @@ import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcServer;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.AccessControlService;
@@ -489,8 +490,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
             private void getUserPermsFromUserDefinedAccessController(final List<UserPermission> userPermissions, Connection connection, AccessControlService.Interface service) {
 
-                HBaseRpcController controller = ((ClusterConnection)connection)
-                        .getRpcControllerFactory().newController();
+                ServerRpcController controller = new ServerRpcController();
 
                 AccessControlProtos.GetUserPermissionsRequest.Builder builderTablePerms = AccessControlProtos.GetUserPermissionsRequest
                         .newBuilder();
@@ -511,7 +511,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
 
             private void callGetUserPermissionsRequest(final List<UserPermission> userPermissions, AccessControlService.Interface service
-                    , AccessControlProtos.GetUserPermissionsRequest request, HBaseRpcController controller) {
+                    , AccessControlProtos.GetUserPermissionsRequest request, RpcController controller) {
                 service.getUserPermissions(controller, request,
                         new RpcCallback<AccessControlProtos.GetUserPermissionsResponse>() {
                             @Override
