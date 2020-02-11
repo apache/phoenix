@@ -294,7 +294,7 @@ public class ViewUtil {
             // Ensure that constant columns (i.e. columns matched in the view WHERE clause)
             // all exist in the index on the parent table.
             for (PColumn col : view.getColumns()) {
-                if (col.getViewConstant() != null) {
+                if (col.isViewReferenced() || col.getViewConstant() != null) {
                     try {
                         // It'd be possible to use a local index that doesn't have all view constants,
                         // but the WHERE clause for the view statement (which is added to the index below)
