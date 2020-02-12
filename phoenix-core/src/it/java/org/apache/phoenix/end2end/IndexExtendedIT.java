@@ -36,6 +36,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
@@ -312,6 +313,57 @@ public class IndexExtendedIT extends BaseTest {
             checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L);
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testIndexStateOnException() throws Exception {
+        if (localIndex  || useSnapshot || useViewIndex) {
+            return;
+        }
+
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)){
+            Statement stmt = conn.createStatement();
+            stmt.execute(String.format(
+                    "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s",
+                    dataTableFullName, tableDDLOptions));
+
+            stmt.execute(String.format(
+                    "UPSERT INTO %s VALUES(1, 'Phoenix', 12345)", dataTableFullName));
+
+            conn.commit();
+
+            // Configure IndexRegionObserver to fail the first write phase. This should not
+            // lead to any change on index and thus index verify during index rebuild should fail
+            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
+            stmt.execute(String.format(
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC",
+                    indexTableName, dataTableFullName));
+
+            // Verify that the index table is not in the ACTIVE state
+            assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
+
+            // Run the index MR job and verify that the index table rebuild fails
+            IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+                    indexTableName, null, -1, IndexTool.IndexVerifyType.AFTER);
+
+            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
+
+            // job failed, verify that the index table is still not in the ACTIVE state
+            assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
+
+            // Run the index MR job and verify that the index table rebuild succeeds
+            IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
+
+            // job passed, verify that the index table is in the ACTIVE state
+            assertTrue(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
         }
     }
 }
