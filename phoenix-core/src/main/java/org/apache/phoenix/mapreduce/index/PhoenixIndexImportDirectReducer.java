@@ -111,16 +111,21 @@ public class PhoenixIndexImportDirectReducer extends
         if (verifyType != IndexTool.IndexVerifyType.NONE) {
             updateCounters(verifyType, context);
         }
+
+        try {
+            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
+        } catch (SQLException e) {
+            LOGGER.error(" Failed to update the status to Active");
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
         try {
-            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
-
             updateTasksTable(context);
         } catch (SQLException e) {
-            LOGGER.error(" Failed to update the status to Active");
+            LOGGER.error(" Failed to update the tasks table");
             throw new RuntimeException(e.getMessage());
         }
     }
