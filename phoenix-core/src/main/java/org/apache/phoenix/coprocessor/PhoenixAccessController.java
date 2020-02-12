@@ -53,13 +53,8 @@ import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.UserProvider;
-import org.apache.hadoop.hbase.security.access.AccessChecker;
-import org.apache.hadoop.hbase.security.access.AccessControlClient;
-import org.apache.hadoop.hbase.security.access.AuthResult;
-import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.security.access.*;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.apache.hadoop.hbase.security.access.TableAuthManager;
-import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
@@ -80,6 +75,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     private PhoenixMetaDataControllerEnvironment env;
     AtomicReference<ArrayList<BaseMasterAndRegionObserver>> accessControllers = new AtomicReference<>();
     private boolean hbaseAccessControllerEnabled = false;
+    private boolean execPermissionsCheckEnabled;
     private boolean accessCheckEnabled;
     private AccessChecker accessChecker;
     private UserProvider userProvider;
@@ -123,6 +119,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             LOGGER.warn(
                     "PhoenixAccessController has been loaded with authorization checks disabled.");
         }
+        this.execPermissionsCheckEnabled = conf.getBoolean(AccessControlConstants.EXEC_PERMISSION_CHECKS_KEY,
+                AccessControlConstants.DEFAULT_EXEC_PERMISSION_CHECKS);
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
             this.env = (PhoenixMetaDataControllerEnvironment)env;
         } else {
@@ -180,12 +178,17 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Set<TableName> physicalTablesChecked = new HashSet<TableName>();
         if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
             physicalTablesChecked.add(parentPhysicalTableName);
-            requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ);
+            }
         }
 
         if (tableType == PTableType.VIEW) {
-            
-            Action[] requiredActions = { Action.READ, Action.EXEC };
+
+            Action[] requiredActions = execPermissionsCheckEnabled ?
+                    new Action[]{ Action.READ, Action.EXEC } : new Action[] { Action.READ};
             for (TableName index : indexes) {
                 if (!physicalTablesChecked.add(index)) {
                     // skip check for local index as we have already check the ACLs above
@@ -235,9 +238,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // skip check for local index
             if (physicalTableName != null && !parentPhysicalTableName.equals(physicalTableName)
                     && !MetaDataUtil.isViewIndex(physicalTableName.getNameAsString())) {
+                List<Action> actions = Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN);
+                if(execPermissionsCheckEnabled) {
+                    actions.add(Action.EXEC);
+                }
                 authorizeOrGrantAccessToUsers("Create" + tableType, parentPhysicalTableName,
-                        Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.EXEC, Action.ADMIN),
-                        physicalTableName);
+                        actions, physicalTableName);
             }
         }
     }
@@ -362,7 +368,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         //checking similar permission checked during the create of the view.
         if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
-            requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
@@ -377,7 +387,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
         }
         if (tableType == PTableType.VIEW) {
-            requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
@@ -421,7 +435,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         // Check for read access in case of rebuild
         if (newState == PIndexState.BUILDING) {
-            requireAccess("Rebuild:", parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Rebuild:", parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Rebuild:", parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
