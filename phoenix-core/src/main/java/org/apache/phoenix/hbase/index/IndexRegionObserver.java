@@ -17,25 +17,9 @@
  */
 package org.apache.phoenix.hbase.index;
 
-import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
-import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -97,7 +81,22 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -173,9 +172,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
       private boolean rebuild;
       // The current state of the data rows corresponding to the pending mutations
-      private HashMap<ImmutableBytesPtr, Put> currentRowStates;
+      private HashMap<ImmutableBytesPtr, Put> currentDataRowStates;
       // The merged state of the current data rows and the pending mutations
-      private HashMap<ImmutableBytesPtr, Put> mergedRowStates;
+      private HashMap<ImmutableBytesPtr, Put> nextDataRowStates;
       private BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
       }
@@ -452,8 +451,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-
-  private void merge(Put current, Put previous) throws IOException {
+  private static void merge(Put current, Put previous) throws IOException {
       for (List<Cell> cells : previous.getFamilyCellMap().values()) {
           for (Cell cell : cells) {
               if (!current.has(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell))) {
@@ -463,43 +461,10 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-  private Put mergeNew(Put current, Put previous) throws IOException {
+  private static Put mergeNew(Put current, Put previous) throws IOException {
       Put next = new Put(current);
       merge(next, previous);
       return next;
-  }
-
-  /**
-   * When there are multiple put mutations on the data same row within the same batch, this method merges them into
-   * one mutation.
-   */
-  private void mergePendingPutMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                        Map<ImmutableBytesPtr, Integer> pendingPuts,
-                                        long now) throws IOException {
-      for (Integer i = 0; i < miniBatchOp.size(); i++) {
-          if (miniBatchOp.getOperationStatus(i) == IGNORE) {
-              continue;
-          }
-          Mutation m = miniBatchOp.getOperation(i);
-          // skip this mutation if we aren't enabling indexing
-          if (!this.builder.isEnabled(m)) {
-              continue;
-          }
-          // Unless we're replaying edits to rebuild the index, we update the time stamp
-          // of the data table to prevent overlapping time stamps (which prevents index
-          // inconsistencies as this case isn't handled correctly currently).
-          setTimestamp(m, now);
-          if (m instanceof Put) {
-              ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
-              Integer opIndex = pendingPuts.get(rowKeyPtr);
-              if (opIndex != null) {
-                  merge((Put) m, (Put) miniBatchOp.getOperation(opIndex));
-                  miniBatchOp.setOperationStatus(opIndex, NOWRITE);
-                  pendingPuts.remove(opIndex);
-              }
-              pendingPuts.put(rowKeyPtr, i);
-          }
-      }
   }
 
   /**
@@ -522,7 +487,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           }
           ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
           Integer opIndex = pendingPuts.get(rowKeyPtr);
-          Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
+          Put mergedRow = context.nextDataRowStates.get(rowKeyPtr);
           if (opIndex == null && mergedRow == null) {
               continue;
           }
@@ -553,7 +518,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                       miniBatchOp.setOperationStatus(opIndex, NOWRITE);
                   }
                   if (mergedRow != null && mergedRow.getFamilyCellMap().size() == 0) {
-                      context.mergedRowStates.remove(rowKeyPtr);
+                      context.nextDataRowStates.remove(rowKeyPtr);
                   }
               }
           }
@@ -573,7 +538,40 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-  /**
+    /**
+     * When there are multiple put mutations on the data same row within the same batch, this method merges them into
+     * one mutation.
+     */
+    private void mergePendingPutMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                          Map<ImmutableBytesPtr, Integer> pendingPuts,
+                                          long now) throws IOException {
+        for (Integer i = 0; i < miniBatchOp.size(); i++) {
+            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+                continue;
+            }
+            Mutation m = miniBatchOp.getOperation(i);
+            // skip this mutation if we aren't enabling indexing
+            if (!this.builder.isEnabled(m)) {
+                continue;
+            }
+            // Unless we're replaying edits to rebuild the index, we update the time stamp
+            // of the data table to prevent overlapping time stamps (which prevents index
+            // inconsistencies as this case isn't handled correctly currently).
+            setTimestamp(m, now);
+            if (m instanceof Put) {
+                ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
+                Integer opIndex = pendingPuts.get(rowKeyPtr);
+                if (opIndex != null) {
+                    merge((Put) m, (Put) miniBatchOp.getOperation(opIndex));
+                    miniBatchOp.setOperationStatus(opIndex, NOWRITE);
+                    pendingPuts.remove(opIndex);
+                }
+                pendingPuts.put(rowKeyPtr, i);
+            }
+        }
+    }
+
+    /**
    * * Merges the mutations on the same row
    */
   private Collection<? extends Mutation> mergeMutations(ObserverContext<RegionCoprocessorEnvironment> c,
@@ -586,7 +584,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       Map<ImmutableBytesPtr, Integer> pendingPuts = new HashMap<>(miniBatchOp.size());
       mergePendingPutMutations(miniBatchOp, pendingPuts, now);
       getCurrentRowStates(c, context);
-      context.mergedRowStates = new HashMap<ImmutableBytesPtr, Put>(miniBatchOp.size());
+      context.nextDataRowStates = new HashMap<ImmutableBytesPtr, Put>(miniBatchOp.size());
       // Merge pending put mutations with current row states into new merged states
       for (Integer i = 0; i < miniBatchOp.size(); i++) {
           if (miniBatchOp.getOperationStatus(i) == IGNORE || miniBatchOp.getOperationStatus(i) == NOWRITE) {
@@ -598,9 +596,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           }
           if (m instanceof Put) {
               ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
-              Put currentRow = context.currentRowStates.get(rowKeyPtr);
+              Put currentRow = context.currentDataRowStates.get(rowKeyPtr);
               Put mergedRow = (currentRow != null) ? mergeNew((Put) m, currentRow) : (Put)m;
-              context.mergedRowStates.put(rowKeyPtr, mergedRow);
+              context.nextDataRowStates.put(rowKeyPtr, mergedRow);
           }
       }
 
@@ -614,57 +612,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       populateMutationList(miniBatchOp, pendingMutations, false);
       return pendingMutations;
   }
-
-  /**
-   * This is to reorder the mutations in ascending order by the tuple of row key, timestamp and mutation type where
-   * delete comes before put
-   */
-  public static final Comparator<Mutation> MUTATION_COMPARATOR = new Comparator<Mutation>() {
-      @Override
-      public int compare(Mutation o1, Mutation o2) {
-        int result = Bytes.compareTo(o1.getRow(), o2.getRow());
-        if (result != 0) {
-            return result;
-        }
-        long ts1 = getTimestamp(o1);
-        long ts2 = getTimestamp(o2);
-        if (ts1 < ts2) {
-            return -1;
-        }
-        if (ts1 > ts2) {
-            return 1;
-        }
-        if (o1 instanceof Delete && o2 instanceof Put) {
-            return -1;
-        }
-        if (o1 instanceof Put && o2 instanceof Delete) {
-            return 1;
-        }
-        return 0;
-      }
-    };
-
-    /**
-     *  Group the cells within a mutation based on their timestamps and create a separate mutation for each group
-     */
-    private Collection<? extends Mutation> splitMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                                          BatchMutateContext context) throws IOException {
-        List<Mutation> pendingMutations = Lists.newArrayListWithExpectedSize(miniBatchOp.size());
-        for (int i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
-                continue;
-            }
-            Mutation m = miniBatchOp.getOperation(i);
-            if (this.builder.isEnabled(m)) {
-                pendingMutations.add(m);
-                miniBatchOp.setOperationStatus(i, NOWRITE);
-            }
-        }
-        pendingMutations = (List<Mutation>) IndexManagementUtil.flattenMutationsByTimestamp(pendingMutations);
-        // Reorder the mutations on the same row so that delete comes before put when they have the same timestamp
-        Collections.sort(pendingMutations, MUTATION_COMPARATOR);
-        return pendingMutations;
-    }
 
   public static void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
       List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
@@ -682,29 +629,29 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
   }
 
-  private void handleLocalIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c,
-                                       MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                       ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates) {
-      byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
-      HTableInterfaceReference hTableInterfaceReference =
-                          new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
-      List<Pair<Mutation, byte[]>> localIndexUpdates = indexUpdates.removeAll(hTableInterfaceReference);
-      if (localIndexUpdates == null || localIndexUpdates.isEmpty()) {
-          return;
-      }
-      List<Mutation> localUpdates = new ArrayList<Mutation>();
-      Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = localIndexUpdates.iterator();
-      while (indexUpdatesItr.hasNext()) {
-          Pair<Mutation, byte[]> next = indexUpdatesItr.next();
-          localUpdates.add(next.getFirst());
-      }
-      if (!localUpdates.isEmpty()) {
-          miniBatchOp.addOperationsFromCP(0, localUpdates.toArray(new Mutation[localUpdates.size()]));
-      }
-  }
-
+    private void handleLocalIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c,
+                                         MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                         ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates) {
+        byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
+        HTableInterfaceReference hTableInterfaceReference =
+                new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
+        List<Pair<Mutation, byte[]>> localIndexUpdates = indexUpdates.removeAll(hTableInterfaceReference);
+        if (localIndexUpdates == null || localIndexUpdates.isEmpty()) {
+            return;
+        }
+        List<Mutation> localUpdates = new ArrayList<Mutation>();
+        Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = localIndexUpdates.iterator();
+        while (indexUpdatesItr.hasNext()) {
+            Pair<Mutation, byte[]> next = indexUpdatesItr.next();
+            localUpdates.add(next.getFirst());
+        }
+        if (!localUpdates.isEmpty()) {
+            miniBatchOp.addOperationsFromCP(0, localUpdates.toArray(new Mutation[localUpdates.size()]));
+        }
+    }
     /**
-     * Retrieve the the last committed row state. This method is called only for regular updates
+     * Retrieve the the last committed data row state. This method is called only for regular data mutations since for
+     * rebuild (i.e., index replay) mutations include all row versions.
      */
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
                                      BatchMutateContext context) throws IOException {
@@ -717,7 +664,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         scanRanges.initializeScan(scan);
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
         scan.setFilter(skipScanFilter);
-        context.currentRowStates = new HashMap<ImmutableBytesPtr, Put>(context.rowsToLock.size());
+        context.currentDataRowStates = new HashMap<ImmutableBytesPtr, Put>(context.rowsToLock.size());
         try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
             boolean more = true;
             while(more) {
@@ -731,12 +678,12 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                 for (Cell cell : cells) {
                     put.add(cell);
                 }
-                context.currentRowStates.put(new ImmutableBytesPtr(rowKey), put);
+                context.currentDataRowStates.put(new ImmutableBytesPtr(rowKey), put);
             }
         }
     }
 
-    private Collection<Cell> getCollection(Mutation m) {
+    public static Collection<Cell> getCollection(Mutation m) {
         Collection<Cell> collection = new ArrayList<>();
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             collection.addAll(cells);
@@ -745,77 +692,140 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
     }
 
     /**
+     * This is to reorder the mutations in ascending order by the tuple of timestamp and mutation type where
+     * delete comes before put
+     */
+    public static final Comparator<Mutation> MUTATION_TS_COMPARATOR = new Comparator<Mutation>() {
+        @Override
+        public int compare(Mutation o1, Mutation o2) {
+            long ts1 = getTimestamp(o1);
+            long ts2 = getTimestamp(o2);
+            if (ts1 < ts2) {
+                return -1;
+            }
+            if (ts1 > ts2) {
+                return 1;
+            }
+            if (o1 instanceof Delete && o2 instanceof Put) {
+                return -1;
+            }
+            if (o1 instanceof Put && o2 instanceof Delete) {
+                return 1;
+            }
+            return 0;
+        }
+    };
+
+    public static List<Mutation> getMutationsWithSameTS(Put put, Delete del) {
+        List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(2);
+        if (put != null) {
+            mutationList.add(put);
+        }
+        if (del != null) {
+            mutationList.add(del);
+        }
+        // Group the cells within a mutation based on their timestamps and create a separate mutation for each group
+        mutationList = (List<Mutation>) IndexManagementUtil.flattenMutationsByTimestamp(mutationList);
+        // Reorder the mutations on the same row so that delete comes before put when they have the same timestamp
+        Collections.sort(mutationList, MUTATION_TS_COMPARATOR);
+        return mutationList;
+    }
+
+    private static Put prepareIndexPut(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
+                                       ValueGetter mergedRowVG, long ts, boolean isRebuild,
+                                       byte[] regionStartKey, byte[] regionEndKey)
+            throws IOException {
+        Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+                mergedRowVG, rowKeyPtr, ts, null, null);
+        if (indexPut == null) {
+            // No covered column. Just prepare an index row with the empty column
+            byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
+                    regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
+            indexPut = new Put(indexRowKey, ts);
+        } else {
+            indexPut.setTimestamp(ts);
+        }
+        if (isRebuild) {
+            indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                    indexMaintainer.getEmptyKeyValueQualifier(), ts, VERIFIED_BYTES);
+        } else {
+            indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                    indexMaintainer.getEmptyKeyValueQualifier(), ts, UNVERIFIED_BYTES);
+        }
+        return indexPut;
+    }
+
+    /**
      * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
      * state with the pending row mutation for index rebuild. This method is called only for global indexes.
      * pendingMutations is a sorted list of data table mutations that are used to replay index table mutations.
      * This list is sorted in ascending order by the tuple of row key, timestamp and mutation type where delete comes
-     * before put.
+     * after put.
      */
-    private void prepareIndexMutationsForRebuild(BatchMutateContext context, IndexMaintainer indexMaintainer,
-                                       Collection<? extends Mutation> pendingMutations) throws IOException {
-        Put currentRow = null;
-        HTableInterfaceReference hTableInterfaceReference =
-                new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        for (Mutation mutation : pendingMutations) {
-            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
-            ValueGetter currentRowVG = null;
-            if (currentRow != null && Bytes.compareTo(mutation.getRow(), currentRow.getRow()) != 0) {
-                currentRow = null;
-            }
-            currentRowVG = (currentRow == null) ? null : new IndexRebuildRegionScanner.SimpleValueGetter(currentRow);
+    public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
+                                                                 Put dataPut, Delete dataDel) throws IOException {
+        List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
+        List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
+        // The row key ptr of the data table row for which we will build index rows here
+        ImmutableBytesPtr rowKeyPtr = (dataPut != null) ? new ImmutableBytesPtr(dataPut.getRow()) :
+                new ImmutableBytesPtr(dataDel.getRow());
+        // Start with empty data table row
+        Put currentDataRow = null;
+        // The index row key corresponding to the current data row
+        byte[] IndexRowKeyForCurrentDataRow = null;
+        for (Mutation mutation : dataMutations) {
+            ValueGetter currentDataRowVG = (currentDataRow == null) ? null : new IndexRebuildRegionScanner.SimpleValueGetter(currentDataRow);
             long ts = getTimestamp(mutation);
             if (mutation instanceof Put) {
-                Put mergedRow = (currentRow == null) ? new Put((Put)mutation) : mergeNew((Put)mutation, currentRow);
-                ValueGetter mergedRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(mergedRow);
-                Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                        mergedRowVG, rowKeyPtr, ts, null, null);
-                if (indexPut == null) {
-                    // No covered column. Just prepare an index row with the empty column
-                    byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
-                            null, null, HConstants.LATEST_TIMESTAMP);
-                    indexPut = new Put(indexRowKey);
-                }
-                indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-                        indexMaintainer.getEmptyKeyValueQualifier(), ts, EMPTY_COLUMN_VALUE_BYTES);
-                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(indexPut, mutation.getRow()));
+                // Add this put on top of the current data row state to get the next data row state
+                Put nextDataRow = (currentDataRow == null) ? new Put((Put)mutation) : mergeNew((Put)mutation, currentDataRow);
+                ValueGetter nextDataRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(nextDataRow);
+                Put indexPut = prepareIndexPut(indexMaintainer, rowKeyPtr, nextDataRowVG, ts, true, null, null);
+                indexMutations.add(indexPut);
                 // Delete the current index row if the new index key is different than the current one
-                if (currentRow != null) {
-                    byte[] currentIndexRowKey = indexMaintainer.buildRowKey(currentRowVG, rowKeyPtr,
-                            null, null, HConstants.LATEST_TIMESTAMP);
-                    if (Bytes.compareTo(indexPut.getRow(), currentIndexRowKey) != 0) {
-                        Delete del = new Delete(currentIndexRowKey, ts);
-                        context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                if (IndexRowKeyForCurrentDataRow != null) {
+                    if (Bytes.compareTo(indexPut.getRow(), IndexRowKeyForCurrentDataRow) != 0) {
+                        Delete del = new Delete(IndexRowKeyForCurrentDataRow, ts);
+                        del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                        indexMutations.add(del);
                     }
                 }
-                // For the next iteration, mergedRow would represent the current row state
-                currentRow = mergedRow;
+                // For the next iteration
+                currentDataRow = nextDataRow;
+                IndexRowKeyForCurrentDataRow = indexPut.getRow();
             } else {
-                if (currentRow != null) {
-                    Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentRowVG,
-                            rowKeyPtr, getCollection(mutation), ts, null, null);
-                    if (del != null) {
-                        context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
-                    }
+                if (currentDataRow != null) {
+                    // We apply the delete column mutations only on the current data row state here as they are already
+                    // applied for pending mutations before. Deletes are handled before puts on the same row since
+                    // data mutations are sorted so. For the index table, we are only interested if the current data row
+                    // is deleted or not. There is no need to apply column deletes to index rows since index rows are
+                    // always full rows and all the cells in an index row have the same timestamp value. Because of
+                    // this index rows versions do not share cells.
+                    boolean toBeDeleted = false;
                     for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
                         for (Cell cell : cells) {
                             switch (cell.getType()) {
                                 case DeleteFamily:
                                 case DeleteFamilyVersion:
-                                    currentRow.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
+                                    toBeDeleted = true;
                                     break;
                                 case DeleteColumn:
                                 case Delete:
-                                    removeColumn(currentRow, cell);
+                                    removeColumn(currentDataRow, cell);
                             }
                         }
-                        if (currentRow.getFamilyCellMap().size() == 0) {
-                            currentRow = null;
-                            break;
-                        }
+                    }
+                    if (toBeDeleted) {
+                        Delete del = new Delete(IndexRowKeyForCurrentDataRow, ts);
+                        del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                        indexMutations.add(del);
+                        currentDataRow = null;
+                        IndexRowKeyForCurrentDataRow = null;
                     }
                 }
             }
         }
+        return indexMutations;
     }
 
     /**
@@ -836,7 +846,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         }
         for (Mutation mutation : pendingMutations) {
             ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
-            Put currentRow = context.currentRowStates.get(rowKeyPtr);
+            Put currentRow = context.currentDataRowStates.get(rowKeyPtr);
             ValueGetter currentRowVG = null;
             if (currentRow != null) {
                 currentRowVG = (currentRow == null) ? null :
@@ -844,7 +854,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
             }
             long ts = getTimestamp(mutation);
             if (mutation instanceof Put) {
-                Put mergedRow = context.mergedRowStates.get(rowKeyPtr);
+                Put mergedRow = context.nextDataRowStates.get(rowKeyPtr);
                 ValueGetter mergedRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(mergedRow);
                 for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
                     IndexMaintainer indexMaintainer = pair.getFirst();
@@ -885,7 +895,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
             }
         }
     }
-
     /**
      * This method prepares unverified index mutations which are applied to index tables before the data table is
      * updated. In the three phase update approach, in phase 1, the status of existing index rows is set to "unverified"
@@ -899,64 +908,52 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                                           Collection<? extends Mutation> pendingMutations,
                                           long now,
                                           PhoenixIndexMetaData indexMetaData) throws Throwable {
-      List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
-      // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-          Span current = scope.getSpan();
-          if (current == null) {
-              current = NullSpan.INSTANCE;
-          }
-          // get the index updates for all elements in this batch
-          context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
-          if (context.rebuild) {
-              prepareIndexMutationsForRebuild(context, maintainers.get(0), pendingMutations);
-          } else {
-              prepareIndexMutations(c, context, maintainers, pendingMutations);
-          }
-          current.addTimelineAnnotation("Built index updates, doing preStep");
-          handleLocalIndexUpdates(c, miniBatchOp, context.indexUpdates);
-          context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
-          int updateCount = 0;
-          for (IndexMaintainer indexMaintainer : maintainers) {
-              updateCount++;
-              byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
-              byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
-              HTableInterfaceReference hTableInterfaceReference =
-                      new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-              List <Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
-              for (Pair<Mutation, byte[]> update : updates) {
-                  // Add an empty column cell with the verify status
-                  Mutation m = update.getFirst();
-                  if (context.rebuild) {
-                      if (m instanceof Put) {
-                          long ts = getMaxTimestamp(m);
-                          // Remove the empty column prepared by Index codec as we need to change its value
-                          removeEmptyColumn(m, emptyCF, emptyCQ);
-                          ((Put) m).addColumn(emptyCF, emptyCQ, ts, VERIFIED_BYTES);
-                      }
-                      context.preIndexUpdates.put(hTableInterfaceReference, m);
-                  } else {
-                      if (m instanceof Put) {
-                          // Remove the empty column prepared by Index codec as we need to change its value
-                          removeEmptyColumn(m, emptyCF, emptyCQ);
-                          // Set the status of the index row to "unverified"
-                          ((Put) m).addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
-                          // This will be done before the data table row is updated (i.e., in the first write phase)
-                          context.preIndexUpdates.put(hTableInterfaceReference, m);
-                      }
-                      else {
-                          // Set the status of the index row to "unverified"
-                          Put unverifiedPut = new Put(m.getRow());
-                          unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
-                          // This will be done before the data table row is updated (i.e., in the first write phase)
-                          context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
-                      }
-                  }
-              }
-          }
-          TracingUtils.addAnnotation(current, "index update count", updateCount);
-      }
-  }
+        List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
+        // get the current span, or just use a null-span to avoid a bunch of if statements
+        try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
+            Span current = scope.getSpan();
+            if (current == null) {
+                current = NullSpan.INSTANCE;
+            }
+            // get the index updates for all elements in this batch
+            context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
+
+            prepareIndexMutations(c, context, maintainers, pendingMutations);
+
+            current.addTimelineAnnotation("Built index updates, doing preStep");
+            handleLocalIndexUpdates(c, miniBatchOp, context.indexUpdates);
+            context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
+            int updateCount = 0;
+            for (IndexMaintainer indexMaintainer : maintainers) {
+                updateCount++;
+                byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+                byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+                HTableInterfaceReference hTableInterfaceReference =
+                        new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+                List <Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
+                for (Pair<Mutation, byte[]> update : updates) {
+                    // Add an empty column cell with the verify status
+                    Mutation m = update.getFirst();
+                    if (m instanceof Put) {
+                        // Remove the empty column prepared by Index codec as we need to change its value
+                        removeEmptyColumn(m, emptyCF, emptyCQ);
+                        // Set the status of the index row to "unverified"
+                        ((Put) m).addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
+                        // This will be done before the data table row is updated (i.e., in the first write phase)
+                        context.preIndexUpdates.put(hTableInterfaceReference, m);
+                    }
+                    else {
+                        // Set the status of the index row to "unverified"
+                        Put unverifiedPut = new Put(m.getRow());
+                        unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
+                        // This will be done before the data table row is updated (i.e., in the first write phase)
+                        context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
+                    }
+                }
+            }
+            TracingUtils.addAnnotation(current, "index update count", updateCount);
+        }
+    }
 
   protected PhoenixIndexMetaData getPhoenixIndexMetaData(ObserverContext<RegionCoprocessorEnvironment> observerContext,
                                                          MiniBatchOperationInProgress<Mutation> miniBatchOp)
@@ -1007,6 +1004,50 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       context.indexUpdates.clear();
   }
 
+  /**
+   * There are at most two rebuild mutation for every row, one put and one delete. They are listed in indexMutations
+   * next to each other such that put comes before delete by {@link IndexRebuildRegionScanner}. This method is called
+   * only for global indexes.
+   */
+  private void preBatchMutateWithExceptionsForRebuild(ObserverContext<RegionCoprocessorEnvironment> c,
+                                                      MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                                      BatchMutateContext context,
+                                                      IndexMaintainer indexMaintainer) throws Throwable {
+        Put put = null;
+        List <Mutation> indexMutations = new ArrayList<>();
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+                continue;
+            }
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!this.builder.isEnabled(m)) {
+                continue;
+            }
+            if (m instanceof Put) {
+                if (put != null) {
+                    indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, null));
+                }
+                put = (Put)m;
+            } else {
+                indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, (Delete)m));
+                put = null;
+            }
+            miniBatchOp.setOperationStatus(i, NOWRITE);
+        }
+        if (put != null) {
+            indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, null));
+        }
+        HTableInterfaceReference hTableInterfaceReference =
+              new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+        context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
+        for (Mutation m : indexMutations) {
+            context.preIndexUpdates.put(hTableInterfaceReference, m);
+        }
+        doPre(c, context, miniBatchOp);
+        // For rebuild updates, no post index update is prepared. Just create an empty list.
+        context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
+  }
+
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
                                            MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
       ignoreAtomicOperations(miniBatchOp);
@@ -1016,37 +1057,31 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       Mutation firstMutation = miniBatchOp.getOperation(0);
       ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
       context.rebuild = replayWrite != null;
+      if (context.rebuild) {
+          preBatchMutateWithExceptionsForRebuild(c, miniBatchOp, context, indexMetaData.getIndexMaintainers().get(0));
+          return;
+      }
       /*
        * Exclusively lock all rows so we get a consistent read
        * while determining the index updates
        */
       long now;
       Collection<? extends Mutation> pendingMutations;
-      if (!context.rebuild) {
-          populateRowsToLock(miniBatchOp, context);
-          lockRows(context);
-          now = EnvironmentEdgeManager.currentTimeMillis();
-          // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
-          // concurrent updates
-          populatePendingRows(context);
-          // Merge all the updates for a single row into a single update to be processed
-          pendingMutations = mergeMutations(c, miniBatchOp, context, now);
-      }
-      else {
-          now = EnvironmentEdgeManager.currentTimeMillis();
-          // Group cells within a mutation based on cell timestamps and create a separate mutation for each group
-          pendingMutations = splitMutations(miniBatchOp, context);
-      }
-
+      populateRowsToLock(miniBatchOp, context);
+      lockRows(context);
+      now = EnvironmentEdgeManager.currentTimeMillis();
+      // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
+      // concurrent updates
+      populatePendingRows(context);
+      // Merge all the updates for a single row into a single update to be processed
+      pendingMutations = mergeMutations(c, miniBatchOp, context, now);
       // early exit if it turns out we don't have any edits
       if (pendingMutations == null || pendingMutations.isEmpty()) {
           return;
       }
-
       long start = EnvironmentEdgeManager.currentTimeMillis();
       preparePreIndexMutations(c, miniBatchOp, context, pendingMutations, now, indexMetaData);
       metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
-
       // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
       // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
       // can be prepared in less than one millisecond
@@ -1060,16 +1095,14 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       }
       // Do the first phase index updates
       doPre(c, context, miniBatchOp);
-      if (!context.rebuild) {
-          // Acquire the locks again before letting the region proceed with data table updates
-          List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(context.rowLocks.size());
-          for (RowLock rowLock : context.rowLocks) {
-              rowLocks.add(lockManager.lockRow(rowLock.getRowKey(), rowLockWaitDuration));
-          }
-          context.rowLocks.clear();
-          context.rowLocks = rowLocks;
-          preparePostIndexMutations(context, now, indexMetaData);
+      // Acquire the locks again before letting the region proceed with data table updates
+      List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(context.rowLocks.size());
+      for (RowLock rowLock : context.rowLocks) {
+          rowLocks.add(lockManager.lockRow(rowLock.getRowKey(), rowLockWaitDuration));
       }
+      context.rowLocks.clear();
+      context.rowLocks = rowLocks;
+      preparePostIndexMutations(context, now, indexMetaData);
       if (failDataTableUpdatesForTesting) {
           throw new DoNotRetryIOException("Simulating the data table write failure");
       }

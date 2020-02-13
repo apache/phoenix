@@ -25,7 +25,9 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.util.*;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -243,6 +245,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
         long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
         assertEquals(nRows, actualRowCount);
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
     }
 
     @Test

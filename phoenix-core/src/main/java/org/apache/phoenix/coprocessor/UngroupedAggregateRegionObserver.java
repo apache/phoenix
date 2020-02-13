@@ -1117,6 +1117,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             rawScan.setMaxVersions();
             rawScan.getFamilyMap().clear();
             rawScan.setFilter(null);
+            for (byte[] family : scan.getFamilyMap().keySet()) {
+                rawScan.addFamily(family);
+            }
             innerScanner.close();
             RegionScanner scanner = region.getScanner(rawScan);
             return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
