@@ -357,6 +357,13 @@ public class IndexExtendedIT extends BaseTest {
 
             // job failed, verify that the index table is still not in the ACTIVE state
             assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
+
+            // Run the index MR job and verify that the index table rebuild succeeds
+            IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
+
+            // job passed, verify that the index table is in the ACTIVE state
+            assertTrue(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
         }
     }
 }
