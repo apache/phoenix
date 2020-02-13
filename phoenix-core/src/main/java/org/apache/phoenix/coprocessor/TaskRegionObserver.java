@@ -185,11 +185,11 @@ public class TaskRegionObserver extends BaseRegionObserver {
 
                         if (result == null) {
                             // reread task record. There might be async setting of task status
-                            taskRecord = Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
-                                    taskRecord.getSchemaName(), taskRecord.getTableName(),
-                                    taskType, taskRecord.getTenantId(), null).get(0);
-                            if (taskRecord.getStatus() != null && taskRecord.getStatus().equals(
-                                    PTable.TaskStatus.COMPLETED.toString())) {
+                            taskRecord =
+                                    Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
+                                            taskRecord.getSchemaName(), taskRecord.getTableName(),
+                                            taskType, taskRecord.getTenantId(), null).get(0);
+                            if (taskRecord.getStatus() != null && !taskRecord.getStatus().equals(PTable.TaskStatus.CREATED.toString())) {
                                 continue;
                             }
 
