@@ -195,7 +195,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                                     Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
                                             taskRecord.getSchemaName(), taskRecord.getTableName(),
                                             taskType, taskRecord.getTenantId(), null).get(0);
-                            if (taskRecord.getStatus() != null && Arrays.stream(excludeStates).anyMatch(taskRecord.getStatus()::equals)) {
+                            if (taskRecord.getStatus() != null && !taskRecord.getStatus().equals(PTable.TaskStatus.CREATED.toString())) {
                                 continue;
                             }
 
