@@ -2960,21 +2960,23 @@ public class MetaDataClient {
             }
 
 			// Modularized this code for unit testing
-            MetaDataMutationResult result = getCreateTableMutationResult(tableMetaData, viewType,
-                    allocateIndexId, physicalNames, tableType, tableProps, familyPropList, splits,
-                    isNamespaceMapped, parent);
+            MetaDataMutationResult result = connection.getQueryServices().createTable(tableMetaData,
+                    viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes()
+                            : null, tableType, tableProps, familyPropList, splits, isNamespaceMapped,
+                    allocateIndexId, UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
             MutationCode code = result.getMutationCode();
             if (code != MutationCode.TABLE_NOT_FOUND) {
-                boolean mutationResult =  handleCreateTableMutationCode(result, code, statement,
+                boolean tableAlreadyExists = handleCreateTableMutationCode(result, code, statement,
                         schemaName, tableName, parent);
-                if(mutationResult) {
+                if(tableAlreadyExists) {
                     return null;
                 }
             }
             // If the parent table of the view has the auto partition sequence name attribute,
             // set the view statement and relevant partition column attributes correctly
             if (parent!=null && parent.getAutoPartitionSeqName()!=null) {
-                final PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent));
+                final PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil
+                        .getAutoPartitionColIndex(parent));
                 final Long autoPartitionNum = Long.valueOf(result.getAutoPartitionNum());
                 columns.put(autoPartitionCol, new DelegateColumn(autoPartitionCol) {
                     @Override
@@ -2990,21 +2992,24 @@ public class MetaDataClient {
                         return true;
                     }
                 });
-                String viewPartitionClause = QueryUtil.getViewPartitionClause(MetaDataUtil.getAutoPartitionColumnName(parent), autoPartitionNum);
+                String viewPartitionClause = QueryUtil.getViewPartitionClause(MetaDataUtil
+                        .getAutoPartitionColumnName(parent), autoPartitionNum);
                 if (viewStatement!=null) {
                     viewStatement = viewStatement + " AND " + viewPartitionClause;
                 }
                 else {
-                    viewStatement = QueryUtil.getViewStatement(parent.getSchemaName().getString(), parent.getTableName().getString(), viewPartitionClause);
+                    viewStatement = QueryUtil.getViewStatement(parent.getSchemaName().getString(),
+                            parent.getTableName().getString(), viewPartitionClause);
                 }
             }
             PName newSchemaName = PNameFactory.newName(schemaName);
             /*
-             * It doesn't hurt for the PTable of views to have the cqCounter. However, views always rely on the
-             * parent table's counter to dole out encoded column qualifiers. So setting the counter as NULL_COUNTER
-             * for extra safety.
+             * It doesn't hurt for the PTable of views to have the cqCounter. However, views always
+             * rely on the parent table's counter to dole out encoded column qualifiers. So setting
+             * the counter as NULL_COUNTER for extra safety.
              */
-            EncodedCQCounter cqCounterToBe = tableType == PTableType.VIEW ? NULL_COUNTER : cqCounter;
+            EncodedCQCounter cqCounterToBe = tableType == PTableType.VIEW ? NULL_COUNTER :
+                    cqCounter;
             PTable table = new PTableImpl.Builder()
                     .setType(tableType)
                     .setState(indexState)
@@ -3048,7 +3053,8 @@ public class MetaDataClient {
                             ImmutableList.of() : ImmutableList.copyOf(physicalNames))
                     .setColumns(columns.values())
                     .setViewTTL(viewTTL == null ? VIEW_TTL_NOT_DEFINED : viewTTL)
-                    .setViewTTLHighWaterMark(viewTTLHighWaterMark == null ? MIN_VIEW_TTL_HWM : viewTTLHighWaterMark)
+                    .setViewTTLHighWaterMark(viewTTLHighWaterMark == null ? MIN_VIEW_TTL_HWM :
+                            viewTTLHighWaterMark)
                     .setViewModifiedUpdateCacheFrequency(tableType ==  PTableType.VIEW &&
                             parent != null &&
                             parent.getUpdateCacheFrequency() != updateCacheFrequency)
@@ -3065,10 +3071,19 @@ public class MetaDataClient {
             return table;
         } finally {
             connection.setAutoCommit(wasAutoCommit);
-            deleteMutexCells(parentPhysicalSchemaName, parentPhysicalTableName, acquiredColumnMutexSet);
+            deleteMutexCells(parentPhysicalSchemaName, parentPhysicalTableName,
+                    acquiredColumnMutexSet);
         }
     }
 
+    /* This method handles mutation codes sent by phoenix server, except for TABLE_NOT_FOUND which
+    * is considered to be a success code. If TABLE_ALREADY_EXISTS in hbase, we don't need to add
+    * it in ConnectionQueryServices and we return result as true. However if code is
+    * NEWER_TABLE_FOUND and it does not exists in statement then we return false because we need to
+    * add it ConnectionQueryServices. For other mutation codes it throws related SQLException.
+    * If server is throwing new mutation code which is not being handled by client then it throws
+    * SQLException stating the server side Mutation code.
+    */
     @VisibleForTesting
     public boolean handleCreateTableMutationCode(MetaDataMutationResult result, MutationCode code,
                  CreateTableStatement statement, String schemaName, String tableName,
@@ -3111,8 +3126,8 @@ public class MetaDataClient {
             default:
                 // Cannot use SQLExecptionInfo here since not all mutation codes have their
                 // corresponding codes in the enum SQLExceptionCode
-                throw new SQLException("Exception occurred while creating table Mutation code, "
-                        + code.toString());
+                throw new SQLException("Exception occurred while creating table, mutation code " +
+                        "sent from server: " + code.toString());
         }
     }
 
@@ -3120,16 +3135,6 @@ public class MetaDataClient {
             throws SQLException {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.valueOf(code))
                 .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-    }
-
-    public MetaDataMutationResult getCreateTableMutationResult(List<Mutation> tableMetaData, ViewType
-           viewType, boolean allocateIndexId, List<PName> physicalNames, PTableType tableType,
-           Map<String,Object> tableProps,List<Pair<byte[],Map<String,Object>>> familyPropList,
-           byte[][] splits, boolean isNamespaceMapped, PTable parent) throws SQLException {
-        return connection.getQueryServices().createTable(tableMetaData,
-                viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes()
-                : null, tableType, tableProps, familyPropList, splits, isNamespaceMapped,
-                allocateIndexId, UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
     }
 
     private static boolean isPkColumn(PrimaryKeyConstraint pkConstraint, ColumnDef colDef) {

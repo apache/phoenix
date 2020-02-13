@@ -23,6 +23,7 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
     private static PhoenixConnection phxConn;
     private static MetaDataClient mockClient;
     private static String ddlFormat;
+    private static CreateTableStatement stmt;
 
     @BeforeClass
     public static void setupTest() throws SQLException {
@@ -32,6 +33,7 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
         mockClient = new MetaDataClient(phxConn);
         ddlFormat = "CREATE TABLE " + schema + "." + baseTable + " " +
                 "(A VARCHAR PRIMARY KEY, B BIGINT, C VARCHAR)";
+        stmt = (CreateTableStatement)new SQLParser((ddlFormat)).parseStatement();
     }
 
     @Test
@@ -39,7 +41,6 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
         MetaDataProtocol.MetaDataMutationResult result = new MetaDataProtocol.MetaDataMutationResult
                 (MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION ,new PSchema(schema),
             EnvironmentEdgeManager.currentTimeMillis());
-        CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddlFormat)).parseStatement();
         try {
             mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt,
                     schema, baseTable, null);
@@ -55,7 +56,6 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
         MetaDataProtocol.MetaDataMutationResult result = new MetaDataProtocol.MetaDataMutationResult(
                 MetaDataProtocol.MutationCode.NO_PK_COLUMNS ,new PSchema(schema),
                 EnvironmentEdgeManager.currentTimeMillis());
-        CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddlFormat)).parseStatement();
         try {
             mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt,
                     schema, baseTable, null);
