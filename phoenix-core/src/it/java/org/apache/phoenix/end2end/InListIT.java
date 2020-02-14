@@ -37,7 +37,6 @@ import java.util.Properties;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -537,4 +536,110 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testInListExpressionWithDescOrderWithRightQueryPlan() throws Exception {
+        String fullTableName = generateUniqueName();
+        String fullViewName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                    " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " EVENT_DATE DATE NOT NULL,\n" +
+                    " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (\n" + " ID1, ID2 DESC, EVENT_DATE DESC\n" + ")) " +
+                    "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'"); }
+
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            Statement stmt = viewConn.createStatement();
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000300', 1532458230000)");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000400', 1532458240000)");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000500', 1532458250000)");
+            viewConn.commit();
+
+
+            ResultSet rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID1, ID2, EVENT_DATE) " +
+                    "IN (('005xx000001Sv6o', '000000000000400', 1532458240000)," +
+                    "('005xx000001Sv6o', '000000000000300', 1532458230000))");
+            assertTrue(getExplainPlanString(rs).contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+
+            rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID1, EVENT_DATE, ID2) IN " +
+                    "(('005xx000001Sv6o', 1532458240000, '000000000000400')," +
+                    "('005xx000001Sv6o', 1532458230000, '000000000000300'))");
+            assertTrue(getExplainPlanString(rs).contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+
+            rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID2, EVENT_DATE, ID1) IN " +
+                    "(('000000000000400', 1532458240000, '005xx000001Sv6o')," +
+                    "('000000000000300', 1532458230000, '005xx000001Sv6o'))");
+            assertTrue(getExplainPlanString(rs).contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+
+            rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (EVENT_DATE, ID2, ID1) IN " +
+                    "((1532458240000, '000000000000400', '005xx000001Sv6o')," +
+                    "(1532458230000, '000000000000300', '005xx000001Sv6o'))");
+            assertTrue(getExplainPlanString(rs).contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithRightQueryPlan() throws Exception {
+        String fullTableName = generateUniqueName();
+        String fullViewName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true); Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                    " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " EVENT_DATE DATE,\n" +
+                    " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                    "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            viewConn.setAutoCommit(true);
+            Statement stmt = viewConn.createStatement();
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000300', 1532458230000)");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000400', 1532458240000)");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
+                    "('005xx000001Sv6o', '000000000000500', 1532458250000)");
+            viewConn.commit();
+
+            ResultSet rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID1, ID2) IN " +
+                    "(('005xx000001Sv6o', '000000000000500')," +
+                    "('005xx000001Sv6o', '000000000000400')," +
+                    "('005xx000001Sv6o', '000000000000300'))");
+
+            assertTrue(getExplainPlanString(rs).contains("DELETE SINGLE ROW"));
+
+            rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                    "(('000000000000400', '005xx000001Sv6o')," +
+                    "('000000000000300', '005xx000001Sv6o'))");
+            assertTrue(getExplainPlanString(rs).contains("DELETE SINGLE ROW"));
+        }
+    }
+
+    private String getExplainPlanString(ResultSet rs) throws SQLException {
+        StringBuilder builder = new StringBuilder();
+        while(rs.next()) {
+            for(int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+                Object col = rs.getObject(i + 1);
+                if (col != null) {
+                    builder.append(col.toString());
+                    builder.append(",");
+                }
+            }
+            builder.append("\n");
+        }
+        return builder.toString();
+    }
 }
