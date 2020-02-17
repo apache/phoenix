@@ -73,7 +73,7 @@
   <properties>
     <!-- The HBase compatibility module that that will be included in
     the shaded JARs and the assembly -->
-    <hbase.profile>2.0</hbase.profile>
+    <hbase.profile>2.2</hbase.profile>
     <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
 
     <!-- Hadoop Version -->
@@ -1112,9 +1112,8 @@
       </build>
     </profile>
     <!-- See BUILDING.md for profile selection-->
-    <!-- 2.0 support should probably be removed for the 5.1 release -->
     <profile>
-      <id>phoenix-hbase-compat-2.0.1-default</id>
+      <id>phoenix-hbase-compat-2.2.1-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
@@ -1123,35 +1122,34 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
         </dependency>
       </dependencies>
       <properties>
-        <hbase.profile>2.0</hbase.profile>
-        <hbase.compat.version>2.0.1</hbase.compat.version>
-        <!-- this is currently set to 2.0.1 to match the non-modular version -->
-        <hbase.version>2.0.1</hbase.version>
+        <hbase.profile>2.2</hbase.profile>
+        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <hbase.version>2.2.3</hbase.version>
       </properties>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-2.0.1</id>
+      <id>phoenix-hbase-compat-2.2.1</id>
       <activation>
-        <activeByDefault>true</activeByDefault>
         <property>
           <name>hbase.profile</name>
-          <value>2.0</value>
+          <value>2.2</value>
         </property>
       </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
+          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
         </dependency>
       </dependencies>
       <properties>
-        <hbase.profile>2.0</hbase.profile>
-        <hbase.compat.version>2.0.1</hbase.compat.version>
-        <hbase.version>2.0.4</hbase.version>
+        <hbase.profile>2.2</hbase.profile>
+        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <!-- Update to latest before release -->
+        <hbase.version>2.2.3</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1176,29 +1174,28 @@
         <hbase.version>2.1.8</hbase.version>
       </properties>
     </profile>
+    <!-- EOM, consider removing -->
     <profile>
-      <id>phoenix-hbase-compat-2.2.1</id>
+      <id>phoenix-hbase-compat-2.0.1</id>
       <activation>
         <property>
           <name>hbase.profile</name>
-          <value>2.2</value>
+          <value>2.0</value>
         </property>
       </activation>
       <dependencies>
         <dependency>
           <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+          <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
         </dependency>
       </dependencies>
       <properties>
-        <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.1</hbase.compat.version>
-        <!-- Update to latest before release -->
-        <hbase.version>2.2.3</hbase.version>
+        <hbase.profile>2.0</hbase.profile>
+        <hbase.compat.version>2.0.1</hbase.compat.version>
+        <hbase.version>2.0.4</hbase.version>
       </properties>
     </profile>
   </profiles>
-
   <reporting>
       <plugins>
           <plugin>
