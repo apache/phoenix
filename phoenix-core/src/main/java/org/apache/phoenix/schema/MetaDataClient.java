@@ -2961,9 +2961,10 @@ public class MetaDataClient {
 
 			// Modularized this code for unit testing
             MetaDataMutationResult result = connection.getQueryServices().createTable(tableMetaData,
-                    viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes()
-                            : null, tableType, tableProps, familyPropList, splits, isNamespaceMapped,
-                    allocateIndexId, UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
+                    viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).
+                            getBytes() : null, tableType, tableProps, familyPropList, splits,
+                            isNamespaceMapped, allocateIndexId, UpgradeUtil.isNoUpgradeSet(
+                            connection.getClientInfo()), parent);
             MutationCode code = result.getMutationCode();
             if (code != MutationCode.TABLE_NOT_FOUND) {
                 boolean tableAlreadyExists = handleCreateTableMutationCode(result, code, statement,

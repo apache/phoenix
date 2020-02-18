@@ -196,8 +196,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testWithSetNull() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
+        // This test is for building non-transactional mutable global indexes with direct api
+        if (localIndex || transactional || !directApi || useSnapshot || useTenantId || !mutable) {
             return;
         }
         // This tests the cases where a column having a null value is overwritten with a not null value and vice versa;
@@ -242,6 +242,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             TestUtil.doMajorCompaction(conn, dataTableFullName);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
+            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,
+                    0, IndexTool.IndexVerifyType.ONLY, new String[0]);
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            dropIndexToolTables(conn);
         }
     }
 
@@ -334,6 +344,18 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
+            if (localIndex || transactional || useTenantId || useSnapshot) {
+                return;
+            }
+            // Run the index MR job and verify that the global index table is built correctly
+            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            assertEquals(4, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(4, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(4, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
         } finally {
             conn.close();
         }

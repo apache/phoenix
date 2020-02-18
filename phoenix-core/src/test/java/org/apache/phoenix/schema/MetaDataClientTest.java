@@ -53,9 +53,9 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
     @Test
     //Testing the case when Mutation code thrown from sever is not handled by MetaDataClient
     public void testHandleCreateTableMutationCodeWithNewCode() throws SQLException {
-        MetaDataProtocol.MetaDataMutationResult result = new MetaDataProtocol.MetaDataMutationResult(
-                MetaDataProtocol.MutationCode.NO_PK_COLUMNS ,new PSchema(schema),
-                EnvironmentEdgeManager.currentTimeMillis());
+        MetaDataProtocol.MetaDataMutationResult result = new MetaDataProtocol
+                .MetaDataMutationResult(MetaDataProtocol.MutationCode.NO_PK_COLUMNS,
+                new PSchema(schema), EnvironmentEdgeManager.currentTimeMillis());
         try {
             mockClient.handleCreateTableMutationCode(result, result.getMutationCode(), stmt,
                     schema, baseTable, null);

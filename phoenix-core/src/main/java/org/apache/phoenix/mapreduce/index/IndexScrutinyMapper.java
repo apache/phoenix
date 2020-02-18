@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -50,6 +51,8 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ColumnInfo;
@@ -298,31 +301,36 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     }
 
     private long getTableTtl() throws SQLException, IOException {
-        PTable psourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
-        if (psourceTable.getType() == PTableType.INDEX
-                && psourceTable.getIndexType() == PTable.IndexType.LOCAL) {
+        PTable pSourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
+        if (pSourceTable.getType() == PTableType.INDEX
+                && pSourceTable.getIndexType() == PTable.IndexType.LOCAL) {
             return Integer.MAX_VALUE;
         }
-        String schema = psourceTable.getSchemaName().toString();
-        String table = getSourceTableName(psourceTable);
-        Admin admin = connection.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        String fullTableName = SchemaUtil.getQualifiedTableName(schema, table);
-        HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(fullTableName));
-        return tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(psourceTable)).getTimeToLive();
+        ConnectionQueryServices
+                cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
+        Admin admin = cqsi.getAdmin();
+        String physicalTable = getSourceTableName(pSourceTable,
+                SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
+        HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(physicalTable));
+        return tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
     }
 
-    private String getSourceTableName(PTable psourceTable) {
-        String sourcePhysicalName = psourceTable.getPhysicalName().getString();
-        String table;
-        if (psourceTable.getType() == PTableType.VIEW) {
-            table = sourcePhysicalName;
-        } else if (MetaDataUtil.isViewIndex(sourcePhysicalName)) {
-            table = SchemaUtil.getParentTableNameFromIndexTable(sourcePhysicalName,
-                            MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
+    @VisibleForTesting
+    public static String getSourceTableName(PTable pSourceTable, boolean isNamespaceEnabled) {
+        String sourcePhysicalName = pSourceTable.getPhysicalName().getString();
+        String physicalTable, table, schema;
+        if (pSourceTable.getType() == PTableType.VIEW
+                || MetaDataUtil.isViewIndex(sourcePhysicalName)) {
+            // in case of view and view index ptable, getPhysicalName() returns hbase tables
+            // i.e. without _IDX_ and with _IDX_ respectively
+            physicalTable = sourcePhysicalName;
         } else {
-            table = psourceTable.getTableName().toString();
+            table = pSourceTable.getTableName().toString();
+            schema = pSourceTable.getSchemaName().toString();
+            physicalTable = SchemaUtil
+                    .getPhysicalHBaseTableName(schema, table, isNamespaceEnabled).toString();
         }
-        return table;
+        return physicalTable;
     }
 
     protected Map<String, Pair<Long, List<Object>>> buildTargetStatement(PreparedStatement targetStatement)
