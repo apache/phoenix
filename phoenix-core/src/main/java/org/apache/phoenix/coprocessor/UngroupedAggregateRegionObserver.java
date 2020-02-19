@@ -530,7 +530,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         if (isDescRowKeyOrderUpgrade || isDelete ||
                 (isUpsert && (targetHTable == null ||
-                        targetHTable.getName().equals(region.getTableDescriptor().getTableName())))
+                        targetHTable.getName().equals(region.getTableDesc().getTableName())))
                 || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             needToWrite = true;
             maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
