@@ -267,9 +267,9 @@ public class IndexManagementUtil {
                   Mutation mWithSameTS;
                   Cell firstCell = batch.getKvs().get(0);
                   if (KeyValue.Type.codeToType(firstCell.getTypeByte()) == KeyValue.Type.Put) {
-                      mWithSameTS = new Put(row, firstCell.getTimestamp());
+                      mWithSameTS = new Put(row);
                   } else {
-                      mWithSameTS = new Delete(row, firstCell.getTimestamp());
+                      mWithSameTS = new Delete(row);
                   }
                   if (m.getAttributesMap() != null) {
                       for (Map.Entry<String,byte[]> entry : m.getAttributesMap().entrySet()) {
