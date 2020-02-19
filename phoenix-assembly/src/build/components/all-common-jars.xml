@@ -27,9 +27,9 @@
       <directory>${project.basedir}/../phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-client-${project.version}-${hbase.compat.version.string}.jar</include>
+        <include>phoenix-client-${project.version}-${hbase.profile.string}.jar</include>
         <!-- deprecated jar name, which we now have a symlink for -->
-        <include>phoenix-${project.version}-${hbase.compat.version.string}-client.jar</include>
+        <include>phoenix-${project.version}-${hbase.profile.string}-client.jar</include>
       </includes>
     </fileSet>
     <fileSet>
