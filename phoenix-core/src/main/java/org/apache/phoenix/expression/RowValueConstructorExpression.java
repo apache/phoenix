@@ -49,7 +49,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     private int partialEvalIndex = -1;
     private int estimatedByteSize;
 
-    // The boolean field that indicated the object is a literal constant, 
+    // The boolean field that indicated the object is a literal constant,
     // has been repurposed to a bitset and now holds additional information. 
     // This is to facilitate b/w compat to 4.13 clients.
     // @see <a href="https://issues.apache.org/jira/browse/PHOENIX-5122">PHOENIX-5122</a> 
@@ -239,7 +239,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     // Don't remove trailing separator byte unless it's the one for ASC
                     // as otherwise we need it to ensure sort order is correct.
                     // Additionally for b/w compat with clients older than 4.14.1 -
-                    // If SortOorder.ASC then always strip trailing separator byte (as before)
+                    // If SortOrder.ASC then always strip trailing separator byte (as before)
                     // else only strip for >= 4.14 client (when STRIP_TRAILING_SEPARATOR_BYTE bit is set)
                     for (int k = expressionCount -1 ; 
                             k >=0 &&  getChildren().get(k).getDataType() != null 

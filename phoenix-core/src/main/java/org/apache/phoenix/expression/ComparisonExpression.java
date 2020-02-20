@@ -109,7 +109,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
             }
         }
     }
-    
+
     public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);

@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -72,11 +71,6 @@ public class InListExpression extends BaseSingleExpression {
         }
         if (children.size() == 2) {
             return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
-        }
-
-        if (firstChild instanceof RowValueConstructorExpression) {
-            children = getSortedRowValueConstructorExpressionList(children, firstChild.isStateless());
-            firstChild = children.get(0);
         }
 
         boolean addedNull = false;
@@ -311,83 +305,5 @@ public class InListExpression extends BaseSingleExpression {
 
     public InListExpression clone(List<Expression> l) {
         return new InListExpression(l, this.rowKeyOrderOptimizable);
-    }
-
-    public static List<Expression> getSortedRowValueConstructorExpressionList(List<Expression> children, boolean isStateless) {
-        List<Expression> l = new ArrayList<>();
-        List<InListColumnKeyValuePair> inListColumnKeyValuePairList = new ArrayList<>();
-        int numberOfRows = children.size() - 1;
-
-        for (int i = 0; i < children.size(); i++) {
-            RowValueConstructorExpression child = (RowValueConstructorExpression)children.get(i);
-            if (i == 0) {
-                for (int j = 0; j < child.getChildren().size(); j++) {
-                    if (child.getChildren().get(j) instanceof RowKeyColumnExpression) {
-                        RowKeyColumnExpression rowKeyColumnExpression = (RowKeyColumnExpression)child.getChildren().get(j);
-                        InListColumnKeyValuePair inListColumnKeyValuePair = new InListColumnKeyValuePair(rowKeyColumnExpression);
-                        inListColumnKeyValuePairList.add(inListColumnKeyValuePair);
-                    } else {
-                        return children;
-                    }
-                }
-            } else {
-                for (int j = 0; j < child.getChildren().size(); j++) {
-                    LiteralExpression literalExpression = (LiteralExpression) child.getChildren().get(j);
-                    inListColumnKeyValuePairList.get(j).addToLiteralExpressionList(literalExpression);
-                }
-            }
-        }
-        Collections.sort(inListColumnKeyValuePairList);
-
-        //reconstruct columns
-        List<Expression> keyExpressions = new ArrayList<>();
-        for (int i = 0; i < inListColumnKeyValuePairList.size(); i++) {
-            keyExpressions.add(inListColumnKeyValuePairList.get(i).getRowKeyColumnExpression());
-        }
-        l.add(new RowValueConstructorExpression(keyExpressions,isStateless));
-
-        //reposition to corresponding values
-        List<List<Expression>> valueExpressionsList = new ArrayList<>();
-
-        for (int j = 0; j < inListColumnKeyValuePairList.size(); j++) {
-            List<LiteralExpression> valueList = inListColumnKeyValuePairList.get(j).getLiteralExpressionList();
-            for (int i = 0; i < numberOfRows; i++) {
-                if (j == 0) {
-                    valueExpressionsList.add(new ArrayList<Expression>());
-                }
-                valueExpressionsList.get(i).add(valueList.get(i));
-            }
-        }
-        for (List<Expression> valueExpressions: valueExpressionsList) {
-            l.add(new RowValueConstructorExpression(valueExpressions, isStateless));
-        }
-        return l;
-    }
-
-    static class InListColumnKeyValuePair implements Comparable<InListColumnKeyValuePair> {
-        RowKeyColumnExpression rowKeyColumnExpression;
-        List<LiteralExpression> literalExpressionList;
-
-        InListColumnKeyValuePair(RowKeyColumnExpression rowKeyColumnExpression) {
-            this.rowKeyColumnExpression = rowKeyColumnExpression;
-            this.literalExpressionList = new ArrayList<>();
-        }
-
-        public RowKeyColumnExpression getRowKeyColumnExpression() {
-            return this.rowKeyColumnExpression;
-        }
-
-        public void addToLiteralExpressionList(LiteralExpression literalExpression) {
-            this.literalExpressionList.add(literalExpression);
-        }
-
-        public List<LiteralExpression> getLiteralExpressionList() {
-            return this.literalExpressionList;
-        }
-
-        @Override
-        public int compareTo(InListColumnKeyValuePair o) {
-            return rowKeyColumnExpression.getPosition() - o.getRowKeyColumnExpression().getPosition();
-        }
     }
 }

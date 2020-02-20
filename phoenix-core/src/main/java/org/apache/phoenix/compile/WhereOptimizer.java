@@ -546,6 +546,8 @@ public class WhereOptimizer {
      * operators, CASE statements, and string concatenation.
      */
     public static class KeyExpressionVisitor extends StatelessTraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
+        private boolean orderMatter;
+
         private static final KeySlots EMPTY_KEY_SLOTS = new KeySlots() {
             @Override
             public boolean isPartialExtraction() {
@@ -594,7 +596,15 @@ public class WhereOptimizer {
             if (childSlots.isEmpty() || rvc.isStateless()) {
                 return null;
             }
-            
+            if (!this.orderMatter) {
+                // op equals or no equals, we sort here
+                Collections.sort(childSlots, new Comparator<KeySlots>() {
+                    @Override
+                    public int compare(KeySlots o1, KeySlots o2) {
+                        return o1.getSlots().iterator().next().getPKPosition() - o2.getSlots().iterator().next().getPKPosition();
+                    }
+                });
+            }
             int position = -1;
             int initialPosition = -1;
             for (int i = 0; i < childSlots.size(); i++) {
@@ -605,7 +615,7 @@ public class WhereOptimizer {
                 // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
                 // key columns. We can't rule the RVC out completely when the childSlots is less the the
                 // RVC length, as a partial, *leading* match is optimizable.
-                if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
+                if (this.orderMatter && (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i)))) {
                     break;
                 }
                 int pkPosition = keySlot.getPKPosition();
@@ -659,6 +669,14 @@ public class WhereOptimizer {
             final ImmutableBytesWritable ptr = context.getTempPtr();
             return new SingleKeySlot(new CoerceKeySlot(
                     childPart, ptr, node, extractNodes), slot.getPKPosition(), slot.getKeyRanges());
+        }
+
+        public boolean isOrderMatter() {
+            return this.orderMatter;
+        }
+
+        public void setOrderMatter(boolean orderMatter) {
+            this.orderMatter = orderMatter;
         }
 
         /**
@@ -1662,7 +1680,10 @@ public class WhereOptimizer {
                     ranges.add(range);
                 }
             }
-            return newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
+            this.orderMatter = true;
+            KeySlots result = newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
+            this.orderMatter = false;
+            return result;
         }
 
         @Override
