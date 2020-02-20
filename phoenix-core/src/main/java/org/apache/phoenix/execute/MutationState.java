@@ -77,8 +77,9 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -91,10 +92,9 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
-import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
@@ -395,6 +395,10 @@ public class MutationState implements SQLCloseable {
 
     public long getUpdateCount() {
         return sizeOffset + numRows;
+    }
+
+    public int getNumRows() {
+        return numRows;
     }
 
     private void joinMutationState(TableRef tableRef, MultiRowMutationState srcRows,

@@ -35,6 +35,8 @@ import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -47,8 +49,6 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
-import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Maps;
@@ -514,8 +514,10 @@ public enum SQLExceptionCode {
             "Cannot use a connection with SCN set to upsert data for " +
                     "table with ROW_TIMESTAMP column."),
     CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES(903,"43M14",
-            "Cannot use a connection with SCN set to upsert data for a table with indexes.");
+            "Cannot use a connection with SCN set to upsert data for a table with indexes."),
 
+    CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS(904, "43M15",
+            "Cannot perform DDL with pending mutations. Commit or rollback mutations before performing DDL");
 
     private final int errorCode;
     private final String sqlState;
