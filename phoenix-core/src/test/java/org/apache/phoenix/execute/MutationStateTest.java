@@ -18,14 +18,21 @@
 package org.apache.phoenix.execute;
 
 import static org.apache.phoenix.execute.MutationState.joinSortedIntArrays;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
@@ -34,10 +41,16 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import com.google.common.collect.ImmutableList;
 
@@ -175,4 +188,26 @@ public class MutationStateTest {
 
     }
 
+    @Rule
+    public ExpectedException exceptionRule = ExpectedException.none();
+
+    @Test
+    public void testPendingMutationsOnDDL() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, "true");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                PhoenixConnection pConnSpy = spy((PhoenixConnection) conn)) {
+            MutationState mutationState = mock(MutationState.class);
+            when(mutationState.getNumRows()).thenReturn(1);
+
+            // Create a connection with mutation state and mock it
+            doReturn(mutationState).when(pConnSpy).getMutationState();
+            exceptionRule.expect(SQLException.class);
+            exceptionRule.expectMessage(
+                SQLExceptionCode.CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS.getMessage());
+
+            pConnSpy.createStatement().execute("create table MUTATION_TEST1"
+                    + "( id1 UNSIGNED_INT not null primary key," + "appId1 VARCHAR)");
+        }
+    }
 }

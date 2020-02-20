@@ -79,14 +79,14 @@ import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_I
 import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
-import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
+import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
 import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
@@ -394,6 +394,8 @@ public class QueryServicesOptions {
     public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
 
     public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
+
+    public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

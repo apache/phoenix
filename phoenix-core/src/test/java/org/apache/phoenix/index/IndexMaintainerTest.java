@@ -151,6 +151,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             assertArrayEquals(dataRowKey, dataKeyValues.get(0).getRow());
         } finally {
             try {
+                conn.rollback();
                 conn.createStatement().execute("DROP TABLE " + fullTableName);
             } finally {
                 conn.close();
