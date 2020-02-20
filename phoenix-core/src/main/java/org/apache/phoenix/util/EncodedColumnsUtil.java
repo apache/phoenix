@@ -180,14 +180,15 @@ public class EncodedColumnsUtil {
         // reserve the first position and offset maxEncodedColumnQualifier by ENCODED_CQ_COUNTER_INITIAL_VALUE (which is the minimum encoded column qualifier)
         int numElements = maxEncodedColumnQualifier - QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 2;
         Expression[] colValues = new Expression[numElements];
-        Arrays.fill(colValues, new DelegateExpression(LiteralExpression.newConstant(null)) {
+        Arrays.fill(colValues, new DelegateExpression(new LiteralExpression.Builder().buildSimple(false)) {
+
                    @Override
                    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
                        return false;
                    }
                });
         // 0 is a reserved position, set it to a non-null value so that we can represent absence of a value using a negative offset
-        colValues[0]=LiteralExpression.newConstant(QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        colValues[0]= new LiteralExpression.Builder().setValue(QueryConstants.EMPTY_COLUMN_VALUE_BYTES).buildSimple(false);
         return colValues;
     }
 

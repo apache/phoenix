@@ -55,9 +55,9 @@ public class OctetLengthFunctionTest {
     private void testOctetLength(byte[] bytes, PBinaryBase dataType, int expected)
             throws SQLException {
         LiteralExpression dataExpr;
-        dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.ASC);
+        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
         testOctetLengthExpression(dataExpr, expected);
-        dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.DESC);
+        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         testOctetLengthExpression(dataExpr, expected);
     }
 

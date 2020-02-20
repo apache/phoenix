@@ -136,7 +136,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private static final int EXPRESSION_NOT_PRESENT = -1;
     private static final int ESTIMATED_EXPRESSION_SIZE = 8;
-    
+
     public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
@@ -1036,7 +1036,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     byte[] value = ptr.copyBytesIfNecessary();
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                        colValues[indexArrayPos] = new LiteralExpression(value);
+                        colValues[indexArrayPos] = new LiteralExpression.Builder().setByteValue(value).buildSimple(true);
                     }
                 }
                 

@@ -742,7 +742,7 @@ public class ScanUtil {
         }
     }
 
-    public static void setRowKeyOffset(Scan scan, int offset) {
+    public static void setRowKeyOffset(Scan scan, int offset)  {
         Filter filter = scan.getFilter();
         if (filter == null) {
             return;

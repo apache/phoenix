@@ -426,8 +426,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     new SubstrFunction(
                         Arrays.<Expression>asList(
                             new RowKeyColumnExpression(ENTITY_ID,new RowKeyValueAccessor(ATABLE.getPKColumns(),1)),
-                            LiteralExpression.newConstant(1),
-                            LiteralExpression.newConstant(3))
+                            new LiteralExpression.Builder().setValue(1).buildSimple(false),
+                            new LiteralExpression.Builder().setValue(3).buildSimple(false))
                         ),
                     keyPrefix),
                 QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES),
@@ -515,8 +515,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         new RowKeyColumnExpression(
                             ENTITY_ID,
                             new RowKeyValueAccessor(ATABLE.getPKColumns(), 1)),
-                        LiteralExpression.newConstant(1),
-                        LiteralExpression.newConstant(3))),
+                        new LiteralExpression.Builder().setValue(1).buildSimple(false),
+                        new LiteralExpression.Builder().setValue(3).buildSimple(false))),
                     keyPrefix),
                 constantComparison(
                     CompareOp.EQUAL,

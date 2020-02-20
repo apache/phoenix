@@ -30,7 +30,6 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
@@ -68,7 +67,8 @@ public class CeilDecimalExpression extends RoundDecimalExpression {
        if (expr.getDataType().isCoercibleTo(PLong.INSTANCE)) {
             return expr;
         }
-        Expression scaleExpr = LiteralExpression.newConstant(scale, PInteger.INSTANCE, Determinism.ALWAYS);
+        Expression scaleExpr = new LiteralExpression.Builder().setValue(scale).setDataType(PInteger.INSTANCE)
+                .setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new CeilDecimalExpression(expressions);
     }
@@ -79,7 +79,8 @@ public class CeilDecimalExpression extends RoundDecimalExpression {
             return expr;
         }
        if (exprs.size() == 1) {
-            Expression scaleExpr = LiteralExpression.newConstant(0, PInteger.INSTANCE, Determinism.ALWAYS);
+            Expression scaleExpr = new LiteralExpression.Builder().setValue(0).setDataType(PInteger.INSTANCE)
+                   .setDeterminism(Determinism.ALWAYS).build();
             exprs = Lists.newArrayList(expr, scaleExpr);
         }
         return new CeilDecimalExpression(exprs);

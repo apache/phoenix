@@ -43,7 +43,6 @@ import org.apache.phoenix.schema.types.PDataType;
  * @since 0.1
  */
 abstract public class SingleAggregateFunction extends AggregateFunction {
-    private static final List<Expression> DEFAULT_EXPRESSION_LIST = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
     protected boolean isConstant;
     private Aggregator aggregator;
     
@@ -83,7 +82,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
     };
     
     protected SingleAggregateFunction() {
-        this(DEFAULT_EXPRESSION_LIST, true);
+        this(Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).buildSimple(false)), true);
     }
 
     public SingleAggregateFunction(List<Expression> children) {

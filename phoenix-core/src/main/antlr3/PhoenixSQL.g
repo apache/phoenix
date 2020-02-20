@@ -1080,10 +1080,10 @@ zero_or_more_data_types returns [List<FunctionArgument> ret]
 
 function_argument returns [FunctionArgument ret]
 	: (dt = identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (c = CONSTANT)? (DEFAULTVALUE EQ dv = expression)? (MINVALUE EQ minv = expression)?  (MAXVALUE EQ maxv = expression)? 
-	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null, 
-    dv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)dv).getValue()), 
-    minv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)minv).getValue()), 
-    maxv == null ? null : LiteralExpression.newConstant(((LiteralParseNode)maxv).getValue()));})
+	{ $ret = new FunctionArgument(dt,  ar != null || lsq != null, c!=null,
+	  dv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)dv).getValue()).buildSimple(false),
+      minv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)minv).getValue()).buildSimple(false),
+      maxv == null ? null : new LiteralExpression.Builder().setValue(((LiteralParseNode)maxv).getValue()).buildSimple(false));})
 	;
 
 value_expression_list returns [List<ParseNode> ret]

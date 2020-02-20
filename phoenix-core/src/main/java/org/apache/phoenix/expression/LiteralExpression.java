@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -34,13 +35,12 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
+
 
 import com.google.common.base.Preconditions;
 
@@ -57,19 +57,32 @@ public class LiteralExpression extends BaseTerminalExpression {
 	private static final LiteralExpression[] NULL_EXPRESSIONS = new LiteralExpression[Determinism.values().length];
     private static final LiteralExpression[] TYPED_NULL_EXPRESSIONS = new LiteralExpression[PDataType.values().length * Determinism.values().length];
     private static final LiteralExpression[] BOOLEAN_EXPRESSIONS = new LiteralExpression[2 * Determinism.values().length];
-    
+
     static {
     	for (Determinism determinism : Determinism.values()) {
-    		NULL_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(null, determinism);
+            NULL_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(null, null,
+                    ByteUtil.EMPTY_BYTE_ARRAY, null, null, SortOrder.getDefault(), determinism);
 	        for (int i = 0; i < PDataType.values().length; i++) {
-	            TYPED_NULL_EXPRESSIONS[i+PDataType.values().length*determinism.ordinal()] = new LiteralExpression(PDataType.values()[i], determinism);
-	        }        
-	        BOOLEAN_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(Boolean.FALSE,
-              PBoolean.INSTANCE, PBoolean.INSTANCE.toBytes(Boolean.FALSE), determinism);
-	        BOOLEAN_EXPRESSIONS[Determinism.values().length+determinism.ordinal()] = new LiteralExpression(Boolean.TRUE, PBoolean.INSTANCE, PBoolean.INSTANCE.toBytes(Boolean.TRUE), determinism);
+	            PDataType type = PDataType.values()[i];
+                TYPED_NULL_EXPRESSIONS[i+PDataType.values().length*determinism.ordinal()] =
+                        new LiteralExpression(null, type, ByteUtil.EMPTY_BYTE_ARRAY,
+                                !type.isFixedWidth() ? null : type.getMaxLength(null), null,
+                                SortOrder.getDefault(), determinism);
+	        }
+            BOOLEAN_EXPRESSIONS[determinism.ordinal()] = new LiteralExpression(Boolean.FALSE,
+                    PBoolean.INSTANCE, PBoolean.INSTANCE.toBytes(Boolean.FALSE),
+                    !PBoolean.INSTANCE.isFixedWidth() ? null :
+                            PBoolean.INSTANCE.getMaxLength(null), null, SortOrder.getDefault(),
+                    determinism);
+
+            BOOLEAN_EXPRESSIONS[Determinism.values().length + determinism.ordinal()] =
+                    new LiteralExpression(Boolean.TRUE, PBoolean.INSTANCE,
+                PBoolean.INSTANCE.toBytes(Boolean.TRUE), !PBoolean.INSTANCE.isFixedWidth() ? null
+                            : PBoolean.INSTANCE.getMaxLength(null), null, SortOrder.getDefault(),
+                            determinism);
     	}
     }
-    
+
     private Object value;
     private PDataType type;
     private Determinism determinism;
@@ -77,162 +90,251 @@ public class LiteralExpression extends BaseTerminalExpression {
     private Integer maxLength;
     private Integer scale;
     private SortOrder sortOrder;
-    
+
     private static LiteralExpression getNullLiteralExpression(Determinism determinism) {
-    	return NULL_EXPRESSIONS[determinism.ordinal()] ;
+        return NULL_EXPRESSIONS[determinism.ordinal()] ;
     }
-    
+
     private static LiteralExpression getTypedNullLiteralExpression(PDataType type, Determinism determinism){
-    	return TYPED_NULL_EXPRESSIONS[type.ordinal()+PDataType.values().length*determinism.ordinal()];
+        return TYPED_NULL_EXPRESSIONS[type.ordinal()+PDataType.values().length*determinism.ordinal()];
     }
-    
+
     private static LiteralExpression getBooleanLiteralExpression(Boolean bool, Determinism determinism){
-    	return BOOLEAN_EXPRESSIONS[ (Boolean.FALSE.equals(bool) ?  0 : Determinism.values().length) + determinism.ordinal()];
+        return BOOLEAN_EXPRESSIONS[ (Boolean.FALSE.equals(bool) ?  0 : Determinism.values().length) + determinism.ordinal()];
     }
 
     public static boolean isFalse(Expression child) {
-        if (child!=null) {
+        if (child != null) {
             return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()];
         }
         return false;
     }
-    
+
     public static boolean isTrue(Expression child) {
-    	if (child!=null) {
-    		return child == BOOLEAN_EXPRESSIONS[Determinism.values().length+child.getDeterminism().ordinal()];
-    	}
-    	return false;
+        if (child != null) {
+            return child == BOOLEAN_EXPRESSIONS[Determinism.values().length+child.getDeterminism().ordinal()];
+        }
+        return false;
     }
 
     public static boolean isBooleanNull(Expression child) {
-    	if (child!=null) {
-    		return child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
-    	}
-    	return false;
+        if (child != null) {
+            return child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
+        }
+        return false;
     }
 
     public static boolean isBooleanFalseOrNull(Expression child) {
-        if (child!=null) {
+        if (child != null) {
             return child == BOOLEAN_EXPRESSIONS[child.getDeterminism().ordinal()]
                     || child == TYPED_NULL_EXPRESSIONS[PBoolean.INSTANCE.ordinal()+PDataType.values().length*child.getDeterminism().ordinal()];
         }
         return false;
     }
-    
-    public static LiteralExpression newConstant(Object value) {
-        return newConstant(value, Determinism.ALWAYS);
-    }
-    
-    // TODO: cache?
-    public static LiteralExpression newConstant(Object value, Determinism determinism) {
-        if (value instanceof Boolean) {
-            return getBooleanLiteralExpression((Boolean)value, determinism);
+
+    public static class Builder {
+
+        private Object value;
+        private PDataType type;
+        private Determinism determinism;
+        private byte[] byteValue;
+        private Integer maxLength;
+        private Integer scale;
+        private SortOrder sortOrder;
+        private Boolean rowKeyOrderOptimizable; //Changed type of this field from primitive to object since its value should be true if not explicitly set in Builder
+
+        public Builder setValue(Object value) {
+            this.value=value;
+            return this;
         }
-        else if (value == null) {
-            return getNullLiteralExpression(determinism);
+
+        public Builder setDataType(PDataType type) {
+            this.type=type;
+            return this;
         }
-        PDataType type = PDataType.fromLiteral(value);
-        byte[] b = type.toBytes(value);
-        if (type.isNull(b)) {
-            return getTypedNullLiteralExpression(type, determinism);
+
+        public Builder setDeterminism(Determinism determinism) {
+            this.determinism=determinism;
+            return this;
         }
-        if (type == PVarchar.INSTANCE) {
-            String s = (String) value;
-            if (s.length() == b.length) { // single byte characters only
-                type = PChar.INSTANCE;
+
+        public Builder setRowKeyOrderOptimizable(Boolean rowKeyOrderOptimizable) {
+            this.rowKeyOrderOptimizable=rowKeyOrderOptimizable;
+            return this;
+        }
+
+        public Builder setMaxLength(Integer maxLength) {
+            this.maxLength=maxLength;
+            return this;
+        }
+
+        public Builder setScale(Integer scale) {
+            this.scale=scale;
+            return this;
+        }
+
+        public Builder setSortOrder(SortOrder sortOrder) {
+            this.sortOrder=sortOrder;
+            return this;
+        }
+
+        public Builder setByteValue(byte[] byteValue) {
+            this.byteValue=byteValue;
+            return this;
+        }
+
+        /**
+         * Method to create LiteralExpression after deriving certain attributes
+         *
+         * ONLY use this build method for LiteralExpressions with:
+         * (A) no attributes set,
+         * (B) value and/or determinism set (either CAN be null),
+         * (C) ONLY byteValue set (CAN be null)
+         * If any other attributes are set, use build()
+         * @param byteValueOnly TRUE if the only known attribute before build is byteValue; FALSE otherwise
+         * @return LiteralExpression
+         */
+        public LiteralExpression buildSimple(boolean byteValueOnly) {
+            if (byteValueOnly) {
+                this.byteValue = this.byteValue != null ? this.byteValue : ByteUtil.EMPTY_BYTE_ARRAY;
+                this.sortOrder = SortOrder.ASC;
+                this.determinism = Determinism.ALWAYS;
+                return new LiteralExpression(this);
             }
-        }
-        return new LiteralExpression(value, type, b, determinism);
-    }
-
-    public static LiteralExpression newConstant(Object value, PDataType type) throws SQLException {
-        return newConstant(value, type, Determinism.ALWAYS);
-    }
-    
-    public static LiteralExpression newConstant(Object value, PDataType type, Determinism determinism) throws SQLException {
-        return newConstant(value, type, SortOrder.getDefault(), determinism);
-    }
-    
-    public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder) throws SQLException {
-        return newConstant(value, type, null, null, sortOrder, Determinism.ALWAYS);
-    }
-    
-    public static LiteralExpression newConstant(Object value, PDataType type, SortOrder sortOrder, Determinism determinism) throws SQLException {
-        return newConstant(value, type, null, null, sortOrder, determinism);
-    }
-    
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale) throws SQLException {
-        return newConstant(value, type, maxLength, scale, SortOrder.getDefault(), Determinism.ALWAYS);
-    }
-    
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, Determinism determinism) throws SQLException { // remove?
-        return newConstant(value, type, maxLength, scale, SortOrder.getDefault(), determinism);
-    }
-
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism) 
-            throws SQLException {
-        return newConstant(value, type, maxLength, scale, sortOrder, determinism, true);
-    }
-    
-    // TODO: cache?
-    public static LiteralExpression newConstant(Object value, PDataType type, Integer maxLength, Integer scale, SortOrder sortOrder, Determinism determinism, boolean rowKeyOrderOptimizable)
-            throws SQLException {
-        if (value == null) {
-            return  (type == null) ?  getNullLiteralExpression(determinism) : getTypedNullLiteralExpression(type, determinism);
-        }
-        else if (value instanceof Boolean) {
-            return getBooleanLiteralExpression((Boolean)value, determinism);
-        }
-        PDataType actualType = PDataType.fromLiteral(value);
-        type = type == null ? actualType : type;
-        try {
-            value = type.toObject(value, actualType);
-        } catch (IllegalDataException e) {
-            throw TypeMismatchException.newException(type, actualType, value.toString());
-        }
-        byte[] b = type.isArrayType() ? ((PArrayDataType)type).toBytes(value, PArrayDataType.arrayBaseType(type), sortOrder, rowKeyOrderOptimizable) :
-                type.toBytes(value, sortOrder);
-        if (type == PVarchar.INSTANCE || type == PChar.INSTANCE) {
-            if (type == PChar.INSTANCE && maxLength != null  && b.length < maxLength) {
-                if (rowKeyOrderOptimizable) {
-                    b = type.pad(b, maxLength, sortOrder);
-                } else {
-                    b = StringUtil.padChar(b, maxLength);
+            if (this.determinism == null) {
+                this.determinism = Determinism.ALWAYS;
+            }
+            if (this.value instanceof Boolean) {
+                return LiteralExpression.getBooleanLiteralExpression((Boolean)this.value,
+                        this.determinism);
+            } else if (this.value == null) {
+                return LiteralExpression.getNullLiteralExpression(this.determinism);
+            }
+            if (this.sortOrder == null) {
+                this.sortOrder = SortOrder.getDefault();
+            }
+            PDataType type = PDataType.fromLiteral(this.value);
+            this.byteValue = type.toBytes(this.value);
+            if (type.isNull(this.byteValue)) {
+                return LiteralExpression.getTypedNullLiteralExpression(type,
+                        this.determinism);
+            }
+            if (type == PVarchar.INSTANCE) {
+                String s = (String) this.value;
+                if (s.length() == this.byteValue.length) { // single byte characters only
+                    type = PChar.INSTANCE;
                 }
-            } else if (value != null) {
-                maxLength = ((String)value).length();
             }
-        } else if (type.isArrayType()) {
-            maxLength = ((PhoenixArray)value).getMaxLength();
+            this.type = type;
+            this.maxLength = type == null || !type.isFixedWidth() ? null
+                    : type.getMaxLength(this.value);
+            this.sortOrder = SortOrder.getDefault();
+            return new LiteralExpression(this);
         }
-        if (b.length == 0) {
-            return getTypedNullLiteralExpression(type, determinism);
+
+        /**
+
+         * Method to initialize/derive attributes for Literal Expressions
+         * @return LiteralExpression builder
+         * @throws SQLException
+         */
+        public LiteralExpression build() throws SQLException{
+            if (this.determinism == null) {
+                this.determinism = Determinism.ALWAYS;
+            }
+            if (this.sortOrder == null) {
+                this.sortOrder = SortOrder.getDefault();
+            }
+            if (this.rowKeyOrderOptimizable == null) {
+                this.rowKeyOrderOptimizable = true;
+            }
+            if (this.value == null) {
+                if (this.type == null) {
+                    return LiteralExpression.getNullLiteralExpression(this.determinism);
+                } else {
+                    return LiteralExpression.getTypedNullLiteralExpression(this.type,
+                            this.determinism);
+                }
+            } else if (this.value instanceof Boolean){
+                return LiteralExpression.getBooleanLiteralExpression((Boolean)this.value,
+                        this.determinism);
+            }
+            PDataType actualType = PDataType.fromLiteral(this.value);
+            this.type = this.type == null ? actualType : this.type;
+            try {
+                this.value = this.type.toObject(this.value, actualType);
+            } catch (IllegalDataException e) {
+                throw TypeMismatchException.newException(this.type, actualType,
+                        this.value.toString());
+            }
+            this.byteValue = this.type.isArrayType()
+                    ? ((PArrayDataType)this.type).toBytes(this.value,
+                    PArrayDataType.arrayBaseType(this.type), this.sortOrder,
+                    this.rowKeyOrderOptimizable) : this.type.toBytes(this.value, this.sortOrder);
+            if (this.type == PVarchar.INSTANCE || this.type == PChar.INSTANCE) {
+                if (this.type == PChar.INSTANCE && this.maxLength != null  && this.byteValue.length
+                        < this.maxLength) {
+                    if (this.rowKeyOrderOptimizable) {
+                        this.byteValue = this.type.pad(this.byteValue, this.maxLength,
+                                this.sortOrder);
+                    } else {
+                        this.byteValue = StringUtil.padChar(this.byteValue, this.maxLength);
+                    }
+                } else if (this.value != null) {
+                    this.maxLength = ((String)this.value).length();
+                }
+            } else if (this.type.isArrayType()) {
+                this.maxLength = ((PhoenixArray)this.value).getMaxLength();
+            }
+            if (this.byteValue.length == 0) {
+                LiteralExpression og = LiteralExpression.getTypedNullLiteralExpression(this.type,
+                        this.determinism);
+                this.value = og.value;
+                this.type = og.type;
+                this.determinism = og.determinism;
+                this.byteValue = og.byteValue;
+                this.maxLength = og.maxLength;
+                this.scale = og.scale;
+                this.sortOrder = og.sortOrder;
+                return new LiteralExpression(this);
+            }
+            if (this.maxLength == null) {
+                this.maxLength = this.type.isFixedWidth()
+                        ? this.type.getMaxLength(this.value) : null;
+            }
+            return new LiteralExpression(this);
         }
-        if (maxLength == null) {
-            maxLength = type.isFixedWidth() ? type.getMaxLength(value) : null;
-        }
-        return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, determinism);
+
     }
 
-    public LiteralExpression() {
-    }
-    
-    public LiteralExpression(byte[] byteValue) {
-        this.byteValue = byteValue!=null ? byteValue : ByteUtil.EMPTY_BYTE_ARRAY;
-        this.determinism = Determinism.ALWAYS;
+    /**
+     * Constructs a LiteralExpression from a Builder after its attributes have been initialized/derived
+     * @param builder
+     */
+    private LiteralExpression(Builder builder) {
+    	Preconditions.checkNotNull(builder.sortOrder);
+        this.value = builder.value;
+        this.type = builder.type;
+        this.byteValue = builder.byteValue;
+        this.maxLength = builder.maxLength;
+        this.scale = builder.scale != null ? builder.scale : builder.type == null ? null : builder.type.getScale(builder.value);
+        this.sortOrder = builder.sortOrder;
+        this.determinism = builder.determinism;
     }
 
-    private LiteralExpression(PDataType type, Determinism determinism) {
-        this(null, type, ByteUtil.EMPTY_BYTE_ARRAY, determinism);
-    }
-
-    private LiteralExpression(Object value, PDataType type, byte[] byteValue, Determinism determinism) {
-        this(value, type, byteValue, type == null || !type.isFixedWidth() ? null : type.getMaxLength(value), null, SortOrder.getDefault(), determinism);
-    }
-
-    private LiteralExpression(Object value, PDataType type, byte[] byteValue,
-            Integer maxLength, Integer scale, SortOrder sortOrder, Determinism deterministic) {
-    	Preconditions.checkNotNull(sortOrder);
+    /**
+     * Only used for initializing the static arrays used in build()
+     * @param value
+     * @param type
+     * @param byteValue
+     * @param maxLength
+     * @param scale
+     * @param sortOrder
+     * @param deterministic
+     */
+    private LiteralExpression(Object value, PDataType type, byte[] byteValue, Integer maxLength,
+                              Integer scale, SortOrder sortOrder, Determinism deterministic) {
+        Preconditions.checkNotNull(sortOrder);
         this.value = value;
         this.type = type;
         this.byteValue = byteValue;
@@ -240,6 +342,10 @@ public class LiteralExpression extends BaseTerminalExpression {
         this.scale = scale != null ? scale : type == null ? null : type.getScale(value);
         this.sortOrder = sortOrder;
         this.determinism = deterministic;
+    }
+
+    @VisibleForTesting
+    public LiteralExpression () {
     }
 
     @Override
@@ -251,8 +357,7 @@ public class LiteralExpression extends BaseTerminalExpression {
     public String toString() {
         if (value == null && byteValue!=null) {
             return Bytes.toStringBinary(byteValue);
-        }
-        else if (value == null) {
+        } else if (value == null) {
             return "null";
         }
         // TODO: move into PDataType?
@@ -293,8 +398,7 @@ public class LiteralExpression extends BaseTerminalExpression {
         	//client is on an older version
         	this.determinism = encodedByteLengthAndBool > 0 ? Determinism.ALWAYS : Determinism.PER_ROW;  	
         	this.sortOrder = SortOrder.fromSystemValue(sortOrderAndDeterminism);;
-        }
-        else {
+        } else {
         	int determinismOrdinal = (sortOrderAndDeterminism>>2)-1;
         	this.determinism = Determinism.values()[determinismOrdinal];
         	int sortOrderValue = sortOrderAndDeterminism & ((1 << 2) - 1); //get the least 2 significant bits

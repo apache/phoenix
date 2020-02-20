@@ -135,7 +135,8 @@ public class WhereCompiler {
         
         Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
         WhereExpressionCompiler whereCompiler = new WhereExpressionCompiler(context);
-        Expression expression = where == null ? LiteralExpression.newConstant(true, PBoolean.INSTANCE,Determinism.ALWAYS) : where.accept(whereCompiler);
+        Expression expression = where == null ? new LiteralExpression.Builder().setValue(true).setDataType(PBoolean.INSTANCE)
+                .setDeterminism(Determinism.ALWAYS).build() : where.accept(whereCompiler);
         if (whereCompiler.isAggregate()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_WHERE).build().buildException();
         }

@@ -67,9 +67,9 @@ public class ExpFunctionTest {
     private static void test(Number value, PNumericType dataType, double expected)
             throws SQLException {
         LiteralExpression literal;
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
         boolean ret1 = testExpression(literal, expected);
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         boolean ret2 = testExpression(literal, expected);
         assertEquals(ret1, ret2);
     }

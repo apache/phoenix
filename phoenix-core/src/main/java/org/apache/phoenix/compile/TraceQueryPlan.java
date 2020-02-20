@@ -276,9 +276,8 @@ public class TraceQueryPlan implements QueryPlan {
             ParseNodeFactory factory = new ParseNodeFactory();
             LiteralParseNode literal =
                     factory.literal(traceScope.getSpan().getTraceId());
-            LiteralExpression expression =
-                    LiteralExpression.newConstant(literal.getValue(), PLong.INSTANCE,
-                        Determinism.ALWAYS);
+            LiteralExpression expression = new LiteralExpression.Builder().setValue(literal.getValue())
+                    .setDataType(PLong.INSTANCE).setDeterminism(Determinism.ALWAYS).build();
             expression.evaluate(null, ptr);
             byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);
             Cell cell =
