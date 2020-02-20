@@ -247,18 +247,10 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(indexRowKey, ts);
                 if (specific) {
-                    // Get all the cells of this row
-                    deleteRowScan.withStartRow(indexRowKey, true);
-                    deleteRowScan.withStopRow(indexRowKey, true);
-                    deleteRowScan.setTimeRange(0, ts + 1);
-                    deleteRowScanner = region.getScanner(deleteRowScan);
-                    row.clear();
-                    deleteRowScanner.next(row);
-                    deleteRowScanner.close();
-                    // We are deleting a specific version of a row so the flowing loop is for that
-                    for (Cell cell : row) {
-                        del.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell), cell.getTimestamp());
-                    }
+                    del.addFamilyVersion(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                }
+                else {
+                    del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
                 }
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations);
