@@ -94,9 +94,9 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogInfo;
-import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
+import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
@@ -114,6 +114,7 @@ import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.CursorName;
+import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
@@ -132,6 +133,7 @@ import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.ListJarsStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.MutableStatement;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OffsetNode;
@@ -409,6 +411,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);
                                 state.checkpointIfNeccessary(plan);
+                                checkIfDDLStatementandMutationState(stmt, state);
                                 MutationState lastState = plan.execute();
                                 state.join(lastState);
                                 if (connection.getAutoCommit()) {
@@ -2171,4 +2174,26 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    /**
+     * Check if the statement is a DDL and if there are any uncommitted mutations Throw or log the
+     * message
+     */
+    private void checkIfDDLStatementandMutationState(final CompilableStatement stmt,
+            MutationState state) throws SQLException {
+        boolean throwUncommittedMutation =
+                connection.getQueryServices().getProps().getBoolean(
+                    QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB,
+                    QueryServicesOptions.DEFAULT_PENDING_MUTATIONS_DDL_THROW);
+        if (stmt instanceof MutableStatement && !(stmt instanceof DMLStatement)
+                && state.getNumRows() > 0) {
+            if (throwUncommittedMutation) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS).build()
+                                .buildException();
+            } else {
+                LOGGER.warn(
+                    "There are Uncommitted mutations, which will be dropped on the execution of this DDL statement.");
+            }
+        }
+    }
 }

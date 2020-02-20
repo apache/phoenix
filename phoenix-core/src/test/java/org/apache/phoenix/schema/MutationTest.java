@@ -45,8 +45,7 @@ public class MutationTest extends BaseConnectionlessQueryTest {
     }
 
     private void testDurability(boolean disableWAL) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
             Durability expectedDurability = disableWAL ? Durability.SKIP_WAL : Durability.USE_DEFAULT;
             conn.setAutoCommit(false);
             conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, a.k varchar, b.k varchar) " + (disableWAL ? "DISABLE_WAL=true" : ""));
@@ -55,9 +54,8 @@ public class MutationTest extends BaseConnectionlessQueryTest {
             assertDurability(conn,expectedDurability);
             conn.createStatement().execute("DELETE FROM t1 WHERE k=1");
             assertDurability(conn,expectedDurability);
+            conn.rollback();
             conn.createStatement().execute("DROP TABLE t1");
-        } finally {
-            conn.close();
         }
     }
     

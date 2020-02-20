@@ -19,13 +19,13 @@ package org.apache.phoenix.query;
 
 import java.util.concurrent.ThreadPoolExecutor;
 
-import net.jcip.annotations.Immutable;
-
 import org.apache.phoenix.iterate.SpoolTooBigToDiskException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
+
+import net.jcip.annotations.Immutable;
 
 
 
@@ -352,6 +352,7 @@ public interface QueryServices extends SQLCloseable {
     // QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS is used if this is not provided
     public static final String GUIDE_POSTS_CACHE_FACTORY_CLASS = "phoenix.guide.posts.cache.factory.class";
 
+    public static final String PENDING_MUTATIONS_DDL_THROW_ATTRIB = "phoenix.pending.mutations.before.ddl.throw";
     /**
      * Get executor service used for parallel scans
      */
