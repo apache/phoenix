@@ -132,7 +132,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         t2.start();
 
         doneSignal.await(60, TimeUnit.SECONDS);
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
         IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
     }
 
     @Test
@@ -193,7 +197,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         t2.start();
 
         doneSignal.await(60, TimeUnit.SECONDS);
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
         IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
     }
 
     @Test @Repeat(5)
@@ -206,9 +214,10 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName
-                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
+                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, v3 INTEGER, " +
+                "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE(v2)");
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
         Runnable[] runnables = new Runnable[nThreads];
         for (int i = 0; i < nThreads; i++) {
@@ -222,7 +231,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                             int randInt = RAND.nextInt() % nIndexValues;
                             conn.createStatement().execute(
                                     "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
-                                            + (isNull ? null : randInt) + ")");
+                                            + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ", "
+                                            + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ")");
                             if ((i % batchSize) == 0) {
                                 conn.commit();
                             }
@@ -243,6 +253,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         }
 
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
         long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
         assertEquals(nRows, actualRowCount);
         IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,

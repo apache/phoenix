@@ -67,7 +67,6 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -84,8 +83,6 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -95,6 +92,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
+import static org.apache.hadoop.hbase.Cell.Type.DeleteFamilyVersion;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.getTimestamp;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.merge;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.mergeNew;
@@ -670,11 +669,11 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         }
         for (Mutation mutation : pendingMutations) {
             ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(mutation.getRow());
-            Put currentRow = context.currentDataRowStates.get(rowKeyPtr);
-            ValueGetter currentRowVG = null;
-            if (currentRow != null) {
-                currentRowVG = (currentRow == null) ? null :
-                        new IndexRebuildRegionScanner.SimpleValueGetter(currentRow);
+            Put currentDataRow = context.currentDataRowStates.get(rowKeyPtr);
+            ValueGetter currentDataRowVG = null;
+            if (currentDataRow != null) {
+                currentDataRowVG = (currentDataRow == null) ? null :
+                        new IndexRebuildRegionScanner.SimpleValueGetter(currentDataRow);
             }
             long ts = getTimestamp(mutation);
             if (mutation instanceof Put) {
@@ -695,24 +694,52 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                             indexMaintainer.getEmptyKeyValueQualifier(), ts, EMPTY_COLUMN_VALUE_BYTES);
                     context.indexUpdates.put(hTableInterfaceReference, new Pair<>(indexPut, mutation.getRow()));
                     // Delete the current index row if the new index key is different than the current one
-                    if (currentRow != null) {
-                        byte[] currentIndexRowKey = indexMaintainer.buildRowKey(currentRowVG, rowKeyPtr,
+                    if (currentDataRow != null) {
+                        byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                                 regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
-                        if (Bytes.compareTo(indexPut.getRow(), currentIndexRowKey) != 0) {
-                            Delete del = new Delete(currentIndexRowKey, ts);
+                        if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
+                            Delete del = new Delete(indexRowKeyForCurrentDataRow);
+                            del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
                             context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
                         }
                     }
                 }
             } else {
-                if (currentRow != null) {
+                if (currentDataRow != null) {
                     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
                         IndexMaintainer indexMaintainer = pair.getFirst();
                         HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
-                        Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentRowVG,
-                                rowKeyPtr, getCollection(mutation), ts, regionStartKey, regionEndKey);
-                        if (del != null) {
-                            context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                        if (indexMaintainer.isLocalIndex()) {
+                            Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentDataRowVG,
+                                    rowKeyPtr, getCollection(mutation), ts, regionStartKey, regionEndKey);
+                            if (del != null) {
+                                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                            }
+                        } else {
+                            // For the index table, we are only interested if the current data row is deleted or not.
+                            // There is no need to apply column deletes to index rows since index rows are always full
+                            // rows and all the cells in an index row have the same timestamp value. Because of
+                            // this index rows versions do not share cells.
+                            Cell.Type cellType = org.apache.hadoop.hbase.Cell.Type.Delete;
+                            for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+                                for (Cell cell : cells) {
+                                    if (cell.getType() == DeleteFamily || cell.getType() == DeleteFamilyVersion) {
+                                        cellType = cell.getType();
+                                        break;
+                                    }
+                                }
+                            }
+                            if (cellType == DeleteFamily || cellType == DeleteFamilyVersion) {
+                                byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
+                                        regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
+                                Delete del = new Delete(indexRowKeyForCurrentDataRow);
+                                if (cellType == DeleteFamily) {
+                                    del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                                } else {
+                                    del.addFamilyVersion(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                                }
+                                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
+                            }
                         }
                     }
                 }
