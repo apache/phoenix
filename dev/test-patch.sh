@@ -384,7 +384,7 @@ checkTests () {
   echo "======================================================================"
   echo ""
   echo ""
-  testReferences=`$GREP -c -i '/test' $PATCH_DIR/patch`
+  testReferences=`$GREP -c -i '/test\|/it' $PATCH_DIR/patch`
   echo "There appear to be $testReferences test files referenced in the patch."
   if [[ $testReferences == 0 ]] ; then
     if [[ $JENKINS == "true" ]] ; then
@@ -414,9 +414,11 @@ checkTests () {
                         Also please list what manual steps were performed to verify this patch."
     return 1
   fi
+  testsAdded=`$GREP -c -i -e '+ \+@Test' $PATCH_DIR/patch`
+  echo "There appear to be $testsAdded new tests added in the patch."
   JIRA_COMMENT="$JIRA_COMMENT
 
-    {color:green}+1 tests included{color}.  The patch appears to include $testReferences new or modified tests."
+    {color:green}+1 tests included{color}.  The patch appears to include $testsAdded new or modified tests."
   return 0
 }
 
