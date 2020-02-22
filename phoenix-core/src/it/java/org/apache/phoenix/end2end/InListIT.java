@@ -29,11 +29,14 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -549,13 +552,14 @@ public class InListIT extends ParallelStatsDisabledIT {
                     " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
             stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " EVENT_DATE DATE NOT NULL,\n" +
                     " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (\n" + " ID1, ID2 DESC, EVENT_DATE DESC\n" + ")) " +
-                    "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'"); }
+                    "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
+        }
 
 
         try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
             viewConn.setAutoCommit(true);
             Statement stmt = viewConn.createStatement();
-            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName);
             viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
                     "('005xx000001Sv6o', '000000000000300', 1532458230000)");
             viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, EVENT_DATE) VALUES " +
@@ -583,6 +587,14 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "((1532458240000, '000000000000400', '005xx000001Sv6o')," +
                     "(1532458230000, '000000000000300', '005xx000001Sv6o'))");
             assertTrue(getExplainPlanString(rs).contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+
+            stmt.execute("DELETE FROM " + tenantView + " WHERE (EVENT_DATE, ID2, ID1) IN " +
+                    "((1532458240000, '000000000000400', '005xx000001Sv6o')," +
+                    "(1532458230000, '000000000000300', '005xx000001Sv6o'))");
+
+            rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
+            assertTrue(rs.next());
+            assertEquals("000000000000500", rs.getString(1));
         }
     }
 
@@ -593,7 +605,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         String tenantView = generateUniqueName();
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.setAutoCommit(true); Statement stmt = conn.createStatement();
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
                     " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
             stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " EVENT_DATE DATE, ID3 BIGINT NOT NULL \n" +
@@ -601,10 +614,16 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
         }
 
-        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
             viewConn.setAutoCommit(true);
             Statement stmt = viewConn.createStatement();
-            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName );
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName);
+
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3) VALUES " +
+                    "('005xx000001Sv6o', '000000000000300', 1)");
+            viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3) VALUES " +
+                    "('005xx000001Sv6o', '000000000000400', 3)");
+            viewConn.commit();
 
             ResultSet rs = stmt.executeQuery("EXPLAIN DELETE FROM " + tenantView + " WHERE (ID1, ID2, ID3) IN " +
                     "(('005xx000001Sv6o', '000000000000500',1)," +
@@ -617,13 +636,20 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(('000000000000400', '005xx000001Sv6o', 1)," +
                     "('000000000000300', '005xx000001Sv6o', 2))");
             assertTrue(getExplainPlanString(rs).contains("DELETE SINGLE ROW"));
+
+            stmt.execute("DELETE FROM " + tenantView + " WHERE (ID3, ID2, ID1) IN " +
+                    "((1, '000000000000300', '005xx000001Sv6o'))");
+
+            rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
+            assertTrue(rs.next());
+            assertEquals("000000000000400", rs.getString(1));
         }
     }
 
     private String getExplainPlanString(ResultSet rs) throws SQLException {
         StringBuilder builder = new StringBuilder();
-        while(rs.next()) {
-            for(int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+        while (rs.next()) {
+            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
                 Object col = rs.getObject(i + 1);
                 if (col != null) {
                     builder.append(col.toString());
@@ -633,5 +659,147 @@ public class InListIT extends ParallelStatsDisabledIT {
             builder.append("\n");
         }
         return builder.toString();
+    }
+
+    @Test
+    public void testInListExpressionGeneratesRightScan() throws Exception {
+        String fullTableName = generateUniqueName();
+        String fullViewName = generateUniqueName();
+        String tenantView = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true); Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                    " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            stmt.execute("CREATE VIEW " + fullViewName + "(\n" + " ID1 VARCHAR NOT NULL,\n" + " ID2 VARCHAR NOT NULL,\n" + " ID3 BIGINT, ID4 BIGINT \n" +
+                    " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                    "AS SELECT * FROM " + fullTableName + " WHERE KEY_PREFIX = '0CY'");
+        }
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            viewConn.setAutoCommit(true);
+            Statement stmt = viewConn.createStatement();
+            stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + fullViewName);
+        }
+        testFullPkListPlan(tenantView);
+        testFullPkPlusNonPkInListPlan(tenantView);
+        testPartialPkListPlan(tenantView);
+        testPartialPkPlusNonPkListPlan(tenantView);
+        testNonPkListPlan(tenantView);
+    }
+
+    private void testFullPkPlusNonPkInListPlan(String tenantView) throws Exception {
+        Long numberOfRowsToScan = new Long(2);
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID2, ID3) IN " +
+                    "(('005xx000001Sv6o', '000000000000500', 1)," +
+                    "('005xx000001Sv6o', '000000000000400', 2))");
+            QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
+            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+
+            preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2, ID1, ID3) IN " +
+                    "(('000000000000500','005xx000001Sv6o', 1)," +
+                    "('000000000000400','005xx000001Sv6o',  2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
+            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID2) IN " +
+                    "(('005xx000001Sv6o', '000000000000500', 1)," +
+                    "('005xx000001Sv6o', '000000000000400', 2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
+            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+        }
+    }
+
+    private void testFullPkListPlan(String tenantView) throws Exception {
+        Long numberOfRowsToScan = new Long(2);
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID2) IN " +
+                    "(('005xx000001Sv6o', '000000000000500')," +
+                    "('005xx000001Sv6o', '000000000000400'))");
+            QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
+            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID2) IN " +
+                    "(('005xx000001Sv6o', '000000000000500')," +
+                    "('005xx000001Sv6o', '000000000000400'))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
+            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+        }
+    }
+
+    private void testPartialPkListPlan(String tenantView) throws Exception {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1) IN " +
+                    "(('005xx000001Sv6o')," +
+                    "('005xx000001Sv6o'))");
+            QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1) IN " +
+                    "(('005xx000001Sv6o')," +
+                    "('005xx000001Sv6o'))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2) IN " +
+                    "(('000000000000500')," +
+                    "('000000000000400'))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2) IN " +
+                    "(('000000000000500')," +
+                    "('000000000000400'))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+        }
+    }
+
+    private void testPartialPkPlusNonPkListPlan(String tenantView) throws Exception {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID3) IN " +
+                    "(('005xx000001Sv6o', 1)," +
+                    "('005xx000001Sv6o', 2))");
+            QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID3) IN " +
+                    "(('005xx000001Sv6o', 1)," +
+                    "('005xx000001Sv6o', 2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2, ID3) IN " +
+                    "(('000000000000500', 1)," +
+                    "('000000000000400', 2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2, ID3) IN " +
+                    "(('000000000000500', 1)," +
+                    "('000000000000400', 2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+        }
+    }
+
+    private void testNonPkListPlan(String tenantView) throws Exception {
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1) ) {
+            PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID3, ID4) IN " +
+                    "((1, 1)," +
+                    "(2, 2))");
+            QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+
+            viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID3, ID4) IN " +
+                    "((1, 1)," +
+                    "(2, 2))");
+            queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+        }
     }
 }

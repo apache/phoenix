@@ -139,6 +139,14 @@ public class WhereOptimizer {
             // TODO:: When we only have one where clause, the keySlots returns as a single slot object,
             // instead of an array of slots for the corresponding column. Change the behavior so it
             // becomes consistent.
+            if (whereClause instanceof ComparisonExpression) {
+                CompareOp op = ((ComparisonExpression) whereClause).getFilterOp();
+                if (op == CompareOp.EQUAL) {
+                    visitor.setOrderMatterToFalse();
+                } else {
+                    visitor.setOrderMatterToTrue();
+                }
+            }
             keySlots = whereClause.accept(visitor);
     
             if (keySlots == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
@@ -592,7 +600,7 @@ public class WhereOptimizer {
             return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, slot.getOrderPreserving());
         }
 
-        private KeySlots newRowValueConstructorKeyParts(RowValueConstructorExpression rvc, List<KeySlots> childSlots) {
+        public KeySlots newRowValueConstructorKeyParts(RowValueConstructorExpression rvc, List<KeySlots> childSlots) {
             if (childSlots.isEmpty() || rvc.isStateless()) {
                 return null;
             }
@@ -675,10 +683,13 @@ public class WhereOptimizer {
             return this.orderMatter;
         }
 
-        public void setOrderMatter(boolean orderMatter) {
-            this.orderMatter = orderMatter;
+        public void setOrderMatterToTrue() {
+            this.orderMatter = true;
         }
 
+        public void setOrderMatterToFalse() {
+            this.orderMatter = false;
+        }
         /**
          * 
          * Iterates through all combinations of KeyRanges for a given
@@ -1753,7 +1764,7 @@ public class WhereOptimizer {
          * to produce the start and stop scan range.
          *
          */
-        static final class KeySlot {
+        public static final class KeySlot {
             private final int pkPosition; // Position in primary key
             private final int pkSpan; // Will be > 1 for RVC
             private final KeyPart keyPart; // Used to produce the KeyRanges below
@@ -1835,7 +1846,7 @@ public class WhereOptimizer {
         public static class SingleKeySlot implements KeySlots {
             private final List<KeySlot> slots;
             
-            SingleKeySlot(KeyPart part, int pkPosition, List<KeyRange> ranges) {
+            public SingleKeySlot(KeyPart part, int pkPosition, List<KeyRange> ranges) {
                 this(part, pkPosition, 1, ranges);
             }
             
@@ -1891,7 +1902,7 @@ public class WhereOptimizer {
             private final PColumn column;
             private final List<Expression> nodes;
 
-            private BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
+            public BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
                 this.table = table;
                 this.column = column;
                 this.nodes = nodes;
@@ -1973,7 +1984,7 @@ public class WhereOptimizer {
             }
         }
 
-        private class RowValueConstructorKeyPart implements KeyPart {
+        public class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
             private final List<Expression> nodes;
@@ -1990,6 +2001,10 @@ public class WhereOptimizer {
                     this.nodes = Collections.<Expression>emptyList();
                     this.childSlots = childSlots.subList(0,  span);
                 }
+            }
+
+            public List<KeySlots> getChildSlots() {
+                return this.childSlots;
             }
 
             @Override
