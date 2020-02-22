@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -139,14 +138,6 @@ public class WhereOptimizer {
             // TODO:: When we only have one where clause, the keySlots returns as a single slot object,
             // instead of an array of slots for the corresponding column. Change the behavior so it
             // becomes consistent.
-            if (whereClause instanceof ComparisonExpression) {
-                CompareOp op = ((ComparisonExpression) whereClause).getFilterOp();
-                if (op == CompareOp.EQUAL) {
-                    visitor.setOrderMatterToFalse();
-                } else {
-                    visitor.setOrderMatterToTrue();
-                }
-            }
             keySlots = whereClause.accept(visitor);
     
             if (keySlots == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
@@ -606,26 +597,42 @@ public class WhereOptimizer {
             }
             if (!this.orderMatter) {
                 // op equals or no equals, we sort here
-                Collections.sort(childSlots, new Comparator<KeySlots>() {
+                List<KeySlotsExpressionNode> keySlotsExpressionNodes = new ArrayList<>();
+                int size = childSlots.size();
+                for (int i = 0; i < size; i++) {
+                    keySlotsExpressionNodes.add(new KeySlotsExpressionNode(childSlots.get(i), rvc.getChildren().get(i)));
+                }
+                Collections.sort(keySlotsExpressionNodes, new Comparator<KeySlotsExpressionNode>() {
                     @Override
-                    public int compare(KeySlots o1, KeySlots o2) {
-                        return o1.getSlots().iterator().next().getPKPosition() - o2.getSlots().iterator().next().getPKPosition();
+                    public int compare(KeySlotsExpressionNode o1, KeySlotsExpressionNode o2) {
+                        return o1.getKeySlots().getSlots().get(0).getPKPosition() -
+                                o2.getKeySlots().getSlots().get(0).getPKPosition();
                     }
                 });
+                childSlots = new ArrayList<>();
+                List<Expression> rvcChildren = new ArrayList<>();
+                for (int i = 0; i < size; i++) {
+                    childSlots.add(keySlotsExpressionNodes.get(i).getKeySlots());
+                    rvcChildren.add(keySlotsExpressionNodes.get(i).getExpression());
+                }
+                rvc = new RowValueConstructorExpression(rvcChildren, rvc.isStateless());
             }
+
             int position = -1;
             int initialPosition = -1;
             for (int i = 0; i < childSlots.size(); i++) {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.getSlots().iterator().next();
                 List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
+
                 // Stop if there was a gap in extraction of RVC elements. This is required if the leading
                 // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
                 // key columns. We can't rule the RVC out completely when the childSlots is less the the
                 // RVC length, as a partial, *leading* match is optimizable.
-                if (this.orderMatter && (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i)))) {
+                if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
                     break;
                 }
+
                 int pkPosition = keySlot.getPKPosition();
                 if (pkPosition < 0) { // break for non PK columns
                     break;

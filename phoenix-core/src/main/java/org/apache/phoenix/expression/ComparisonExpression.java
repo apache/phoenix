@@ -31,6 +31,7 @@ import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.rewrite.RowValueConstructorExpressionRewriter;
@@ -367,6 +368,13 @@ public class ComparisonExpression extends BaseCompoundExpression {
 
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
+        if (visitor instanceof WhereOptimizer.KeyExpressionVisitor) {
+            if (this.op == CompareOp.EQUAL) {
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToFalse();
+            } else {
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToTrue();
+            }
+        }
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {

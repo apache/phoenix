@@ -25,9 +25,7 @@ import com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PColumn;
@@ -74,65 +72,79 @@ public class InListExpressionTest {
     @Test
     public void testKeyPartsForOrderMatters() {
         List<Expression> expressionList = new ArrayList<>();
-        RowKeyColumnExpression rowKeyColumnExpressionMock1 = Mockito.mock(RowKeyColumnExpression.class);
-        RowKeyColumnExpression rowKeyColumnExpressionMock2 = Mockito.mock(RowKeyColumnExpression.class);
-        expressionList.add(rowKeyColumnExpressionMock1);
-        expressionList.add(rowKeyColumnExpressionMock2);
-        RowValueConstructorExpression rvc = Mockito.mock(RowValueConstructorExpression.class);
-        when(rvc.isStateless()).thenReturn(false);
+        final RowKeyColumnExpression rowKeyColumnExpressionMock0 = Mockito.mock(RowKeyColumnExpression.class);
+        when(rowKeyColumnExpressionMock0.getPosition()).thenReturn(0);
+        when(rowKeyColumnExpressionMock0.getDeterminism()).thenReturn(Determinism.ALWAYS);
 
+        final RowKeyColumnExpression rowKeyColumnExpressionMock1 = Mockito.mock(RowKeyColumnExpression.class);
+        when(rowKeyColumnExpressionMock1.getPosition()).thenReturn(1);
+        when(rowKeyColumnExpressionMock1.getDeterminism()).thenReturn(Determinism.ALWAYS);
+        expressionList.add(rowKeyColumnExpressionMock1);
+        expressionList.add(rowKeyColumnExpressionMock0);
+        RowValueConstructorExpression rvc = new RowValueConstructorExpression(expressionList, false);
+
+        final PColumn pColumn0 = Mockito.mock(PColumn.class);
         final PColumn pColumn1 = Mockito.mock(PColumn.class);
-        final PColumn pColumn2 = Mockito.mock(PColumn.class);
-        List<PColumn> pColumnList = new ArrayList<PColumn>(){{add(pColumn1); add(pColumn2);}};
+        List<PColumn> pColumnList = new ArrayList<PColumn>(){{add(pColumn1); add(pColumn0);}};
         PTable pTable = Mockito.mock(PTable.class);
         when(pTable.getPKColumns()).thenReturn(pColumnList);
 
-        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart =
-                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, expressionList);
+        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart0 =
+                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, new ArrayList<Expression>(){{add(rowKeyColumnExpressionMock0);}});
+        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart1 =
+                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, new ArrayList<Expression>(){{add(rowKeyColumnExpressionMock1);}});
         List<WhereOptimizer.KeyExpressionVisitor.KeySlots> children =
                 new ArrayList<WhereOptimizer.KeyExpressionVisitor.KeySlots>() {{
-            add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart,1, null));
-            add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart,2, null));
-        }};
-        when(rvc.getChildren()).thenReturn(expressionList);
+                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart1,1, null));
+                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart0,0, null));
+                }};
 
         WhereOptimizer.KeyExpressionVisitor visitor = new WhereOptimizer.KeyExpressionVisitor(null, pTable);
         visitor.setOrderMatterToTrue();
-        WhereOptimizer.KeyExpressionVisitor.KeySlots resultKeySlots = visitor.newRowValueConstructorKeyParts(rvc, children);
-        assertEquals(null, resultKeySlots);
-    }
-
-    @Test
-    public void testKeyPartsForOrderDoesNotMatter() {
-        List<Expression> expressionList = new ArrayList<>();
-        RowKeyColumnExpression rowKeyColumnExpressionMock1 = Mockito.mock(RowKeyColumnExpression.class);
-        RowKeyColumnExpression rowKeyColumnExpressionMock2 = Mockito.mock(RowKeyColumnExpression.class);
-        expressionList.add(rowKeyColumnExpressionMock1);
-        expressionList.add(rowKeyColumnExpressionMock2);
-        RowValueConstructorExpression rvc = Mockito.mock(RowValueConstructorExpression.class);
-        when(rvc.isStateless()).thenReturn(false);
-
-        final PColumn pColumn1 = Mockito.mock(PColumn.class);
-        final PColumn pColumn2 = Mockito.mock(PColumn.class);
-        List<PColumn> pColumnList = new ArrayList<PColumn>(){{add(pColumn2); add(pColumn1);}};
-        PTable pTable = Mockito.mock(PTable.class);
-        when(pTable.getPKColumns()).thenReturn(pColumnList);
-
-        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart =
-                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, expressionList);
-        List<WhereOptimizer.KeyExpressionVisitor.KeySlots> children =
-                new ArrayList<WhereOptimizer.KeyExpressionVisitor.KeySlots>() {{
-                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart,2, null));
-                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart,1, null));
-                }};
-        when(rvc.getChildren()).thenReturn(expressionList);
-
-        WhereOptimizer.KeyExpressionVisitor visitor = new WhereOptimizer.KeyExpressionVisitor(null, pTable);
         WhereOptimizer.KeyExpressionVisitor.KeySlots resultKeySlots = visitor.newRowValueConstructorKeyParts(rvc, children);
         WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart keyPart =
                 (WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart)
                         resultKeySlots.getSlots().iterator().next().getKeyPart();
         assertEquals(1, keyPart.getChildSlots().get(0).getSlots().get(0).getPKPosition());
-        assertEquals(2, keyPart.getChildSlots().get(1).getSlots().get(0).getPKPosition());
+    }
+
+    @Test
+    public void testKeyPartsForOrderDoesNotMatter() {
+        List<Expression> expressionList = new ArrayList<>();
+        final RowKeyColumnExpression rowKeyColumnExpressionMock0 = Mockito.mock(RowKeyColumnExpression.class);
+        when(rowKeyColumnExpressionMock0.getPosition()).thenReturn(0);
+        when(rowKeyColumnExpressionMock0.getDeterminism()).thenReturn(Determinism.ALWAYS);
+
+        final RowKeyColumnExpression rowKeyColumnExpressionMock1 = Mockito.mock(RowKeyColumnExpression.class);
+        when(rowKeyColumnExpressionMock1.getPosition()).thenReturn(1);
+        when(rowKeyColumnExpressionMock1.getDeterminism()).thenReturn(Determinism.ALWAYS);
+        expressionList.add(rowKeyColumnExpressionMock1);
+        expressionList.add(rowKeyColumnExpressionMock0);
+        RowValueConstructorExpression rvc = new RowValueConstructorExpression(expressionList, false);
+
+        final PColumn pColumn0 = Mockito.mock(PColumn.class);
+        final PColumn pColumn1 = Mockito.mock(PColumn.class);
+        List<PColumn> pColumnList = new ArrayList<PColumn>(){{add(pColumn1); add(pColumn0);}};
+        PTable pTable = Mockito.mock(PTable.class);
+        when(pTable.getPKColumns()).thenReturn(pColumnList);
+
+        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart0 =
+                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, new ArrayList<Expression>(){{add(rowKeyColumnExpressionMock0);}});
+        final WhereOptimizer.KeyExpressionVisitor.BaseKeyPart baseKeyPart1 =
+                new WhereOptimizer.KeyExpressionVisitor.BaseKeyPart(pTable, null, new ArrayList<Expression>(){{add(rowKeyColumnExpressionMock1);}});
+        List<WhereOptimizer.KeyExpressionVisitor.KeySlots> children =
+                new ArrayList<WhereOptimizer.KeyExpressionVisitor.KeySlots>() {{
+                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart1,1, null));
+                    add(new WhereOptimizer.KeyExpressionVisitor.SingleKeySlot(baseKeyPart0,0, null));
+                }};
+
+        WhereOptimizer.KeyExpressionVisitor visitor = new WhereOptimizer.KeyExpressionVisitor(null, pTable);
+        visitor.setOrderMatterToFalse();
+        WhereOptimizer.KeyExpressionVisitor.KeySlots resultKeySlots = visitor.newRowValueConstructorKeyParts(rvc, children);
+        WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart keyPart =
+                (WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart)
+                        resultKeySlots.getSlots().iterator().next().getKeyPart();
+        assertEquals(0, keyPart.getChildSlots().get(0).getSlots().get(0).getPKPosition());
+        assertEquals(1, keyPart.getChildSlots().get(1).getSlots().get(0).getPKPosition());
     }
 }
