@@ -39,6 +39,11 @@ public enum PhoenixScrutinyJobCounters {
      */
     EXPIRED_ROW_COUNT,
     /**
+     * Number of rows in source that have been written with newer version (old versions were
+     * beyond max lookback age) while scrutiny was comparing them with target
+     */
+    BEYOND_MAX_LOOKBACK,
+    /**
      * Number of batches processed
      */
     BATCHES_PROCESSED_COUNT;

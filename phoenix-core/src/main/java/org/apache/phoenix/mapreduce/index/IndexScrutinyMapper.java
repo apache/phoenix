@@ -39,6 +39,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -52,7 +53,6 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ColumnInfo;
@@ -65,7 +65,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
-
 
 /**
  * Mapper that reads from the data table and checks the rows against the index table
@@ -96,6 +95,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     private long outputMaxRows;
     private MessageDigest md5;
     private long ttl;
+    private long maxLookBack;
+    String dataTableFullName;
+    PTable targetPTable;
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
@@ -119,7 +121,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
             final String qIndexTable =
                     PhoenixConfigurationUtil.getScrutinyIndexTableName(configuration);
-            final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
+            PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
             // set the target table based on whether we're running the MR over the data or index
             // table
             SourceTable sourceTable =
@@ -132,6 +134,10 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                                     pindexTable);
             qSourceTable = columnNames.getQualifiedSourceTableName();
             qTargetTable = columnNames.getQualifiedTargetTableName();
+
+            dataTableFullName = SourceTable.DATA_TABLE_SOURCE.equals(sourceTable) ? qSourceTable : qTargetTable;
+            targetPTable = SourceTable.DATA_TABLE_SOURCE.equals(sourceTable) ? pindexTable : pdataTable;
+
             List<String> targetColNames = columnNames.getTargetColNames();
             List<String> sourceColNames = columnNames.getSourceColNames();
             List<String> targetPkColNames = columnNames.getTargetPkColNames();
@@ -161,12 +167,19 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
             ttl = getTableTtl();
+            maxLookBack = getMaxLookBack();
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
             tryClosingResourceSilently(this.connection);
             tryClosingResourceSilently(this.outputConn);
             throw new RuntimeException(e);
         }
+    }
+
+    private long getMaxLookBack() throws SQLException {
+       return connection.unwrap(PhoenixConnection.class).getQueryServices().
+                getConfiguration().getInt(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                ScanInfoUtil.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE);
     }
 
     private static void tryClosingResourceSilently(AutoCloseable res) {
@@ -233,20 +246,24 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 QueryUtil.constructParameterizedInClause(numTargetPkCols,
                     currentBatchValues.size());
         String indexQuery = targetTableQuery + inClause;
+
         try (PreparedStatement targetStatement = connection.prepareStatement(indexQuery)) {
             // while we build the PreparedStatement, we also maintain a hash of the target table
             // PKs,
             // which we use to join against the results of the query on the target table
             Map<String, Pair<Long, List<Object>>> targetPkToSourceValues =
                     buildTargetStatement(targetStatement);
-
-            preQueryTargetTable();
+            ConnectionQueryServices cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
+            String targetPhysicalTable = getPhysicalTableName(targetPTable,
+                    SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
+            preQueryTargetTable(dataTableFullName, targetPhysicalTable);
             // fetch results from the target table and output invalid rows
             queryTargetTable(context, targetStatement, targetPkToSourceValues);
 
             //check if there are any invalid rows that have been expired, report them
-            //with EXPIRED_ROW_COUNT
-            checkIfInvalidRowsExpired(context, targetPkToSourceValues);
+            //with EXPIRED_ROW_COUNT and check if there any invalid rows that were beyond max
+            //lookback age and have been overwritten by newer version
+            scrutinizeInvalidRows(context, targetPkToSourceValues);
 
             // any source values we have left over are invalid (e.g. data table rows without
             // corresponding index row)
@@ -272,9 +289,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         }
     }
 
-    protected void preQueryTargetTable() { }
+    protected void preQueryTargetTable(String dataTable, String indexPhysicalTable) { }
 
-    protected void checkIfInvalidRowsExpired(Context context,
+    protected void scrutinizeInvalidRows(Context context,
             Map<String, Pair<Long,
             List<Object>>> targetPkToSourceValues) {
         Set<Map.Entry<String, Pair<Long, List<Object>>>>
@@ -289,6 +306,10 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             Long sourceTS = sourceValues.getFirst();
             if (hasRowExpiredOnSource(sourceTS, ttl)) {
                 context.getCounter(PhoenixScrutinyJobCounters.EXPIRED_ROW_COUNT).increment(1);
+                itr.remove();
+            } else if (hasRowExpiredOnSource(sourceTS, maxLookBack)) {
+                context.getCounter(PhoenixScrutinyJobCounters.BEYOND_MAX_LOOKBACK)
+                        .increment(1);
                 itr.remove();
             }
         }
@@ -308,14 +329,14 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         ConnectionQueryServices
                 cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
         Admin admin = cqsi.getAdmin();
-        String physicalTable = getSourceTableName(pSourceTable,
+        String physicalTable = getPhysicalTableName(pSourceTable,
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(physicalTable));
         return tableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
     }
 
     @VisibleForTesting
-    public static String getSourceTableName(PTable pSourceTable, boolean isNamespaceEnabled) {
+    public static String getPhysicalTableName(PTable pSourceTable, boolean isNamespaceEnabled) {
         String sourcePhysicalName = pSourceTable.getPhysicalName().getString();
         String physicalTable, table, schema;
         if (pSourceTable.getType() == PTableType.VIEW

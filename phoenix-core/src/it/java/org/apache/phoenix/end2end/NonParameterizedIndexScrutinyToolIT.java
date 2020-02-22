@@ -233,7 +233,7 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
         stmt.executeUpdate();
     }
 
-    private void upsertRow(PreparedStatement stmt, int id, String name, int zip)
+    public static void upsertRow(PreparedStatement stmt, int id, String name, int zip)
             throws SQLException {
         int index = 1;
         // insert row

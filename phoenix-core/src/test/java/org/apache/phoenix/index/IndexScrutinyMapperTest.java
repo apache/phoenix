@@ -72,7 +72,7 @@ public class IndexScrutinyMapperTest extends BaseConnectionlessQueryTest {
         Mockito.when(inputTable.getTableName()).thenReturn(PNameFactory.newName(tableName));
         Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
         //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+        String output = IndexScrutinyMapper.getPhysicalTableName(inputTable, isNamespaceEnabled);
         //assert
         Assert.assertEquals(expectedName, output);
     }
@@ -88,7 +88,7 @@ public class IndexScrutinyMapperTest extends BaseConnectionlessQueryTest {
         Mockito.when(inputTable.getType()).thenReturn(PTableType.VIEW);
         Mockito.when(inputTable.getPhysicalName()).thenReturn(sourcePhysicalName);
         //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+        String output = IndexScrutinyMapper.getPhysicalTableName(inputTable, isNamespaceEnabled);
         //assert
         Assert.assertEquals(expectedName, output);
     }
@@ -108,7 +108,7 @@ public class IndexScrutinyMapperTest extends BaseConnectionlessQueryTest {
         Mockito.when(inputTable.getSchemaName()).thenReturn(PNameFactory.newName(schema));
 
         //test
-        String output = IndexScrutinyMapper.getSourceTableName(inputTable, isNamespaceEnabled);
+        String output = IndexScrutinyMapper.getPhysicalTableName(inputTable, isNamespaceEnabled);
         //assert
         Assert.assertEquals(expectedName, output);
     }
@@ -125,7 +125,7 @@ public class IndexScrutinyMapperTest extends BaseConnectionlessQueryTest {
         //setup
         Mockito.when(pSourceTable.getPhysicalName()).thenReturn(physicalIndexTableName);
         //test
-        String output = IndexScrutinyMapper.getSourceTableName(pSourceTable, isNamespaceEnabled);
+        String output = IndexScrutinyMapper.getPhysicalTableName(pSourceTable, isNamespaceEnabled);
         //assert
         Assert.assertEquals(expectedName, output);
     }
