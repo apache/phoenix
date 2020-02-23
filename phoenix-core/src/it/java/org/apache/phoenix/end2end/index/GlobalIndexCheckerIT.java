@@ -308,13 +308,13 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions);
+                    " (id varchar(10) not null primary key, a.val1 varchar(10), b.val2 varchar(10), c.val3 varchar(10))" + tableDDLOptions);
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)");
             // Configure IndexRegionObserver to fail the data write phase
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
-            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab','abc')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab','abcde')");
             commitWithException(conn);
             // The above upsert will create an unverified index row
             // Configure IndexRegionObserver to allow the data write phase
@@ -339,7 +339,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertFalse(rs.next());
             // Configure IndexRegionObserver to fail the data write phase
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
-            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab','abc')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab','abcde')");
             commitWithException(conn);
             // The above upsert will create an unverified index row
             // Configure IndexRegionObserver to allow the data write phase
