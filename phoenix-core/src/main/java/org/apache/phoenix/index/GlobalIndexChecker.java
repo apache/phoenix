@@ -246,11 +246,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
 
         private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts, boolean specific) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
-                Delete del = new Delete(indexRowKey, ts);
+                Delete del;
                 if (specific) {
-                    del.addFamilyVersion(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                    del = indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                            IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
                 } else {
-                    del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                    del = indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                 }
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
