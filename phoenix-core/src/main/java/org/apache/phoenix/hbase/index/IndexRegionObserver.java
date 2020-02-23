@@ -92,8 +92,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
-import static org.apache.hadoop.hbase.Cell.Type.DeleteFamilyVersion;
+import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.adjustGlobalIndexDeleteMutation;
+import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.getCollection;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.getTimestamp;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.merge;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.mergeNew;
@@ -642,15 +642,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         }
     }
 
-    public static Collection<Cell> getCollection(Mutation m) {
-        Collection<Cell> collection = new ArrayList<>();
-        for (List<Cell> cells : m.getFamilyCellMap().values()) {
-            collection.addAll(cells);
-        }
-        return collection;
-    }
-
-
     /**
      * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
      * state with the pending row mutation.
@@ -690,16 +681,21 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                                 regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
                         indexPut = new Put(indexRowKey);
                     }
-                    indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-                            indexMaintainer.getEmptyKeyValueQualifier(), ts, EMPTY_COLUMN_VALUE_BYTES);
+                    if (indexMaintainer.isLocalIndex()) {
+                        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                                indexMaintainer.getEmptyKeyValueQualifier(), ts, EMPTY_COLUMN_VALUE_BYTES);
+                    } else {
+                        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                                indexMaintainer.getEmptyKeyValueQualifier(), ts, UNVERIFIED_BYTES);
+                    }
                     context.indexUpdates.put(hTableInterfaceReference, new Pair<>(indexPut, mutation.getRow()));
                     // Delete the current index row if the new index key is different than the current one
                     if (currentDataRow != null) {
                         byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                                 regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
-                            Delete del = new Delete(indexRowKeyForCurrentDataRow);
-                            del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
+                            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                                    IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                             context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
                         }
                     }
@@ -709,38 +705,18 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
                         IndexMaintainer indexMaintainer = pair.getFirst();
                         HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
-                        if (indexMaintainer.isLocalIndex()) {
-                            Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentDataRowVG,
-                                    rowKeyPtr, getCollection(mutation), ts, regionStartKey, regionEndKey);
-                            if (del != null) {
-                                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
-                            }
-                        } else {
-                            // For the index table, we are only interested if the current data row is deleted or not.
-                            // There is no need to apply column deletes to index rows since index rows are always full
-                            // rows and all the cells in an index row have the same timestamp value. Because of
-                            // this index rows versions do not share cells.
-                            Cell.Type cellType = org.apache.hadoop.hbase.Cell.Type.Delete;
-                            for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
-                                for (Cell cell : cells) {
-                                    if (cell.getType() == DeleteFamily || cell.getType() == DeleteFamilyVersion) {
-                                        cellType = cell.getType();
-                                        break;
-                                    }
-                                }
-                            }
-                            if (cellType == DeleteFamily || cellType == DeleteFamilyVersion) {
-                                byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
-                                        regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
-                                Delete del = new Delete(indexRowKeyForCurrentDataRow);
-                                if (cellType == DeleteFamily) {
-                                    del.addFamily(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
-                                } else {
-                                    del.addFamilyVersion(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(), ts);
-                                }
-                                context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
-                            }
+                        Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentDataRowVG,
+                                rowKeyPtr, getCollection(mutation), ts, regionStartKey, regionEndKey);
+                        if (del == null) {
+                            continue;
                         }
+                        if (!indexMaintainer.isLocalIndex()) {
+                            del = adjustGlobalIndexDeleteMutation((Delete) del);
+                        }
+                        if (del == null) {
+                            continue;
+                        }
+                        context.indexUpdates.put(hTableInterfaceReference, new Pair<>(del, mutation.getRow()));
                     }
                 }
             }
@@ -768,9 +744,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
             }
             // get the index updates for all elements in this batch
             context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
-
             prepareIndexMutations(c, context, maintainers, pendingMutations);
-
             current.addTimelineAnnotation("Built index updates, doing preStep");
             handleLocalIndexUpdates(c, miniBatchOp, context.indexUpdates);
             context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
@@ -783,17 +757,11 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                         new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
                 List <Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
                 for (Pair<Mutation, byte[]> update : updates) {
-                    // Add an empty column cell with the verify status
                     Mutation m = update.getFirst();
                     if (m instanceof Put) {
-                        // Remove the empty column prepared by Index codec as we need to change its value
-                        removeEmptyColumn(m, emptyCF, emptyCQ);
-                        // Set the status of the index row to "unverified"
-                        ((Put) m).addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, m);
-                    }
-                    else {
+                    } else {
                         // Set the status of the index row to "unverified"
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
