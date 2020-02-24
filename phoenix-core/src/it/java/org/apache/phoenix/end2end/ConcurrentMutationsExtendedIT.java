@@ -234,8 +234,6 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                     try {
                         Connection conn = DriverManager.getConnection(getUrl());
                         for (int i = 0; i < 10000; i++) {
-                            boolean isNull = RAND.nextBoolean();
-                            int randInt = RAND.nextInt() % nIndexValues;
                             conn.createStatement().execute(
                                     "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
                                             + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ", "

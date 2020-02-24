@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.hadoop.hbase.Cell.Type.DeleteFamily;
+import static org.apache.hadoop.hbase.Cell.Type.DeleteFamilyVersion;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
@@ -43,7 +44,6 @@ import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATT
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -78,7 +78,6 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
@@ -412,6 +411,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKey != null) {
             setReturnCodeForSingleRowRebuild();
+            pageSizeInRows = 1;
         }
         byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
         if (valueBytes != null) {
@@ -774,23 +774,18 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return false;
     }
 
-    /**
-     * indexRow is the set of all cells of all the row version of an index row from the index table. These are actual
-     * cells. We group these cells based on timestamp and type (put vs delete), and form the actual set of
-     * index mutations. indexKeyToMutationMap is a map from an index row key to a set of mutations that are generated
-     * using the rebuild process (i.e., by replaying raw data table mutations). These sets are sets of expected
-     * index mutations, one set for each index row key. Since not all mutations in the index table have both phase
-     * (i.e., pre and post data phase) mutations, we cannot compare actual index mutations with expected one by one
-     * and expect to find them identical. We need to consider concurrent data mutation effects, data table row write
-     * failures, post index write failures. Thus, we need to allow some expected and actual mutations to be skipped
-     * during comparing actual mutations to index mutations.
-     */
-    private boolean verifySingleIndexRow(Result indexRow, VerificationResult.PhaseResult verificationPhaseResult)
-            throws IOException {
-        List<Mutation> expectedMutationList = indexKeyToMutationMap.get(indexRow.getRow());
-        if (expectedMutationList == null) {
-            throw new DoNotRetryIOException("No expected mutation");
+    private boolean isDeleteFamilyVersion(Mutation mutation) {
+        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+            for (Cell cell : cells) {
+                if (cell.getType() == DeleteFamilyVersion) {
+                    return true;
+                }
+            }
         }
+        return false;
+    }
+
+    private static List<Mutation> prepareActualIndexMutations(Result indexRow) throws IOException {
         Put put = null;
         Delete del = null;
         for (Cell cell : indexRow.rawCells()) {
@@ -806,109 +801,159 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 del.addDeleteMarker(cell);
             }
         }
-        List<Mutation> actualMutationList = getMutationsWithSameTS(put, del);
+        return getMutationsWithSameTS(put, del);
+    }
+
+    /**
+     * indexRow is the set of all cells of all the row version of an index row from the index table. These are actual
+     * cells. We group these cells based on timestamp and type (put vs delete), and form the actual set of
+     * index mutations. indexKeyToMutationMap is a map from an index row key to a set of mutations that are generated
+     * using the rebuild process (i.e., by replaying raw data table mutations). These sets are sets of expected
+     * index mutations, one set for each index row key. Since not all mutations in the index table have both phase
+     * (i.e., pre and post data phase) mutations, we cannot compare actual index mutations with expected one by one
+     * and expect to find them identical. We need to consider concurrent data mutation effects, data table row write
+     * failures, post index write failures. Thus, we need to allow some expected and actual mutations to be skipped
+     * during comparing actual mutations to index mutations.
+     *
+     * The main idea for the verification algorithm used here is to match every expected verified put with an actual
+     * put such that these two mutations are the same except that actual mutation can be unverified.
+     *
+     * Some background on why we can skip some of the actual unverified puts and delete markers due to concurrent data
+     * table updates is as follows:
+     *
+     * For each data table mutation, two operations are done on the data table. One is to read the existing row state,
+     * and the second is to write to the data table. The processing of concurrent data mutations are serialized once
+     * for reading the existing row states, and then serialized again for updating data table. In other words,
+     * they go through locking twice, i.e., [lock, read, unlock] and [lock, write, unlock]. Because of this two phase
+     * locking, for a pair of concurrent mutations (for the same row), the same row state can be read from the data
+     * table. This means the same existing index row can be made unverified twice with different timestamps, one for
+     * each concurrent mutation. These unverified mutation are then repaired from the data table. Since expected
+     * mutations are used for rebuild (which is also used by the read repair), skipping these unverified put mutations
+     * that are not matching with expected mutation are safe as they will go through the same process during
+     * read repair and will be skipped and eventually cleaned up by the read repair. We can skip the delete markers
+     * safely too as they are placed to clean up these unverified mutations. When the data table rows are rebuilt,
+     * the rebuild process generates the delete family markers. The timestamp of delete markers are the timestamp of
+     * the data table mutation for which the delete marker is added. Thus, the timestamp of these delete markers will be
+     * higher than the timestamp of index row to be deleted.
+     */
+    private boolean verifySingleIndexRow(Result indexRow, VerificationResult.PhaseResult verificationPhaseResult)
+            throws IOException {
+        List<Mutation> expectedMutationList = indexKeyToMutationMap.get(indexRow.getRow());
+        if (expectedMutationList == null) {
+            throw new DoNotRetryIOException("No expected mutation");
+        }
+        List<Mutation> actualMutationList = prepareActualIndexMutations(indexRow);
         if (actualMutationList == null || actualMutationList.isEmpty()) {
             throw new DoNotRetryIOException("actualMutationList is null or empty");
         }
         Collections.sort(expectedMutationList, MUTATION_TS_DESC_COMPARATOR);
         Collections.sort(actualMutationList, MUTATION_TS_DESC_COMPARATOR);
         long currentTime = EnvironmentEdgeManager.currentTime();
-        int actualMutationIndex = 0;
-        int expectedMutationIndex = 0;
+        int actualIndex = 0;
+        int expectedIndex = 0;
         int matchingCount = 0;
-        // This is just for additional information to identify in which expected index row version
-        // we find a verification issue
-        int expectedMutationVersion = 0;
-        for (Mutation expectedMutation : expectedMutationList) {
-            expectedMutationIndex++;
-            if (expectedMutation instanceof Put) {
-                expectedMutationVersion++;
-            }
+        int expectedSize = expectedMutationList.size();
+        int actualSize = actualMutationList.size();
+        Mutation expected = null;
+        Mutation previousExpected;
+        Mutation actual;
+        while (expectedIndex < expectedSize && actualIndex <actualSize) {
+            previousExpected = expected;
+            expected = expectedMutationList.get(expectedIndex);
             // Check if cell expired as per the current server's time and data table ttl
             // Index table should have the same ttl as the data table, hence we might not
             // get a value back from index if it has already expired between our rebuild and
             // verify
             // TODO: have a metric to update for these cases
-            if (isTimestampBeforeTTL(currentTime, getTimestamp(expectedMutation))) {
+            if (isTimestampBeforeTTL(currentTime, getTimestamp(expected))) {
                 verificationPhaseResult.expiredIndexRowCount++;
                 return true;
             }
-            if (actualMutationIndex == actualMutationList.size()) {
-                // No more actual mutation is left to verify
-                break;
-            }
-            Mutation actualMutation = actualMutationList.get(actualMutationIndex);
-            // Skip (1) newer actual unverified put mutations and (2) newer actual delete mutations as they are only
-            // added by the read repair. For mutations there will be no corresponding data mutations and thus no
-            // expected index mutation generated. Thus, we can skip them.
-            while (getTimestamp(actualMutation) > getTimestamp(expectedMutation) &&
-                    ((actualMutation instanceof Put && !isVerified((Put)actualMutation)) ||
-                            actualMutation instanceof Delete)) {
-                // The actual mutation is not expected as its timestamp is newer than expected mutation timestamp.
-                // This actual mutation is an unverified put. This can happen when the data write phase fails and
-                // leaves an unverified put. This put then later can be deleted by the read repair. If the unverified
-                // put leads to a new index row (i.e., a row with a new index row key), then the delete marker type will
-                // be DeleteFamily. If it is a new version of an existing row, then the delete marker type will be
-                // DeleteFamilyVersion.
-                actualMutationIndex++;
-                if (actualMutationIndex == actualMutationList.size()) {
+            actual = actualMutationList.get(actualIndex);
+            if (expected instanceof Put) {
+                if (previousExpected == null || previousExpected instanceof Put) {
+                    // This expected put is either the first mutation or a put just comes after another expected mutation
+                    // on the expected mutation list which is sorted by the mutation timestamps. The cell timestamps
+                    // within each mutation here are the same.
+                    // Go down the list of actual mutations and find the corresponding actual put mutation with the same
+                    // timestamp. Stop if a verified put or delete family mutation is encountered on the way. Skip
+                    // unverified puts or delete family version delete markers.
+                    while (getTimestamp(actual) > getTimestamp(expected) &&
+                            ((actual instanceof Put && !isVerified((Put) actual)) ||
+                                    (actual instanceof Delete && isDeleteFamilyVersion(actual)))) {
+                        actualIndex++;
+                        if (actualIndex == actualSize) {
+                            break;
+                        }
+                        actual = actualMutationList.get(actualIndex);
+                    }
+                } else { // previousExpected instanceof Delete
+                    // Between an expected delete and put, there cannot be any types of mutation even verified put
+                    while (getTimestamp(actual) > getTimestamp(expected)) {
+                        actualIndex++;
+                        if (actualIndex == actualSize) {
+                            break;
+                        }
+                        actual = actualMutationList.get(actualIndex);
+                    }
+                }
+                if (actualIndex == actualSize) {
                     break;
                 }
-                actualMutation = actualMutationList.get(actualMutationIndex);
+                // Now the expected and actual mutations should match
+                if (isMatchingMutation(expected, actual, expectedIndex)) {
+                    expectedIndex++;
+                    actualIndex++;
+                    matchingCount++;
+                    continue;
+                }
+                verificationPhaseResult.invalidIndexRowCount++;
+                return false;
+            } else { // expected instanceof Delete
+                // Between put and delete, delete and delete, or before first delete, there can be other deletes and
+                // unverified puts. Skip all of them if any
+                while (getTimestamp(actual) > getTimestamp(expected) &&
+                        ((actual instanceof Put && !isVerified((Put) actual)) || actual instanceof Delete)) {
+                    actualIndex++;
+                    if (actualIndex == actualSize) {
+                        break;
+                    }
+                    actual = actualMutationList.get(actualIndex);
+                }
+                if (actualIndex == actualSize) {
+                    break;
+                }
+                // If this is first expected mutation is delete, there should be an actual delete mutation with the
+                // same timestamp or an unverified put with the same or older timestamp
+                if (getTimestamp(actual) == getTimestamp(expected) &&
+                        (actual instanceof Delete && isDeleteFamily(actual))) {
+                    expectedIndex++;
+                    actualIndex++;
+                    matchingCount++;
+                    continue;
+                } else if (getTimestamp(actual) <= getTimestamp(expected) &&
+                        (actual instanceof Put && !isVerified((Put) actual))) {
+                    expectedIndex++;
+                    if (previousExpected == null) {
+                        matchingCount++;
+                    }
+                    continue;
+                }
+                if (previousExpected == null) {
+                    String errorMsg = "First delete check failure";
+                    byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
+                    logToIndexToolOutputTable(dataKey, indexRow.getRow(),
+                            getTimestamp(expected),
+                            getTimestamp(actual), errorMsg);
+                    verificationPhaseResult.invalidIndexRowCount++;
+                    return false;
+                }
             }
-            if (actualMutationIndex == actualMutationList.size()) {
-                break;
-            }
-            // Skip newer expected unverified put or delete mutations
-            if (getTimestamp(expectedMutation) > getTimestamp(actualMutation) &&
-                    ((expectedMutation instanceof Put && !isVerified((Put)expectedMutation) &&
-                            expectedMutation.size() == 1) ||
-                            (expectedMutation instanceof Delete))) {
-                // The reason there is no corresponding actual index row mutations is because of concurrent data
-                // table mutations. For each data table mutation, two operations are done on the data table. One is to
-                // read the existing row state, and the second is to write to the data table. The processing of
-                // concurrent data mutations are serialized once for reading the existing row states, and then
-                // serialized again for updating data table. In other words, they go through locking twice, i.e.,
-                // [lock, read, unlock] and [lock, write, unlock]. Because of this two phase locking, for a pair of
-                // concurrent mutations(for the same row), the same row state is read from the data table. This means
-                // the same existing index row can be made unverified twice with different timestamps, one for each
-                // the concurrent mutation. So skipping newer expected unverified put mutation are safe. One of these
-                // unverified put mutations is later cleaned up by delete markers by the read repair process.
-                // We can skipped these delete markers safely above. When the data table rows are rebuilt, the rebuild
-                // process generates the delete family markers. The timestamp of delete markers are the timestamp of
-                // the data table mutation for which the delete marker is added. This means their timestamp will be
-                // higher than the timestamp of actual index row to be deleted.
-                continue;
-            }
-            // For each expected delete (family) mutation there has to be the corresponding actual unverified put
-            // mutation. The corresponding delete mutation may not be there if the last write phase does not
-            // make it. The following two patterns are possible
-            // {(expected delete, actual delete), (expected unverified put, actual unverified put)},
-            // {(expected delete, actual unverified put), (expected unverified put, no corresponding actual put)}
-            if (expectedMutation instanceof Delete && isDeleteFamily(expectedMutation) &&
-                    actualMutation instanceof Delete && isDeleteFamily(actualMutation) &&
-                    getTimestamp(expectedMutation) == getTimestamp(expectedMutation)) {
-                actualMutationIndex++;
-                matchingCount++;
-                continue;
-            }
-            if (expectedMutation instanceof Delete && isDeleteFamily(expectedMutation) &&
-                    actualMutation instanceof Put && !isVerified((Put)actualMutation) && actualMutation.size() == 1 &&
-                    getTimestamp(expectedMutation) == getTimestamp(expectedMutation)) {
-                continue;
-            }
-            if (isMatchingMutation(expectedMutation, actualMutation, expectedMutationVersion)) {
-                actualMutationIndex++;
-                matchingCount++;
-                continue;
-            }
-            verificationPhaseResult.invalidIndexRowCount++;
-            return false;
         }
-        if ((expectedMutationIndex != expectedMutationList.size()) || actualMutationIndex != actualMutationList.size()) {
-            if (matchingCount > 0 || expectedMutationList.get(0) instanceof Delete) {
-                // We do not consider this an verification issue but log it for further information. This may happen due to
-                // compaction
+        if ((expectedIndex != expectedSize) || actualIndex != actualSize) {
+            if (matchingCount > 0) {
+                // We do not consider this as a verification issue but log it for further information.
+                // This may happen due to compaction
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
                 String errorMsg = "Expected to find " + expectedMutationList.size() + " mutations but got "
                         + actualMutationList.size();
@@ -1177,7 +1222,6 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         throw new IllegalStateException("No cell found");
     }
 
-
     /**
      * This is to reorder the mutations in ascending order by the tuple of timestamp and mutation type where
      * delete comes before put
@@ -1218,16 +1262,15 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         return mutationList;
     }
 
-    private static Put prepareIndexPut(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
-                                       ValueGetter mergedRowVG, long ts, boolean isRebuild,
-                                       byte[] regionStartKey, byte[] regionEndKey)
+    private static Put prepareIndexPutForRebuid(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
+                                                ValueGetter mergedRowVG, long ts)
             throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 mergedRowVG, rowKeyPtr, ts, null, null);
         if (indexPut == null) {
             // No covered column. Just prepare an index row with the empty column
             byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
-                    regionStartKey, regionEndKey, HConstants.LATEST_TIMESTAMP);
+                    null, null, HConstants.LATEST_TIMESTAMP);
             indexPut = new Put(indexRowKey);
         }
         indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
@@ -1254,86 +1297,21 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         }
     }
 
-    public static void merge(Put current, Put previous) throws IOException {
-        for (List<Cell> cells : previous.getFamilyCellMap().values()) {
+    public static void apply(Put destination, Put source) throws IOException {
+        for (List<Cell> cells : source.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                if (!current.has(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell))) {
-                    current.add(cell);
+                if (!destination.has(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell))) {
+                    destination.add(cell);
                 }
             }
         }
     }
 
-    public static Put mergeNew(Put current, Put previous) throws IOException {
-        Put next = new Put(current);
-        merge(next, previous);
+    public static Put applyNew(Put destination, Put source) throws IOException {
+        Put next = new Put(destination);
+        apply(next, source);
         return next;
     }
-
-
-    public static Delete copyDeleteFamilyMarkers(Delete del) throws IOException {
-        Delete newDel = new Delete(del.getRow());
-        for (List<Cell> cells : del.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                switch (cell.getType()) {
-                    case DeleteFamily:
-                    case DeleteFamilyVersion:
-                        newDel.addDeleteMarker(cell);
-                }
-            }
-        }
-        return newDel;
-    }
-
-    public static Delete adjustGlobalIndexDeleteMutation(Delete del) throws IOException {
-        // For a global index table, we are only interested if the current data row is deleted or
-        // not. There is no need to apply column deletes to index rows since index rows are always
-        // full rows and all the cells in an index row have the same timestamp value. Because of
-        // this index rows versions do not share cells.
-        boolean deleteColumn = false;
-        boolean deleteFamily = false;
-        for (List<Cell> cells : del.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                switch (cell.getType()) {
-                    case DeleteFamily:
-                    case DeleteFamilyVersion:
-                        deleteFamily = true;
-                        break;
-                    case DeleteColumn:
-                    case Delete:
-                        deleteColumn = true;
-                }
-            }
-        }
-        if (!deleteFamily) {
-            return null;
-        }
-        if (deleteColumn) {
-            del = copyDeleteFamilyMarkers(del);
-        }
-        return del;
-    }
-
-    private static void addIndexDeleteMutation(IndexMaintainer indexMaintainer, Delete del, List<Mutation> mutationList,
-                                               long ts) throws IOException {
-        // The following unverified put is needed for inline verification to treat regular updates and
-        // rebuild updates the same way
-        Put unverifiedPut = new Put(del.getRow());
-        unverifiedPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-                indexMaintainer.getEmptyKeyValueQualifier(), ts, UNVERIFIED_BYTES);
-        mutationList.add(unverifiedPut);
-        del = adjustGlobalIndexDeleteMutation(del);
-        mutationList.add(del);
-    }
-
-    public static Collection<Cell> getCollection(Mutation m) {
-        Collection<Cell> collection = new ArrayList<>();
-        for (List<Cell> cells : m.getFamilyCellMap().values()) {
-            collection.addAll(cells);
-        }
-        return collection;
-    }
-
 
     /**
      * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
@@ -1357,35 +1335,32 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             long ts = getTimestamp(mutation);
             if (mutation instanceof Put) {
                 // Add this put on top of the current data row state to get the next data row state
-                Put nextDataRow = (currentDataRow == null) ? new Put((Put)mutation) : mergeNew((Put)mutation, currentDataRow);
+                Put nextDataRow = (currentDataRow == null) ? new Put((Put)mutation) : applyNew((Put)mutation, currentDataRow);
                 ValueGetter nextDataRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(nextDataRow);
-                Put indexPut = prepareIndexPut(indexMaintainer, rowKeyPtr, nextDataRowVG, ts, true, null, null);
+                Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
                 indexMutations.add(indexPut);
                 // Delete the current index row if the new index key is different than the current one
                 if (indexRowKeyForCurrentDataRow != null) {
                     if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
                         Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                 IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                        addIndexDeleteMutation(indexMaintainer, (Delete)del, indexMutations, ts);
+                        indexMutations.add(del);
                     }
                 }
                 // For the next iteration
                 currentDataRow = nextDataRow;
                 indexRowKeyForCurrentDataRow = indexPut.getRow();
             } else if (currentDataRow != null) {
-                // We apply the delete column mutations only on the current data row state here as they are already
-                // applied for pending mutations before. Deletes are handled before puts on the same row since
-                // data mutations are sorted so. For the index table, we are only interested if the current data row
-                // is deleted or not. There is no need to apply column deletes to index rows since index rows are
-                // always full rows and all the cells in an index row have the same timestamp value. Because of
-                // this index rows versions do not share cells.
-                boolean toBeDeleted = false;
+                // We apply delete column mutations only on the current data row state. For the index table,
+                // we are only interested in if the current data row is deleted or not. There is no need to apply
+                // column deletes to index rows since index rows are always full rows and all the cells in an index
+                // row have the same timestamp value. Because of this index rows versions do not share cells.
                 for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
                     for (Cell cell : cells) {
                         switch (cell.getType()) {
                             case DeleteFamily:
                             case DeleteFamilyVersion:
-                                toBeDeleted = true;
+                                currentDataRow.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
                                 break;
                             case DeleteColumn:
                             case Delete:
@@ -1393,11 +1368,10 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                         }
                     }
                 }
-                if (toBeDeleted) {
-                    ValueGetter currentDataRowVG = new IndexRebuildRegionScanner.SimpleValueGetter(currentDataRow);
-                    Mutation del = indexMaintainer.buildDeleteMutation(GenericKeyValueBuilder.INSTANCE, currentDataRowVG,
-                            rowKeyPtr, getCollection(mutation), ts, null, null);
-                    addIndexDeleteMutation(indexMaintainer, (Delete)del, indexMutations, ts);
+                if (currentDataRow.getFamilyCellMap().size() == 0) {
+                    Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                    indexMutations.add(del);
                     currentDataRow = null;
                     indexRowKeyForCurrentDataRow = null;
                 }
@@ -1509,7 +1483,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             }
         }
         if (indexRowKey != null) {
-            rowCount = (int) singleRowRebuildReturnCode;
+            rowCount = singleRowRebuildReturnCode;
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
         final Cell aggKeyValue;

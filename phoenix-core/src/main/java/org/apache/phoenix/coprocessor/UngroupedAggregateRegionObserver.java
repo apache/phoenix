@@ -1111,7 +1111,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
                                          final RegionCoprocessorEnvironment env) throws IOException {
-        if (!scan.isRaw()) {
+        if (!scan.isRaw() && scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY) == null) {
             Scan rawScan = new Scan(scan);
             rawScan.setRaw(true);
             rawScan.setMaxVersions();
