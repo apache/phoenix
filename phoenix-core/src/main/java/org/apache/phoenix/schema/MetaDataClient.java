@@ -3127,8 +3127,9 @@ public class MetaDataClient {
             default:
                 // Cannot use SQLExecptionInfo here since not all mutation codes have their
                 // corresponding codes in the enum SQLExceptionCode
-                throw new SQLException("Exception occurred while creating table, mutation code " +
-                        "sent from server: " + code.toString());
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNEXPECTED_MUTATION_CODE)
+                .setSchemaName(schemaName).setTableName(tableName).setMessage("mutation code: "
+                + code).build().buildException();
         }
     }
 
