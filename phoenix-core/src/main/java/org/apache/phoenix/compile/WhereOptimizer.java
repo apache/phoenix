@@ -596,25 +596,27 @@ public class WhereOptimizer {
                 return null;
             }
             if (!this.orderMatter) {
-                // op equals or no equals, we sort here
-                List<KeySlotsExpressionNode> keySlotsExpressionNodes = new ArrayList<>();
-                int size = childSlots.size();
-                for (int i = 0; i < size; i++) {
-                    keySlotsExpressionNodes.add(new KeySlotsExpressionNode(childSlots.get(i), rvc.getChildren().get(i)));
-                }
-                Collections.sort(keySlotsExpressionNodes, new Comparator<KeySlotsExpressionNode>() {
+                Collections.sort(childSlots, new Comparator<KeySlots>() {
                     @Override
-                    public int compare(KeySlotsExpressionNode o1, KeySlotsExpressionNode o2) {
-                        return o1.getKeySlots().getSlots().get(0).getPKPosition() -
-                                o2.getKeySlots().getSlots().get(0).getPKPosition();
+                    public int compare(KeySlots o1, KeySlots o2) {
+                        return o1.getSlots().get(0).getPKPosition() -
+                                o2.getSlots().get(0).getPKPosition();
                     }
                 });
-                childSlots = new ArrayList<>();
                 List<Expression> rvcChildren = new ArrayList<>();
-                for (int i = 0; i < size; i++) {
-                    childSlots.add(keySlotsExpressionNodes.get(i).getKeySlots());
-                    rvcChildren.add(keySlotsExpressionNodes.get(i).getExpression());
+                for (int i= 0; i < rvc.getChildren().size(); i++) {
+                    rvcChildren.add(rvc.getChildren().get(i));
                 }
+                Collections.sort(rvcChildren, new Comparator<Expression>() {
+                    @Override
+                    public int compare(Expression o1, Expression o2) {
+                        if (o1 instanceof RowKeyColumnExpression && o2 instanceof RowKeyColumnExpression) {
+                            return ((RowKeyColumnExpression)o1).getPosition() -
+                                    ((RowKeyColumnExpression)o2).getPosition();
+                        }
+                        return 0;
+                    }
+                });
                 rvc = new RowValueConstructorExpression(rvcChildren, rvc.isStateless());
             }
 
@@ -624,7 +626,6 @@ public class WhereOptimizer {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.getSlots().iterator().next();
                 List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
-
                 // Stop if there was a gap in extraction of RVC elements. This is required if the leading
                 // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
                 // key columns. We can't rule the RVC out completely when the childSlots is less the the
@@ -632,7 +633,6 @@ public class WhereOptimizer {
                 if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
                     break;
                 }
-
                 int pkPosition = keySlot.getPKPosition();
                 if (pkPosition < 0) { // break for non PK columns
                     break;
