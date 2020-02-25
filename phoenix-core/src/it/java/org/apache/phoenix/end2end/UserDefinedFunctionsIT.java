@@ -381,6 +381,11 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals("oof", rs.getString(1));        
         assertFalse(rs.next());
+        rs = stmt.executeQuery("select myreverse2('abc'), myreverse2('aba')");
+        assertTrue(rs.next());
+        assertEquals("cba", rs.getString(1));
+        assertEquals("aba", rs.getString(2));
+        assertFalse(rs.next());
         rs = stmt.executeQuery("select * from t where myreverse2(firstname)='oof'");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
