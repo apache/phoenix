@@ -368,13 +368,17 @@ public class ComparisonExpression extends BaseCompoundExpression {
 
     @Override
     public final <T> T accept(ExpressionVisitor<T> visitor) {
-//        if (visitor instanceof WhereOptimizer.KeyExpressionVisitor) {
-//            if (this.op == CompareOp.EQUAL) {
-//                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToFalse();
-//            } else {
-//                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToTrue();
-//            }
-//        }
+        /*
+            Adding extra flag here can help expression to understand whether order matters.
+            ex. (a,b,c) > ((?,?,?)) order matters if a,b,c are not pk.
+         */
+        if (visitor instanceof WhereOptimizer.KeyExpressionVisitor) {
+            if (this.op == CompareOp.EQUAL) {
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToFalse();
+            } else {
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToTrue();
+            }
+        }
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
         T t = visitor.visitLeave(this, l);
         if (t == null) {
