@@ -618,6 +618,7 @@ public abstract class BaseTest {
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
         conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
+        conf.setInt("hbase.hfile.compaction.discharger.interval", 5000);
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
