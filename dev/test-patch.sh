@@ -1090,8 +1090,8 @@ checkJavacWarnings
 (( RESULT = RESULT + $? ))
 # checkProtocErrors
 # (( RESULT = RESULT + $? ))
-checkJavadocWarnings
-(( RESULT = RESULT + $? ))
+#checkJavadocWarnings
+#(( RESULT = RESULT + $? ))
 # checkCheckstyleErrors
 # (( RESULT = RESULT + $? ))
 checkInterfaceAudience
