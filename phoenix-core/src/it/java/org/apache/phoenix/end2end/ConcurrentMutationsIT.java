@@ -274,7 +274,8 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
             EnvironmentEdgeManager.injectEdge(null);
         }
     }
-
+    @Ignore ("It is not possible to assign the same timestamp two separately committed mutations in the current model\n" +
+            " except when the server time goes backward. In that case, the behavior is not deterministic")
     @Test
     public void testDeleteRowAndUpsertValueAtSameTS1() throws Exception {
         try {

@@ -229,8 +229,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
-            // Check after compaction
-            TestUtil.doMajorCompaction(conn, dataTableFullName);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
             setEveryNthRowWithNull(NROWS, 5, stmt);
@@ -241,7 +239,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
-            TestUtil.doMajorCompaction(conn, dataTableFullName);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
             indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,
@@ -526,7 +523,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             assertEquals(1, MutationCountingRegionObserver.getMutationCount());
             MutationCountingRegionObserver.setMutationCount(0);
-            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should
+            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should not
             // write any index rows
             runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BEFORE);
@@ -614,16 +611,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             // Run the index tool to populate the index while verifying rows
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
-            // Corrupt one cell by writing directly into the index table
-            conn.createStatement().execute("upsert into " + indexTableFullName + " values ('Phoenix', 1, 'B')");
-            conn.commit();
-            // Run the index tool using the only-verify option to detect this mismatch between the data and index table
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, -1, IndexTool.IndexVerifyType.ONLY);
-            cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            expectedValueBytes = Bytes.toBytes("Not matching value for 0:0:CODE E:A A:B");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
             dropIndexToolTables(conn);
         }
     }
