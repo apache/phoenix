@@ -132,6 +132,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -1921,7 +1922,19 @@ public abstract class BaseTest {
 
         splitTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME, splitPoints);
     }
-    
+
+    // We don't need need this for 1.4+, but this works with 1.3, 1.4, and 1.5
+    private static int getRegionServerIndex(MiniHBaseCluster cluster, ServerName serverName) {
+        // we have a small number of region servers, this should be fine for now.
+        List<RegionServerThread> servers = cluster.getRegionServerThreads();
+        for (int i = 0; i < servers.size(); i++) {
+            if (servers.get(i).getRegionServer().getServerName().equals(serverName)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     /**
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
@@ -1931,9 +1944,14 @@ public abstract class BaseTest {
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();
         AssignmentManager am = master.getAssignmentManager();
-   
-        HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
-        HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
+
+        // The 1.4+ MiniCluster way
+        // HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
+        // HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
+        HRegionServer dstServer =
+                cluster.getRegionServer(getRegionServerIndex(cluster, dstServerName));
+        HRegionServer srcServer =
+                cluster.getRegionServer(getRegionServerIndex(cluster, srcServerName));
         byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();
         admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
         while (dstServer.getOnlineRegion(regionInfo.getRegionName()) == null

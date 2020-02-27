@@ -25,6 +25,9 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
+import static org.apache.phoenix.compat.hbase.CompatUtil.*;
+
+
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -297,8 +300,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
             byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
-            buildIndexScan.withStartRow(dataRowKey, true);
-            buildIndexScan.withStopRow(dataRowKey, true);
+            setStartRow(buildIndexScan, dataRowKey, true);
+            setStopRow(buildIndexScan, dataRowKey, true);
             buildIndexScan.setTimeRange(0, maxTimestamp);
             // Pass the index row key to the partial index builder which will rebuild the index row and check if the
             // row key of this rebuilt index row matches with the passed index row key
@@ -330,7 +333,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Delete the unverified row from index if it is old enough
                 deleteRowIfAgedEnough(indexRowKey, row, ts, false);
                 // Open a new scanner starting from the row after the current row
-                indexScan.withStartRow(indexRowKey, false);
+                setStartRow(indexScan, indexRowKey, false);
                 scanner = region.getScanner(indexScan);
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
@@ -339,7 +342,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
             // code == RebuildReturnCode.INDEX_ROW_EXISTS.getValue()
             // Open a new scanner starting from the current row
-            indexScan.withStartRow(indexRowKey, true);
+            setStartRow(indexScan, indexRowKey, true);
             scanner = region.getScanner(indexScan);
             scanner.next(row);
             if (row.isEmpty()) {
@@ -378,8 +381,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Now we will do a single row scan to retrieve the verified index row built from the data table row.
                 // Note we cannot read all versions in one scan as the max number of row versions for an index table
                 // can be 1. In that case, we will get only one (i.e., the most recent) version instead of all versions
-                singleRowIndexScan.withStartRow(indexRowKey, true);
-                singleRowIndexScan.withStopRow(indexRowKey, true);
+                setStartRow(singleRowIndexScan, indexRowKey, true);
+                setStopRow(singleRowIndexScan, indexRowKey, true);
                 singleRowIndexScan.setTimeRange(minTimestamp, ts);
                 RegionScanner singleRowScanner = region.getScanner(singleRowIndexScan);
                 row.clear();

@@ -23,38 +23,39 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
+import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
 
 /**
  * {@link RpcControllerFactory} that should only be used when creating {@link HTable} for
  * making remote RPCs to the region servers hosting Phoenix SYSTEM tables.
  */
-public class InterRegionServerMetadataRpcControllerFactory extends RpcControllerFactory {
+public class InterRegionServerMetadataRpcControllerFactory extends CompatRpcControllerFactory {
 
     public InterRegionServerMetadataRpcControllerFactory(Configuration conf) {
         super(conf);
     }
 
     @Override
-    public HBaseRpcController newController() {
-        HBaseRpcController delegate = super.newController();
+    public CompatHBaseRpcController newController() {
+        CompatHBaseRpcController delegate = super.newController();
         return getController(delegate);
     }
 
     @Override
-    public HBaseRpcController newController(CellScanner cellScanner) {
-        HBaseRpcController delegate = super.newController(cellScanner);
+    public CompatHBaseRpcController newController(CellScanner cellScanner) {
+        CompatHBaseRpcController delegate = super.newController(cellScanner);
         return getController(delegate);
     }
 
     @Override
-    public HBaseRpcController newController(List<CellScannable> cellIterables) {
-        HBaseRpcController delegate = super.newController(cellIterables);
+    public CompatHBaseRpcController newController(List<CellScannable> cellIterables) {
+        CompatHBaseRpcController delegate = super.newController(cellIterables);
         return getController(delegate);
     }
 
-    private HBaseRpcController getController(HBaseRpcController delegate) {
+    private CompatHBaseRpcController getController(CompatHBaseRpcController delegate) {
         return new MetadataRpcController(delegate, conf);
     }
 
