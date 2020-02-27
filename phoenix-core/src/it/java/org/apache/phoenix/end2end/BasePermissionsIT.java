@@ -863,6 +863,40 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
     }
 
+    AccessTestAction onlyCreateTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+                    assertFalse(stmt.execute("CREATE IMMUTABLE TABLE " + tableName
+                            + "(pk INTEGER not null primary key, data VARCHAR, val integer)"));
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction upsertRowsIntoTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection()) {
+                    try (PreparedStatement pstmt = conn.prepareStatement(
+                            "UPSERT INTO " + tableName + " values(?, ?, ?)")) {
+                        for (int i = 0; i < NUM_RECORDS; i++) {
+                            pstmt.setInt(1, i);
+                            pstmt.setString(2, Integer.toString(i));
+                            pstmt.setInt(3, i);
+                            assertEquals(1, pstmt.executeUpdate());
+                        }
+                    }
+                    conn.commit();
+                }
+                return null;
+            }
+        };
+    }
+
     /**
      * Verify that READ and EXECUTE permissions are required on SYSTEM tables to get a Phoenix Connection
      * Tests grant revoke permissions per user 1. if NS enabled -> on namespace 2. If NS disabled -> on tables
@@ -1213,6 +1247,45 @@ public abstract class BasePermissionsIT extends BaseTest {
             verifyAllowed(dropView(viewName1), superUser2);
             verifyAllowed(dropTable(phoenixTableName), superUser2);
 
+        } finally {
+            revokeAll();
+        }
+    }
+
+    @Test
+    public void testUpsertIntoImmutableTable() throws Throwable {
+        final String schema = "TEST_INDEX_VIEW";
+        final String tableName = "TABLE_DDL_PERMISSION_IT";
+        final String phoenixTableName = schema + "." + tableName;
+        grantSystemTableAccess();
+        try {
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser1);
+                        verifyAllowed(onlyCreateTable(phoenixTableName), superUser1);
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            if (isNamespaceMapped) {
+                grantPermissions(unprivilegedUser.getShortName(), schema, Permission.Action.WRITE,
+                        Permission.Action.READ,Permission.Action.EXEC);
+            } else {
+                grantPermissions(unprivilegedUser.getShortName(),
+                        NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.WRITE,
+                        Permission.Action.READ, Permission.Action.EXEC);
+            }
+            verifyAllowed(upsertRowsIntoTable(phoenixTableName), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName), unprivilegedUser);
         } finally {
             revokeAll();
         }

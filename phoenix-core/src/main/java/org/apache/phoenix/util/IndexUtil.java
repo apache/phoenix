@@ -31,6 +31,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -68,6 +69,7 @@ import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -306,8 +308,8 @@ public class IndexUtil {
     }
 
 
-    public static boolean isGlobalIndexCheckerEnabled(PhoenixConnection connection, PName index)
-            throws SQLException {
+    public static boolean isGlobalIndexCheckerEnabled(final PhoenixConnection connection,
+            final PName index) {
         String indexName = index.getString();
         Boolean entry = indexNameGlobalIndexCheckerEnabledMap.getIfPresent(indexName);
         if (entry != null){
@@ -316,16 +318,21 @@ public class IndexUtil {
 
         boolean result = false;
         try {
-            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(index.getBytes());
-
+            HTableDescriptor desc = User
+                    .runAsLoginUser(new PrivilegedExceptionAction<HTableDescriptor>() {
+                @Override
+                public HTableDescriptor run() throws Exception {
+                    return connection.getQueryServices().getTableDescriptor(index.getBytes());
+                }
+            });
             if (desc != null) {
                 if (desc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
                     result = true;
                 }
             }
             indexNameGlobalIndexCheckerEnabledMap.put(indexName, result);
-        } catch (TableNotFoundException ex) {
-            // We can swallow this because some indexes don't have separate tables like local indexes
+        } catch (IOException ex) {
+            throw new RuntimeException("Unable to check the GlobalIndexChecker ", ex);
         }
 
         return result;
