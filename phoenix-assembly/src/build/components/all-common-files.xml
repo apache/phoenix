@@ -27,7 +27,7 @@
       <directory>${project.basedir}/..</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>*.txt</include>
+        <include>*.md</include>
       </includes>
     </fileSet>
     <!-- Copy the executable files from the bin directory  -->
