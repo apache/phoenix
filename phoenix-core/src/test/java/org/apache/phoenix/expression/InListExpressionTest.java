@@ -71,6 +71,9 @@ public class InListExpressionTest {
 
     @Test
     public void testKeyPartsForOrderMatters() {
+        // unit tests for testing the KeyExpressionVisitor returns the unsorted KeySlot.
+        // mock the first rowkeyColumnExpression at pk position 1, and second rowkeyColumnExpression at pk position 2,
+        // it should not sort by pk position because order matters.
         List<Expression> expressionList = new ArrayList<>();
         final RowKeyColumnExpression rowKeyColumnExpressionMock0 = Mockito.mock(RowKeyColumnExpression.class);
         when(rowKeyColumnExpressionMock0.getPosition()).thenReturn(0);
@@ -100,7 +103,7 @@ public class InListExpressionTest {
                 }};
 
         WhereOptimizer.KeyExpressionVisitor visitor = new WhereOptimizer.KeyExpressionVisitor(null, pTable);
-        visitor.setOrderMatterToTrue();
+        visitor.setOrderDependent(true);
         WhereOptimizer.KeyExpressionVisitor.KeySlots resultKeySlots = visitor.newRowValueConstructorKeyParts(rvc, children);
         WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart keyPart =
                 (WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart)
@@ -110,6 +113,9 @@ public class InListExpressionTest {
 
     @Test
     public void testKeyPartsForOrderDoesNotMatter() {
+        // unit tests for testing the KeyExpressionVisitor returns the sorted KeySlot.
+        // mock the first rowkeyColumnExpression at pk position 1, and second rowkeyColumnExpression at pk position 2,
+        // it should sort by pk position.
         List<Expression> expressionList = new ArrayList<>();
         final RowKeyColumnExpression rowKeyColumnExpressionMock0 = Mockito.mock(RowKeyColumnExpression.class);
         when(rowKeyColumnExpressionMock0.getPosition()).thenReturn(0);
@@ -139,7 +145,7 @@ public class InListExpressionTest {
                 }};
 
         WhereOptimizer.KeyExpressionVisitor visitor = new WhereOptimizer.KeyExpressionVisitor(null, pTable);
-        visitor.setOrderMatterToFalse();
+        visitor.setOrderDependent(false);
         WhereOptimizer.KeyExpressionVisitor.KeySlots resultKeySlots = visitor.newRowValueConstructorKeyParts(rvc, children);
         WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart keyPart =
                 (WhereOptimizer.KeyExpressionVisitor.RowValueConstructorKeyPart)

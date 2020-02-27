@@ -374,9 +374,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
          */
         if (visitor instanceof WhereOptimizer.KeyExpressionVisitor) {
             if (this.op == CompareOp.EQUAL) {
-                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToFalse();
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderDependent(false);
             } else {
-                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderMatterToTrue();
+                ((WhereOptimizer.KeyExpressionVisitor) visitor).setOrderDependent(true);
             }
         }
         List<T> l = acceptChildren(visitor, visitor.visitEnter(this));

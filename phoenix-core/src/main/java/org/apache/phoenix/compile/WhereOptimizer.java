@@ -72,6 +72,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -545,7 +546,7 @@ public class WhereOptimizer {
      * operators, CASE statements, and string concatenation.
      */
     public static class KeyExpressionVisitor extends StatelessTraverseNoExpressionVisitor<KeyExpressionVisitor.KeySlots> {
-        private boolean orderMatter;
+        private boolean orderDependent;
 
         private static final KeySlots EMPTY_KEY_SLOTS = new KeySlots() {
             @Override
@@ -595,10 +596,11 @@ public class WhereOptimizer {
             if (childSlots.isEmpty() || rvc.isStateless()) {
                 return null;
             }
-            if (!this.orderMatter) {
+            if (!this.orderDependent) {
                 Collections.sort(childSlots, new Comparator<KeySlots>() {
                     @Override
                     public int compare(KeySlots o1, KeySlots o2) {
+                        //we don't allow nesting on RVCs which is the only case and get(0) is valid
                         return o1.getSlots().get(0).getPKPosition() -
                                 o2.getSlots().get(0).getPKPosition();
                     }
@@ -686,17 +688,14 @@ public class WhereOptimizer {
                     childPart, ptr, node, extractNodes), slot.getPKPosition(), slot.getKeyRanges());
         }
 
-        public boolean isOrderMatter() {
-            return this.orderMatter;
+        public boolean isOrderDependent() {
+            return this.orderDependent;
         }
 
-        public void setOrderMatterToTrue() {
-            this.orderMatter = true;
+        public void setOrderDependent(boolean orderDependent) {
+            this.orderDependent = orderDependent;
         }
 
-        public void setOrderMatterToFalse() {
-            this.orderMatter = false;
-        }
         /**
          * 
          * Iterates through all combinations of KeyRanges for a given
@@ -1698,9 +1697,9 @@ public class WhereOptimizer {
                     ranges.add(range);
                 }
             }
-            this.orderMatter = true;
+            this.orderDependent = true;
             KeySlots result = newKeyParts(childSlot, node, new ArrayList<KeyRange>(ranges));
-            this.orderMatter = false;
+            this.orderDependent = false;
             return result;
         }
 
@@ -1771,6 +1770,7 @@ public class WhereOptimizer {
          * to produce the start and stop scan range.
          *
          */
+        @VisibleForTesting
         public static final class KeySlot {
             private final int pkPosition; // Position in primary key
             private final int pkSpan; // Will be > 1 for RVC
@@ -1852,7 +1852,8 @@ public class WhereOptimizer {
          */
         public static class SingleKeySlot implements KeySlots {
             private final List<KeySlot> slots;
-            
+
+            @VisibleForTesting
             public SingleKeySlot(KeyPart part, int pkPosition, List<KeyRange> ranges) {
                 this(part, pkPosition, 1, ranges);
             }
@@ -1909,6 +1910,7 @@ public class WhereOptimizer {
             private final PColumn column;
             private final List<Expression> nodes;
 
+            @VisibleForTesting
             public BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
                 this.table = table;
                 this.column = column;
@@ -2010,6 +2012,7 @@ public class WhereOptimizer {
                 }
             }
 
+            @VisibleForTesting
             public List<KeySlots> getChildSlots() {
                 return this.childSlots;
             }
