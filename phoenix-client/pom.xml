@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.16.0-HBase-1.5-SNAPSHOT</version>
+    <version>4.16.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-client</artifactId>
   <name>Phoenix Client</name>
@@ -346,7 +346,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <createSourcesJar>true</createSourcesJar>
@@ -382,7 +383,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedClassifierName>embedded</shadedClassifierName>
+              <shadedClassifierName>${hbase.profile.string}-embedded</shadedClassifierName>
               <shadedArtifactAttached>true</shadedArtifactAttached>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
