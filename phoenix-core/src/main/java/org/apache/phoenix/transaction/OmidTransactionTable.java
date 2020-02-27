@@ -322,22 +322,22 @@ public class OmidTransactionTable implements Table {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for compatibility reasons
     public int getWriteRpcTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for compatibility reasons
     public void setWriteRpcTimeout(int writeRpcTimeout) {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for compatibility reasons
     public int getReadRpcTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for compatibility reasons
     public void setReadRpcTimeout(int readRpcTimeout) {
         throw new UnsupportedOperationException();
     }

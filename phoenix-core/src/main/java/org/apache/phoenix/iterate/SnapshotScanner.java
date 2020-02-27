@@ -34,11 +34,11 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -148,7 +148,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   }
 
   private RegionCoprocessorEnvironment getSnapshotContextEnvironment(final Configuration conf) {
-    return new RegionCoprocessorEnvironment() {
+    return new CompatRegionCoprocessorEnvironment() {
       @Override
       public Region getRegion() {
         return region;
@@ -215,10 +215,6 @@ public class SnapshotScanner extends AbstractClientScanner {
         throw new UnsupportedOperationException();
       }
 
-      @Override
-      public MetricRegistry getMetricRegistryForRegionServer() {
-        throw new UnsupportedOperationException();
-      }
     };
   }
 }

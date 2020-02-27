@@ -59,10 +59,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.hadoop.hbase.metrics.Gauge;
-import org.apache.hadoop.hbase.metrics.MetricRegistries;
-import org.apache.hadoop.hbase.metrics.MetricRegistry;
-import org.apache.hadoop.hbase.metrics.MetricRegistryInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -121,11 +117,7 @@ public enum GlobalClientMetrics {
 
     static {
         initPhoenixGlobalClientMetrics();
-        if (isGlobalMetricsEnabled) {
-            MetricRegistry metricRegistry = createMetricRegistry();
-            registerPhoenixMetricsToRegistry(metricRegistry);
-            GlobalMetricRegistriesAdapter.getInstance().registerMetricRegistry(metricRegistry);
-        }
+        GlobalClientMetricsRegistry.register();
     }
 
     private static void initPhoenixGlobalClientMetrics() {
@@ -135,47 +127,14 @@ public enum GlobalClientMetrics {
         }
     }
 
-    private static void registerPhoenixMetricsToRegistry(MetricRegistry metricRegistry) {
-        for (GlobalClientMetrics globalMetric : GlobalClientMetrics.values()) {
-            metricRegistry.register(globalMetric.metricType.columnName(),
-                    new PhoenixGlobalMetricGauge(globalMetric.metric));
-        }
-    }
-
-    private static MetricRegistry createMetricRegistry() {
-        LOGGER.info("Creating Metric Registry for Phoenix Global Metrics");
-        MetricRegistryInfo registryInfo = new MetricRegistryInfo("PHOENIX", "Phoenix Client Metrics",
-                "phoenix", "Phoenix,sub=CLIENT", true);
-        return MetricRegistries.global().create(registryInfo);
-    }
-
-    /**
-     * Class to convert Phoenix Metric objects into HBase Metric objects (Gauge)
-     */
-    private static class PhoenixGlobalMetricGauge implements Gauge<Long> {
-
-        private final GlobalMetric metric;
-
-        public PhoenixGlobalMetricGauge(GlobalMetric metric) {
-            this.metric = metric;
-        }
-
-        @Override
-        public Long getValue() {
-            return metric.getValue();
-        }
-    }
-
     public void update(long value) {
         metric.change(value);
     }
 
-    @VisibleForTesting
     public GlobalMetric getMetric() {
         return metric;
     }
 
-    @VisibleForTesting
     public MetricType getMetricType() {
         return metricType;
     }

@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -34,7 +32,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 
 import static org.apache.hadoop.hbase.KeyValue.ROW_LENGTH_SIZE;
 
-public class LocalIndexStoreFileScanner extends StoreFileScanner{
+public class LocalIndexStoreFileScanner extends CompatStoreFileScanner {
 
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;

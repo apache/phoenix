@@ -23,8 +23,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
+import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
 
 /**
  * {@link RpcControllerFactory} that should only be used when creating {@link HTable} for
@@ -32,33 +33,33 @@ import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
  * This controller factory shouldn't be globally configured anywhere and is meant to be used
  * only internally by Phoenix indexing code.
  */
-public class InterRegionServerIndexRpcControllerFactory extends RpcControllerFactory {
+public class InterRegionServerIndexRpcControllerFactory extends CompatRpcControllerFactory {
 
     public InterRegionServerIndexRpcControllerFactory(Configuration conf) {
         super(conf);
     }
 
     @Override
-    public HBaseRpcController newController() {
-        HBaseRpcController delegate = super.newController();
+    public CompatHBaseRpcController newController() {
+        CompatHBaseRpcController delegate = super.newController();
         return getController(delegate);
     }
 
     @Override
-    public HBaseRpcController newController(CellScanner cellScanner) {
-        HBaseRpcController delegate = super.newController(cellScanner);
+    public CompatHBaseRpcController newController(CellScanner cellScanner) {
+        CompatHBaseRpcController delegate = super.newController(cellScanner);
         return getController(delegate);
     }
 
     @Override
-    public HBaseRpcController newController(List<CellScannable> cellIterables) {
-        HBaseRpcController delegate = super.newController(cellIterables);
+    public CompatHBaseRpcController newController(List<CellScannable> cellIterables) {
+        CompatHBaseRpcController delegate = super.newController(cellIterables);
         return getController(delegate);
     }
 
-    private HBaseRpcController getController(HBaseRpcController delegate) {
+    private CompatHBaseRpcController getController(CompatHBaseRpcController delegate) {
         // construct a chain of controllers: metadata, index and standard controller
-      HBaseRpcController indexRpcController = new IndexRpcController(delegate, conf);
+        CompatHBaseRpcController indexRpcController = new IndexRpcController(delegate, conf);
         return new MetadataRpcController(indexRpcController, conf);
     }
 
