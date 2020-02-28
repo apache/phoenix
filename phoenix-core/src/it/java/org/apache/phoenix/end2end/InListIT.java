@@ -620,6 +620,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
     }
 
+    // InListExpression generates a range scan instead of a point lookup if we have PK in DESC oder.
+    // Please remove ignore tag after PHOENIX-5752 has been fixed.
     @Ignore
     @Test
     public void testInListExpressionWithDescOrderWithRightQueryPlan2() throws Exception {
@@ -717,6 +719,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         testNonPkListPlan(this.ascViewName);
     }
 
+    // InListExpression generates a range scan instead of a point lookup if we have PK in DESC oder.
+    // Please remove ignore tag after PHOENIX-5752 has been fixed.
     @Ignore
     @Test
     public void testInListExpressionGeneratesRightScanForDesc() throws Exception {
