@@ -515,6 +515,10 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           }
           ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
           Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
+          if (dataRowState == null) {
+              dataRowState = new Pair<Put, Put>(null, null);
+              context.dataRowStates.put(rowKeyPtr, dataRowState);
+          }
           Put nextDataRowState = dataRowState.getSecond();
           if (nextDataRowState == null) {
               continue;
@@ -698,6 +702,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
                         byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr,
                                 null, null, HConstants.LATEST_TIMESTAMP);
                         indexPut = new Put(indexRowKey);
+                    } else {
+                        removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                                indexMaintainer.getEmptyKeyValueQualifier());
                     }
                     indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                             indexMaintainer.getEmptyKeyValueQualifier(), ts, UNVERIFIED_BYTES);
