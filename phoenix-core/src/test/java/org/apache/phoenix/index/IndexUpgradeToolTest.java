@@ -20,19 +20,29 @@ package org.apache.phoenix.index;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
 
+import java.sql.Connection;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.PhoenixRuntime;
+
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
 
 @RunWith(Parameterized.class)
 public class IndexUpgradeToolTest {
@@ -86,4 +96,73 @@ public class IndexUpgradeToolTest {
         return Arrays.asList( false, true);
     }
 
+    private void setupConfForConnectionlessQuery(Configuration conf) {
+        conf.set(HConstants.ZOOKEEPER_QUORUM, PhoenixRuntime.CONNECTIONLESS);
+        conf.unset(HConstants.ZOOKEEPER_CLIENT_PORT);
+        conf.unset(HConstants.ZOOKEEPER_ZNODE_PARENT);
+    }
+
+    @Test
+    public void testConnectionProperties() throws Exception {
+        Configuration conf = HBaseConfiguration.create();
+
+        long indexRebuildQueryTimeoutMs = 2000;
+        long indexRebuildRpcTimeoutMs = 3000;
+        long indexRebuildClientScannerTimeoutMs = 4000;
+        int indexRebuildRpcRetryCount = 10;
+
+        conf.setLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB, indexRebuildQueryTimeoutMs);
+        conf.setLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB, indexRebuildRpcTimeoutMs);
+        conf.setLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                indexRebuildClientScannerTimeoutMs);
+        conf.setInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, indexRebuildRpcRetryCount);
+
+        // prepare conf for connectionless query
+        setupConfForConnectionlessQuery(conf);
+
+        try (Connection conn = IndexUpgradeTool.getConnection(conf)) {
+            // verify connection properties for phoenix, hbase timeouts and retries
+            Assert.assertEquals(conn.getClientInfo(QueryServices.THREAD_TIMEOUT_MS_ATTRIB),
+                    Long.toString(indexRebuildQueryTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_RPC_TIMEOUT_KEY),
+                    Long.toString(indexRebuildRpcTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD),
+                    Long.toString(indexRebuildClientScannerTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_RETRIES_NUMBER),
+                    Long.toString(indexRebuildRpcRetryCount));
+        }
+    }
+
+    @Test
+    public void testConnectionDefaults() throws Exception {
+        Configuration conf = HBaseConfiguration.create();
+
+        long indexRebuildQueryTimeoutMs = conf.getLong(
+                QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+        long indexRebuildRpcTimeoutMs = conf.getLong(
+                QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
+                QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
+        long indexRebuildClientScannerTimeoutMs = conf.getLong(
+                QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
+        long indexRebuildRpcRetryCount = conf.getInt(
+                QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
+
+        // prepare conf for connectionless query
+        setupConfForConnectionlessQuery(conf);
+
+        try (Connection conn = IndexUpgradeTool.getConnection(conf)) {
+            // verify connection properties for phoenix, hbase timeouts and retries
+            Assert.assertEquals(conn.getClientInfo(QueryServices.THREAD_TIMEOUT_MS_ATTRIB),
+                    Long.toString(indexRebuildQueryTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_RPC_TIMEOUT_KEY),
+                    Long.toString(indexRebuildRpcTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD),
+                    Long.toString(indexRebuildClientScannerTimeoutMs));
+            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_RETRIES_NUMBER),
+                    Long.toString(indexRebuildRpcRetryCount));
+        }
+    }
 }
