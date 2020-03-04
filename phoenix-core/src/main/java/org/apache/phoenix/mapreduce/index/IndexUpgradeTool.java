@@ -27,6 +27,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
@@ -46,6 +47,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -314,12 +316,39 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
+    private static void setRpcRetriesAndTimeouts(Configuration conf) {
+        long indexRebuildQueryTimeoutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+        long indexRebuildRPCTimeoutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
+        long indexRebuildClientScannerTimeOutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
+        int indexRebuildRpcRetriesCounter =
+                conf.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
+
+        // Set phoenix and hbase level timeouts and rpc retries
+        conf.setLong(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, indexRebuildQueryTimeoutMs);
+        conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, indexRebuildRPCTimeoutMs);
+        conf.setLong(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                indexRebuildClientScannerTimeOutMs);
+        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, indexRebuildRpcRetriesCounter);
+    }
+
+    @VisibleForTesting
+    public static Connection getConnection(Configuration conf) throws SQLException {
+        setRpcRetriesAndTimeouts(conf);
+        return ConnectionUtil.getInputConnection(conf);
+    }
+
     @VisibleForTesting
     public int executeTool() {
         Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
 
-        try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
-
+        try (Connection conn = getConnection(conf)) {
             ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class)
                     .getQueryServices();
 
@@ -785,9 +814,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
         String viewIndexesSql = getViewIndexesSql(viewName, schemaName, tenantId);
         ArrayList<String> viewIndexes = new ArrayList<>();
-        ResultSet
-                rs =
-                conn.createStatement().executeQuery(viewIndexesSql);
+        long stime = EnvironmentEdgeManager.currentTimeMillis();
+        ResultSet rs = conn.createStatement().executeQuery(viewIndexesSql);
+        long etime = EnvironmentEdgeManager.currentTimeMillis();
+        LOGGER.info(String.format("Query %s took %d ms ", viewIndexesSql, (etime - stime)));
         while(rs.next()) {
             String viewIndexName = rs.getString(1);
             viewIndexes.add(viewIndexName);
