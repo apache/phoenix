@@ -863,7 +863,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
     }
 
-    AccessTestAction onlyCreateTable(final String tableName) throws SQLException {
+    AccessTestAction onlyCreateImmutableTable(final String tableName) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
@@ -1264,7 +1264,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                 public Void run() throws Exception {
                     try {
                         verifyAllowed(createSchema(schema), superUser1);
-                        verifyAllowed(onlyCreateTable(phoenixTableName), superUser1);
+                        verifyAllowed(onlyCreateImmutableTable(phoenixTableName), superUser1);
                     } catch (Throwable e) {
                         if (e instanceof Exception) {
                             throw (Exception)e;
