@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -45,14 +46,14 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
-public class RowTimestampStringFunctionIT extends ParallelStatsDisabledIT {
-
+public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     private final boolean encoded;
     private final String tableDDLOptions;
 
-    public RowTimestampStringFunctionIT(QualifierEncodingScheme encoding,
+    public PhoenixRowTimestampFunctionIT(QualifierEncodingScheme encoding,
             ImmutableStorageScheme storage) {
         StringBuilder optionBuilder = new StringBuilder();
         optionBuilder.append(" COLUMN_ENCODED_BYTES = " + encoding.ordinal());
@@ -132,7 +133,7 @@ public class RowTimestampStringFunctionIT extends ParallelStatsDisabledIT {
             }
             conn.commit();
 
-            String dql = "SELECT ROW_TIMESTAMP_STRING() FROM " + tableName;
+            String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
 
             ResultSet rs = conn.createStatement().executeQuery(dql);
             // verify row timestamp returned by the query matches the empty column cell timestamp
@@ -147,7 +148,7 @@ public class RowTimestampStringFunctionIT extends ParallelStatsDisabledIT {
             // verify again after update
             verifyHbaseAllRowsTimestamp(tableName, rs, count);
 
-            dql = "SELECT ROWKEY_BYTES_STRING(), ROW_TIMESTAMP_STRING() FROM " + tableName
+            dql = "SELECT ROWKEY_BYTES_STRING(), PHOENIX_ROW_TIMESTAMP() FROM " + tableName
                     + " WHERE PK >= 1 AND PK <=3 ";
             rs = conn.createStatement().executeQuery(dql);
 
@@ -182,12 +183,166 @@ public class RowTimestampStringFunctionIT extends ParallelStatsDisabledIT {
             }
             conn.commit();
 
-            String dql = "SELECT ROW_TIMESTAMP_STRING() FROM " + tableName;
+            String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
 
             ResultSet rs = conn.createStatement().executeQuery(dql);
             while(rs.next()) {
                 assertEquals(rs.getDate(1), rowTimestampDate);
             }
+        }
+    }
+
+    @Test
+    public void testRowTimestampColumnAndPredicates() throws Exception {
+        String tableName =  generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
+                    + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR"
+                    + " CONSTRAINT PK PRIMARY KEY(PK1, PK2))" + this.tableDDLOptions;
+            conn.createStatement().execute(ddl);
+
+            String dml = "UPSERT INTO " + tableName + " (PK1, PK2, KV1, KV2) VALUES (?, ?, ?, ?)";
+
+            long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            Date rowTimestampDate1 = new Date(rowTimestamp - 120000);
+            PreparedStatement stmt = conn.prepareStatement(dml);
+
+            int count = 5;
+            for (int id = 0; id < count; ++id) {
+                int idValue = id;
+                stmt.setInt(1, idValue);
+                stmt.setDate(2, rowTimestampDate1);
+                stmt.setString(3, "KV1_" + idValue);
+                stmt.setString(4, "KV2_" + idValue);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            // case: No rows should be selected
+            // Since we used a past date for column PK2
+            String dql1 = "SELECT PHOENIX_ROW_TIMESTAMP(), KV1 FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() = PK2";
+
+            ResultSet rs1 = conn.createStatement().executeQuery(dql1);
+            assertTrue(!rs1.next());
+            rs1.close();
+
+            // case: All rows selected should have the phoenix_row_timestamp() > date column
+            // Since we used a past date for column PK2
+            String dql2 = "SELECT PHOENIX_ROW_TIMESTAMP(), KV1 FROM " + tableName +
+                    " WHERE PK2 < PHOENIX_ROW_TIMESTAMP() ";
+
+            ResultSet rs2 = conn.createStatement().executeQuery(dql2);
+            int actualCount2 = 0;
+            while(rs2.next()) {
+                assertTrue(rs2.getDate(1).after(rowTimestampDate1));
+                actualCount2++;
+            }
+            assertEquals(count, actualCount2);
+            rs2.close();
+
+            // case: All rows selected should have the phoenix_row_timestamp() < date column
+            // So using a future date.
+            Date rowTimestampDate2 = new Date(rowTimestamp + 120000);
+            for (int id = 0; id < count; ++id) {
+                int idValue = id + 100;
+                stmt.setInt(1, idValue);
+                stmt.setDate(2, rowTimestampDate2);
+                stmt.setString(3, "KV1_" + idValue);
+                stmt.setString(4, "KV2_" + idValue);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            String dql3 = "SELECT PHOENIX_ROW_TIMESTAMP(), KV2 FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() < PK2";
+
+            ResultSet rs3 = conn.createStatement().executeQuery(dql3);
+            int actualCount3 = 0;
+            while(rs3.next()) {
+                assertTrue(rs3.getDate(1).before(rowTimestampDate2));
+                actualCount3++;
+            }
+            assertEquals(count, actualCount3);
+            rs3.close();
+        }
+    }
+
+    @Ignore("Fails when encoding=NON_ENCODED_QUALIFIERS and PHOENIX_ROW_TIMESTAMP "
+            + "is the only select column"
+            + "Expected rows do match expected:<5> but was:<0>")
+    public void testRowTimestampColumnOnlyAndPredicates() throws Exception {
+        String tableName =  generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
+                    + " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR, KV2 VARCHAR"
+                    + " CONSTRAINT PK PRIMARY KEY(PK1, PK2))" + this.tableDDLOptions;
+            conn.createStatement().execute(ddl);
+
+            String dml = "UPSERT INTO " + tableName + " (PK1, PK2, KV1, KV2) VALUES (?, ?, ?, ?)";
+
+            long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            Date rowTimestampDate1 = new Date(rowTimestamp - 120000);
+            PreparedStatement stmt = conn.prepareStatement(dml);
+
+            int count = 5;
+            for (int id = 0; id < count; ++id) {
+                int idValue = id;
+                stmt.setInt(1, idValue);
+                stmt.setDate(2, rowTimestampDate1);
+                stmt.setString(3, "KV1_" + idValue);
+                stmt.setString(4, "KV2_" + idValue);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            // case: No rows should be selected
+            // Since we used a past date for column PK2
+            String dql1 = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() = PK2";
+
+            ResultSet rs1 = conn.createStatement().executeQuery(dql1);
+            assertTrue(!rs1.next());
+            rs1.close();
+
+            // case: All rows selected should have the phoenix_row_timestamp() > date column
+            // Since we used a past date for column PK2
+            String dql2 = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
+                    " WHERE PK2 < PHOENIX_ROW_TIMESTAMP() ";
+
+            ResultSet rs2 = conn.createStatement().executeQuery(dql2);
+            int actualCount2 = 0;
+            while(rs2.next()) {
+                assertTrue(rs2.getDate(1).after(rowTimestampDate1));
+                actualCount2++;
+            }
+            assertEquals(count, actualCount2);
+            rs2.close();
+
+            // case: All rows selected should have the phoenix_row_timestamp() < date column
+            // So using a future date.
+            Date rowTimestampDate2 = new Date(rowTimestamp + 120000);
+            for (int id = 0; id < count; ++id) {
+                int idValue = id + 100;
+                stmt.setInt(1, idValue);
+                stmt.setDate(2, rowTimestampDate2);
+                stmt.setString(3, "KV1_" + idValue);
+                stmt.setString(4, "KV2_" + idValue);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+
+            String dql3 = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() < PK2";
+
+            ResultSet rs3 = conn.createStatement().executeQuery(dql3);
+            int actualCount3 = 0;
+            while(rs3.next()) {
+                assertTrue(rs3.getDate(1).before(rowTimestampDate2));
+                actualCount3++;
+            }
+            assertEquals(count, actualCount3);
+            rs3.close();
         }
     }
 
