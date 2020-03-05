@@ -223,7 +223,7 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
         }
     }
 
-    private void upsertRow(PreparedStatement stmt, int id, String name, byte[] val) throws
+    public static void upsertRow(PreparedStatement stmt, int id, String name, byte[] val) throws
             SQLException {
         int index = 1;
         // insert row
@@ -233,13 +233,13 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
         stmt.executeUpdate();
     }
 
-    private void upsertRow(PreparedStatement stmt, int id, String name, int zip)
+    public static void upsertRow(PreparedStatement stmt, int id, String name, int val)
             throws SQLException {
         int index = 1;
         // insert row
         stmt.setInt(index++, id);
         stmt.setString(index++, name);
-        stmt.setInt(index++, zip);
+        stmt.setInt(index++, val);
         stmt.executeUpdate();
     }
 
@@ -254,6 +254,6 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
                 cmdArgs =
                 getArgValues(schemaName, dataTableName, indexTableName, batchSize, sourceTable,
                         false, null, null, null, Long.MAX_VALUE);
-        return runScrutiny(cmdArgs);
+        return runScrutiny(IndexScrutinyMapperForTest.class, cmdArgs);
     }
 }

@@ -39,6 +39,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -52,7 +53,6 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ColumnInfo;
@@ -65,7 +65,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
-
 
 /**
  * Mapper that reads from the data table and checks the rows against the index table
@@ -96,6 +95,12 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     private long outputMaxRows;
     private MessageDigest md5;
     private long ttl;
+    private long scnTimestamp;
+    private long maxLookbackAgeMillis;
+
+    protected long getScrutinyTs(){
+        return scnTimestamp;
+    }
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
@@ -107,6 +112,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             final Properties overrideProps = new Properties();
             String scn = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn);
+            scnTimestamp = new Long(scn);
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);
             batchSize = PhoenixConfigurationUtil.getScrutinyBatchSize(configuration);
@@ -161,12 +167,18 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
             ttl = getTableTtl();
+            maxLookbackAgeMillis = ScanInfoUtil.getMaxLookbackInMillis(configuration);
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
             tryClosingResourceSilently(this.connection);
             tryClosingResourceSilently(this.outputConn);
             throw new RuntimeException(e);
         }
+        postSetup();
+    }
+
+    protected void postSetup() {
+
     }
 
     private static void tryClosingResourceSilently(AutoCloseable res) {
@@ -244,14 +256,10 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             // fetch results from the target table and output invalid rows
             queryTargetTable(context, targetStatement, targetPkToSourceValues);
 
-            //check if there are any invalid rows that have been expired, report them
-            //with EXPIRED_ROW_COUNT
-            checkIfInvalidRowsExpired(context, targetPkToSourceValues);
+            //check if any invalid rows are just temporary side effects of ttl or compaction,
+            //and if so remove them from the list and count them as separate metrics
+            categorizeInvalidRows(context, targetPkToSourceValues);
 
-            // any source values we have left over are invalid (e.g. data table rows without
-            // corresponding index row)
-            context.getCounter(PhoenixScrutinyJobCounters.INVALID_ROW_COUNT)
-                    .increment(targetPkToSourceValues.size());
             if (outputInvalidRows) {
                 for (Pair<Long, List<Object>> sourceRowWithoutTargetRow : targetPkToSourceValues.values()) {
                     List<Object> valuesWithoutTarget = sourceRowWithoutTargetRow.getSecond();
@@ -274,8 +282,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
 
     protected void preQueryTargetTable() { }
 
-    protected void checkIfInvalidRowsExpired(Context context,
-            Map<String, Pair<Long,
+    protected void categorizeInvalidRows(Context context,
+                                         Map<String, Pair<Long,
             List<Object>>> targetPkToSourceValues) {
         Set<Map.Entry<String, Pair<Long, List<Object>>>>
                 entrySet = targetPkToSourceValues.entrySet();
@@ -288,8 +296,15 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             Pair<Long, List<Object>> sourceValues = entry.getValue();
             Long sourceTS = sourceValues.getFirst();
             if (hasRowExpiredOnSource(sourceTS, ttl)) {
-                context.getCounter(PhoenixScrutinyJobCounters.EXPIRED_ROW_COUNT).increment(1);
-                itr.remove();
+                context.getCounter(PhoenixScrutinyJobCounters.EXPIRED_ROW_COUNT).increment(1L);
+                itr.remove(); //don't output to the scrutiny table
+            } else if (isRowOlderThanMaxLookback(sourceTS)) {
+                context.getCounter(PhoenixScrutinyJobCounters.BEYOND_MAX_LOOKBACK_COUNT).increment(1L);
+                //still output to the scrutiny table just in case it's useful
+            } else {
+                // otherwise it's invalid (e.g. data table rows without corresponding index row)
+                context.getCounter(PhoenixScrutinyJobCounters.INVALID_ROW_COUNT)
+                    .increment(1L);
             }
         }
     }
@@ -299,7 +314,16 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         return ttl != Integer.MAX_VALUE && sourceTS + ttl*1000 < currentTS;
     }
 
-    private long getTableTtl() throws SQLException, IOException {
+    protected boolean isRowOlderThanMaxLookback(Long sourceTS){
+        if (maxLookbackAgeMillis == ScanInfoUtil.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000){
+            return false;
+        }
+        long now =  EnvironmentEdgeManager.currentTimeMillis();
+        long maxLookBackTimeMillis = now - maxLookbackAgeMillis;
+        return sourceTS <= maxLookBackTimeMillis;
+    }
+
+    private int getTableTtl() throws SQLException, IOException {
         PTable pSourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
         if (pSourceTable.getType() == PTableType.INDEX
                 && pSourceTable.getIndexType() == PTable.IndexType.LOCAL) {
@@ -417,6 +441,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         outputUpsertStmt.setLong(index++, sourceTS); // SOURCE_TS
         outputUpsertStmt.setLong(index++, targetTS); // TARGET_TS
         outputUpsertStmt.setBoolean(index++, targetValues != null); // HAS_TARGET_ROW
+        outputUpsertStmt.setBoolean(index++, isRowOlderThanMaxLookback(sourceTS));
         index = setStatementObjects(sourceValues, index, sourceTblColumnMetadata);
         if (targetValues != null) {
             index = setStatementObjects(targetValues, index, targetTblColumnMetadata);
@@ -498,4 +523,5 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             md5.reset();
         }
     }
+
 }

@@ -49,6 +49,9 @@ import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
@@ -1182,6 +1185,22 @@ public class SchemaUtil {
 	public static int getIsNullableInt(boolean isNullable) {
 		return isNullable ? ResultSetMetaData.columnNullable : ResultSetMetaData.columnNoNulls;
 	}
+
+	public static int getTimeToLive(PhoenixConnection conn, String physicalName) throws SQLException {
+        byte[] tableQualifier = Bytes.toBytes(physicalName);
+        return getTimeToLive(conn, tableQualifier);
+    }
+
+    public static int getTimeToLive(PhoenixConnection conn, byte[] tableQualifier)
+     throws SQLException {
+        HTableDescriptor td = conn.getQueryServices().getTableDescriptor(tableQualifier);
+        HColumnDescriptor[] cds = td.getColumnFamilies();
+        if (cds.length > 0){
+            return cds[0].getTimeToLive();
+        } else {
+            return HConstants.FOREVER;
+        }
+    }
 
 	public static boolean hasGlobalIndex(PTable table) {
         for (PTable index : table.getIndexes()) {

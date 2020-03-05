@@ -56,7 +56,7 @@ public class ScanInfoUtil {
     public static long getTimeToLiveForCompactions(HColumnDescriptor columnDescriptor,
                                                    ScanInfo scanInfo) {
         long ttl = scanInfo.getTtl();
-        long maxLookbackTtl = getMaxLookback(scanInfo.getConfiguration());
+        long maxLookbackTtl = getMaxLookbackInMillis(scanInfo.getConfiguration());
         if (isMaxLookbackTimeEnabled(maxLookbackTtl)) {
             if (ttl == Long.MAX_VALUE
                 && columnDescriptor.getKeepDeletedCells() != KeepDeletedCells.TRUE) {
@@ -110,7 +110,7 @@ public class ScanInfoUtil {
             oldScanInfo.getComparator());
     }
 
-    private static long getMaxLookback(Configuration conf){
+    public static long getMaxLookbackInMillis(Configuration conf){
         //config param is in seconds, switch to millis
         return conf.getLong(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;
