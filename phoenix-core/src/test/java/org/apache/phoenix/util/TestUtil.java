@@ -58,6 +58,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -78,6 +79,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -801,6 +803,21 @@ public class TestUtil {
             conn.createStatement().execute(ddl);
     }
 
+    public static void majorCompact(HBaseTestingUtility utility, TableName table)
+        throws IOException, InterruptedException {
+        long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
+        Admin admin = utility.getHBaseAdmin();
+        admin.majorCompact(table);
+        long lastCompactionTimestamp;
+        AdminProtos.GetRegionInfoResponse.CompactionState state = null;
+        while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table))
+            < compactionRequestedSCN
+            || (state = admin.getCompactionState(table)).
+            equals(AdminProtos.GetRegionInfoResponse.CompactionState.MAJOR)){
+            Thread.sleep(100);
+        }
+    }
+
     /**
      * Runs a major compaction, and then waits until the compaction is complete before returning.
      *
@@ -895,7 +912,7 @@ public class TestUtil {
                     current = cellScanner.current();
                     System.out.println(current + "column= " +
                         Bytes.toString(CellUtil.cloneQualifier(current)) +
-                        " val=" + Bytes.toString(CellUtil.cloneValue(current)));
+                        " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
                 }
             }
         }
@@ -993,18 +1010,25 @@ public class TestUtil {
 
     public static void printResultSet(ResultSet rs) throws SQLException {
         while(rs.next()){
-            StringBuilder builder = new StringBuilder();
-            int columnCount = rs.getMetaData().getColumnCount();
-            for(int i = 0; i < columnCount; i++) {
-                Object value = rs.getObject(i+1);
-                String output = value == null ? "null" : value.toString();
-                builder.append(output);
-                if(i + 1 < columnCount){
-                    builder.append(",");
+            printResult(rs, false);
+        }
+    }
+
+    public static void printResult(ResultSet rs, boolean multiLine) throws SQLException {
+        StringBuilder builder = new StringBuilder();
+        int columnCount = rs.getMetaData().getColumnCount();
+        for(int i = 0; i < columnCount; i++) {
+            Object value = rs.getObject(i+1);
+            String output = value == null ? "null" : value.toString();
+            builder.append(output);
+            if(i + 1 < columnCount){
+                builder.append(",");
+                if (multiLine){
+                    builder.append("\n");
                 }
             }
-            System.out.println(builder.toString());
         }
+        System.out.println(builder.toString());
     }
 
     public static void waitForIndexRebuild(Connection conn, String fullIndexName, PIndexState indexState) throws InterruptedException, SQLException {

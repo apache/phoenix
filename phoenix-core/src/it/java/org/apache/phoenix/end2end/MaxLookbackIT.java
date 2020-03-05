@@ -31,6 +31,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -66,24 +67,6 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
     private StringBuilder optionBuilder;
     ManualEnvironmentEdge injectEdge;
     private int ttl;
-
-    private class ManualEnvironmentEdge extends EnvironmentEdge {
-        // Sometimes 0 ts might have a special value, so lets start with 1
-        protected long value = 1L;
-
-        public void setValue(long newValue) {
-            value = newValue;
-        }
-
-        public void incrementValue(long addedValue) {
-            value += addedValue;
-        }
-
-        @Override
-        public long currentTime() {
-            return this.value;
-        }
-    }
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -159,8 +142,8 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
             long beforeFirstCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
             injectEdge.incrementValue(1); //new ts for major compaction
-            majorCompact(dataTable, beforeFirstCompactSCN);
-            majorCompact(indexTable, beforeFirstCompactSCN);
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
             assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             //wait for the lookback time. After this compactions should purge the deleted row
@@ -177,8 +160,8 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("upsert into " + dataTableName +
                 " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
-            majorCompact(dataTable, beforeSecondCompactSCN);
-            majorCompact(indexTable, beforeSecondCompactSCN);
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             //should still be ROWS_POPULATED because we added one and deleted one
             assertRawRowCount(conn, dataTable, ROWS_POPULATED);
             assertRawRowCount(conn, indexTable, ROWS_POPULATED);
@@ -241,8 +224,8 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             injectEdge.incrementValue(1); //get a new timestamp for compaction
-            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
-            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             //nothing should have been purged by this major compaction
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
@@ -253,8 +236,8 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
                 injectEdge.incrementValue(timeToAdvance);
             }
             //make sure that we can compact away the now-expired rows
-            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
-            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             //note that before HBase 1.4, we don't have HBASE-17956
             // and this will always return 0 whether it's still on-disk or not
             assertRawRowCount(conn, dataTable, 0);
@@ -317,16 +300,16 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
             //after flush, check to make sure we can see all three versions at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-            majorCompact(dataTable, EnvironmentEdgeManager.currentTimeMillis());
-            majorCompact(indexTable, EnvironmentEdgeManager.currentTimeMillis());
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             //after major compaction, check to make sure we can see all three versions
             // at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
             injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
             long afterLookbackAgeSCN = EnvironmentEdgeManager.currentTimeMillis();
-            majorCompact(dataTable, afterLookbackAgeSCN);
-            majorCompact(indexTable, afterLookbackAgeSCN);
+            majorCompact(dataTable);
+            majorCompact(indexTable);
             //empty column, 1 version of val 1, 3 versions of val2, 1 version of val3 = 6
             assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
             //2 versions of empty column, 2 versions of val2,
@@ -344,20 +327,8 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         admin.flush(table);
     }
 
-    private void majorCompact(TableName table, long compactionRequestedSCN) throws Exception {
-        Admin admin = getUtility().getHBaseAdmin();
-        admin.majorCompact(table);
-        long lastCompactionTimestamp;
-        AdminProtos.GetRegionInfoResponse.CompactionState state = null;
-        while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table)) < compactionRequestedSCN
-            || (state = admin.getCompactionState(table)).
-            equals(AdminProtos.GetRegionInfoResponse.CompactionState.MAJOR)){
-            if (LOG.isTraceEnabled()) {
-                LOG.trace("Last compaction time:" + lastCompactionTimestamp);
-                LOG.trace("CompactionState: " + state);
-            }
-            Thread.sleep(100);
-        }
+    private void majorCompact(TableName table) throws Exception {
+        TestUtil.majorCompact(getUtility(), table);
     }
 
     private void assertMultiVersionLookbacks(String dataTableSelectSql,

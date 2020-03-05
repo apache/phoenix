@@ -23,6 +23,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 public class IndexScrutinyMapperForTest extends IndexScrutinyMapper {
 
     public static final int TEST_TABLE_TTL = 3600;
+
     public static class ScrutinyTestClock extends EnvironmentEdge {
         long initialTime;
         long delta;
