@@ -17,12 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -139,35 +135,6 @@ public class IndexUpgradeToolIT extends BaseTest {
                 conn.createStatement().execute("CREATE INDEX " + index + " ON "
                         + fullViewName + " (address)");
             }
-        }
-    }
-
-    @Test
-    public void testToolConnectionProperties() throws Exception {
-        // copy the current configuration
-        Configuration conf = new Configuration(getUtility().getConfiguration());
-
-        long indexRebuildQueryTimeoutMs = 2000;
-        long indexRebuildRpcTimeoutMs = 3000;
-        long indexRebuildClientScannerTimeoutMs = 4000;
-        int indexRebuildRpcRetryCount = 10;
-
-        conf.setLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB, indexRebuildQueryTimeoutMs);
-        conf.setLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB, indexRebuildRpcTimeoutMs );
-        conf.setLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
-                indexRebuildClientScannerTimeoutMs);
-        conf.setInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, indexRebuildRpcRetryCount);
-
-        try (Connection conn = IndexUpgradeTool.getConnection(conf)) {
-            // verify connection properties for phoenix, hbase timeouts and retries
-            Assert.assertEquals(conn.getClientInfo(QueryServices.THREAD_TIMEOUT_MS_ATTRIB),
-                    Long.toString(indexRebuildQueryTimeoutMs));
-            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_RPC_TIMEOUT_KEY),
-                    Long.toString(indexRebuildRpcTimeoutMs));
-            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD),
-                    Long.toString(indexRebuildClientScannerTimeoutMs));
-            Assert.assertEquals(conn.getClientInfo(HConstants.HBASE_CLIENT_RETRIES_NUMBER),
-                    Long.toString(indexRebuildRpcRetryCount));
         }
     }
 }

@@ -833,7 +833,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"
                 + schemaName + "\'" : "")
                 + " AND LINK_TYPE = " + PTable.LinkType.INDEX_TABLE.getSerializedValue()
-                + (tenantId != null ? " AND TENANT_ID = \'" + tenantId + "\'" : "");
+                + (tenantId != null ?
+                    " AND TENANT_ID = \'" + tenantId + "\'" : " AND TENANT_ID IS NULL");
     }
 
     private class IndexInfo {
