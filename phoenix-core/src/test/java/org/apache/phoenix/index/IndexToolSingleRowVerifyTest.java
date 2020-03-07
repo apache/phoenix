@@ -70,16 +70,16 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
     public static final String SECOND_ID = "SECOND_ID";
     public static final String FIRST_VALUE = "FIRST_VALUE";
     public static final String SECOND_VALUE = "SECOND_VALUE";
-    public static final String THIRD_VALUE = "THIRD_VALUE";
-    public static final String createTableDDL = "CREATE TABLE IF NOT EXISTS %s (FIRST_ID BIGINT NOT NULL, "
-            + "SECOND_ID BIGINT NOT NULL, FIRST_VALUE VARCHAR(20), "
-            + "SECOND_VALUE INTEGER, THIRD_VALUE DOUBLE "
-            + "CONSTRAINT PK PRIMARY KEY(FIRST_ID, SECOND_ID)) COLUMN_ENCODED_BYTES=0";
+    public static final String
+            createTableDDL = "CREATE TABLE IF NOT EXISTS %s (FIRST_ID BIGINT NOT NULL, "
+                        + "SECOND_ID BIGINT NOT NULL, FIRST_VALUE VARCHAR(20), "
+                        + "SECOND_VALUE INTEGER "
+                        + "CONSTRAINT PK PRIMARY KEY(FIRST_ID, SECOND_ID)) COLUMN_ENCODED_BYTES=0";
 
-    public static final String createIndexDDL = "CREATE INDEX %s ON %s (SECOND_VALUE) INCLUDE (FIRST_VALUE)";
-    public static final String completeRowUpsert = "UPSERT INTO %s VALUES (?,?,?,?,?)";
+    public static final String
+            createIndexDDL = "CREATE INDEX %s ON %s (SECOND_VALUE) INCLUDE (FIRST_VALUE)";
+    public static final String completeRowUpsert = "UPSERT INTO %s VALUES (?,?,?,?)";
     public static final String partialRowUpsert1 = "UPSERT INTO %s (%s, %s, %s) VALUES (?,?,?)";
-    public static final String partialRowUpsert2 = "UPSERT INTO %s (%s, %s, %s, %s) VALUES (?,?,?,?)";
 
     private enum TestType {
         VALID,
@@ -110,106 +110,109 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
     Result indexRow;
     @Mock
     IndexRebuildRegionScanner rebuildScanner;
-    IndexToolVerificationResult.PhaseResult actualPR;
-    IndexToolVerificationResult.PhaseResult expectedPR;
     List<Mutation> actualMutationList;
-    Connection conn;
     String schema, table, dataTableFullName, index, indexTableFullName;
+    PTable pIndexTable, pDataTable;
+    Put put = null;
+    Delete delete = null;
+    PhoenixConnection pconn;
+    IndexToolVerificationResult.PhaseResult actualPR, expectedPR;
 
     @Before
-    public void setup() throws SQLException, IOException, InterruptedException {
-
+    public void setup() throws SQLException, IOException {
         MockitoAnnotations.initMocks(this);
         createDBObject();
-        actualPR = new IndexToolVerificationResult.PhaseResult();
-        setupMockitoForTest();
+        createMutationsWithUpserts();
+        initializeRebuildScannerAttributes();
+        initializeGlobalMockitoSetup();
     }
 
     public void createDBObject() throws SQLException {
-        conn = DriverManager.getConnection(getUrl(), new Properties());
-        schema = generateUniqueName();
-        table = generateUniqueName();
-        index = generateUniqueName();
-        dataTableFullName = SchemaUtil.getQualifiedTableName(schema, table);
-        indexTableFullName = SchemaUtil.getQualifiedTableName(schema, index);
+        try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
+            schema = generateUniqueName();
+            table = generateUniqueName();
+            index = generateUniqueName();
+            dataTableFullName = SchemaUtil.getQualifiedTableName(schema, table);
+            indexTableFullName = SchemaUtil.getQualifiedTableName(schema, index);
 
-        conn.createStatement().execute(String.format(createTableDDL, dataTableFullName));
-        conn.createStatement().execute(String.format(createIndexDDL, index, dataTableFullName));
-        conn.commit();
+            conn.createStatement().execute(String.format(createTableDDL, dataTableFullName));
+            conn.createStatement().execute(String.format(createIndexDDL, index, dataTableFullName));
+            conn.commit();
+
+            pconn = conn.unwrap(PhoenixConnection.class);
+            pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), indexTableFullName));
+            pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), dataTableFullName));
+        }
     }
 
-    private void setupMockitoForTest() throws SQLException, IOException, InterruptedException {
-        //setup
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), indexTableFullName));
-        PTable pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), dataTableFullName));
+    private void createMutationsWithUpserts() throws SQLException, IOException {
+        upsertPartialRow(2, 3, "abc");
+        upsertCompleteRow(2, 3, "hik", 8);
+        upsertPartialRow(2, 3, 10);
+        upsertPartialRow(2,3,4);
+        upsertPartialRow(2,3, "def");
+        upsertCompleteRow(2, 3, null, 20);
+        upsertPartialRow(2,3, "wert");
+    }
 
-        PreparedStatement ps = conn.prepareStatement(String.format(partialRowUpsert1,
-                dataTableFullName, FIRST_ID, SECOND_ID, SECOND_VALUE));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setInt(3, 10);
+    private void upsertPartialRow(int key1, int key2, String val1)
+            throws SQLException, IOException {
 
-        ps.execute();
+        try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())){
+            PreparedStatement ps =
+                    conn.prepareStatement(
+                            String.format(partialRowUpsert1, dataTableFullName, FIRST_ID, SECOND_ID,
+                                    FIRST_VALUE));
+            ps.setInt(1, key1);
+            ps.setInt(2, key2);
+            ps.setString(3, val1);
+            ps.execute();
+            convertUpsertToMutations(conn);
+        }
+    }
 
-        ps = conn.prepareStatement(String.format(completeRowUpsert, dataTableFullName));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setString(3, "abc");
-        ps.setInt(4, 8);
-        ps.setDouble(5, 5.5);
+    private void upsertPartialRow(int key1, int key2, int value1)
+            throws SQLException, IOException {
 
-        ps.execute();
+        try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())){
+            PreparedStatement
+                    ps =
+                    conn.prepareStatement(
+                            String.format(partialRowUpsert1, dataTableFullName, FIRST_ID, SECOND_ID,
+                                    SECOND_VALUE));
+            ps.setInt(1, key1);
+            ps.setInt(2, key2);
+            ps.setInt(3, value1);
+            ps.execute();
+            convertUpsertToMutations(conn);
+        }
+    }
 
-        ps = conn.prepareStatement(String.format(partialRowUpsert1, dataTableFullName, FIRST_ID,
-                SECOND_ID, SECOND_VALUE));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setInt(3, 4);
+    private void upsertCompleteRow(int key1, int key2, String val1
+    , int val2) throws SQLException, IOException {
+        try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
+            PreparedStatement
+                    ps = conn.prepareStatement(String.format(completeRowUpsert, dataTableFullName));
+            ps.setInt(1, key1);
+            ps.setInt(2, key2);
+            ps.setString(3, val1);
+            ps.setInt(4, val2);
+            ps.execute();
+            convertUpsertToMutations(conn);
+        }
+    }
 
-        ps.execute();
-
-        ps = conn.prepareStatement(String.format(partialRowUpsert2, dataTableFullName, FIRST_ID,
-                SECOND_ID, FIRST_VALUE, THIRD_VALUE));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setString(3, "def");
-        ps.setDouble(4, 8.5);
-
-        ps.execute();
-
-        ps = conn.prepareStatement(String.format(partialRowUpsert2, dataTableFullName, FIRST_ID,
-                SECOND_ID, FIRST_VALUE, SECOND_VALUE));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setString(3, null);
-        ps.setInt(4, 20);
-
-        ps.execute();
-
-        ps = conn.prepareStatement(String.format(partialRowUpsert1, dataTableFullName, FIRST_ID,
-                SECOND_ID, FIRST_VALUE));
-        ps.setInt(1, 2);
-        ps.setInt(2, 3);
-        ps.setString(3, "wert");
-
-        ps.execute();
-
-        rebuildScanner.indexTableTTL = HConstants.FOREVER;
-        rebuildScanner.indexMaintainer = pIndexTable.getIndexMaintainer(pDataTable, pconn);
-        rebuildScanner.indexKeyToMutationMap = Maps.newTreeMap((Bytes.BYTES_COMPARATOR));
+    private void convertUpsertToMutations(Connection conn) throws SQLException, IOException {
         Iterator<Pair<byte[],List<KeyValue>>>
                 dataTableNameAndMutationKeyValuesIter = PhoenixRuntime.getUncommittedDataIterator(conn);
-        Put put = null;
-        Delete delete = null;
         Pair<byte[], List<KeyValue>> elem = dataTableNameAndMutationKeyValuesIter.next();
         byte[] key = elem.getSecond().get(0).getRow();
+        long mutationTS = EnvironmentEdgeManager.currentTimeMillis();
 
         for (KeyValue kv : elem.getSecond()) {
             Cell cell =
                     CellUtil.createCell(kv.getRow(), kv.getFamily(), kv.getQualifier(),
-                            EnvironmentEdgeManager.currentTimeMillis(), kv.getType(), kv.getValue());
-            Thread.sleep(1);
+                            mutationTS, kv.getType(), kv.getValue());
             if (kv.getType() == (KeyValue.Type.Put.getCode())) {
                 if (put == null ) {
                     put = new Put(key);
@@ -222,11 +225,20 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
                 delete.addDeleteMarker(cell);
             }
         }
+    }
+
+    private void initializeRebuildScannerAttributes() {
+        rebuildScanner.indexTableTTL = HConstants.FOREVER;
+        rebuildScanner.indexMaintainer = pIndexTable.getIndexMaintainer(pDataTable, pconn);
+        rebuildScanner.indexKeyToMutationMap = Maps.newTreeMap((Bytes.BYTES_COMPARATOR));
+    }
+
+    private void initializeGlobalMockitoSetup() throws IOException {
+        //setup
         when(rebuildScanner.getIndexRowKey(put)).thenCallRealMethod();
-        byte [] indexKey = rebuildScanner.getIndexRowKey(put);
         when(rebuildScanner.prepareIndexMutations(put, delete)).thenCallRealMethod();
-        when(indexRow.getRow()).thenReturn(indexKey);
-        when(rebuildScanner.verifySingleIndexRow(indexRow, actualPR)).thenCallRealMethod();
+        when(rebuildScanner.verifySingleIndexRow(Matchers.<Result>any(),
+                Matchers.<IndexToolVerificationResult.PhaseResult>any())).thenCallRealMethod();
         doNothing().when(rebuildScanner)
                 .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
                 Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
@@ -241,104 +253,108 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testVerifySingleIndexRow_validIndexRowCount_nonZero() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.VALID);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
         expectedPR = new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0);
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.VALID);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.EXPIRED);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0);
-        expireThisRow();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult
+                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0);
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.EXPIRED);
+            expireThisRow();
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_lessMutations() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.INVALID_LESS_MUTATIONS);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = getInvalidPhaseResult();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.INVALID_LESS_MUTATIONS);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_cellValue() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.INVALID_CELL_VALUE);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = getInvalidPhaseResult();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.INVALID_CELL_VALUE);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_emptyCell() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.INVALID_EMPTY_CELL);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = getInvalidPhaseResult();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.INVALID_EMPTY_CELL);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_diffColumn() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.INVALID_COLUMN);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = getInvalidPhaseResult();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.INVALID_COLUMN);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_extraCell() throws IOException {
-        actualMutationList = buildActualIndexMutationsList(TestType.INVALID_EXTRA_CELL);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-
-        expectedPR = getInvalidPhaseResult();
-
-        //test code
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-
-        //assert
-        assertVerificationPhaseResult(actualPR, expectedPR);
+        IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : rebuildScanner.indexKeyToMutationMap.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.INVALID_EXTRA_CELL);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            //assert
+            assertVerificationPhaseResult(actualPR, expectedPR);
+        }
     }
 
     private IndexToolVerificationResult.PhaseResult getInvalidPhaseResult() {
         return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1);
+    }
+
+    private void initializeLocalMockitoSetup(Map.Entry<byte[], List<Mutation>> entry, TestType testType)
+            throws IOException {
+        actualPR = new IndexToolVerificationResult.PhaseResult();
+        byte[] indexKey = entry.getKey();
+        when(indexRow.getRow()).thenReturn(indexKey);
+        actualMutationList = buildActualIndexMutationsList(testType);
+        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
     }
 
     private List<Mutation> buildActualIndexMutationsList(TestType testType) {
@@ -375,15 +391,16 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
         case INVALID_COLUMN:
             newCell =
                 CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
-                        Bytes.toBytes("0:" + UNEXPECTED_VALUE), EnvironmentEdgeManager.currentTimeMillis(),
+                        Bytes.toBytes("0:" + UNEXPECTED_VALUE),
+                        EnvironmentEdgeManager.currentTimeMillis(),
                         KeyValue.Type.Put.getCode(), Bytes.toBytes("zxcv"));
             newCellList.add(newCell);
             newCellList.add(c);
             break;
         case INVALID_CELL_VALUE:
-            if (CellUtil.matchingQualifier(c, Bytes.toBytes("0:"+FIRST_VALUE))) {
+            if (CellUtil.matchingQualifier(c, EMPTY_COLUMN_BYTES)) {
                 newCell = CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
-                        CellUtil.cloneQualifier(c), EnvironmentEdgeManager.currentTimeMillis(),
+                        Bytes.toBytes(FIRST_VALUE), EnvironmentEdgeManager.currentTimeMillis(),
                         KeyValue.Type.Put.getCode(),
                         Bytes.toBytes("zxcv"));
                 newCellList.add(newCell);
@@ -403,9 +420,9 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             }
             break;
         case INVALID_EXTRA_CELL:
-            if (CellUtil.matchingQualifier(c, Bytes.toBytes("0:"+FIRST_VALUE))) {
+            if (CellUtil.matchingQualifier(c, EMPTY_COLUMN_BYTES)) {
                 newCell = CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
-                        CellUtil.cloneQualifier(c), EnvironmentEdgeManager.currentTimeMillis(),
+                        Bytes.toBytes(FIRST_VALUE), EnvironmentEdgeManager.currentTimeMillis(),
                         KeyValue.Type.Put.getCode(),
                         Bytes.toBytes("zxcv"));
                 newCellList.add(newCell);
@@ -426,7 +443,8 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
         List<Cell> cellList = familyCellMap.firstEntry().getValue();
         Cell c = cellList.get(0);
         Cell newCell = CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
-                CellUtil.cloneQualifier(c), EnvironmentEdgeManager.currentTimeMillis(), KeyValue.Type.Put.getCode(),
+                CellUtil.cloneQualifier(c), EnvironmentEdgeManager.currentTimeMillis(),
+                KeyValue.Type.Delete.getCode(),
                     CellUtil.cloneValue(c));
         cellList.add(newCell);
         familyCellMap.put(Bytes.toBytes(0), cellList);
