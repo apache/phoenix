@@ -596,8 +596,13 @@ public class WhereOptimizer {
             if (childSlots.isEmpty() || rvc.isStateless()) {
                 return null;
             }
+            List<KeySlots> childSlotsCopy = new ArrayList<>();
+            for (int i= 0; i < childSlots.size(); i++) {
+                childSlotsCopy.add(childSlots.get(i));
+            }
+
             if (!this.orderDependent) {
-                Collections.sort(childSlots, new Comparator<KeySlots>() {
+                Collections.sort(childSlotsCopy, new Comparator<KeySlots>() {
                     @Override
                     public int compare(KeySlots o1, KeySlots o2) {
                         //we don't allow nesting on RVCs which is the only case and get(0) is valid
@@ -605,27 +610,12 @@ public class WhereOptimizer {
                                 o2.getSlots().get(0).getPKPosition();
                     }
                 });
-                List<Expression> rvcChildren = new ArrayList<>();
-                for (int i= 0; i < rvc.getChildren().size(); i++) {
-                    rvcChildren.add(rvc.getChildren().get(i));
-                }
-                Collections.sort(rvcChildren, new Comparator<Expression>() {
-                    @Override
-                    public int compare(Expression o1, Expression o2) {
-                        if (o1 instanceof RowKeyColumnExpression && o2 instanceof RowKeyColumnExpression) {
-                            return ((RowKeyColumnExpression)o1).getPosition() -
-                                    ((RowKeyColumnExpression)o2).getPosition();
-                        }
-                        return 0;
-                    }
-                });
-                rvc = new RowValueConstructorExpression(rvcChildren, rvc.isStateless());
             }
 
             int position = -1;
             int initialPosition = -1;
-            for (int i = 0; i < childSlots.size(); i++) {
-                KeySlots slots = childSlots.get(i);
+            for (int i = 0; i < childSlotsCopy.size(); i++) {
+                KeySlots slots = childSlotsCopy.get(i);
                 KeySlot keySlot = slots.getSlots().iterator().next();
                 List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
                 // Stop if there was a gap in extraction of RVC elements. This is required if the leading
@@ -659,7 +649,7 @@ public class WhereOptimizer {
             }
             if (position > 0) {
                 int span = position - initialPosition;
-                return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlots), initialPosition, span, EVERYTHING_RANGES);
+                return new SingleKeySlot(new RowValueConstructorKeyPart(table.getPKColumns().get(initialPosition), rvc, span, childSlotsCopy), initialPosition, span, EVERYTHING_RANGES);
             }
             return null;
         }
@@ -1684,6 +1674,7 @@ public class WhereOptimizer {
             }
 
             List<Expression> keyExpressions = node.getKeyExpressions();
+
             Set<KeyRange> ranges = Sets.newHashSetWithExpectedSize(keyExpressions.size());
             KeySlot childSlot = childParts.get(0).getSlots().get(0);
             KeyPart childPart = childSlot.getKeyPart();

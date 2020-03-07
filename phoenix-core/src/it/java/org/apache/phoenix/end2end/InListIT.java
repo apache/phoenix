@@ -663,6 +663,10 @@ public class InListIT extends ParallelStatsDisabledIT {
                 ResultSet rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
                 assertTrue(rs.next());
                 assertEquals("000000000000500", rs.getString(1));
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(1, rs.getString(1));
                 stmt.execute("DELETE * FROM " + tenantView);
             }
         }
@@ -699,13 +703,17 @@ public class InListIT extends ParallelStatsDisabledIT {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                     assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                        "(('000000000000400', '005xx000001Sv6o')," +
+                        "('000000000000300', '005xx000001Sv6o'))");
+                assertTrue(rs.next());
 
                 stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
                         "(('000000000000300', '005xx000001Sv6o'))");
 
-                ResultSet rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
                 assertTrue(rs.next());
-                assertEquals("000000000000400", rs.getString(1));
+                assertEquals(1, rs.getInt(1));
             }
         }
     }
@@ -713,7 +721,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     @Test
     public void testInListExpressionGeneratesRightScanForAsc() throws Exception {
         testFullPkListPlan(this.ascViewName);
-        testFullPkPlusNonPkInListPlan(this.ascViewName);
+        //testFullPkPlusNonPkInListPlan(this.ascViewName);
         testPartialPkListPlan(this.ascViewName);
         testPartialPkPlusNonPkListPlan(this.ascViewName);
         testNonPkListPlan(this.ascViewName);
@@ -846,6 +854,498 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(2, 2))");
             queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
             assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithRightQueryPlan2() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(DOUBLE1 DOUBLE NOT NULL, INT1 BIGINT NOT NULL " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (DOUBLE1, INT1)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(DOUBLE1, INT1) VALUES " +
+                        "(12.0, 8)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(DOUBLE1, INT1) VALUES " +
+                        "(13.0, 9)");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView + " WHERE (INT1, DOUBLE1) IN " +
+                        "((8, 12.0)," +
+                        "(9, 13.0))");
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (INT1, DOUBLE1) IN " +
+                        "((8, 12.0)," +
+                        "(9, 13.0))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithDescOrderWithRightQueryPlan3() throws Exception {
+        String tenantView = generateUniqueName();
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + " AS SELECT * FROM " + descViewName);
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2) VALUES " +
+                        "('foo', '000000000000300')");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2) VALUES " +
+                        "('bar', '000000000000400')");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2) VALUES " +
+                        "('005xx000001Sv6o', '000000000000500')");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                        "(('000000000000400', 'bar')," +
+                        "('000000000000300','foo'))");
+
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                        "(('000000000000400', 'bar')," +
+                        "('000000000000300','foo'))");
+
+                rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals("000000000000500", rs.getString(1));
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+                stmt.execute("DELETE FROM " + tenantView);
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithRightQueryPlan4() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(DOUBLE1 VARCHAR NOT NULL, INT1 VARCHAR NOT NULL " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (DOUBLE1, INT1)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(DOUBLE1, INT1) VALUES " +
+                        "('12.0', '8')");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(DOUBLE1, INT1) VALUES " +
+                        "('13.0', '9')");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView + " WHERE (INT1, DOUBLE1) IN " +
+                        "(('8', '12.0')," +
+                        "('9', '13.0'))");
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (INT1, DOUBLE1) IN " +
+                        "(('8', '12.0')," +
+                        "('9', '13.0'))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithRightQueryPlan5() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID3 BIGINT \n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(12, 8, 7, 6)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(13, 9, 13, 9)");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID1, ID3) IN " +
+                        "((12, 7)," +
+                        "(12, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID4, ID1) IN " +
+                        "((9, 13)," +
+                        "(12, 13))");
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                        "((8, 12)," +
+                        "(9, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
+                        "((8, 12)," +
+                        "(9, 13))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithFunction() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID3 BIGINT \n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(12, 8, 7, 6)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(13, 9, 13, 9)");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID1 + 1, ID3) IN " +
+                        "((13, 7)," +
+                        "(13, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID4 - 1, ID1) IN " +
+                        "((8, 13)," +
+                        "(11, 13))");
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID2 + 1 , ID1 - 1) IN " +
+                        "((9, 11)," +
+                        "(10, 12))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2 -1, ID1 + 1) IN " +
+                        "((7, 13)," +
+                        "(8, 14))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithFunctionAndIndex() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+        String tenantIndexView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID3 BIGINT \n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(12, 8, 7, 6)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(13, 9, 13, 9)");
+                viewConn.commit();
+
+                stmt.execute("CREATE INDEX " + tenantIndexView + " ON " + tenantView + " (ID3) INCLUDE (ID4, ID1)");
+
+                ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID1 + 1, ID3) IN " +
+                        "((13, 7)," +
+                        "(13, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID3 - 1, ID1) IN " +
+                        "((6, 13)," +
+                        "(12, 13))");
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID3 + 1 , ID1 - 1) IN " +
+                        "((8, 11)," +
+                        "(14, 12))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID3 -1, ID1 + 1) IN " +
+                        "((6, 13)," +
+                        "(12, 14))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithIndex() throws Exception {
+        String tableName = generateUniqueName();
+        String tenantView = generateUniqueName();
+        String tenantIndexView = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID3 BIGINT \n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                        " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(12, 8, 7, 6)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(13, 9, 13, 9)");
+                viewConn.commit();
+
+                stmt.execute("CREATE INDEX " + tenantIndexView + " ON " + tenantView + " (ID3) INCLUDE (ID4)");
+
+                ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID3, ID1) IN " +
+                        "((7, 12)," +
+                        "(7, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID2, ID3) IN " +
+                        "((8, 13)," +
+                        "(9, 13))");
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID3, ID4) IN " +
+                        "((7, 6)," +
+                        "(13, 9))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID1, ID3) IN " +
+                        "((12, 7)," +
+                        "(13, 13))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithGlobalViewAndFunction() throws Exception {
+        String tenantView = generateUniqueName();
+        String tableName = generateUniqueName();
+        String globalView = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE " + tableName + "(\n" + " TENANT_ID CHAR(15) NOT NULL,\n" + " KEY_PREFIX CHAR(3) NOT NULL, ID3 BIGINT \n" +
+                        " CONSTRAINT PK PRIMARY KEY (\n" + " TENANT_ID," + " KEY_PREFIX" + ")) MULTI_TENANT=TRUE");
+                stmt.execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = 'ABC'");
+            }
+        }
+
+        try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            viewConn.setAutoCommit(true);
+            try (Statement stmt = viewConn.createStatement()) {
+                stmt.execute("CREATE VIEW IF NOT EXISTS " + tenantView + "(ID1 BIGINT NOT NULL, ID2 BIGINT NOT NULL, ID4 BIGINT " +
+                        " CONSTRAINT PKVIEW PRIMARY KEY\n" + " (ID1, ID2)) " +
+                        " AS SELECT * FROM " + globalView);
+
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(12, 8, 7, 6)");
+                viewConn.createStatement().execute("UPSERT INTO " + tenantView + "(ID1, ID2, ID3, ID4) VALUES " +
+                        "(13, 9, 13, 9)");
+                viewConn.commit();
+
+                ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID1 + 1, ID3) IN " +
+                        "((13, 7)," +
+                        "(13, 13))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID4 - 1, ID1) IN " +
+                        "((8, 13)," +
+                        "(11, 13))");
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                rs = stmt.executeQuery("SELECT ID1, ID2, ID3, ID4 FROM " + tenantView + " WHERE (ID2 + 1 , ID1 - 1) IN " +
+                        "((9, 11)," +
+                        "(10, 12))");
+                assertTrue(rs.next());
+                assertEquals(12, rs.getInt(1));
+                assertEquals(8, rs.getInt(2));
+                assertEquals(7, rs.getInt(3));
+                assertEquals(6, rs.getInt(4));
+                assertTrue(rs.next());
+                assertEquals(13, rs.getInt(1));
+                assertEquals(9, rs.getInt(2));
+                assertEquals(13, rs.getInt(3));
+                assertEquals(9, rs.getInt(4));
+                assertTrue(!rs.next());
+
+                stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2 -1, ID1 + 1) IN " +
+                        "((7, 13)," +
+                        "(8, 14))");
+
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            }
         }
     }
 }
