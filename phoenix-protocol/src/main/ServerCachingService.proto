@@ -63,6 +63,7 @@ message IndexMaintainer {
   required int32 encodingScheme = 20;
   required int32 immutableStorageScheme = 21;
   optional int32 viewIndexIdType = 22 ;
+  optional int32 indexDataColumnCount = 23 [default = -1];
 }
 
 message AddServerCacheRequest {
