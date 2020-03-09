@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
@@ -484,6 +485,54 @@ public class InListIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         conn.close();
+    }
+
+    @Test
+    public void testInListExpressionWithNull() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
+                    "TENANT_ID IN ('', 'FOO')");
+            ResultSet rs2 = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
+                    "TENANT_ID = '' OR TENANT_ID = 'FOO'");
+            assertTrue(rs.next());
+            assertTrue(rs2.next());
+            assertEquals(rs.getInt(1), rs2.getInt(1));
+            assertEquals(0, rs.getInt(1));
+        }
+    }
+
+    @Test(expected = TypeMismatchException.class)
+    public void testInListExpressionWithNotValidElements() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
+                    "TENANT_ID IN (4, 8)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        }
+    }
+
+    @Test(expected = SQLException.class)
+    public void testInListExpressionWithNoElements() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
+                    "TENANT_ID IN ()");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithNullAndWrongTypedData() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
+                    "TENANT_ID IN ('', 4)");
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        }
     }
     
     @Test
