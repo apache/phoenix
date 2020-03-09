@@ -175,7 +175,26 @@ public class RuleGeneratorTest {
         Column targetColumn = null;
         for (Column column : model.getDataMappingColumns()) {
             DataSequence sequence = column.getDataSequence();
-            if (sequence == DataSequence.SEQUENTIAL) {
+            if (!DataTypeMapping.INTEGER.equals(column.getType()) && sequence == DataSequence.SEQUENTIAL) {
+                targetColumn = column;
+                break;
+            }
+        }
+        assertNotNull("Could not find a DataSequence.SEQENTIAL rule.", targetColumn);
+        assertMultiThreadedIncrementValue(targetColumn, rulesApplier);
+    }
+
+    @Test
+    public void testSequentialIntegerDataSequence() throws Exception {
+        XMLConfigParser parser = new XMLConfigParser(matcherScenario);
+        DataModel model = parser.getDataModels().get(0);
+        WriteWorkload loader = new WriteWorkload(parser);
+        RulesApplier rulesApplier = loader.getRulesApplier();
+
+        Column targetColumn = null;
+        for (Column column : model.getDataMappingColumns()) {
+            DataSequence sequence = column.getDataSequence();
+            if (DataTypeMapping.INTEGER.equals(column.getType()) && sequence == DataSequence.SEQUENTIAL) {
                 targetColumn = column;
                 break;
             }
@@ -216,12 +235,16 @@ public class RuleGeneratorTest {
                 public void run() {
                     for (int i = 0; i < increments; i++) {
                         try {
-                            DataValue value = rulesApplier.getDataValue(column);
-                            String strValue = value.getValue();
                             synchronized (testSet) {
+                                DataValue value = rulesApplier.getDataValue(column);
+                                String strValue = value.getValue();
                                 assertFalse("Incrementer gave a duplicate value: " + strValue, testSet.contains(strValue));
-                                assertTrue("Length did not equal expected.",
-                                        strValue.length() == column.getLength());
+                                if(DataTypeMapping.INTEGER.equals(column.getType())) {
+                                    assertEquals(testSet.size() + 1,(long) Long.valueOf(strValue));
+                                } else {
+                                    assertTrue("Length did not equal expected.",
+                                            strValue.length() == column.getLength());
+                                }
                                 testSet.add(strValue);
                             }
                         } catch (Exception e) {

@@ -57,6 +57,8 @@ public class RulesApplier {
     private String cachedScenarioOverrideName;
     private Map<DataTypeMapping, List> scenarioOverrideMap;
 
+    private Map<Column,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
+
 
     public RulesApplier(XMLConfigParser parser) {
         this(parser, EnvironmentEdgeManager.currentTimeMillis());
@@ -193,7 +195,7 @@ public class RulesApplier {
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
                     if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        data = getSequentialDataValue(column);
+                        data = getSequentialVarcharDataValue(column);
                     } else {
                         data = getRandomDataValue(column);
                     }
@@ -234,6 +236,9 @@ public class RulesApplier {
             case INTEGER:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
+                } else if(DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
                 } else {
                     int minInt = (int) column.getMinValue();
                     int maxInt = (int) column.getMaxValue();
@@ -502,16 +507,16 @@ public class RulesApplier {
      * @param column {@link org.apache.phoenix.pherf.configuration.Column}
      * @return {@link org.apache.phoenix.pherf.rules.DataValue}
      */
-    private DataValue getSequentialDataValue(Column column) {
+    private DataValue getSequentialVarcharDataValue(Column column) {
         DataValue data = null;
         long inc = COUNTER.getAndIncrement();
         String strInc = String.valueOf(inc);
-		int paddedLength = column.getLengthExcludingPrefix();
-		String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
-		String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
+        int paddedLength = column.getLengthExcludingPrefix();
+        String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
+        String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
         String varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc2:
                 strInc2;
-        
+
         // Truncate string back down if it exceeds length
         varchar = StringUtils.left(varchar,column.getLength());
         data = new DataValue(column.getType(), varchar);
@@ -525,5 +530,15 @@ public class RulesApplier {
         // Truncate string back down if it exceeds length
         varchar = StringUtils.left(varchar, column.getLength());
         return new DataValue(column.getType(), varchar);
+    }
+
+    private RuleBasedDataGenerator getRuleBasedDataGeneratorForColumn(Column column) {
+        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column);
+        if(generator == null) {
+            //For now we only have one of these, likely this should replace all all the methods
+            generator = new SequentialIntegerDataGenerator(column);
+            columnRuleBasedDataGeneratorMap.put(column,generator);
+        }
+        return generator;
     }
 }
