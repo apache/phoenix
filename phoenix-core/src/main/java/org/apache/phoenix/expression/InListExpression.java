@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -64,22 +65,39 @@ public class InListExpression extends BaseSingleExpression {
     private boolean hashCodeSet = false;
 
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
+        if (children.size() == 1) {
+            throw new SQLException("No element in the IN list");
+        }
+
         Expression firstChild = children.get(0);
 
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
         }
-        if (children.size() == 2) {
-            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
-        }
 
-        boolean addedNull = false;
+        List<Expression> childrenWithoutNulls = Lists.newArrayList();
+        for (Expression child : children){
+            if(!child.equals(LiteralExpression.newConstant(null))){
+                childrenWithoutNulls.add(child);
+            }
+        }
+        if (childrenWithoutNulls.size() <= 1 ) {
+            // In case of after removing nulls there is no remaining element in the IN list
+            return LiteralExpression.newConstant(false);
+        }
+        boolean nullInList = children.size() != childrenWithoutNulls.size();
+
+        if (childrenWithoutNulls.size() == 2 && !nullInList) {
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+                    childrenWithoutNulls, ptr, rowKeyOrderOptimizable);
+        }
         SQLException sqlE = null;
-        List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(children.size());
+        List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(childrenWithoutNulls.size());
         coercedKeyExpressions.add(firstChild);
-        for (int i = 1; i < children.size(); i++) {
+        for (int i = 1; i < childrenWithoutNulls.size(); i++) {
             try {
-                Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL, rowKeyOrderOptimizable);
+                Expression rhs = BaseExpression.coerce(firstChild, childrenWithoutNulls.get(i),
+                        CompareOp.EQUAL, rowKeyOrderOptimizable);
                 coercedKeyExpressions.add(rhs);
             } catch (SQLException e) {
                 // Type mismatch exception or invalid data exception.
@@ -89,11 +107,17 @@ public class InListExpression extends BaseSingleExpression {
                 sqlE = e;
             }
         }
-        if (coercedKeyExpressions.size() == 1) {
-            throw sqlE != null ? sqlE : new SQLException("Only one element in IN list");
+        if (coercedKeyExpressions.size() <= 1 ) {
+            if(nullInList || sqlE == null){
+                // In case of after removing nulls there is no remaining element in the IN list
+                return LiteralExpression.newConstant(false);
+            } else {
+                throw sqlE;
+            }
         }
-        if (coercedKeyExpressions.size() == 2 && addedNull) {
-            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
+        if (coercedKeyExpressions.size() == 2) {
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+                    coercedKeyExpressions, ptr, rowKeyOrderOptimizable);
         }
         Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);
         if (isNegate) {
