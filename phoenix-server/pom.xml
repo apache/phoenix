@@ -267,8 +267,8 @@
                       <shadedPattern>${shaded.package}.net.jcip.annotations</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.codehaus.jackson</pattern>
-                      <shadedPattern>${shaded.package}.org.codehaus.jackson</shadedPattern>
+                      <pattern>com.fasterxml.jackson</pattern>
+                      <shadedPattern>${shaded.package}.com.fasterxml.jackson</shadedPattern>
                     </relocation>
                     <relocation>
                       <pattern>javax.annotation</pattern>
