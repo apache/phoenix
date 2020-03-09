@@ -25,8 +25,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.apache.phoenix.util.json.JsonUpsertExecutor;
-import org.codehaus.jackson.map.ObjectMapper;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
