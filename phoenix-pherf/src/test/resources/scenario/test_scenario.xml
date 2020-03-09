@@ -221,6 +221,13 @@
            <length>1</length>
            <name>FIELD</name>
        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100000</maxValue>
+            <name>SEQUENTIAL_INTEGER</name>
+        </column>
     </datamapping>
     <scenarios>
         <scenario tableName="PHERF.TEST_TABLE" rowCount="100" name="testScenarioRW">
