@@ -42,6 +42,8 @@ import com.google.common.base.Preconditions;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolStartTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolEndTime;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
@@ -70,6 +72,8 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
         final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
         final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
+        final String startTimeValue = getIndexToolStartTime(configuration);
+        final String endTimeValue = getIndexToolEndTime(configuration);
         final Properties overridingProps = new Properties();
         if(txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
@@ -85,6 +89,12 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             Long scn = (currentScnValue != null) ? Long.valueOf(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
                     Long.toString(scn));
+
+            Long startTime = startTimeValue == null ? 0L : Long.valueOf(startTimeValue);
+            Long endTime = endTimeValue == null ? scn : Long.valueOf(endTimeValue);
+            if(startTime >= endTime) {
+                throw new Exception("startTime is greater than or equal to endTime; IndexTool can't proceed.");
+            }
             PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =
                     new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
@@ -92,7 +102,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             Scan scan = plan.getContext().getScan();
 
             try {
-                scan.setTimeRange(0, scn);
+                scan.setTimeRange(startTime, endTime);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
             } catch (IOException e) {

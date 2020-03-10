@@ -116,6 +116,7 @@ import com.google.common.collect.Lists;
  *
  */
 public class IndexTool extends Configured implements Tool {
+
     public enum IndexVerifyType {
         BEFORE("BEFORE"),
         AFTER("AFTER"),
@@ -211,8 +212,7 @@ public class IndexTool extends Configured implements Tool {
     private PTable pDataTable;
     private String tenantId;
     private Job job;
-
-
+    private Long startTime, endTime;
 
     private static final Option SCHEMA_NAME_OPTION = new Option("s", "schema", true,
             "Phoenix schema name (optional)");
@@ -271,7 +271,11 @@ public class IndexTool extends Configured implements Tool {
             + "If specified, truncates the index table and rebuilds (optional)");
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
+    private static final Option START_TIME_OPTION = new Option("st", "starttime", true, "Start time for indextool rebuild or verify");
+    private static final Option END_TIME_OPTION = new Option("et", "endtime", true, "End time for indextool rebuild or verify");
+
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
+
 
     private Options getOptions() {
         final Options options = new Options();
@@ -287,7 +291,11 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(TENANT_ID_OPTION);
         options.addOption(DELETE_ALL_AND_REBUILD_OPTION);
         options.addOption(HELP_OPTION);
+        options.addOption(START_TIME_OPTION);
+        options.addOption(END_TIME_OPTION);
         AUTO_SPLIT_INDEX_OPTION.setOptionalArg(true);
+        START_TIME_OPTION.setOptionalArg(true);
+        END_TIME_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
         SPLIT_INDEX_OPTION.setOptionalArg(true);
         options.addOption(SPLIT_INDEX_OPTION);
@@ -601,7 +609,12 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
-
+            if (startTime != null) {
+                PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
+            }
+            if (endTime != null) {
+                PhoenixConfigurationUtil.setIndexToolEndTime(configuration, endTime);
+            }
             PhoenixConfigurationUtil.setIndexVerifyType(configuration, indexVerifyType);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
@@ -718,14 +731,21 @@ public class IndexTool extends Configured implements Tool {
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
             useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
             shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
-
+            boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
+            if(useStartTime) {
+                startTime = new Long(cmdLine.getOptionValue(START_TIME_OPTION.getOpt()));
+            }
+            boolean useEndTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
+            if (useEndTime) {
+                endTime = new Long(cmdLine.getOptionValue(END_TIME_OPTION.getOpt()));
+            }
             byte[][] splitKeysBeforeJob = null;
             isLocalIndexBuild = false;
             pIndexTable = null;
 
             connection = ConnectionUtil.getInputConnection(configuration);
             createIndexToolTables(connection);
-            
+
             if (indexTable != null) {
                 if (!isValidIndexTable(connection, qDataTable,indexTable, tenantId)) {
                     throw new IllegalArgumentException(String.format(
@@ -792,7 +812,7 @@ public class IndexTool extends Configured implements Tool {
             LOGGER.info("Running Index Build in Foreground. Waits for the build to complete." +
                     " This may take a long time!.");
             boolean result = job.waitForCompletion(true);
-            
+
             if (result) {
                 return 0;
             } else {
