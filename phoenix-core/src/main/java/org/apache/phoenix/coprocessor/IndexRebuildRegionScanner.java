@@ -42,7 +42,6 @@ import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATT
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -115,6 +114,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private static final int DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS = 17;
     public static final String INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY = "index.verify.threads.max";
     private static final int DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK = 2048;
+    public static final String NO_EXPECTED_MUTATION = "No expected mutation";
+    public static final String
+            ACTUAL_MUTATION_IS_NULL_OR_EMPTY = "actualMutationList is null or empty";
     private long pageSizeInRows = Long.MAX_VALUE;
     private int rowCountPerTask;
     private boolean hasMore;
@@ -633,11 +635,11 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             throws IOException {
         List<Mutation> expectedMutationList = indexKeyToMutationMap.get(indexRow.getRow());
         if (expectedMutationList == null) {
-            throw new DoNotRetryIOException("No expected mutation");
+            throw new DoNotRetryIOException(NO_EXPECTED_MUTATION);
         }
         List<Mutation> actualMutationList = prepareActualIndexMutations(indexRow);
         if (actualMutationList == null || actualMutationList.isEmpty()) {
-            throw new DoNotRetryIOException("actualMutationList is null or empty");
+            throw new DoNotRetryIOException(ACTUAL_MUTATION_IS_NULL_OR_EMPTY);
         }
         Collections.sort(expectedMutationList, MUTATION_TS_DESC_COMPARATOR);
         Collections.sort(actualMutationList, MUTATION_TS_DESC_COMPARATOR);
@@ -773,12 +775,12 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         Put put = pair.getFirst();
         long ts1 = 0;
         if (put != null) {
-            ts1 = getMaxTimestamp((Mutation)put);
+            ts1 = getMaxTimestamp(put);
         }
         Delete del = pair.getSecond();
         long ts2 = 0;
         if (del != null) {
-            ts1 = getMaxTimestamp((Mutation)del);
+            ts1 = getMaxTimestamp(del);
         }
         return (ts1 > ts2) ? ts1 : ts2;
     }
