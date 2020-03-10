@@ -62,6 +62,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.hadoop.metrics2.AbstractMetric;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -201,6 +202,10 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     // The test sink is defined at GlobalPhoenixMetricsTestSink
     // Configuration for Hadoop-metrics2 comes from hadoop-metrics2.properties file located in test/resources
     private boolean verifyMetricsFromSink() {
+        if (!HbaseCompatCapabilities.hasNewMetrics()) {
+            //The tested functionality is missing in Hbase 1.3 see PHOENIX-4857
+            return true;
+        }
         Map<String, Long> expectedMetrics = new HashMap<>();
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
             expectedMetrics.put(m.getMetricType().name(), m.getValue());
