@@ -147,7 +147,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     
     public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER;
     public static final List<String> COMPATIBLE_CLIENT_VERSIONS = 
-            Arrays.asList("4.14.3-HBase-1.3", "4.15.0-HBase-1.3");
+            Arrays.asList("4.14.3-HBase-1.4", "4.15.0-HBase-1.4");
      
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
