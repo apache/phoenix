@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -310,7 +311,8 @@ public class IndexTool extends Configured implements Tool {
      * @param args supplied command line arguments
      * @return the parsed command line
      */
-    private CommandLine parseOptions(String[] args) {
+    @VisibleForTesting
+    public CommandLine parseOptions(String[] args) {
 
         final Options options = getOptions();
 
@@ -363,6 +365,14 @@ public class IndexTool extends Configured implements Tool {
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp("help", options);
         System.exit(exitCode);
+    }
+
+    public Long getStartTime() {
+        return startTime;
+    }
+
+    public Long getEndTime() {
+        return endTime;
     }
 
     class JobFactory {
@@ -760,7 +770,8 @@ public class IndexTool extends Configured implements Tool {
         return job.waitForCompletion(true);
     }
 
-    private void populateIndexToolAttributes(CommandLine cmdLine) {
+    @VisibleForTesting
+    public void populateIndexToolAttributes(CommandLine cmdLine) {
         boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
         boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
         boolean useEndTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());

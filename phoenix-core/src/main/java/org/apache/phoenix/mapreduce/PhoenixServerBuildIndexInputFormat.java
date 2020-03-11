@@ -63,7 +63,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     }
 
     @Override
-    protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+    public QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {
         Preconditions.checkNotNull(context);
         if (queryPlan != null) {
@@ -75,10 +75,10 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         final String startTimeValue = getIndexToolStartTime(configuration);
         final String endTimeValue = getIndexToolEndTime(configuration);
         final Properties overridingProps = new Properties();
-        if(txnScnValue==null && currentScnValue!=null) {
+        if (txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
         }
-        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
+        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null) {
             overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         String dataTableFullName = getIndexToolDataTableName(configuration);
@@ -92,8 +92,9 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
 
             Long startTime = startTimeValue == null ? 0L : Long.valueOf(startTimeValue);
             Long endTime = endTimeValue == null ? scn : Long.valueOf(endTimeValue);
-            if(startTime >= endTime) {
-                throw new Exception("startTime is greater than or equal to endTime; IndexTool can't proceed.");
+            if (startTime >= endTime) {
+                throw new Exception("startTime is greater than or equal to endTime; "
+                        + "IndexTool can't proceed.");
             }
             PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =

@@ -30,6 +30,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -108,9 +109,8 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
         } finally {
             conn.close();
         }
-     }
+    }
 
-    
     @Test
     public void testUpsertStatement() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES));
@@ -268,5 +268,19 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                 PhoenixConfigurationUtil.getOutputCluster(configuration3);
         assertEquals(zkQuorumOverride3, OVERRIDE_CLUSTER_QUORUM);
 
+    }
+
+    @Test
+    public void testTimeRangeOverride() {
+        final Configuration configuration = new Configuration();
+        Long startTime = 1L;
+        Long endTime = 2L;
+
+        PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
+        PhoenixConfigurationUtil.setIndexToolEndTime(configuration, endTime);
+        Assert.assertEquals(startTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getIndexToolStartTime(configuration)));
+        Assert.assertEquals(endTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getIndexToolEndTime(configuration)));
     }
 }
