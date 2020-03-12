@@ -995,11 +995,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add("-tenant");
             args.add(tenantId);
         }
-        if(startTime!=null) {
+        if(startTime != null) {
             args.add("-st");
             args.add(String.valueOf(startTime));
         }
-        if(endTime!=null) {
+        if(endTime != null) {
             args.add("-et");
             args.add(String.valueOf(endTime));
         }

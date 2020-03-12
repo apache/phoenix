@@ -100,6 +100,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.EquiDepthStreamHistogram;
 import org.apache.phoenix.util.EquiDepthStreamHistogram.Bucket;
 import org.apache.phoenix.util.IndexUtil;
@@ -278,6 +279,11 @@ public class IndexTool extends Configured implements Tool {
     private static final Option END_TIME_OPTION = new Option("et", "endtime", true, "End time for indextool rebuild or verify");
 
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
+
+    public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
+            + "or equal to endTime "
+            + "or startTime is set in future; IndexTool can't proceed.";
+
 
 
     private Options getOptions() {
@@ -714,7 +720,7 @@ public class IndexTool extends Configured implements Tool {
 
         try (Connection conn = getConnection(configuration)) {
             createIndexToolTables(conn);
-            if (dataTable!=null && indexTable != null) {
+            if (dataTable != null && indexTable != null) {
                 setupIndexAndDataTable(conn);
                 if (shouldDeleteBeforeRebuild) {
                     deleteBeforeRebuild(conn);
@@ -774,7 +780,7 @@ public class IndexTool extends Configured implements Tool {
     public void populateIndexToolAttributes(CommandLine cmdLine) {
         boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
         boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
-        boolean useEndTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
+        boolean useEndTime = cmdLine.hasOption(END_TIME_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
 
         if (useTenantId) {
@@ -785,6 +791,9 @@ public class IndexTool extends Configured implements Tool {
         }
         if (useEndTime) {
             endTime = new Long(cmdLine.getOptionValue(END_TIME_OPTION.getOpt()));
+        }
+        if(startTime != null || endTime != null) {
+            validateTimeRange();
         }
         if (verify) {
             String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
@@ -799,6 +808,14 @@ public class IndexTool extends Configured implements Tool {
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
         useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
         shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+    }
+
+    private void validateTimeRange() {
+        Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (startTime != null && (startTime.compareTo(currentTime) > 0 ||
+                (endTime != null && startTime.compareTo(endTime) >= 0))) {
+            throw new RuntimeException(INVALID_TIME_RANGE_EXCEPTION_MESSAGE);
+        }
     }
 
     private Connection getConnection(Configuration configuration) throws SQLException {

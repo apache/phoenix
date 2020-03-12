@@ -63,7 +63,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     }
 
     @Override
-    public QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+    protected QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {
         Preconditions.checkNotNull(context);
         if (queryPlan != null) {
@@ -92,10 +92,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
 
             Long startTime = startTimeValue == null ? 0L : Long.valueOf(startTimeValue);
             Long endTime = endTimeValue == null ? scn : Long.valueOf(endTimeValue);
-            if (startTime >= endTime) {
-                throw new Exception("startTime is greater than or equal to endTime; "
-                        + "IndexTool can't proceed.");
-            }
             PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =
                     new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
