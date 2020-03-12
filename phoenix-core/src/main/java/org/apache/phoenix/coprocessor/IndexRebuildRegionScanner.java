@@ -48,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -130,16 +131,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private Scan scan;
     private RegionScanner innerScanner;
     private Region region;
-    @VisibleForTesting
-    public IndexMaintainer indexMaintainer;
+    private IndexMaintainer indexMaintainer;
     private byte[] indexRowKey = null;
     private Table indexHTable = null;
     private Table outputHTable = null;
     private Table resultHTable = null;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     private boolean verify = false;
-    @VisibleForTesting
-    public Map<byte[], List<Mutation>> indexKeyToMutationMap;
+    private  Map<byte[], List<Mutation>> indexKeyToMutationMap;
     private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
     private TaskRunner pool;
     private TaskBatch<Boolean> tasks;
@@ -147,8 +146,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
     private RegionCoprocessorEnvironment env;
     private HTableFactory hTableFactory;
-    @VisibleForTesting
-    public int indexTableTTL = 0;
+    private int indexTableTTL = 0;
     private IndexToolVerificationResult verificationResult;
     private boolean isBeforeRebuilt = true;
     private boolean partialRebuild = false;
@@ -332,6 +330,24 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             mutationList.clear();
         }
         return uuidValue;
+    }
+
+    @VisibleForTesting
+    public int setIndexTableTTL(int forever) {
+        indexTableTTL = forever;
+        return 0;
+    }
+
+    @VisibleForTesting
+    public int setIndexMaintainer(IndexMaintainer indexMaintainer) {
+        this.indexMaintainer = indexMaintainer;
+        return 0;
+    }
+
+    @VisibleForTesting
+    public int setIndexKeyToMutationMap(Map<byte[], List<Mutation>> newTreeMap) {
+        this.indexKeyToMutationMap = newTreeMap;
+        return 0;
     }
 
     public static class SimpleValueGetter implements ValueGetter {
