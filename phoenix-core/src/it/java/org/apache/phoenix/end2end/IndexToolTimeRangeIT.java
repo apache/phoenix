@@ -147,7 +147,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
-        // pass time range 7 to 12
         String [] args = {"--deleteall", "--starttime", "6" , "--endtime", "12"};
         runIndexTool(args, 0);
         // only last 3 rows should be rebuilt

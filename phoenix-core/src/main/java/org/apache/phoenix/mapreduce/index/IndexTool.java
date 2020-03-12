@@ -284,8 +284,6 @@ public class IndexTool extends Configured implements Tool {
             + "or equal to endTime "
             + "or startTime is set in future; IndexTool can't proceed.";
 
-
-
     private Options getOptions() {
         final Options options = new Options();
         options.addOption(SCHEMA_NAME_OPTION);
