@@ -24,17 +24,12 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
-import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.SchemaUtil;
@@ -47,7 +42,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -63,12 +57,12 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         public PTable pDataTable;
     }
 
-    private SetupInfo setupIndexMaintainer(String tableName,
-                                                 String indexName,
-                                                 String columns,
-                                                 String indexColumns,
-                                                 String pk,
-                                                 String includeColumns) throws Exception{
+    private SetupInfo setup(String tableName,
+                            String indexName,
+                            String columns,
+                            String indexColumns,
+                            String pk,
+                            String includeColumns) throws Exception{
         Connection conn = DriverManager.getConnection(getUrl());
 
         String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""),SchemaUtil.normalizeIdentifier(tableName));
@@ -89,20 +83,19 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         conn.createStatement().execute(str2);
 
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
         PTable pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        pDataTable.getIndexMaintainers(ptr, pconn);
-        List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(ptr, GenericKeyValueBuilder.INSTANCE, true);
-        
+        IndexMaintainer im = pIndexTable.getIndexMaintainer(pDataTable,pconn);
+
         SetupInfo info = new SetupInfo();
-        info.indexMaintainer = indexMaintainers.get(0);
+        info.indexMaintainer = im;
         info.pDataTable = pDataTable;
         return info;
     }
 
     @Test
     public void testSinglePutOnIndexColumn() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -138,7 +131,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testSinglePutOnNonIndexColumn() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -168,7 +161,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testDelOnIndexColumn() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -231,7 +224,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testDelOnNonIndexColumn() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -283,7 +276,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testDeleteAllVersions() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR",
                 "C1",
@@ -358,7 +351,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testPutDeleteOnSameTimeStamp() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR",
                 "C1",
@@ -399,7 +392,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testCoveredIndexColumns() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -472,7 +465,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testForMultipleFamilies() throws Exception {
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, CF1.C1 VARCHAR, CF2.C2 VARCHAR",
                 "CF1.C1",
@@ -545,7 +538,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     @Test
     public void testSameTypeOfMutationWithDifferentTimeStamp() throws Exception{
-        SetupInfo info = setupIndexMaintainer(TABLE_NAME,
+        SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
                 "C1",
@@ -583,66 +576,6 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         assertEqualMutationList(Arrays.asList((Mutation)idxPut1, (Mutation)idxPut2), actualIndexMutations);
     }
 
-    @Test
-    public void testDummy() throws Exception{
-        Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""),SchemaUtil.normalizeIdentifier("dataTable"));
-        String fullIndexName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""),SchemaUtil.normalizeIdentifier("idx"));
-        String dataColumns = "R_KEY VARCHAR, C1 VARCHAR";
-        String indexColumns = "C1" ;
-        String pk = "R_KEY";
-
-        try {
-            conn.setAutoCommit(false);
-            String str1 = "CREATE TABLE " + fullTableName + "(" + dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + ")) COLUMN_ENCODED_BYTES=0 ";
-            conn.createStatement().execute(str1);
-
-            String str2 = "CREATE INDEX idx ON " + fullTableName + "(" + indexColumns + ") ";
-            conn.createStatement().execute(str2);
-            conn.commit();
-
-            Connection conn2 = DriverManager.getConnection(getUrl());
-            String upsertStr = "UPSERT INTO " + fullTableName + " VALUES('k1','v1')";
-            conn.createStatement().execute(upsertStr);
-
-            //String delStr = "Delete FROM " + fullTableName + " WHERE R_KEY='k1'";
-            //conn.createStatement().execute(delStr);
-
-            conn.commit();
-
-            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-            PTable index = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
-
-            Iterator<Pair<byte[],List<Mutation>>> itr = pconn.getMutationState().toMutations();
-            Pair<byte[],List<Mutation>> pair = itr.next();
-            Put dataPut = (Put)pair.getSecond().get(0);
-            Delete dataDel = null;
-
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            table.getIndexMaintainers(ptr, pconn);
-            List<IndexMaintainer> c1 = IndexMaintainer.deserialize(ptr, GenericKeyValueBuilder.INSTANCE, true);
-            assertEquals(1,c1.size());
-            IndexMaintainer im1 = c1.get(0);
-
-            List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(im1,
-                    dataPut,
-                    dataDel);
-            List<Mutation> expectedIndexMutations = IndexTestUtil.generateIndexData(index, table, dataPut, ptr, GenericKeyValueBuilder.INSTANCE);
-
-        }
-        catch(Exception ex){
-            LOGGER.error("Failed to run TestOneColumnRowPut. ex={}", ex);
-        }
-        finally {
-            try {
-                conn.createStatement().execute("DROP TABLE " + fullTableName);
-            } finally {
-                conn.close();
-            }
-        }
-    }
-
     void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception{
         byte[] rowKey = put.getRow();
         Cell cell = new KeyValue(rowKey, family, column, ts, KeyValue.Type.Put, value);
@@ -656,9 +589,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     void addEmptyColumnToDataPutMutation(Put put, PTable ptable, long ts) throws Exception{
-        PName pdefaultFamilyName = ptable.getDefaultFamilyName();
         addCellToPutMutation(put,
-                pdefaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : pdefaultFamilyName.getBytes(),
+                SchemaUtil.getEmptyColumnFamily(ptable),
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 ts,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
@@ -700,7 +632,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
             actualCells.addAll(cells);
         }
 
-        assertEquals(expectedCells.size(), actualCells.size());
+        if (expectedCells.size() != actualCells.size())
+            return false;
         for(Cell expected : expectedCells){
             boolean found = false;
             for(Cell actual: actualCells){
@@ -710,7 +643,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                     break;
                 }
             }
-            if (!found) return false;
+            if (!found)
+                return false;
         }
 
         return true;
