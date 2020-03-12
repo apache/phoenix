@@ -38,6 +38,7 @@ import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -162,7 +163,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
-    public void testPartialRowUpdate() throws Exception {
+    public void testPartialRowUpdateForMutable() throws Exception {
         String dataTableName = generateUniqueName();
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         Connection conn = DriverManager.getConnection(getUrl());
@@ -200,6 +201,58 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals("abcdd", rs.getString(4));
         assertFalse(rs.next());
         conn.close();
+    }
+
+    /**
+     * Phoenix allows immutable tables with indexes to be overwritten partially as long as the indexed columns are not
+     * updated during partial overwrites. However, there is no check/enforcement for this. The immutable index mutations
+     * are prepared at the client side without reading existing data table rows. This means the index mutations
+     * prepared by the client will be partial when the data table row mutations are partial. The new indexing design
+     * assumes index rows are always full and all cells within an index row have the same timestamp. On the read path,
+     * GlobalIndexChecker returns only the cells with the most recent timestamp of the row. This means that if the
+     * client updates the same row multiple times, the client will read back only the most recent update which could be
+     * partial. To support the partial updates for immutable indexes, GlobalIndexChecker allows cells with different
+     * timestamps to be be returned to the client for immutable tables even though this breaks the design assumption.
+     * This test is to verify the partial row update support for immutable tables.
+     *
+     * Allowing partial overwrites on immutable indexes is a broken model in the first place. Assuring correctness in
+     * the presence of failures does not seem possible without using something similar to the solution for mutable
+     * indexes.
+     *
+     * Immutable indexes should be used only for really immutable tables and for these tables, overwrites
+     * should be due to failures and should be idempotent. For everything else, mutable tables should be used
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testPartialRowUpdateForImmutable() throws Exception {
+        if (async || encoded) {
+            // No need to run this test more than once
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))" +
+                    " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME="+ PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abcc')");
+            conn.commit();
+            String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals("abcc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+        }
     }
 
     @Test
