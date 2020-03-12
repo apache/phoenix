@@ -2167,6 +2167,16 @@ public final class ServerCachingProtos {
      * <code>optional int32 viewIndexIdType = 22;</code>
      */
     int getViewIndexIdType();
+
+    // optional int32 indexDataColumnCount = 23 [default = -1];
+    /**
+     * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+     */
+    boolean hasIndexDataColumnCount();
+    /**
+     * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+     */
+    int getIndexDataColumnCount();
   }
   /**
    * Protobuf type {@code IndexMaintainer}
@@ -2363,6 +2373,11 @@ public final class ServerCachingProtos {
             case 176: {
               bitField0_ |= 0x00010000;
               viewIndexIdType_ = input.readInt32();
+              break;
+            }
+            case 184: {
+              bitField0_ |= 0x00020000;
+              indexDataColumnCount_ = input.readInt32();
               break;
             }
           }
@@ -2865,6 +2880,22 @@ public final class ServerCachingProtos {
       return viewIndexIdType_;
     }
 
+    // optional int32 indexDataColumnCount = 23 [default = -1];
+    public static final int INDEXDATACOLUMNCOUNT_FIELD_NUMBER = 23;
+    private int indexDataColumnCount_;
+    /**
+     * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+     */
+    public boolean hasIndexDataColumnCount() {
+      return ((bitField0_ & 0x00020000) == 0x00020000);
+    }
+    /**
+     * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+     */
+    public int getIndexDataColumnCount() {
+      return indexDataColumnCount_;
+    }
+
     private void initFields() {
       saltBuckets_ = 0;
       isMultiTenant_ = false;
@@ -2888,6 +2919,7 @@ public final class ServerCachingProtos {
       encodingScheme_ = 0;
       immutableStorageScheme_ = 0;
       viewIndexIdType_ = 0;
+      indexDataColumnCount_ = -1;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3051,6 +3083,9 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00010000) == 0x00010000)) {
         output.writeInt32(22, viewIndexIdType_);
       }
+      if (((bitField0_ & 0x00020000) == 0x00020000)) {
+        output.writeInt32(23, indexDataColumnCount_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -3152,6 +3187,10 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00010000) == 0x00010000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(22, viewIndexIdType_);
+      }
+      if (((bitField0_ & 0x00020000) == 0x00020000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(23, indexDataColumnCount_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -3271,6 +3310,11 @@ public final class ServerCachingProtos {
         result = result && (getViewIndexIdType()
             == other.getViewIndexIdType());
       }
+      result = result && (hasIndexDataColumnCount() == other.hasIndexDataColumnCount());
+      if (hasIndexDataColumnCount()) {
+        result = result && (getIndexDataColumnCount()
+            == other.getIndexDataColumnCount());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -3371,6 +3415,10 @@ public final class ServerCachingProtos {
       if (hasViewIndexIdType()) {
         hash = (37 * hash) + VIEWINDEXIDTYPE_FIELD_NUMBER;
         hash = (53 * hash) + getViewIndexIdType();
+      }
+      if (hasIndexDataColumnCount()) {
+        hash = (37 * hash) + INDEXDATACOLUMNCOUNT_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexDataColumnCount();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3550,6 +3598,8 @@ public final class ServerCachingProtos {
         bitField0_ = (bitField0_ & ~0x00100000);
         viewIndexIdType_ = 0;
         bitField0_ = (bitField0_ & ~0x00200000);
+        indexDataColumnCount_ = -1;
+        bitField0_ = (bitField0_ & ~0x00400000);
         return this;
       }
 
@@ -3691,6 +3741,10 @@ public final class ServerCachingProtos {
           to_bitField0_ |= 0x00010000;
         }
         result.viewIndexIdType_ = viewIndexIdType_;
+        if (((from_bitField0_ & 0x00400000) == 0x00400000)) {
+          to_bitField0_ |= 0x00020000;
+        }
+        result.indexDataColumnCount_ = indexDataColumnCount_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -3871,6 +3925,9 @@ public final class ServerCachingProtos {
         }
         if (other.hasViewIndexIdType()) {
           setViewIndexIdType(other.getViewIndexIdType());
+        }
+        if (other.hasIndexDataColumnCount()) {
+          setIndexDataColumnCount(other.getIndexDataColumnCount());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -5665,6 +5722,39 @@ public final class ServerCachingProtos {
       public Builder clearViewIndexIdType() {
         bitField0_ = (bitField0_ & ~0x00200000);
         viewIndexIdType_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 indexDataColumnCount = 23 [default = -1];
+      private int indexDataColumnCount_ = -1;
+      /**
+       * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+       */
+      public boolean hasIndexDataColumnCount() {
+        return ((bitField0_ & 0x00400000) == 0x00400000);
+      }
+      /**
+       * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+       */
+      public int getIndexDataColumnCount() {
+        return indexDataColumnCount_;
+      }
+      /**
+       * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+       */
+      public Builder setIndexDataColumnCount(int value) {
+        bitField0_ |= 0x00400000;
+        indexDataColumnCount_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 indexDataColumnCount = 23 [default = -1];</code>
+       */
+      public Builder clearIndexDataColumnCount() {
+        bitField0_ = (bitField0_ & ~0x00400000);
+        indexDataColumnCount_ = -1;
         onChanged();
         return this;
       }
@@ -8795,7 +8885,7 @@ public final class ServerCachingProtos {
       "ength\030\003 \002(\005\"4\n\017ColumnReference\022\016\n\006family" +
       "\030\001 \002(\014\022\021\n\tqualifier\030\002 \002(\014\"4\n\nColumnInfo\022" +
       "\022\n\nfamilyName\030\001 \001(\t\022\022\n\ncolumnName\030\002 \002(\t\"" +
-      "\337\005\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
+      "\201\006\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
       "\022\025\n\risMultiTenant\030\002 \002(\010\022\023\n\013viewIndexId\030\003" +
       " \001(\014\022(\n\016indexedColumns\030\004 \003(\0132\020.ColumnRef" +
       "erence\022 \n\030indexedColumnTypeOrdinal\030\005 \003(\005",
@@ -8813,23 +8903,24 @@ public final class ServerCachingProtos {
       "\timmutable\030\022 \002(\010\022&\n\021indexedColumnInfo\030\023 " +
       "\003(\0132\013.ColumnInfo\022\026\n\016encodingScheme\030\024 \002(\005" +
       "\022\036\n\026immutableStorageScheme\030\025 \002(\005\022\027\n\017view" +
-      "IndexIdType\030\026 \001(\005\"\370\001\n\025AddServerCacheRequ" +
-      "est\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022)" +
-      "\n\010cachePtr\030\003 \002(\0132\027.ImmutableBytesWritabl" +
-      "e\022)\n\014cacheFactory\030\004 \002(\0132\023.ServerCacheFac" +
-      "tory\022\017\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBufInde" +
-      "xMaintainer\030\006 \001(\010\022\025\n\rclientVersion\030\007 \001(\005",
-      "\022\032\n\022usePersistentCache\030\010 \001(\010\"(\n\026AddServe" +
-      "rCacheResponse\022\016\n\006return\030\001 \002(\010\"=\n\030Remove" +
-      "ServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007" +
-      "cacheId\030\002 \002(\014\"+\n\031RemoveServerCacheRespon" +
-      "se\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerCachingServ" +
-      "ice\022A\n\016addServerCache\022\026.AddServerCacheRe" +
-      "quest\032\027.AddServerCacheResponse\022J\n\021remove" +
-      "ServerCache\022\031.RemoveServerCacheRequest\032\032" +
-      ".RemoveServerCacheResponseBG\n(org.apache" +
-      ".phoenix.coprocessor.generatedB\023ServerCa",
-      "chingProtosH\001\210\001\001\240\001\001"
+      "IndexIdType\030\026 \001(\005\022 \n\024indexDataColumnCoun" +
+      "t\030\027 \001(\005:\002-1\"\370\001\n\025AddServerCacheRequest\022\020\n" +
+      "\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022)\n\010cach" +
+      "ePtr\030\003 \002(\0132\027.ImmutableBytesWritable\022)\n\014c" +
+      "acheFactory\030\004 \002(\0132\023.ServerCacheFactory\022\017" +
+      "\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBufIndexMaint",
+      "ainer\030\006 \001(\010\022\025\n\rclientVersion\030\007 \001(\005\022\032\n\022us" +
+      "ePersistentCache\030\010 \001(\010\"(\n\026AddServerCache" +
+      "Response\022\016\n\006return\030\001 \002(\010\"=\n\030RemoveServer" +
+      "CacheRequest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheI" +
+      "d\030\002 \002(\014\"+\n\031RemoveServerCacheResponse\022\016\n\006" +
+      "return\030\001 \002(\0102\245\001\n\024ServerCachingService\022A\n" +
+      "\016addServerCache\022\026.AddServerCacheRequest\032" +
+      "\027.AddServerCacheResponse\022J\n\021removeServer" +
+      "Cache\022\031.RemoveServerCacheRequest\032\032.Remov" +
+      "eServerCacheResponseBG\n(org.apache.phoen",
+      "ix.coprocessor.generatedB\023ServerCachingP" +
+      "rotosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8859,7 +8950,7 @@ public final class ServerCachingProtos {
           internal_static_IndexMaintainer_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_IndexMaintainer_descriptor,
-              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", });
+              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", "IndexDataColumnCount", });
           internal_static_AddServerCacheRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddServerCacheRequest_fieldAccessorTable = new

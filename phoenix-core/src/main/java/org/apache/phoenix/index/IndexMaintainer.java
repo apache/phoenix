@@ -108,6 +108,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -340,6 +341,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private Set<ColumnReference> allColumns;
     // TODO remove this in the next major release
     private List<PDataType> indexedColumnTypes;
+    private int indexDataColumnCount;
     private RowKeyMetaData rowKeyMetaData;
     private byte[] indexTableName;
     private int nIndexSaltBuckets;
@@ -422,17 +424,34 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
             indexedExpressionCount++;
         }
-        int indexPkColumnCount = this.dataRowKeySchema.getFieldCount() + indexedExpressionCount  - (this.isDataTableSalted ? 1 : 0) - (this.isMultiTenant ? 1 : 0);
-        this.rowKeyMetaData = newRowKeyMetaData(indexPkColumnCount);
-        BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
 
         int dataPosOffset = (isDataTableSalted ? 1 : 0) + (this.isMultiTenant ? 1 : 0);
-        int nDataPKColumns = dataRowKeySchema.getFieldCount() - dataPosOffset;
+
         // For indexes on views, we need to remember which data columns are "constants"
         // These are the values in a VIEW where clause. For these, we don't put them in the
         // index, as they're the same for every row in the index. The data table can be
         // either a VIEW or PROJECTED
         List<PColumn>dataPKColumns = dataTable.getPKColumns();
+        this.indexDataColumnCount = dataPKColumns.size();
+        // We need to get the PK column for the table on which the index is created
+        if (!dataTable.getName().equals(index.getParentName())) {
+            try {
+                String tenantId = (index.getTenantId() != null) ? 
+                        index.getTenantId().getString() : null;
+                PTable indexTable = PhoenixRuntime.getTable(connection, 
+                        tenantId, index.getParentName().getString());
+                this.indexDataColumnCount = indexTable.getPKColumns().size();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        
+        int indexPkColumnCount = this.indexDataColumnCount + 
+                indexedExpressionCount  - (this.isDataTableSalted ? 1 : 0) - (this.isMultiTenant ? 1 : 0);
+        this.rowKeyMetaData = newRowKeyMetaData(indexPkColumnCount);
+        BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
+        
+        int nDataPKColumns = this.indexDataColumnCount - dataPosOffset;
         for (int i = dataPosOffset; i < dataPKColumns.size(); i++) {
             PColumn dataPKColumn = dataPKColumns.get(i);
             if (dataPKColumn.getViewConstant() != null) {
@@ -620,7 +639,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
             
             // Write index row key
-            for (int i = dataPosOffset; i < dataRowKeySchema.getFieldCount(); i++) {
+            for (int i = dataPosOffset; i < indexDataColumnCount; i++) {
                 Boolean hasValue=dataRowKeySchema.next(ptr, i, maxRowKeyOffset);
                 // Ignore view constants from the data table, as these
                 // don't need to appear in the index (as they're the
@@ -1377,6 +1396,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             maintainer.indexedColumnTypes.add(PDataType.values()[typeOrdinal]);
         }
         maintainer.indexTableName = proto.getIndexTableName().toByteArray();
+        maintainer.indexDataColumnCount = dataTableRowKeySchema.getFieldCount();
+        if (proto.getIndexDataColumnCount() != -1) {
+            maintainer.indexDataColumnCount = proto.getIndexDataColumnCount();
+        }
         maintainer.rowKeyOrderOptimizable = proto.getRowKeyOrderOptimizable();
         maintainer.dataEmptyKeyValueCF = proto.getDataTableEmptyKeyValueColFamily().toByteArray();
         ServerCachingProtos.ImmutableBytesWritable emptyKeyValueColFamily = proto.getEmptyKeyValueColFamily();
@@ -1512,6 +1535,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         builder.setIsLocalIndex(maintainer.isLocalIndex);
+        builder.setIndexDataColumnCount(maintainer.indexDataColumnCount);
         builder.setIndexTableName(ByteStringer.wrap(maintainer.indexTableName));
         builder.setRowKeyOrderOptimizable(maintainer.rowKeyOrderOptimizable);
         builder.setDataTableEmptyKeyValueColFamily(ByteStringer.wrap(maintainer.dataEmptyKeyValueCF));
@@ -1627,7 +1651,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Arrays.fill(dataPkPosition, EXPRESSION_NOT_PRESENT);
         int numViewConstantColumns = 0;
         BitSet viewConstantColumnBitSet = rowKeyMetaData.getViewConstantColumnBitSet();
-        for (int i = dataPkOffset; i < dataRowKeySchema.getFieldCount(); i++) {
+        for (int i = dataPkOffset; i < indexDataColumnCount; i++) {
             if (!viewConstantColumnBitSet.get(i)) {
                 int indexPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
                 this.dataPkPosition[indexPkPosition] = i;
@@ -1663,11 +1687,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     private int getIndexPkColumnCount() {
-        return getIndexPkColumnCount(dataRowKeySchema, indexedExpressions.size(), isDataTableSalted, isMultiTenant);
+        return getIndexPkColumnCount(indexDataColumnCount, indexedExpressions.size(), 
+                isDataTableSalted, isMultiTenant);
     }
     
-    private static int getIndexPkColumnCount(RowKeySchema rowKeySchema, int numIndexExpressions, boolean isDataTableSalted, boolean isMultiTenant) {
-        return rowKeySchema.getFieldCount() + numIndexExpressions - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
+    private static int getIndexPkColumnCount(int indexDataColumnCount, int numIndexExpressions, boolean isDataTableSalted, boolean isMultiTenant) {
+        return indexDataColumnCount + numIndexExpressions - (isDataTableSalted ? 1 : 0) - (isMultiTenant ? 1 : 0);
     }
     
     private RowKeyMetaData newRowKeyMetaData() {
@@ -1675,7 +1700,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     private static RowKeyMetaData newRowKeyMetaData(IndexMaintainer i, RowKeySchema rowKeySchema, int numIndexExpressions, boolean isDataTableSalted, boolean isMultiTenant) {
-        int indexPkColumnCount = getIndexPkColumnCount(rowKeySchema, numIndexExpressions, isDataTableSalted, isMultiTenant);
+        int indexPkColumnCount = getIndexPkColumnCount(i.indexDataColumnCount, numIndexExpressions, 
+                isDataTableSalted, isMultiTenant);
         return indexPkColumnCount < 0xFF ? i.new ByteSizeRowKeyMetaData() : i.new IntSizedRowKeyMetaData();
     }
 

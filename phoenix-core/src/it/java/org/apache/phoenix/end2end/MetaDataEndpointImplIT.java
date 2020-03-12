@@ -10,18 +10,18 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.util.TableViewFinderResult;
-import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TableViewFinderResult;
+import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
 
 import com.google.common.base.Joiner;
@@ -95,6 +95,83 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         // now lets check and make sure the columns are correct
         assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childMostView.getName().getString()), "PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
 
+    }
+    
+    @Test
+    public void testUpsertIntoChildViewWithPKAndIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+        String childView = generateUniqueName();
+    
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
+                    + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
+                    + "VERSIONS=1, IMMUTABLE_ROWS=TRUE";
+            conn.createStatement().execute(baseTableDDL);
+            String view1DDL = "CREATE VIEW IF NOT EXISTS " + view + 
+                    "(V2 VARCHAR NOT NULL,V3 BIGINT NOT NULL, "
+                    + "V4 VARCHAR CONSTRAINT PKVIEW PRIMARY KEY(V2, V3)) AS SELECT * FROM " 
+                    + baseTable + " WHERE KEY_PREFIX = '0CY'";
+            conn.createStatement().execute(view1DDL);
+    
+            // Create an Index on the base view
+            String view1Index = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + view1Index + 
+                " ON " + view + " (V2, V3) include (V1, V4)");
+    
+            // Create a child view with primary key constraint
+            String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
+                    + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
+                    + "(V5, V6)) AS SELECT * FROM " + view;
+            conn.createStatement().execute(childViewDDL);
+    
+            String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
+                    + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+        }
+    }
+    
+    @Test
+    public void testUpsertIntoTenantChildViewWithPKAndIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+        String childView = generateUniqueName();
+        String tenantId = "TENANT";
+    
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
+                    + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
+                    + "MULTI_TENANT=TRUE, VERSIONS=1, IMMUTABLE_ROWS=TRUE";
+            conn.createStatement().execute(baseTableDDL);
+            String view1DDL = "CREATE VIEW IF NOT EXISTS " + view + 
+                    "(V2 VARCHAR NOT NULL,V3 BIGINT NOT NULL, "
+                    + "V4 VARCHAR CONSTRAINT PKVIEW PRIMARY KEY(V2, V3)) AS SELECT * FROM " 
+                    + baseTable + " WHERE KEY_PREFIX = '0CY'";
+            conn.createStatement().execute(view1DDL);
+    
+            // Create an Index on the base view
+            String view1Index = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + view1Index + 
+                " ON " + view + " (V2, V3) include (V1, V4)");
+    
+            // Create a child view with primary key constraint owned by tenant
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
+                        + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
+                        + "(V5, V6)) AS SELECT * FROM " + view;
+                conn.createStatement().execute(childViewDDL);
+            }
+            
+            String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
+                    + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+        }
     }
 
     @Test
