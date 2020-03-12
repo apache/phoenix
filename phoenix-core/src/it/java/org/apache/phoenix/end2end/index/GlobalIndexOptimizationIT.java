@@ -338,14 +338,18 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             
             String query = "SELECT /*+ INDEX(" + viewName + " " + viewIndex + ")*/ t_id,k1,k2,k3,v1 FROM " + viewName + " where k1 IN (1,2) and k2 IN (3,4)";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
-            
+
+            /**
+             * This inner "_IDX_" + dataTableName use skipScan, and all the whereExpressions are already in SkipScanFilter,
+             * so there is no other RowKeyComparisonFilter needed.
+             */
             String actual = QueryUtil.getExplainPlan(rs);
             String expected = 
                     "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SERVER FILTER BY V1 = 'a'\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[" + Short.MIN_VALUE + ",1\\] - \\[" + Short.MIN_VALUE + ",2\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY \\(\"" + viewName + ".T_ID\", \"" + viewName + ".K1\", \"" + viewName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
             

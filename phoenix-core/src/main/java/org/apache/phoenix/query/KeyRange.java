@@ -446,6 +446,18 @@ public class KeyRange implements Writable {
         return lowerRange == KeyRange.EMPTY_RANGE.getLowerRange() && upperRange == KeyRange.EMPTY_RANGE.getUpperRange();
     }
 
+    public static boolean areAllSingleKey(List<KeyRange> rowKeyRanges) {
+        if(rowKeyRanges == null || rowKeyRanges.isEmpty()) {
+           return false;
+        }
+        for(KeyRange rowKeyRange : rowKeyRanges) {
+           if(!rowKeyRange.isSingleKey()) {
+               return false;
+           }
+        }
+        return true;
+    }
+
     /**
      * @return list of at least size 1
      */
