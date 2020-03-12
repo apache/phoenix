@@ -747,7 +747,7 @@ select_node returns [SelectStatement ret]
     :   u=unioned_selects
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        (OFFSET o=offset (ROW | ROWS)?)?
+        (OFFSET o=offset)?
         (FETCH (FIRST | NEXT) (l=limit)? (ROW | ROWS) ONLY)?
         { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, o, getBindCount(), context.isAggregate()); }
     ;
@@ -817,8 +817,9 @@ limit returns [LimitNode ret]
     ;
     
 offset returns [OffsetNode ret]
-	: b=bind_expression { $ret = factory.offset(b); }
-    | l=int_or_long_literal { $ret = factory.offset(l); }
+	: b=bind_expression (ROW | ROWS)? {  try { $ret = factory.offset(b); } catch (SQLException e) { throw new RuntimeException(e); } }
+    | l=int_or_long_literal (ROW | ROWS)? { try { $ret = factory.offset(l); } catch (SQLException e) { throw new RuntimeException(e); } }
+    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOp.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
     ;
 
 sampling_rate returns [LiteralParseNode ret]

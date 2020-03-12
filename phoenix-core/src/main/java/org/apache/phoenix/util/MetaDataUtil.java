@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -59,6 +60,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -122,7 +125,33 @@ public class MetaDataUtil {
             HColumnDescriptor.KEEP_DELETED_CELLS,
             HColumnDescriptor.REPLICATION_SCOPE);
 
-    public static boolean areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
+    public static class ClientServerCompatibility {
+
+        private int errorCode;
+        private boolean isCompatible;
+
+        ClientServerCompatibility() {
+            this.errorCode = 0;
+        }
+
+        public int getErrorCode() {
+            return this.errorCode;
+        }
+
+        void setErrorCode(int errorCode) {
+            this.errorCode = errorCode;
+        }
+
+        public boolean getIsCompatible() {
+            return this.isCompatible;
+        }
+
+        void setCompatible(boolean isCompatible) {
+            this.isCompatible = isCompatible;
+        }
+    }
+
+    public static ClientServerCompatibility areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
         // As of 3.0, we allow a client and server to differ for the minor version.
         // Care has to be taken to upgrade the server before the client, as otherwise
         // the client may call expressions that don't yet exist on the server.
@@ -132,12 +161,24 @@ public class MetaDataUtil {
     }
 
     // Default scope for testing
-    static boolean areClientAndServerCompatible(int serverVersion, int clientMajorVersion, int clientMinorVersion) {
+    @VisibleForTesting
+    static ClientServerCompatibility areClientAndServerCompatible(int serverVersion, int clientMajorVersion, int clientMinorVersion) {
         // A server and client with the same major and minor version number must be compatible.
         // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
         // when we make an incompatible change.
-        return VersionUtil.encodeMinPatchVersion(clientMajorVersion, clientMinorVersion) <= serverVersion && // Minor major and minor cannot be ahead of server
-                VersionUtil.encodeMaxMinorVersion(clientMajorVersion) >= serverVersion; // Major version must at least be up to server version
+        ClientServerCompatibility compatibility = new ClientServerCompatibility();
+        if (VersionUtil.encodeMinPatchVersion(clientMajorVersion, clientMinorVersion) > serverVersion) { // Client major and minor cannot be ahead of server
+            compatibility.setErrorCode(SQLExceptionCode.OUTDATED_JARS.getErrorCode());
+            compatibility.setCompatible(false);
+            return compatibility;
+        } else if (VersionUtil.encodeMaxMinorVersion(clientMajorVersion) < serverVersion) { // Client major version must at least be up to server major version
+            compatibility.setErrorCode(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode());
+            compatibility.setCompatible(false);
+            return compatibility;
+        }
+        compatibility.setCompatible(true);
+        return compatibility;
+
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.

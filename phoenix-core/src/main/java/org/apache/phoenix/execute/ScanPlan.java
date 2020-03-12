@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -98,15 +99,16 @@ public class ScanPlan extends BaseQueryPlan {
     private Long serialBytesEstimate;
     private Long serialEstimateInfoTs;
     private OrderBy actualOutputOrderBy;
+    private Optional<byte[]> rowOffset;
 
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit,
             Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, 
-            QueryPlan dataPlan) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null, dataPlan);
+            QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
+        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null, dataPlan, rowOffset);
     }
     
     private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset,
-            OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter, QueryPlan dataPlan) throws SQLException {
+            OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter, QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
                         buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter, dataPlan);
@@ -129,6 +131,7 @@ public class ScanPlan extends BaseQueryPlan {
             serialEstimateInfoTs = StatisticsUtil.NOT_STATS_BASED_TS;
         }
         this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, context);
+        this.rowOffset = rowOffset;
     }
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
@@ -373,5 +376,9 @@ public class ScanPlan extends BaseQueryPlan {
     @Override
     public List<OrderBy> getOutputOrderBys() {
        return OrderBy.wrapForOutputOrderBys(this.actualOutputOrderBy);
+    }
+
+    public Optional<byte[]> getRowOffset() {
+        return this.rowOffset;
     }
 }
