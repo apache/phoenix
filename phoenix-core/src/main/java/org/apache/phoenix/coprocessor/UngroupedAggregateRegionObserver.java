@@ -565,11 +565,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if(buildLocalIndex) {
             checkForLocalIndexColumnFamilies(region, indexMaintainers);
         }
-        if (isDescRowKeyOrderUpgrade || isDelete ||
-                (isUpsert && (targetHTable == null ||
-                        targetHTable.getName().equals(region.getTableDescriptor().getTableName())))
-                || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
+        if (isDescRowKeyOrderUpgrade || isDelete || isUpsert ||
+                (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             needToWrite = true;
+            if(isUpsert && (targetHTable == null ||
+                    !targetHTable.getName().equals(region.getTableDescriptor().getTableName()))) {
+                needToWrite = false;
+            }
             maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
             mutations = new MutationList(Ints.saturatedCast(maxBatchSize + maxBatchSize / 10));
             maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
