@@ -93,9 +93,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public ExpectedException exceptionRule = ExpectedException.none();
 
     private enum TestType {
-        VALID,
+        //set of mutations matching expected mutations
+        VALID_EXACT_MATCH,
+        //mix of delete and put mutations
         VALID_MIX_MUTATIONS,
+        //only incoming unverified mutations
         VALID_NEW_UNVERIFIED_MUTATIONS,
+        //extra mutations mimicking incoming mutations
         VALID_MORE_MUTATIONS,
         EXPIRED,
         INVALID_EXTRA_CELL,
@@ -299,7 +303,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         IndexToolVerificationResult.PhaseResult expectedPR = getValidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
                 entry : indexKeyToMutationMapLocal.entrySet()) {
-            initializeLocalMockitoSetup(entry, TestType.VALID);
+            initializeLocalMockitoSetup(entry, TestType.VALID_EXACT_MATCH);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
 
@@ -478,7 +482,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     private List <Mutation> getValidActualMutations(TestType testType,
             List<Mutation> actualMutations) {
         List <Mutation> newActualMutations = new ArrayList<>();
-        if(testType.equals(TestType.VALID)) {
+        if(testType.equals(TestType.VALID_EXACT_MATCH)) {
             return actualMutations;
         }
         if (testType.equals(TestType.VALID_MIX_MUTATIONS)) {
