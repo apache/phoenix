@@ -50,9 +50,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     private static String ROW_KEY = "k1";
     private static String TABLE_NAME = "dataTable";
     private static String INDEX_NAME = "idx";
-    private static final Logger LOGGER = LoggerFactory.getLogger(PrepareIndexMutationsForRebuildTest.class);
 
-    class SetupInfo{
+    class SetupInfo {
         public IndexMaintainer indexMaintainer;
         public PTable pDataTable;
     }
@@ -62,39 +61,40 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                             String columns,
                             String indexColumns,
                             String pk,
-                            String includeColumns) throws Exception{
-        Connection conn = DriverManager.getConnection(getUrl());
+                            String includeColumns) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
 
-        String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""),SchemaUtil.normalizeIdentifier(tableName));
-        String fullIndexName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""),SchemaUtil.normalizeIdentifier(indexName));
+            String fullTableName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""), SchemaUtil.normalizeIdentifier(tableName));
+            String fullIndexName = SchemaUtil.getTableName(SchemaUtil.normalizeIdentifier(""), SchemaUtil.normalizeIdentifier(indexName));
 
-        String str1 = String.format("CREATE TABLE %1$s (%2$s CONSTRAINT pk PRIMARY KEY (%3$s)) COLUMN_ENCODED_BYTES=0",
-                fullTableName,
-                columns,
-                pk);
-        conn.createStatement().execute(str1);
+            String str1 = String.format("CREATE TABLE %1$s (%2$s CONSTRAINT pk PRIMARY KEY (%3$s)) COLUMN_ENCODED_BYTES=0",
+                    fullTableName,
+                    columns,
+                    pk);
+            conn.createStatement().execute(str1);
 
-        String str2 = String.format("CREATE INDEX %1$s ON %2$s (%3$s)",
-                fullIndexName,
-                fullTableName,
-                indexColumns);
-        if (!includeColumns.isEmpty())
-            str2 += " INCLUDE (" + includeColumns + ")";
-        conn.createStatement().execute(str2);
+            String str2 = String.format("CREATE INDEX %1$s ON %2$s (%3$s)",
+                    fullIndexName,
+                    fullTableName,
+                    indexColumns);
+            if (!includeColumns.isEmpty())
+                str2 += " INCLUDE (" + includeColumns + ")";
+            conn.createStatement().execute(str2);
 
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
-        PTable pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
-        IndexMaintainer im = pIndexTable.getIndexMaintainer(pDataTable,pconn);
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable pIndexTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
+            PTable pDataTable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+            IndexMaintainer im = pIndexTable.getIndexMaintainer(pDataTable, pconn);
 
-        SetupInfo info = new SetupInfo();
-        info.indexMaintainer = im;
-        info.pDataTable = pDataTable;
-        return info;
+            SetupInfo info = new SetupInfo();
+            info.indexMaintainer = im;
+            info.pDataTable = pDataTable;
+            return info;
+        }
     }
 
     @Test
-    public void testSinglePutOnIndexColumn() throws Exception{
+    public void testSinglePutOnIndexColumn() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -119,18 +119,14 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 dataPut,
                 null);
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        Put idxPut1 = new Put(com.google.common.primitives.Bytes.toArray(idxKey));
+        Put idxPut1 = new Put(generateIndexRowKey("v1"));
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
 
         assertEqualMutationList(Arrays.asList((Mutation)idxPut1), actualIndexMutations);
     }
 
     @Test
-    public void testSinglePutOnNonIndexColumn() throws Exception{
+    public void testSinglePutOnNonIndexColumn() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -150,17 +146,14 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 dataPut,
                 null);
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        Put idxPut1 = new Put(com.google.common.primitives.Bytes.toArray(idxKey));
+        Put idxPut1 = new Put(generateIndexRowKey(null));
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
 
         assertEqualMutationList(Arrays.asList((Mutation)idxPut1), actualIndexMutations);
     }
 
     @Test
-    public void testDelOnIndexColumn() throws Exception{
+    public void testDelOnIndexColumn() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -194,20 +187,13 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         List<Mutation> expectedIndexMutation = new ArrayList<>();
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes = com.google.common.primitives.Bytes.toArray(idxKey);
+        byte[] idxKeyBytes = generateIndexRowKey("v1");
 
         Put idxPut1 = new Put(idxKeyBytes);
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
         expectedIndexMutation.add(idxPut1);
 
-        List<Byte> idxKey2 = new ArrayList<>();
-        idxKey2.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey2.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        Put idxPut2 = new Put(com.google.common.primitives.Bytes.toArray(idxKey2));
+        Put idxPut2 = new Put(generateIndexRowKey(null));
         addEmptyColumnToIndexPutMutation(idxPut2, info.indexMaintainer, 2);
         expectedIndexMutation.add(idxPut2);
 
@@ -223,7 +209,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     @Test
-    public void testDelOnNonIndexColumn() throws Exception{
+    public void testDelOnNonIndexColumn() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -257,11 +243,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes = com.google.common.primitives.Bytes.toArray(idxKey);
+        byte[] idxKeyBytes = generateIndexRowKey("v1");
 
         Put idxPut1 = new Put(idxKeyBytes);
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
@@ -275,7 +257,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     @Test
-    public void testDeleteAllVersions() throws Exception{
+    public void testDeleteAllVersions() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR",
@@ -310,17 +292,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
-        List<Byte> idxKey1 = new ArrayList<>();
-        idxKey1.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey1.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey1.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes1 = com.google.common.primitives.Bytes.toArray(idxKey1);
-
-        List<Byte> idxKey2 = new ArrayList<>();
-        idxKey2.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v2")));
-        idxKey2.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey2.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes2 = com.google.common.primitives.Bytes.toArray(idxKey2);
+        byte[] idxKeyBytes1 = generateIndexRowKey("v1");
+        byte[] idxKeyBytes2 = generateIndexRowKey("v2");
 
         Put idxPut1 = new Put(idxKeyBytes1);
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
@@ -350,7 +323,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     @Test
-    public void testPutDeleteOnSameTimeStamp() throws Exception{
+    public void testPutDeleteOnSameTimeStamp() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR",
@@ -379,11 +352,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes = com.google.common.primitives.Bytes.toArray(idxKey);
-        Put idxPut1 = new Put(idxKeyBytes);
+        Put idxPut1 = new Put(generateIndexRowKey(null));
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
         expectedIndexMutations.add(idxPut1);
 
@@ -391,7 +360,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     @Test
-    public void testCoveredIndexColumns() throws Exception{
+    public void testCoveredIndexColumns() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -424,11 +393,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 dataDel);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes = com.google.common.primitives.Bytes.toArray(idxKey);
+        byte[] idxKeyBytes = generateIndexRowKey("v1");
 
         Put idxPut1 = new Put(idxKeyBytes);
         addCellToPutMutation(idxPut1,
@@ -498,11 +463,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         List<Mutation> expectedIndexMutation = new ArrayList<>();
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes("v1")));
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes = com.google.common.primitives.Bytes.toArray(idxKey);
+        byte[] idxKeyBytes = generateIndexRowKey("v1");
 
         Put idxPut1 = new Put(idxKeyBytes);
         addCellToPutMutation(idxPut1,
@@ -513,10 +474,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
         expectedIndexMutation.add(idxPut1);
 
-        List<Byte> idxKey2 = new ArrayList<>();
-        idxKey2.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey2.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        Put idxPut2 = new Put(com.google.common.primitives.Bytes.toArray(idxKey2));
+        Put idxPut2 = new Put(generateIndexRowKey(null));
         addCellToPutMutation(idxPut2,
                 Bytes.toBytes("CF2"),
                 Bytes.toBytes("CF2:C2"),
@@ -537,7 +495,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     @Test
-    public void testSameTypeOfMutationWithDifferentTimeStamp() throws Exception{
+    public void testSameTypeOfMutationWithDifferentTimeStamp() throws Exception {
         SetupInfo info = setup(TABLE_NAME,
                 INDEX_NAME,
                 "ROW_KEY VARCHAR, C1 VARCHAR, C2 VARCHAR",
@@ -563,32 +521,39 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 dataPut,
                 null);
 
-        List<Byte> idxKey = new ArrayList<>();
-        idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
+        byte[] idxKeyBytes = generateIndexRowKey(null);
 
-        Put idxPut1 = new Put(com.google.common.primitives.Bytes.toArray(idxKey));
+        Put idxPut1 = new Put(idxKeyBytes);
         addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
 
-        Put idxPut2 = new Put(com.google.common.primitives.Bytes.toArray(idxKey));
+        Put idxPut2 = new Put(idxKeyBytes);
         addEmptyColumnToIndexPutMutation(idxPut2, info.indexMaintainer, 2);
 
         assertEqualMutationList(Arrays.asList((Mutation)idxPut1, (Mutation)idxPut2), actualIndexMutations);
     }
 
-    void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception{
+    byte[] generateIndexRowKey(String indexVal) {
+        List<Byte> idxKey = new ArrayList<>();
+        if (indexVal != null && !indexVal.isEmpty())
+            idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(indexVal)));
+        idxKey.add(QueryConstants.SEPARATOR_BYTE);
+        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
+        return com.google.common.primitives.Bytes.toArray(idxKey);
+    }
+
+    void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception {
         byte[] rowKey = put.getRow();
         Cell cell = new KeyValue(rowKey, family, column, ts, KeyValue.Type.Put, value);
         put.add(cell);
     }
 
-    void addCellToDelMutation(Delete del, byte[] family, byte[] column, long ts, KeyValue.Type type) throws Exception{
+    void addCellToDelMutation(Delete del, byte[] family, byte[] column, long ts, KeyValue.Type type) throws Exception {
         byte[] rowKey = del.getRow();
         Cell cell = new KeyValue(rowKey, family, column, ts, type);
         del.addDeleteMarker(cell);
     }
 
-    void addEmptyColumnToDataPutMutation(Put put, PTable ptable, long ts) throws Exception{
+    void addEmptyColumnToDataPutMutation(Put put, PTable ptable, long ts) throws Exception {
         addCellToPutMutation(put,
                 SchemaUtil.getEmptyColumnFamily(ptable),
                 QueryConstants.EMPTY_COLUMN_BYTES,
@@ -596,7 +561,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
     }
 
-    void addEmptyColumnToIndexPutMutation(Put put, IndexMaintainer im, long ts) throws Exception{
+    void addEmptyColumnToIndexPutMutation(Put put, IndexMaintainer im, long ts) throws Exception {
         addCellToPutMutation(put,
                 im.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 QueryConstants.EMPTY_COLUMN_BYTES,
@@ -605,12 +570,12 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     void assertEqualMutationList(List<Mutation> expectedMutations,
-                                 List<Mutation> actualMutations){
+                                 List<Mutation> actualMutations) {
         assertEquals(expectedMutations.size(), actualMutations.size());
-        for (Mutation expected : expectedMutations){
+        for (Mutation expected : expectedMutations) {
             boolean found = false;
-            for (Mutation actual: actualMutations){
-                if (isEqualMutation(expected, actual)){
+            for (Mutation actual: actualMutations) {
+                if (isEqualMutation(expected, actual)) {
                     actualMutations.remove(actual);
                     found = true;
                     break;
@@ -634,10 +599,10 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
         if (expectedCells.size() != actualCells.size())
             return false;
-        for(Cell expected : expectedCells){
+        for(Cell expected : expectedCells) {
             boolean found = false;
             for(Cell actual: actualCells){
-                if (isEqualCell(expected, actual)){
+                if (isEqualCell(expected, actual)) {
                     actualCells.remove(actual);
                     found = true;
                     break;
@@ -650,7 +615,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         return true;
     }
 
-    boolean isEqualCell(Cell a, Cell b){
+    boolean isEqualCell(Cell a, Cell b) {
         return CellUtil.matchingRow(a, b)
                 && CellUtil.matchingFamily(a, b)
                 && CellUtil.matchingQualifier(a, b)
