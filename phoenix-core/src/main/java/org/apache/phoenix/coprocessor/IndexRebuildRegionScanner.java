@@ -138,7 +138,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private Table resultHTable = null;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     private boolean verify = false;
-    private  Map<byte[], List<Mutation>> indexKeyToMutationMap;
+    private Map<byte[], List<Mutation>> indexKeyToMutationMap;
     private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
     private TaskRunner pool;
     private TaskBatch<Boolean> tasks;
@@ -333,8 +333,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     }
 
     @VisibleForTesting
-    public int setIndexTableTTL(int forever) {
-        indexTableTTL = forever;
+    public int setIndexTableTTL(int ttl) {
+        indexTableTTL = ttl;
         return 0;
     }
 
@@ -668,7 +668,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         Mutation expected = null;
         Mutation previousExpected;
         Mutation actual;
-        while (expectedIndex < expectedSize && actualIndex < actualSize) {
+        while (expectedIndex < expectedSize && actualIndex <actualSize) {
             previousExpected = expected;
             expected = expectedMutationList.get(expectedIndex);
             // Check if cell expired as per the current server's time and data table ttl

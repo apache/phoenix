@@ -40,7 +40,6 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -61,7 +60,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
-import java.util.TreeMap;
 
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
@@ -70,7 +68,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
-public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
+public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private static final int INDEX_TABLE_EXPIRY_SEC = 1;
     private static final String UNEXPECTED_COLUMN = "0:UNEXPECTED_COLUMN";
@@ -79,16 +77,16 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
     public static final String FIRST_VALUE = "FIRST_VALUE";
     public static final String SECOND_VALUE = "SECOND_VALUE";
     public static final String
-            createTableDDL = "CREATE TABLE IF NOT EXISTS %s (FIRST_ID BIGINT NOT NULL, "
+            CREATE_TABLE_DDL = "CREATE TABLE IF NOT EXISTS %s (FIRST_ID BIGINT NOT NULL, "
                         + "SECOND_ID BIGINT NOT NULL, FIRST_VALUE VARCHAR(20), "
                         + "SECOND_VALUE INTEGER "
                         + "CONSTRAINT PK PRIMARY KEY(FIRST_ID, SECOND_ID)) COLUMN_ENCODED_BYTES=0";
 
     public static final String
-            createIndexDDL = "CREATE INDEX %s ON %s (SECOND_VALUE) INCLUDE (FIRST_VALUE)";
-    public static final String completeRowUpsert = "UPSERT INTO %s VALUES (?,?,?,?)";
-    public static final String partialRowUpsert1 = "UPSERT INTO %s (%s, %s, %s) VALUES (?,?,?)";
-    public static final String deleteRowDML = "DELETE FROM %s WHERE %s = ?  AND %s = ?";
+            CREATE_INDEX_DDL = "CREATE INDEX %s ON %s (SECOND_VALUE) INCLUDE (FIRST_VALUE)";
+    public static final String COMPLETE_ROW_UPSERT = "UPSERT INTO %s VALUES (?,?,?,?)";
+    public static final String PARTIAL_ROW_UPSERT = "UPSERT INTO %s (%s, %s, %s) VALUES (?,?,?)";
+    public static final String DELETE_ROW_DML = "DELETE FROM %s WHERE %s = ?  AND %s = ?";
     public static final String INCLUDED_COLUMN = "0:FIRST_VALUE";
 
     @Rule
@@ -152,8 +150,8 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             dataTableFullName = SchemaUtil.getQualifiedTableName(schema, table);
             indexTableFullName = SchemaUtil.getQualifiedTableName(schema, index);
 
-            conn.createStatement().execute(String.format(createTableDDL, dataTableFullName));
-            conn.createStatement().execute(String.format(createIndexDDL, index, dataTableFullName));
+            conn.createStatement().execute(String.format(CREATE_TABLE_DDL, dataTableFullName));
+            conn.createStatement().execute(String.format(CREATE_INDEX_DDL, index, dataTableFullName));
             conn.commit();
 
             pconn = conn.unwrap(PhoenixConnection.class);
@@ -178,7 +176,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
         try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())){
             PreparedStatement ps =
                     conn.prepareStatement(
-                            String.format(deleteRowDML, dataTableFullName, FIRST_ID, SECOND_ID));
+                            String.format(DELETE_ROW_DML, dataTableFullName, FIRST_ID, SECOND_ID));
             ps.setInt(1, key1);
             ps.setInt(2, key2);
             ps.execute();
@@ -192,7 +190,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
         try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())){
             PreparedStatement ps =
                     conn.prepareStatement(
-                            String.format(partialRowUpsert1, dataTableFullName, FIRST_ID, SECOND_ID,
+                            String.format(PARTIAL_ROW_UPSERT, dataTableFullName, FIRST_ID, SECOND_ID,
                                     FIRST_VALUE));
             ps.setInt(1, key1);
             ps.setInt(2, key2);
@@ -209,7 +207,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             PreparedStatement
                     ps =
                     conn.prepareStatement(
-                            String.format(partialRowUpsert1, dataTableFullName, FIRST_ID, SECOND_ID,
+                            String.format(PARTIAL_ROW_UPSERT, dataTableFullName, FIRST_ID, SECOND_ID,
                                     SECOND_VALUE));
             ps.setInt(1, key1);
             ps.setInt(2, key2);
@@ -223,7 +221,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
     , int val2) throws SQLException, IOException {
         try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
             PreparedStatement
-                    ps = conn.prepareStatement(String.format(completeRowUpsert, dataTableFullName));
+                    ps = conn.prepareStatement(String.format(COMPLETE_ROW_UPSERT, dataTableFullName));
             ps.setInt(1, key1);
             ps.setInt(2, key2);
             ps.setString(3, val1);
@@ -304,8 +302,8 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.VALID);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
-            actualPR.equals(expectedPR);
+
+            assertTrue(actualPR.equals(expectedPR));
         }
     }
 
@@ -317,7 +315,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.VALID_MORE_MUTATIONS);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -330,7 +328,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.VALID_MIX_MUTATIONS);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -343,7 +341,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.VALID_NEW_UNVERIFIED_MUTATIONS);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -358,7 +356,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             expireThisRow();
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -371,7 +369,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.INVALID_CELL_VALUE);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -384,7 +382,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.INVALID_EMPTY_CELL);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -397,7 +395,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.INVALID_COLUMN);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -410,7 +408,7 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
             initializeLocalMockitoSetup(entry, TestType.INVALID_EXTRA_CELL);
             //test code
             rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-            //assert
+
             assertTrue(actualPR.equals(expectedPR));
         }
     }
@@ -620,7 +618,8 @@ public class IndexToolSingleRowVerifyTest extends BaseConnectionlessQueryTest {
         return m;
     }
 
-    private Cell getEmptyCell(Mutation orig, List<Cell> origList, Long ts, KeyValue.Type type, boolean verified) {
+    private Cell getEmptyCell(Mutation orig, List<Cell> origList, Long ts, KeyValue.Type type,
+            boolean verified) {
         return CellUtil.createCell(orig.getRow(), CellUtil.cloneFamily(origList.get(0)),
                 indexMaintainer.getEmptyKeyValueQualifier(),
                 ts, type.getCode(), verified ? VERIFIED_BYTES : UNVERIFIED_BYTES);

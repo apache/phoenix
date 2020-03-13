@@ -94,6 +94,16 @@ public class IndexToolVerificationResult {
                     && this.invalidIndexRowCount == pr.invalidIndexRowCount
                     && this.missingIndexRowCount == pr.missingIndexRowCount;
         }
+
+        @Override
+        public int hashCode() {
+            long result = 17;
+            result = 31 * result + expiredIndexRowCount;
+            result = 31 * result + validIndexRowCount;
+            result = 31 * result + missingIndexRowCount;
+            result = 31 * result + invalidIndexRowCount;
+            return (int)result;
+        }
     }
 
     long scannedDataRowCount = 0;
