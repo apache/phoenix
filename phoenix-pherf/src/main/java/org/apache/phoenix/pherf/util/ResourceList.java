@@ -18,11 +18,6 @@
 
 package org.apache.phoenix.pherf.util;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.phoenix.pherf.exception.PherfException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -31,11 +26,22 @@ import java.net.URL;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.phoenix.pherf.exception.PherfException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 /**
  * list resources available from the classpath @ *
@@ -43,6 +49,9 @@ import java.util.zip.ZipFile;
 public class ResourceList {
     private static final Logger LOGGER = LoggerFactory.getLogger(ResourceList.class);
     private final String rootResourceDir;
+    // Lists the directories to ignore meant for testing something else
+    // when getting the resources from classpath
+    private List<String> dirsToIgnore = Lists.newArrayList("sql_files");
 
     public ResourceList(String rootResourceDir) {
         this.rootResourceDir = rootResourceDir;
@@ -166,6 +175,7 @@ public class ResourceList {
         final ArrayList<String> retval = new ArrayList<String>();
         final File[] fileList = directory.listFiles();
         for (final File file : fileList) {
+            if (isIgnoredDir(file.getAbsolutePath())) continue;
             if (file.isDirectory()) {
                 retval.addAll(getResourcesFromDirectory(file, pattern));
             } else {
@@ -178,5 +188,12 @@ public class ResourceList {
             }
         }
         return retval;
+    }
+    
+    private boolean isIgnoredDir(String path) {
+        for (String dir : dirsToIgnore) {
+            if (path.contains(dir)) return true;
+        }
+        return false;
     }
 }
