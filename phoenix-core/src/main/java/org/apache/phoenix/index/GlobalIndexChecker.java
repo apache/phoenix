@@ -149,6 +149,15 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                     QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
             minTimestamp = scan.getTimeRange().getMin();
             maxTimestamp = scan.getTimeRange().getMax();
+            byte[] indexTableName = region.getRegionInfo().getTable().getName();
+            byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
+            indexMaintainer = getIndexMaintainer(maintainers, indexTableName);
+            if (indexMaintainer == null) {
+                throw new DoNotRetryIOException(
+                        "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
+                                region.getRegionInfo().getTable().getNameAsString());
+            }
         }
 
         @Override
@@ -266,22 +275,9 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 deleteRowScan = new Scan();
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
-                byte[] indexTableName = region.getRegionInfo().getTable().getName();
                 dataHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
                         env).getTable(TableName.valueOf(dataTableName));
-                if (indexMaintainer == null) {
-                    byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-                    List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
-                    indexMaintainer = getIndexMaintainer(maintainers, indexTableName);
-                }
-                if (indexMaintainer == null) {
-                    throw new DoNotRetryIOException(
-                            "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
-                                    region.getRegionInfo().getTable().getNameAsString());
-                }
-                if (viewConstants == null) {
-                    viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-                }
+                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
                 // The following attributes are set to instruct UngroupedAggregateRegionObserver to do partial index rebuild
                 // i.e., rebuild a subset of index rows.
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
@@ -471,7 +467,9 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
 
 
         private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) throws IOException {
-            removeOlderCells(cellList);
+            if (!indexMaintainer.isImmutableRows()) {
+                removeOlderCells(cellList);
+            }
             long cellListSize = cellList.size();
             Cell cell = null;
             if (cellListSize == 0) {
