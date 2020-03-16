@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -60,6 +61,10 @@ public abstract class LikeExpression extends BaseCompoundExpression {
      * Store whether this like expression has to be case sensitive or not.
      */
     private LikeType likeType;
+
+    @VisibleForTesting
+    public LikeExpression() {
+    }
 
     public static String unescapeLike(String s) {
         return StringUtil.replace(s, StringUtil.LIKE_ESCAPE_SEQS, StringUtil.LIKE_UNESCAPED_SEQS);
@@ -198,14 +203,12 @@ public abstract class LikeExpression extends BaseCompoundExpression {
 
     private static final int LIKE_TYPE_INDEX = 2;
     private static final LiteralExpression[] LIKE_TYPE_LITERAL = new LiteralExpression[LikeType.values().length];
-    static {
-        for (LikeType likeType : LikeType.values()) {
-            LIKE_TYPE_LITERAL[likeType.ordinal()] = LiteralExpression.newConstant(likeType.name());
-        }
-    }
     private AbstractBasePattern pattern;
 
-    public LikeExpression() {
+    static {
+        for (LikeType likeType : LikeType.values()) {
+            LIKE_TYPE_LITERAL[likeType.ordinal()] = new LiteralExpression.Builder().setValue(likeType.name()).buildSimple(false);
+        }
     }
 
     protected static List<Expression> addLikeTypeChild(List<Expression> children, LikeType likeType) {

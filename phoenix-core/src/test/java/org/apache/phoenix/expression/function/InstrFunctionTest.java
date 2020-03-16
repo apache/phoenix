@@ -36,9 +36,8 @@ import org.junit.Test;
 public class InstrFunctionTest {
 
     private static Object evaluateExpression(String value, PDataType<?> dataType, String strToSearch, SortOrder order) throws SQLException {
-      Expression inputArg = LiteralExpression.newConstant(value,dataType,order);
-
-      Expression strToSearchExp = LiteralExpression.newConstant(strToSearch,dataType);
+      Expression inputArg = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(order).build();
+      Expression strToSearchExp = new LiteralExpression.Builder().setValue(strToSearch).setDataType(dataType).build();
       List<Expression> expressions = Arrays.<Expression>asList(inputArg,strToSearchExp);
       Expression instrFunction = new InstrFunction(expressions);
       ImmutableBytesWritable ptr = new ImmutableBytesWritable();

@@ -1218,7 +1218,7 @@ public class PTableImpl implements PTable {
                         for (PColumn column : columns) {
                             if (columnToValueMap.containsKey(column)) {
                                 int colIndex = qualifierEncodingScheme.decode(column.getColumnQualifierBytes())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                                colValues[colIndex] = new LiteralExpression(columnToValueMap.get(column));
+                                colValues[colIndex] = new LiteralExpression.Builder().setByteValue(columnToValueMap.get(column)).buildSimple(true);
                             }
                         }
                         

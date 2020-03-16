@@ -78,7 +78,8 @@ public class RoundDecimalExpression extends ScalarFunction {
         if (expr.getDataType().isCoercibleTo(PLong.INSTANCE)) {
             return expr;
         }
-        Expression scaleExpr = LiteralExpression.newConstant(scale, PInteger.INSTANCE, Determinism.ALWAYS);
+        Expression scaleExpr = new LiteralExpression.Builder().setValue(scale).setDataType(PInteger.INSTANCE)
+                .setDeterminism(Determinism.ALWAYS).build();
         List<Expression> expressions = Lists.newArrayList(expr, scaleExpr);
         return new RoundDecimalExpression(expressions);
     }
@@ -97,7 +98,8 @@ public class RoundDecimalExpression extends ScalarFunction {
             return expr;
         }
         if (exprs.size() == 1) {
-            Expression scaleExpr = LiteralExpression.newConstant(0, PInteger.INSTANCE, Determinism.ALWAYS);
+            Expression scaleExpr = new LiteralExpression.Builder().setValue(0).setDataType(PInteger.INSTANCE)
+                    .setDeterminism(Determinism.ALWAYS).build();
             exprs = Lists.newArrayList(expr, scaleExpr);
         }
         return new RoundDecimalExpression(exprs);

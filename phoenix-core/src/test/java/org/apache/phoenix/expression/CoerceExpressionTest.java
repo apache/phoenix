@@ -66,7 +66,7 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingIntToDecimal() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant(1, PInteger.INSTANCE);
+		LiteralExpression v = new LiteralExpression.Builder().setValue(1).setDataType(PInteger.INSTANCE).build();
         CoerceExpression e = new CoerceExpression(v, PDecimal.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
@@ -78,8 +78,8 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingCharToVarchar() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant("a", PChar.INSTANCE);
-        CoerceExpression e = new CoerceExpression(v, PVarchar.INSTANCE);
+		LiteralExpression v = new LiteralExpression.Builder().setValue("a").setDataType(PChar.INSTANCE).build();
+		CoerceExpression e = new CoerceExpression(v, PVarchar.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
         Object obj = e.getDataType().toObject(ptr);
@@ -90,8 +90,8 @@ public class CoerceExpressionTest {
 	
 	@Test
     public void testCoerceExpressionSupportsCoercingIntToLong() throws Exception {
-        LiteralExpression v = LiteralExpression.newConstant(1, PInteger.INSTANCE);
-        CoerceExpression e = new CoerceExpression(v, PLong.INSTANCE);
+		LiteralExpression v = new LiteralExpression.Builder().setValue(1).setDataType(PInteger.INSTANCE).build();
+		CoerceExpression e = new CoerceExpression(v, PLong.INSTANCE);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         e.evaluate(null, ptr);
         Object obj = e.getDataType().toObject(ptr);
@@ -104,8 +104,7 @@ public class CoerceExpressionTest {
 	public void testCoerceExpressionSupportsCoercingAllPDataTypesToVarBinary() throws Exception {
 		for(PDataType p : PDataType.values()) {
 			if (!p.isArrayType()) {
-				LiteralExpression v = LiteralExpression.newConstant(
-						map.get(p.getJavaClass()), p);
+				LiteralExpression v = new LiteralExpression.Builder().setValue(map.get(p.getJavaClass())).setDataType(p).build();
 				CoerceExpression e = new CoerceExpression(v,
             PVarbinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -122,8 +121,7 @@ public class CoerceExpressionTest {
     public void testCoerceExpressionSupportsCoercingAllPDataTypesToBinary() throws Exception {
 		for(PDataType p : PDataType.values()) {
 			if (!p.isArrayType()) {
-				LiteralExpression v = LiteralExpression.newConstant(
-						map.get(p.getJavaClass()), p);
+				LiteralExpression v = new LiteralExpression.Builder().setValue(map.get(p.getJavaClass())).setDataType(p).build();
 				CoerceExpression e = new CoerceExpression(v, PBinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				e.evaluate(null, ptr);

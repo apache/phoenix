@@ -46,12 +46,12 @@ import org.apache.phoenix.util.SchemaUtil;
 @BuiltInFunction(name=CountAggregateFunction.NAME, args= {@Argument()} )
 public class CountAggregateFunction extends SingleAggregateFunction {
     public static final String NAME = "COUNT";
-    public static final List<Expression> STAR = Arrays.<Expression>asList(LiteralExpression.newConstant(1, Determinism.ALWAYS));
+    public static final List<Expression> STAR = Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).buildSimple(false));
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
-    
+
     public CountAggregateFunction() {
     }
-    
+
     public CountAggregateFunction(List<Expression> childExpressions) {
         super(childExpressions);
     }

@@ -41,11 +41,13 @@ public class IsNullExpression extends BaseSingleExpression {
 
     public static Expression create(Expression child, boolean negate, ImmutableBytesWritable ptr) throws SQLException {
         if (!child.isNullable()) {
-            return LiteralExpression.newConstant(negate, PBoolean.INSTANCE, child.getDeterminism());
+            return new LiteralExpression.Builder().setValue(negate).setDataType(PBoolean.INSTANCE)
+                    .setDeterminism(child.getDeterminism()).build();
         }
         if (ExpressionUtil.isConstant(child)) {
             boolean evaluated = child.evaluate(null, ptr);
-            return LiteralExpression.newConstant(negate ^ (!evaluated || ptr.getLength() == 0), PBoolean.INSTANCE, child.getDeterminism());
+            return new LiteralExpression.Builder().setValue(negate ^ (!evaluated || ptr.getLength() == 0))
+                    .setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism()).build();
         }
         return new IsNullExpression(child, negate);
     }

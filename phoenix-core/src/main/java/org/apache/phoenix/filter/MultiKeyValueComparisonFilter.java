@@ -36,8 +36,6 @@ import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-
-
 /**
  * 
  * Modeled after {@link org.apache.hadoop.hbase.filter.SingleColumnValueFilter},

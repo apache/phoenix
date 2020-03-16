@@ -79,8 +79,8 @@ public class LowerFunctionTest {
 
 	private static String callFunction(String inputStr, String localeIsoCode, SortOrder sortOrder) throws Exception {
 		LiteralExpression inputStrLiteral, localeIsoCodeLiteral;
-		inputStrLiteral = LiteralExpression.newConstant(inputStr, PVarchar.INSTANCE, sortOrder);
-		localeIsoCodeLiteral = LiteralExpression.newConstant(localeIsoCode, PVarchar.INSTANCE, sortOrder);
+		inputStrLiteral = new LiteralExpression.Builder().setValue(inputStr).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
+		localeIsoCodeLiteral = new LiteralExpression.Builder().setValue(localeIsoCode).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
 		List<Expression> expressions = Lists.newArrayList((Expression) inputStrLiteral,
 				(Expression) localeIsoCodeLiteral);
 		Expression lowerFunction = new LowerFunction(expressions);

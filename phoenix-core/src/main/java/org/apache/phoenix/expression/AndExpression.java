@@ -53,7 +53,7 @@ public class AndExpression extends AndOrExpression {
 			determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, determinism);
+            return new LiteralExpression.Builder().setValue(true).setDeterminism(determinism).buildSimple(false);
         }
         if (children.size() == 1) {
             return children.get(0);

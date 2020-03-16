@@ -46,9 +46,9 @@ public class RegexpSubstrFunctionTest {
 
     private String testExpression(String srcStr, String patternStr, int offset, SortOrder sortOrder) throws SQLException {
         Expression srcExp, patternExp, offsetExp;
-        srcExp = LiteralExpression.newConstant(srcStr, TYPE, sortOrder);
-        patternExp = LiteralExpression.newConstant(patternStr, TYPE, sortOrder);
-        offsetExp = LiteralExpression.newConstant(offset, PInteger.INSTANCE, sortOrder);
+        srcExp = new LiteralExpression.Builder().setValue(srcStr).setDataType(TYPE).setSortOrder(sortOrder).build();
+        patternExp = new LiteralExpression.Builder().setValue(patternStr).setDataType(TYPE).setSortOrder(sortOrder).build();
+        offsetExp = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(sortOrder).build();
         List<Expression> expressions = Lists.newArrayList(srcExp, patternExp, offsetExp);
         String res1, res2;
         res1 = evalExp(new ByteBasedRegexpSubstrFunction(expressions));
