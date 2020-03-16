@@ -32,8 +32,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -83,6 +81,8 @@ import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
@@ -96,7 +96,7 @@ import com.google.common.collect.Lists;
  */
 public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
 
-  private static final Log LOG = LogFactory.getLog(IndexRegionObserver.class);
+  private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
   private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
   private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
     protected static final byte VERIFIED_BYTE = 1;

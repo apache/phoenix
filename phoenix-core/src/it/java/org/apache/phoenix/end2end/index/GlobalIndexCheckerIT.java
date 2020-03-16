@@ -32,8 +32,6 @@ import java.util.Map;
 import java.util.Properties;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -48,11 +46,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Log LOG = LogFactory.getLog(GlobalIndexCheckerIT.class);
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
     private final boolean async;
     private final boolean encoded;
     private final String tableDDLOptions;

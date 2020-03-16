@@ -167,6 +167,8 @@ public class ResultUtil {
     public void deleteDir(String directory) throws IOException {
         File baseDir = new File(directory);
         if (baseDir.exists()) {
+            //deleteDirectory seems to have a problem with MacOs tmp dir symlinks
+            FileUtils.cleanDirectory(baseDir);
             FileUtils.deleteDirectory(baseDir);
         }
     }

@@ -55,7 +55,19 @@
        <!-- HBase dependencies -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-endpoint</artifactId>
+        <artifactId>hbase-client</artifactId>
+        <version>2.1.6</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-common</artifactId>
+        <version>2.1.6</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-server</artifactId>
         <version>2.1.6</version>
         <scope>provided</scope>
       </dependency>

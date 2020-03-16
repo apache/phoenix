@@ -30,8 +30,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -65,6 +63,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -90,7 +90,7 @@ import org.apache.phoenix.util.ServerUtil;
  *
  */
 public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
-    private static final Log LOG = LogFactory.getLog(GlobalIndexChecker.class);
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexChecker.class);
     private GlobalIndexCheckerSource metricsSource;
     public enum RebuildReturnCode {
         NO_DATA_ROW(0),
