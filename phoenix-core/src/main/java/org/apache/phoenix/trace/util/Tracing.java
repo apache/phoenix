@@ -49,7 +49,8 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
-import com.sun.istack.NotNull;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * Helper class to manage using the {@link Tracer} within Phoenix
@@ -221,7 +222,7 @@ public class Tracing {
         return new TracingWrapper(conn, desc);
     }
 
-    private static void addCustomAnnotationsToSpan(@Nullable Span span, @NotNull PhoenixConnection conn) {
+    private static void addCustomAnnotationsToSpan(@Nullable Span span, @NonNull PhoenixConnection conn) {
         Preconditions.checkNotNull(conn);
 
         if (span == null) {

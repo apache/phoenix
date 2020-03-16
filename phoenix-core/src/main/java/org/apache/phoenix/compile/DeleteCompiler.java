@@ -93,7 +93,8 @@ import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.sun.istack.NotNull;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 public class DeleteCompiler {
     private static ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -331,7 +332,7 @@ public class DeleteCompiler {
         private final MutationPlan firstPlan;
         private final QueryPlan dataPlan;
 
-        public MultiRowDeleteMutationPlan(QueryPlan dataPlan, @NotNull List<MutationPlan> plans) {
+        public MultiRowDeleteMutationPlan(QueryPlan dataPlan, @NonNull List<MutationPlan> plans) {
             Preconditions.checkArgument(!plans.isEmpty());
             this.plans = plans;
             this.firstPlan = plans.get(0);

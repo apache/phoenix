@@ -19,6 +19,7 @@ package org.apache.phoenix.log;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
@@ -29,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 
-import io.netty.util.internal.ThreadLocalRandom;
 
 /*
  * Wrapper for query translator
