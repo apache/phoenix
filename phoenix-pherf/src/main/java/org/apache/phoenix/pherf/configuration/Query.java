@@ -36,6 +36,7 @@ public class Query {
     private String queryGroup;
     private String id;
     private Pattern pattern;
+    private long timeoutDuration = Long.MAX_VALUE;
 
     public Query() {
     	pattern = Pattern.compile("\\[.*?\\]");
@@ -157,5 +158,15 @@ public class Query {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+
+    @XmlAttribute
+    public long getTimeoutDuration() {
+        return this.timeoutDuration;
+    }
+
+    public void setTimeoutDuration(long timeoutDuration) {
+        this.timeoutDuration = timeoutDuration;
     }
 }
