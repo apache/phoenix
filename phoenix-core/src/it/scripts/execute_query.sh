@@ -30,11 +30,11 @@ if [ -n $maven_home ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
-mvn dependency:get -Dartifact=org.apache.phoenix:phoenix-core:$client_version
-mvn dependency:copy -Dartifact=org.apache.phoenix:phoenix-core:$client_version \
+mvn dependency:get -Dartifact=org.apache.phoenix:phoenix-client:$client_version
+mvn dependency:copy -Dartifact=org.apache.phoenix:phoenix-client:$client_version \
 -DoutputDirectory=$tmp_dir
 
-phoenix_client_jar=$tmp_dir/phoenix-core-$client_version.jar
+phoenix_client_jar=$tmp_dir/phoenix-client-$client_version.jar
 java -cp ".:$phoenix_client_jar" sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
 -u jdbc:phoenix:$zk_url -n none -p none --color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile

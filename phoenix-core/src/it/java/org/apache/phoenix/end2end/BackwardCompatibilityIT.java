@@ -38,6 +38,8 @@ import java.sql.ResultSetMetaData;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +48,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -62,6 +65,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.stream.JsonReader;
+
 /**
  * This class is meant for testing all compatible client versions 
  * against the current server version. It runs SQL queries with given 
@@ -74,6 +82,8 @@ public class BackwardCompatibilityIT {
 
     private static final String SQL_DIR = "src/it/resources/sql_files/";
     private static final String RESULT_DIR = "src/it/resources/gold_files/";
+    private static final String COMPATIBLE_CLIENTS_JSON =
+            "src/it/resources/compatible_client_versions.json";
     private static final String RESULT_PREFIX = "result_";
     private static final String SQL_EXTENSION = ".sql";
     private static final String TEXT_EXTENSION = ".txt";
@@ -95,8 +105,8 @@ public class BackwardCompatibilityIT {
     }
 
     @Parameters(name = "BackwardCompatibilityIT_compatibleClientVersion={0}")
-    public static synchronized Collection<String> data() {
-        return MetaDataProtocol.COMPATIBLE_CLIENT_VERSIONS;
+    public static synchronized Collection<String> data() throws Exception {
+        return computeClientVersions();
     }
 
     @Before
@@ -118,6 +128,26 @@ public class BackwardCompatibilityIT {
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
         }
+    }
+    
+    private static List<String> computeClientVersions() throws Exception {
+        String hbaseVersion = VersionInfo.getVersion();
+        Pattern p = Pattern.compile("\\d+\\.\\d+");
+        Matcher m = p.matcher(hbaseVersion);
+        String hbaseProfile = null;
+        if (m.find()) {
+            hbaseProfile = m.group();
+        }
+        List<String> clientVersions = Lists.newArrayList();
+        JsonParser jsonParser = new JsonParser();
+        JsonReader jsonReader =
+                new JsonReader(new FileReader(COMPATIBLE_CLIENTS_JSON));
+        JsonObject jsonObject =
+                jsonParser.parse(jsonReader).getAsJsonObject();
+        for (JsonElement clientVersion : jsonObject.get(hbaseProfile).getAsJsonArray()) {
+            clientVersions.add(clientVersion.getAsString() + "-HBase-" + hbaseProfile);
+        }
+        return clientVersions;
     }
 
     /**
