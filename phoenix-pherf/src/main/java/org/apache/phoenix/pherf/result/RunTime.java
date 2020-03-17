@@ -24,38 +24,44 @@ import java.util.Date;
 
 public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
     private Date startTime;
-    private Integer elapsedDurationInMs;
+    private Long elapsedDurationInMs;
     private String message;
     private Long resultRowCount;
     private String explainPlan;
+    private boolean timedOut;
 
     @SuppressWarnings("unused") public RunTime() {
     }
 
-    @SuppressWarnings("unused") public RunTime(Integer elapsedDurationInMs) {
+    @SuppressWarnings("unused") public RunTime(Long elapsedDurationInMs) {
         this(null, elapsedDurationInMs);
     }
 
-    public RunTime(Long resultRowCount, Integer elapsedDurationInMs) {
+    public RunTime(Long resultRowCount, Long elapsedDurationInMs) {
         this(null, resultRowCount, elapsedDurationInMs);
     }
 
-    public RunTime(Date startTime, Long resultRowCount, Integer elapsedDurationInMs) {
-        this(null, null, startTime, resultRowCount, elapsedDurationInMs);
+    public RunTime(Date startTime, Long resultRowCount, Long elapsedDurationInMs) {
+        this(null, null, startTime, resultRowCount, elapsedDurationInMs, false);
+    }
+
+    public RunTime(Date startTime, Long elapsedDurationInMs, boolean timedOut) {
+        this(null, startTime, null, elapsedDurationInMs, timedOut);
     }
 
     public RunTime(String message, Date startTime, Long resultRowCount,
-            Integer elapsedDurationInMs) {
-        this(message, null, startTime, resultRowCount, elapsedDurationInMs);
+            Long elapsedDurationInMs, boolean timedOut) {
+        this(message, null, startTime, resultRowCount, elapsedDurationInMs, timedOut);
     }
 
     public RunTime(String message, String explainPlan, Date startTime, Long resultRowCount,
-            Integer elapsedDurationInMs) {
+            Long elapsedDurationInMs, boolean timedOut) {
         this.elapsedDurationInMs = elapsedDurationInMs;
         this.startTime = startTime;
         this.resultRowCount = resultRowCount;
         this.message = message;
         this.explainPlan = explainPlan;
+        this.timedOut = timedOut;
     }
 
     @XmlAttribute() public Date getStartTime() {
@@ -66,11 +72,11 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
         this.startTime = startTime;
     }
 
-    @XmlAttribute() public Integer getElapsedDurationInMs() {
+    @XmlAttribute() public Long getElapsedDurationInMs() {
         return elapsedDurationInMs;
     }
 
-    @SuppressWarnings("unused") public void setElapsedDurationInMs(Integer elapsedDurationInMs) {
+    @SuppressWarnings("unused") public void setElapsedDurationInMs(Long elapsedDurationInMs) {
         this.elapsedDurationInMs = elapsedDurationInMs;
     }
 
@@ -104,5 +110,13 @@ public class RunTime implements Comparator<RunTime>, Comparable<RunTime> {
 
     @SuppressWarnings("unused") public void setResultRowCount(Long resultRowCount) {
         this.resultRowCount = resultRowCount;
+    }
+
+    @SuppressWarnings("unused") public void setTimedOut(boolean timedOut) {
+        this.timedOut = timedOut;
+    }
+
+    @XmlAttribute() public boolean getTimedOut() {
+        return this.timedOut;
     }
 }

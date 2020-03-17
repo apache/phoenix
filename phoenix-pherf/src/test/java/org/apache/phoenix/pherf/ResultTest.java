@@ -137,8 +137,8 @@ public class ResultTest extends ResultBaseTest {
         ThreadTime ttFromFile = queryResultFromFile.getThreadTimes().get(0);
 
         // thread level verification
-        assertEquals(10, (int) ttFromFile.getMinTimeInMs().getElapsedDurationInMs());
-        assertEquals(30, (int) ttFromFile.getMaxTimeInMs().getElapsedDurationInMs());
+        assertEquals(new Long(10), ttFromFile.getMinTimeInMs().getElapsedDurationInMs());
+        assertEquals(new Long(30), ttFromFile.getMaxTimeInMs().getElapsedDurationInMs());
         assertEquals(20, (int) ttFromFile.getAvgTimeInMs());
 
         // 3rd runtime has the earliest start time, therefore that's what's expected.
@@ -190,13 +190,13 @@ public class ResultTest extends ResultBaseTest {
         tt.setThreadName("thread1");
         Calendar calendar = Calendar.getInstance();
         Date startTime1 = calendar.getTime();
-        RunTime runtime1 = new RunTime(startTime1, 1000L, 10);
+        RunTime runtime1 = new RunTime(startTime1, 1000L, new Long(10));
         tt.getRunTimesInMs().add(runtime1);
         calendar.add(Calendar.MINUTE, -1);
-        RunTime runtime2 = new RunTime(calendar.getTime(), 2000L, 20);
+        RunTime runtime2 = new RunTime(calendar.getTime(), 2000L, new Long(20));
         tt.getRunTimesInMs().add(runtime2);
         calendar.add(Calendar.MINUTE, -1);
-        RunTime runtime3 = new RunTime(calendar.getTime(), 3000L, 30);
+        RunTime runtime3 = new RunTime(calendar.getTime(), 3000L, new Long(30));
         tt.getRunTimesInMs().add(runtime3);
         queryResult.getThreadTimes().add(tt);
         queryResult2.getThreadTimes().add(tt);
