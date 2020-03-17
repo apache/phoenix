@@ -69,13 +69,13 @@ public class ThreadTime {
     public Integer getAvgTimeInMs() {
         if (getRunTimesInMs().isEmpty()) return null;
 
-        Integer totalTimeInMs = new Integer(0);
+        Long totalTimeInMs = new Long(0);
         for (RunTime runTime : getRunTimesInMs()) {
             if (null != runTime.getElapsedDurationInMs()) {
                 totalTimeInMs += runTime.getElapsedDurationInMs();
             }
         }
-        return totalTimeInMs / getRunTimesInMs().size();
+        return (int) (totalTimeInMs / getRunTimesInMs().size());
     }
 
     public RunTime getMaxTimeInMs() {
@@ -117,6 +117,7 @@ public class ThreadTime {
                 rowValues.add(new ResultValue(
                         util.convertNull(getRunTimesInMs().get(i).getMessage())));
             }
+            rowValues.add(new ResultValue(getRunTimesInMs().get(i).getTimedOut()));
             rows.add(rowValues);
         }
         return rows;

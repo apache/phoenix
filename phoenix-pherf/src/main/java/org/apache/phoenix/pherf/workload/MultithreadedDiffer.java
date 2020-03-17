@@ -22,6 +22,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.Callable;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.result.RunTime;
@@ -56,10 +57,11 @@ class MultithreadedDiffer implements Callable<Void> {
         String newCSV = queryVerifier.exportCSV(query);
         boolean verifyResult = queryVerifier.doDiff(query, newCSV);
         String explainPlan = pUtil.getExplainPlan(query);
+        long elapsedTime = EnvironmentEdgeManager.currentTimeMillis() - start;
         getThreadTime().getRunTimesInMs().add(new RunTime(
                         verifyResult == true ? PherfConstants.DIFF_PASS : PherfConstants.DIFF_FAIL,
                         explainPlan, startDate, -1L,
-            (int) (EnvironmentEdgeManager.currentTimeMillis() - start)));
+            elapsedTime, !(elapsedTime >= executionDurationInMs)));
     }
 
     /**
