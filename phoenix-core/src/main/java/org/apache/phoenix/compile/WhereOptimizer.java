@@ -197,9 +197,8 @@ public class WhereOptimizer {
         boolean hasUnboundedRange = false;
         boolean hasMultiRanges = false;
         boolean hasRangeKey = false;
-        boolean stopExtracting = false;
         boolean useSkipScan = false;
-        //boolean useSkipScan = !forcedRangeScan && nBuckets != null;
+
         // Concat byte arrays of literals to form scan start key
         while (iterator.hasNext()) {
             KeyExpressionVisitor.KeySlot slot = iterator.next();
@@ -209,13 +208,12 @@ public class WhereOptimizer {
             if (slot == null || slot.getKeyRanges().isEmpty())  {
                 continue;
             }
+            if(slot.getPKPosition() < pkPos) {
+                continue;
+            }
             if (slot.getPKPosition() != pkPos) {
-                if (!forcedSkipScan) {
-                    stopExtracting = true;
-                } else {
-                    useSkipScan |= !stopExtracting && !forcedRangeScan && forcedSkipScan;
-                }
-                for (int i=pkPos; i < slot.getPKPosition(); i++) {
+                hasUnboundedRange = hasRangeKey = true;
+                for (int i= pkPos; i < slot.getPKPosition(); i++) {
                     cnf.add(Collections.singletonList(KeyRange.EVERYTHING_RANGE));
                 }
             }
@@ -224,8 +222,10 @@ public class WhereOptimizer {
             SortOrder prevSortOrder = null;
             int slotOffset = 0;
             int clipLeftSpan = 0;
-            
+            boolean onlySplittedRVCLeftValid = false;
+            boolean stopExtracting = false;
             // Iterate through all spans of this slot
+            boolean areAllSingleKey = KeyRange.areAllSingleKey(keyRanges);
             while (true) {
                 SortOrder sortOrder =
                         schema.getField(slot.getPKPosition() + slotOffset).getSortOrder();
@@ -259,52 +259,76 @@ public class WhereOptimizer {
                     keyRanges =
                             clipRight(schema, slot.getPKPosition() + slotOffset - 1, keyRanges,
                                     leftRanges, ptr);
+                    leftRanges = KeyRange.coalesce(leftRanges);
+                    keyRanges = KeyRange.coalesce(keyRanges);
                     if (prevSortOrder == SortOrder.DESC) {
                         leftRanges = invertKeyRanges(leftRanges);
                     }
                     slotSpanArray[cnf.size()] = clipLeftSpan-1;
                     cnf.add(leftRanges);
+                    pkPos = slot.getPKPosition() + slotOffset;
                     clipLeftSpan = 0;
                     prevSortOrder = sortOrder;
                     // since we have to clip the portion with the same sort order, we can no longer
                     // extract the nodes from the where clause
                     // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query
                     //   WHERE (A,B) < ('a','b')
-                    // the range (* - a\xFFb) is converted to (~a-*)(*-b)
+                    // the range (* - a\xFFb) is converted to [~a-*)(*-b)
                     // so we still need to filter on A,B
                     stopExtracting = true;
+                    if(!areAllSingleKey) {
+                        //for cnf, we only add [~a-*) to it, (*-b) is skipped.
+                        //but for all single key, we can continue.
+                        onlySplittedRVCLeftValid = true;
+                        break;
+                    }
                 }
                 clipLeftSpan++;
                 slotOffset++;
                 if (slotOffset >= slot.getPKSpan()) {
                     break;
                 }
-                if (iterator.hasNext()) {
-                    iterator.next();
+            }
+
+            if(onlySplittedRVCLeftValid) {
+                keyRanges = cnf.get(cnf.size()-1);
+            } else {
+                if (schema.getField(
+                       slot.getPKPosition() + slotOffset - 1).getSortOrder() == SortOrder.DESC) {
+                    keyRanges = invertKeyRanges(keyRanges);
                 }
+                pkPos = slot.getPKPosition() + slotOffset;
+                slotSpanArray[cnf.size()] = clipLeftSpan-1;
+                cnf.add(keyRanges);
             }
-            if (schema.getField(slot.getPKPosition() + slotOffset - 1).getSortOrder() == SortOrder.DESC) {
-                keyRanges = invertKeyRanges(keyRanges);
-            }
-            pkPos = slot.getPKPosition() + slot.getPKSpan();
-            
-            slotSpanArray[cnf.size()] = clipLeftSpan-1;
-            cnf.add(keyRanges);
-            
             // TODO: when stats are available, we may want to use a skip scan if the
             // cardinality of this slot is low.
-            /*
-             *  Stop extracting nodes once we encounter:
-             *  1) An unbound range unless we're forcing a skip scan and haven't encountered
-             *     a multi-column span. Even if we're trying to force a skip scan, we can't
-             *     execute it over a multi-column span.
-             *  2) A non range key as we can extract the first one, but further ones need
-             *     to be evaluated in a filter.
-             *  3) As above a non-contiguous range due to sort order
+            /**
+             * We use skip scan when:
+             * 1.previous slot has unbound and force skip scan and
+             * 2.not force Range Scan and
+             * 3.previous rowkey slot has range or current rowkey slot have multiple ranges.
+             *
+             * Once we can not use skip scan and we have a non-contiguous range, we can not remove
+             * the whereExpressions of current rowkey slot from the current {@link SelectStatement#where},
+             * because the {@link Scan#startRow} and {@link Scan#endRow} could not exactly represent
+             * currentRowKeySlotRanges.
+             * So we should stop extracting whereExpressions of current rowkey slot once we encounter:
+             * 1. we now use range scan and
+             * 2. previous rowkey slot has unbound or
+             *    previous rowkey slot has range or
+             *    current rowkey slot have multiple ranges.
              */
-            stopExtracting |= (hasUnboundedRange && !forcedSkipScan) || (hasRangeKey && forcedRangeScan);
-            useSkipScan |= !stopExtracting && !forcedRangeScan && (keyRanges.size() > 1 || hasRangeKey);
-            
+            hasMultiRanges |= keyRanges.size() > 1;
+            useSkipScan |=
+                    (!hasUnboundedRange || forcedSkipScan) &&
+                    !forcedRangeScan &&
+                    (hasRangeKey || hasMultiRanges);
+
+            stopExtracting |=
+                     !useSkipScan &&
+                     (hasUnboundedRange || hasRangeKey || hasMultiRanges);
+
             for (int i = 0; (!hasUnboundedRange || !hasRangeKey) && i < keyRanges.size(); i++) {
                 KeyRange range  = keyRanges.get(i);
                 if (range.isUnbound()) {
@@ -313,12 +337,6 @@ public class WhereOptimizer {
                     hasRangeKey = true;
                 }
             }
-            
-            hasMultiRanges |= keyRanges.size() > 1;
-            
-            // We cannot extract if we have multiple ranges and are forcing a range scan.
-            stopExtracting |= forcedRangeScan && hasMultiRanges;
-            
             // Will be null in cases for which only part of the expression was factored out here
             // to set the start/end key. An example would be <column> LIKE 'foo%bar' where we can
             // set the start key to 'foo' but still need to match the regex at filter time.
