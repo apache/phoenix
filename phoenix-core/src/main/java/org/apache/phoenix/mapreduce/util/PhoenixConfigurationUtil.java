@@ -42,7 +42,6 @@ import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
-import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -159,6 +158,8 @@ public final class PhoenixConfigurationUtil {
     public static final String RESTORE_DIR_KEY = "phoenix.tableSnapshot.restore.dir";
 
     public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
+    private static final String INDEX_TOOL_END_TIME = "phoenix.mr.index.endtime";
+    private static final String INDEX_TOOL_START_TIME = "phoenix.mr.index.starttime";
 
     public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
 
@@ -274,6 +275,28 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(restoreDir);
         configuration.set(RESTORE_DIR_KEY, restoreDir);
+    }
+
+    public static void setIndexToolStartTime(Configuration configuration, Long startTime) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(startTime);
+        configuration.set(INDEX_TOOL_START_TIME, Long.toString(startTime));
+    }
+
+    public static void setCurrentScnValue(Configuration configuration, Long scn) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(scn);
+        configuration.set(CURRENT_SCN_VALUE, Long.toString(scn));
+    }
+
+    public static String getIndexToolStartTime(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_START_TIME);
+    }
+
+    public static String getCurrentScnValue(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(CURRENT_SCN_VALUE);
     }
     
     public static List<String> getUpsertColumnNames(final Configuration configuration) {
