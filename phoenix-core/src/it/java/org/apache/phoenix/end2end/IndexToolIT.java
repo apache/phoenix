@@ -962,8 +962,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
-                                            String dataTable, String indxTable, String tenantId,
-                                            IndexTool.IndexVerifyType verifyType) {
+                            String dataTable, String indxTable, String tenantId,
+                            IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -988,7 +988,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add("-tenant");
             args.add(tenantId);
         }
-
+        if(startTime != null) {
+            args.add("-st");
+            args.add(String.valueOf(startTime));
+        }
+        if(endTime != null) {
+            args.add("-et");
+            args.add(String.valueOf(endTime));
+        }
         args.add("-op");
         args.add("/tmp/" + UUID.randomUUID().toString());
         return args;
@@ -996,7 +1003,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     public static String[] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
                                         String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType) {
-        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable, tenantId, verifyType);
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
+                tenantId, verifyType, null, null);
+        return args.toArray(new String[0]);
+    }
+
+    public static String [] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
+            String dataTable, String indexTable, String tenantId,
+            IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime) {
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
+                tenantId, verifyType, startTime, endTime);
         return args.toArray(new String[0]);
     }
 

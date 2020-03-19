@@ -39,8 +39,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
+
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getCurrentScnValue;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolStartTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
@@ -60,20 +64,22 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     }
 
     @Override
-    protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+    protected QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {
         Preconditions.checkNotNull(context);
         if (queryPlan != null) {
             return queryPlan;
         }
         final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
-        final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
+        final String currentScnValue = getCurrentScnValue(configuration);
         final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
+        //until PHOENIX-5783 is fixed; we'll continue with startTime = 0
+        final String startTimeValue = null;
         final Properties overridingProps = new Properties();
-        if(txnScnValue==null && currentScnValue!=null) {
+        if (txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
         }
-        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
+        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null) {
             overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         String dataTableFullName = getIndexToolDataTableName(configuration);
@@ -82,8 +88,9 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps)) {
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             Long scn = (currentScnValue != null) ? Long.valueOf(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
-            configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE,
-                    Long.toString(scn));
+            setCurrentScnValue(configuration, scn);
+
+            Long startTime = (startTimeValue == null) ? 0L : Long.valueOf(startTimeValue);
             PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =
                     new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
@@ -91,7 +98,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             Scan scan = plan.getContext().getScan();
 
             try {
-                scan.setTimeRange(0, scn);
+                scan.setTimeRange(startTime, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE,
                         PhoenixConfigurationUtil.getIndexVerifyType(configuration).toBytes());
