@@ -28,8 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Pair;
@@ -74,7 +72,6 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -176,10 +173,8 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        List<TableRef> scnTooOldTableRefs = new ArrayList<TableRef>();
         ColumnResolver resolver =
             FromCompiler.getResolverForQuery(select, conn);
-        List<TableRef> involvedTables = resolver.getTables();
         int maxLookBackAge = conn.getQueryServices().
             getConfiguration().getInt(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             ScanInfoUtil.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE);
@@ -189,31 +184,6 @@ public class QueryCompiler {
                 SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE)
                 .build().buildException();
         }
-        for (TableRef tableRef : involvedTables) {
-            byte[] tableQualifier = tableRef.getTable().getPhysicalName().getBytes();
-            //we can have a tableRef with an empty table, such as with sequences
-            if (tableQualifier.length > 0) {
-                HTableDescriptor td = conn.getQueryServices().getTableDescriptor(tableQualifier);
-                HColumnDescriptor[] cds = td.getColumnFamilies();
-                now = EnvironmentEdgeManager.currentTimeMillis();
-                if (cds.length > 0){
-                    //Phoenix only allows a single table level TTL, so any CF will do
-                    if (now - cds[0].getTimeToLive() * 1000L > scn) {
-                        scnTooOldTableRefs.add(tableRef);
-                    }
-                }
-            }
-        }
-        if (scnTooOldTableRefs.size() > 0) {
-            TableRef tableRef = scnTooOldTableRefs.get(0);
-            throw new SQLExceptionInfo.Builder(
-                SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_TTL)
-                .setSchemaName(tableRef.getTable().getSchemaName().getString())
-                .setTableName(tableRef.getTable().getTableName().getString())
-                .build()
-                .buildException();
-        }
-
     }
 
     public QueryPlan compileUnionAll(SelectStatement select) throws SQLException { 
