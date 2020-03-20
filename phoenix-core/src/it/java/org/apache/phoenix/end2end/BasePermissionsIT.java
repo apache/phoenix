@@ -1218,4 +1218,79 @@ public abstract class BasePermissionsIT extends BaseTest {
             revokeAll();
         }
     }
+
+    @Test
+    public void testUpsertIntoImmutableTable() throws Throwable {
+        final String schema = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String phoenixTableName = schema + "." + tableName;
+        grantSystemTableAccess();
+        try {
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser1);
+                        verifyAllowed(onlyCreateImmutableTable(phoenixTableName), superUser1);
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception) e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            if (isNamespaceMapped) {
+                grantPermissions(unprivilegedUser.getShortName(), schema, Permission.Action.WRITE,
+                    Permission.Action.READ, Permission.Action.EXEC);
+            } else {
+                grantPermissions(unprivilegedUser.getShortName(),
+                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.WRITE,
+                    Permission.Action.READ, Permission.Action.EXEC);
+            }
+            verifyAllowed(upsertRowsIntoTable(phoenixTableName), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName), unprivilegedUser);
+        } finally {
+            revokeAll();
+        }
+    }
+
+    AccessTestAction onlyCreateImmutableTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+                    assertFalse(stmt.execute("CREATE IMMUTABLE TABLE " + tableName
+                            + "(pk INTEGER not null primary key, data VARCHAR, val integer)"));
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction upsertRowsIntoTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection()) {
+                    try (PreparedStatement pstmt =
+                            conn.prepareStatement(
+                                "UPSERT INTO " + tableName + " values(?, ?, ?)")) {
+                        for (int i = 0; i < NUM_RECORDS; i++) {
+                            pstmt.setInt(1, i);
+                            pstmt.setString(2, Integer.toString(i));
+                            pstmt.setInt(3, i);
+                            assertEquals(1, pstmt.executeUpdate());
+                        }
+                    }
+                    conn.commit();
+                }
+                return null;
+            }
+        };
+    }
+
 }
