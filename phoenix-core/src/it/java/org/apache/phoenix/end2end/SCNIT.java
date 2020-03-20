@@ -27,11 +27,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
@@ -100,34 +96,6 @@ public class SCNIT extends ParallelStatsDisabledIT {
 			assertFalse(rs.next());
 			rs.close();
 		}
-	}
-
-	@Test
-	public void testTooLowSCNWithTTL() throws Exception {
-		//if scn is for an older time than a table's ttl, it should throw a SQLException
-		int ttl = 2;
-		String fullTableName = createTableWithTTL(ttl);
-		int sleepTime = (ttl + 1)* 1000;
-		//need to sleep long enough for the SCN to still find the syscat row for the table
-		Thread.sleep(sleepTime);
-		Properties props = new Properties();
-		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-			Long.toString(EnvironmentEdgeManager.currentTime() - sleepTime));
-		try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
-			connscn.createStatement().
-				executeQuery(String.format("select * from %s", fullTableName));
-		} catch (SQLException se){
-			SQLExceptionCode code = SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_TTL;
-			assertSqlExceptionCode(code, se);
-			return;
-		}
-		Assert.fail("We should have thrown an exception for the too-early SCN");
-	}
-
-	private void assertSqlExceptionCode(SQLExceptionCode code, SQLException se) {
-		assertEquals(code.getErrorCode(), se.getErrorCode());
-		assertTrue("Wrong error message", se.getMessage().contains(code.getMessage()));
-		assertEquals(code.getSQLState(), se.getSQLState());
 	}
 
 	private String createTableWithTTL(int ttl) throws SQLException, InterruptedException {
