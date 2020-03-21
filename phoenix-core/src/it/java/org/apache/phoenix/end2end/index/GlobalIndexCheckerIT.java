@@ -37,6 +37,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -139,6 +140,31 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(1, rs.getInt(1));
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexTableName);
+        }
+    }
+
+    @Test
+    public void testDeleteNonExistingRow() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            conn.createStatement().executeUpdate(dml);
+            conn.commit();
+            // Attempt to delete a row that does not exist
+            conn.createStatement().executeUpdate(dml);
+            conn.commit();
+            // Make sure this delete attempt did not make the index and data table inconsistent
+            IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null,
+                    0, IndexTool.IndexVerifyType.ONLY);
         }
     }
 
