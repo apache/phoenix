@@ -15,11 +15,13 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
@@ -205,6 +207,34 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         assertColumnNamesEqual(PhoenixRuntime.getTableNoCache(conn, childView.toUpperCase()), "A", "B", "D");
 
     }
+    
+    @Test
+    public void testUpdateCacheWithAlteringColumns() throws Exception {
+        String tableName = generateUniqueName();
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(
+                PhoenixConnection.class)) {
+            String ddlFormat =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + "  (" + " PK2 INTEGER NOT NULL, "
+                            + "V1 INTEGER, V2 INTEGER "
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+                conn.createStatement().execute(ddlFormat);
+                conn.createStatement().execute("ALTER TABLE " + tableName + " ADD V3 integer");
+                PTable table = PhoenixRuntime.getTable(conn, tableName.toUpperCase());
+                assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
+                
+                // Set the SCN to the timestamp when V3 column is added
+                Properties props = PropertiesUtil.deepCopy(conn.getClientInfo());
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(table.getTimeStamp()));
+                
+                try (PhoenixConnection metaConnection = new PhoenixConnection(conn, 
+                        conn.getQueryServices(), props)) {
+                    // Force update the cache and check if V3 is present in the returned table result
+                    table = PhoenixRuntime.getTableNoCache(metaConnection, tableName.toUpperCase());
+                    assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
+                }                              
+        }      
+    }
+
 
     @Test
     public void testDroppingAColumn() throws Exception {
