@@ -98,6 +98,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private final boolean mutable;
     private final boolean upgrade;
     private final boolean isNamespaceEnabled;
+    private final boolean rebuild;
 
     private StringBuilder optionsBuilder;
     private String tableDDLOptions;
@@ -136,7 +137,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         admin = queryServices.getAdmin();
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
                 null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
-                true, indexToolMock);
+                true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
         if (!mutable) {
@@ -299,20 +300,22 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
     }
 
-    @Parameters(name ="IndexUpgradeToolIT_mutable={0},upgrade={1},isNamespaceEnabled={2}")
+    @Parameters(name ="IndexUpgradeToolIT_mutable={0},upgrade={1},isNamespaceEnabled={2}, rebuild={3}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-            {false, false, true},
-            {true, false, false},
-            {false, true, false},
-            {true, true, true}
+            {false, false, true, false},
+            {true, false, false, true},
+            {false, true, false, false},
+            {true, true, true, true}
         });
     }
 
-    public ParameterizedIndexUpgradeToolIT(boolean mutable, boolean upgrade, boolean isNamespaceEnabled) {
+    public ParameterizedIndexUpgradeToolIT(boolean mutable, boolean upgrade,
+                                           boolean isNamespaceEnabled, boolean rebuild) {
         this.mutable = mutable;
         this.upgrade = upgrade;
         this.isNamespaceEnabled = isNamespaceEnabled;
+        this.rebuild = rebuild;
     }
 
     @Test
@@ -332,7 +335,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             Assert.assertEquals("Index upgrade tool waited for client cache to expire "
                     + "for mutable tables", false, iut.getIsWaitComplete());
         }
-        if(upgrade) {
+        if(upgrade && rebuild) {
             //verifying if index tool was started
             Mockito.verify(indexToolMock,
                     times(11)) // for every index/view-index except index on transaction table
