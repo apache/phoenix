@@ -498,7 +498,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
      */
     private void applyPendingDeleteMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                              BatchMutateContext context) throws IOException {
-        for (Integer i = 0; i < miniBatchOp.size(); i++) {
+        for (int i = 0; i < miniBatchOp.size(); i++) {
             if (miniBatchOp.getOperationStatus(i) == IGNORE) {
                 continue;
             }
@@ -517,6 +517,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
             }
             Put nextDataRowState = dataRowState.getSecond();
             if (nextDataRowState == null) {
+                if (dataRowState.getFirst() == null) {
+                    // This is a delete row mutation on a non-existing row. There is no need to apply this mutation
+                    // on the data table
+                    miniBatchOp.setOperationStatus(i, NOWRITE);
+                }
                 continue;
             }
             for (List<Cell> cells : m.getFamilyCellMap().values()) {
