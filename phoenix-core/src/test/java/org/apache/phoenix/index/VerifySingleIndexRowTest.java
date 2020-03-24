@@ -41,6 +41,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -542,7 +543,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         case INVALID_CELL_VALUE:
             if (CellUtil.matchingQualifier(c, EMPTY_COLUMN_BYTES)) {
                 newCell = getCellWithPut(c);
-                emptyCell = getUnverifiedEmptyCell(c);
+                emptyCell = getVerifiedEmptyCell(c);
                 newCellList.add(newCell);
                 newCellList.add(emptyCell);
             } else {
@@ -562,24 +563,24 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
             break;
         case INVALID_EXTRA_CELL:
             newCell = getCellWithPut(c);
-            emptyCell = getUnverifiedEmptyCell(c);
+            emptyCell = getVerifiedEmptyCell(c);
             newCellList.add(newCell);
             newCellList.add(emptyCell);
             newCellList.add(c);
         }
     }
 
-    private Cell getUnverifiedEmptyCell(Cell c) {
+    private Cell getVerifiedEmptyCell(Cell c) {
         return CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
                 indexMaintainer.getEmptyKeyValueQualifier(),
                 EnvironmentEdgeManager.currentTimeMillis(),
-                KeyValue.Type.Put.getCode(), UNVERIFIED_BYTES);
+                KeyValue.Type.Put.getCode(), VERIFIED_BYTES);
     }
 
     private Cell getCellWithPut(Cell c) {
         return CellUtil.createCell(CellUtil.cloneRow(c),
                 CellUtil.cloneFamily(c), Bytes.toBytes(INCLUDED_COLUMN),
-                EnvironmentEdgeManager.currentTimeMillis(), KeyValue.Type.Put.getCode(),
+                c.getTimestamp(), KeyValue.Type.Put.getCode(),
                 Bytes.toBytes("zxcv"));
     }
 
