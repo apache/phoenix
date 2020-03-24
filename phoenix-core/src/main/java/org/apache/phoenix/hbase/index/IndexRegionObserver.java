@@ -771,6 +771,13 @@ public class IndexRegionObserver extends BaseRegionObserver {
         return (PhoenixIndexMetaData)indexMetaData;
     }
 
+    /**
+     * IndexMaintainer.getIndexedColumns() returns the data column references for indexed columns. The data columns are
+     * grouped into three classes, pk columns (data table pk columns), the indexed columns (the columns for which
+     * we want to have indexing; they form the prefix for the primary key for the index table (after salt and tenant id))
+     * and covered columns. The purpose of this method is to find out if all the indexed columns are included in the
+     * pending data table mutation pointed by multiMutation.
+     */
     private boolean hasAllIndexedColumns(IndexMaintainer indexMaintainer, MultiMutation multiMutation) {
         Map<byte[], List<Cell>> familyMap = multiMutation.getFamilyCellMap();
         for (ColumnReference columnReference : indexMaintainer.getIndexedColumns()) {
@@ -781,8 +788,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
             }
             boolean has = false;
             for (Cell cell : cellList) {
-                if (Bytes.compareTo(CellUtil.cloneFamily(cell), family) == 0 &&
-                        Bytes.compareTo(CellUtil.cloneQualifier(cell), columnReference.getQualifier() ) == 0) {
+                if (CellUtil.matchingColumn(cell, family, columnReference.getQualifier())) {
                     has = true;
                     break;
                 }
@@ -794,8 +800,8 @@ public class IndexRegionObserver extends BaseRegionObserver {
         return true;
     }
 
-    private void preparePostIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
-                                           BatchMutateContext context, long now, PhoenixIndexMetaData indexMetaData)
+    private void preparePostIndexMutations(BatchMutateContext context, long now, PhoenixIndexMetaData indexMetaData,
+                                           String tableName)
             throws Throwable {
         context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
@@ -836,8 +842,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
                         }
                         context.rowLocks.clear();
                         throw new IOException("One of the concurrent mutations does not have all indexed columns. " +
-                                "The batch needs to be retried " +
-                                c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                                "The batch needs to be retried " + tableName);
                     }
                 }
             }
@@ -948,7 +953,8 @@ public class IndexRegionObserver extends BaseRegionObserver {
         }
         context.rowLocks.clear();
         context.rowLocks = rowLocks;
-        preparePostIndexMutations(c, context, now, indexMetaData);
+        preparePostIndexMutations(context, now, indexMetaData,
+                c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
         }

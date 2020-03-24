@@ -71,8 +71,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                 0, IndexTool.IndexVerifyType.AFTER);
         // Truncate, rebuild and verify the index table
         PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
-        TableName physicalTableName =
-                org.apache.hadoop.hbase.TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
+        TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         try (Admin admin = pConn.getQueryServices().getAdmin()) {
             admin.disableTable(physicalTableName);
