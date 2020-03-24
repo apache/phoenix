@@ -98,16 +98,14 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private static final Option LOG_FILE_OPTION = new Option("lf", "logfile",
             true,
             "[Optional] Log file path where the logs are written");
-    private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr",
-            "index-sync-rebuild",
+    private static final Option INDEX_REBUILD_OPTION = new Option("rb",
+            "index-rebuild",
             false,
-            "[Optional] Whether or not synchronously rebuild the indexes; "
-                    + "default rebuild asynchronous");
-
-    private static final Option INDEX_VERIFY_OPTION = new Option("v",
-            "verify",
+            "[Optional] Rebuild the indexes");
+    private static final Option INDEX_TOOL_OPTION = new Option("tool",
+            "index-tool",
             true,
-            "[Optional] mode to run indexTool with verify options");
+            "[Optional] Options to pass to indexTool when rebuilding indexes");
 
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
@@ -119,13 +117,13 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private HashMap<String, String> prop = new  HashMap<>();
     private HashMap<String, String> emptyProp = new HashMap<>();
 
-    private boolean dryRun, upgrade, syncRebuild;
+    private boolean dryRun, upgrade, rebuild;
     private String operation;
     private String inputTables;
     private String logFile;
     private String inputFile;
     private boolean isWaitComplete = false;
-    private String verify;
+    private String indexToolOpts;
 
     private boolean test = false;
 
@@ -149,10 +147,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     public boolean getIsWaitComplete() { return this.isWaitComplete; }
 
-
     public boolean getDryRun() { return this.dryRun; }
-
-    public String getVerify() { return this.verify; }
 
     public String getInputTables() {
         return this.inputTables;
@@ -166,14 +161,19 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return this.operation;
     }
 
+    public boolean getIsRebuild() { return this.rebuild; }
+
+    public String getIndexToolOpts() { return this.indexToolOpts; }
+
     public IndexUpgradeTool(String mode, String tables, String inputFile,
-            String outputFile, boolean dryRun, IndexTool indexTool) {
+            String outputFile, boolean dryRun, IndexTool indexTool, boolean rebuild) {
         this.operation = mode;
         this.inputTables = tables;
         this.inputFile = inputFile;
         this.logFile = outputFile;
         this.dryRun = dryRun;
         this.indexingTool = indexTool;
+        this.rebuild = rebuild;
     }
 
     public IndexUpgradeTool () { }
@@ -235,6 +235,11 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     +TABLE_OPTION.getLongOpt() + " and " + TABLE_CSV_FILE_OPTION.getLongOpt()
                     + "; specify only one.");
         }
+        if ((cmdLine.hasOption(INDEX_TOOL_OPTION.getOpt()))
+                && !cmdLine.hasOption(INDEX_REBUILD_OPTION.getOpt())) {
+            throw new IllegalStateException("Index tool options should be passed in with "
+                    + INDEX_REBUILD_OPTION.getLongOpt());
+        }
         return cmdLine;
     }
 
@@ -261,10 +266,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         LOG_FILE_OPTION.setOptionalArg(true);
         options.addOption(LOG_FILE_OPTION);
         options.addOption(HELP_OPTION);
-        INDEX_SYNC_REBUILD_OPTION.setOptionalArg(true);
-        options.addOption(INDEX_SYNC_REBUILD_OPTION);
-        INDEX_VERIFY_OPTION.setOptionalArg(true);
-        options.addOption(INDEX_VERIFY_OPTION);
+        INDEX_REBUILD_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_REBUILD_OPTION);
+        INDEX_TOOL_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_TOOL_OPTION);
         return options;
     }
 
@@ -275,8 +280,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
         logFile = cmdLine.getOptionValue(LOG_FILE_OPTION.getOpt());
         inputFile = cmdLine.getOptionValue(TABLE_CSV_FILE_OPTION.getOpt());
         dryRun = cmdLine.hasOption(DRY_RUN_OPTION.getOpt());
-        syncRebuild = cmdLine.hasOption(INDEX_SYNC_REBUILD_OPTION.getOpt());
-        verify = cmdLine.getOptionValue(INDEX_VERIFY_OPTION.getOpt());
+        rebuild = cmdLine.hasOption(INDEX_REBUILD_OPTION.getOpt());
+        indexToolOpts = cmdLine.getOptionValue(INDEX_TOOL_OPTION.getOpt());
     }
 
     @VisibleForTesting
@@ -577,6 +582,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         if (!upgrade) {
             return;
         }
+        if (!rebuild) {
+            return;
+        }
+
         for (String table: tableList) {
             rebuildIndexes(conn, conf, table);
         }
@@ -707,12 +716,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
             list.add("-tenant");
             list.add(tenantId);
         }
-        if (syncRebuild) {
-            list.add("-runfg");
-        }
-        if(!Strings.isNullOrEmpty(verify)) {
-            list.add("-v");
-            list.add(verify);
+
+        if(!Strings.isNullOrEmpty(indexToolOpts)) {
+            String[] options = indexToolOpts.split("\\s+");
+            for (String opt : options) {
+                list.add(opt);
+            }
         }
         return list.toArray(new String[list.size()]);
     }

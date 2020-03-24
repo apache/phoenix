@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -55,13 +56,10 @@ public class IndexUpgradeToolTest {
 
     public IndexUpgradeToolTest(boolean upgrade) {
         this.upgrade = upgrade;
+        this.outputFile = "/tmp/index_upgrade_" + UUID.randomUUID().toString();
     }
 
-    @Before
-    public void setup() {
-        outputFile = "/tmp/index_upgrade_" + UUID.randomUUID().toString();
-        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
-                INPUT_LIST, "-lf", outputFile, "-d", "-v", DUMMY_VERIFY_VALUE};
+    private void setup(String[] args) {
         indexUpgradeTool = new IndexUpgradeTool();
         CommandLine cmd = indexUpgradeTool.parseOptions(args);
         indexUpgradeTool.initializeTool(cmd);
@@ -69,26 +67,86 @@ public class IndexUpgradeToolTest {
 
     @Test
     public void testCommandLineParsing() {
+        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
+                INPUT_LIST, "-lf", outputFile, "-d"};
+        setup(args);
         Assert.assertEquals(indexUpgradeTool.getDryRun(),true);
         Assert.assertEquals(indexUpgradeTool.getInputTables(), INPUT_LIST);
         Assert.assertEquals(indexUpgradeTool.getOperation(), upgrade ? UPGRADE_OP : ROLLBACK_OP);
         Assert.assertEquals(indexUpgradeTool.getLogFile(), outputFile);
+        // verify index rebuild is disabled by default
+        Assert.assertEquals(false, indexUpgradeTool.getIsRebuild());
+        Assert.assertNull(indexUpgradeTool.getIndexToolOpts());
     }
 
     @Test
-    public void testIfVerifyOptionIsPassedToTool() {
+    public void testRebuildOptionParsing() {
+        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
+                INPUT_LIST, "-rb"};
+        setup(args);
+        Assert.assertEquals(true, indexUpgradeTool.getIsRebuild());
+        Assert.assertNull(indexUpgradeTool.getIndexToolOpts());
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIndexToolOptionsNoRebuild() {
+        String indexToolOpts = "-v " + DUMMY_VERIFY_VALUE;
+        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb", INPUT_LIST,
+                "-tool", indexToolOpts};
+        setup(args);
+    }
+
+    @Test
+    public void testIfOptionsArePassedToIndexTool() {
         if (!upgrade) {
             return;
         }
-        Assert.assertEquals("value passed with verify option does not match with provided value",
-                DUMMY_VERIFY_VALUE, indexUpgradeTool.getVerify());
+        String [] indexToolOpts = {"-v", DUMMY_VERIFY_VALUE, "-runfg", "-st", "100"};
+        String indexToolarg = String.join(" ", indexToolOpts);
+        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
+                INPUT_LIST, "-lf", outputFile, "-d", "-rb", "-tool", indexToolarg };
+        setup(args);
+
+        Assert.assertEquals("value passed to index tool option does not match with provided value",
+                indexToolarg, indexUpgradeTool.getIndexToolOpts());
         String [] values = indexUpgradeTool.getIndexToolArgValues(DUMMY_STRING_VALUE,
                 DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
         List<String> argList =  Arrays.asList(values);
-        Assert.assertTrue(argList.contains(DUMMY_VERIFY_VALUE));
         Assert.assertTrue(argList.contains("-v"));
+        Assert.assertTrue(argList.contains(DUMMY_VERIFY_VALUE));
         Assert.assertEquals("verify option and value are not passed consecutively", 1,
                 argList.indexOf(DUMMY_VERIFY_VALUE) - argList.indexOf("-v"));
+        Assert.assertTrue(argList.contains("-runfg"));
+        Assert.assertTrue(argList.contains("-st"));
+
+        // ensure that index tool can parse the options
+        IndexTool it = new IndexTool();
+        it.parseOptions(values);
+    }
+
+    @Test
+    public void testMalformedSpacingOptionsArePassedToIndexTool() {
+        if (!upgrade) {
+            return;
+        }
+        String [] indexToolOpts = {"-v"+DUMMY_VERIFY_VALUE, "     -runfg", " -st  ", "100  "};
+        String indexToolarg = String.join(" ", indexToolOpts);
+        String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
+                INPUT_LIST, "-rb", "-tool", indexToolarg };
+        setup(args);
+
+        Assert.assertEquals("value passed to index tool option does not match with provided value",
+                indexToolarg, indexUpgradeTool.getIndexToolOpts());
+        String [] values = indexUpgradeTool.getIndexToolArgValues(DUMMY_STRING_VALUE,
+                DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
+        List<String> argList =  Arrays.asList(values);
+        Assert.assertTrue(argList.contains("-v" + DUMMY_VERIFY_VALUE));
+        Assert.assertTrue(argList.contains("-runfg"));
+        Assert.assertTrue(argList.contains("-st"));
+
+        // ensure that index tool can parse the options and raises no exceptions
+        IndexTool it = new IndexTool();
+        it.parseOptions(values);
     }
 
     @Parameters(name ="IndexUpgradeToolTest_mutable={1}")
