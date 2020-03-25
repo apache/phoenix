@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -31,15 +32,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-// RVC Based Offset - Tests
 public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     private static final String SIMPLE_DDL = "CREATE TABLE %s (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
@@ -361,7 +362,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test RVC Offset where clause
     @Test
     public void testWhereClauseRVCOffsetLookup() throws SQLException {
-       //Offset should not overcome the where clause
+        //Offset should not overcome the where clause
         String sql = String.format("SELECT * FROM %s WHERE (k1,k2,k3)=(3,3,3) LIMIT 2 OFFSET (%s)=(%s)",DATA_TABLE_NAME,DATA_ROW_KEY,GOOD_DATA_ROW_KEY_VALUE);
         try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
@@ -940,4 +941,74 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
             assertTrue(explainStringBuilder.toString().contains("With RVC Offset"));
         }
     }
+
+    @Test public void testGlobalIndexViewAccess() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + "(\n"
+                        + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
+                        + "    PARENT_KEY_PREFIX CHAR(3) NOT NULL,\n"
+                        + "    PARENT_ID CHAR(15) NOT NULL,\n"
+                        + "    CREATED_DATE DATE NOT NULL,\n"
+                        + "    DATA VARCHAR   \n"
+                        + "    CONSTRAINT PK PRIMARY KEY \n"
+                        + "    (\n"
+                        + "        ORGANIZATION_ID, \n"
+                        + "        PARENT_KEY_PREFIX,\n"
+                        + "        PARENT_ID,\n"
+                        + "        CREATED_DATE\n"
+                        + "    )\n"
+                        + ") MULTI_TENANT=true";
+
+        //Index reorders the pk only
+        String indexSyncDDL = "CREATE INDEX IF NOT EXISTS " + indexName + "\n"
+                        + "ON " + tableName +" (PARENT_KEY_PREFIX, CREATED_DATE, PARENT_ID)\n"
+                        + "INCLUDE (DATA)";
+
+        String viewDDL = "CREATE VIEW IF NOT EXISTS " + viewName + "\n"
+                + "AS SELECT * FROM " + tableName;
+        try (Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+            statement.execute(indexSyncDDL);
+            conn.commit();
+        }
+
+        String tenantId2 = "tenant2";
+
+        //tenant connection
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
+
+        try (Connection tenantConnection = DriverManager.getConnection(getUrl(), props)) {
+            try (Statement statement = tenantConnection.createStatement()) {
+                statement.execute(viewDDL);
+            }
+            String baseQuery = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA\n"
+                            + "FROM " + viewName + " LIMIT 2\n";
+
+            try (PreparedStatement statement = tenantConnection.prepareStatement(baseQuery)) {
+                QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
+                assertEquals(PTableType.INDEX, plan.getTableRef().getTable().getType());
+            }
+
+            String query = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA\n"
+                            + "FROM " + viewName + "\n"
+                            + "LIMIT 2\n"
+                            + "OFFSET (PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID) = (?,?,?)\n";
+
+            try (PreparedStatement statement = tenantConnection.prepareStatement(query)) {
+                statement.setString(1, "a");
+                statement.setDate(2, new Date(0));
+                statement.setString(3, "b");
+
+                ResultSet rs = statement.executeQuery(query);
+
+                QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
+                assertEquals(PTableType.INDEX, plan.getTableRef().getTable().getType());
+            }
+        }
+    }
+
 }

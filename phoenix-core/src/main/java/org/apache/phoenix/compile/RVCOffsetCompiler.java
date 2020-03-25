@@ -109,7 +109,7 @@ public class RVCOffsetCompiler {
             userColumnIndex++;
         }
 
-        if (pTable.isMultiTenant() && pTable.getTenantId() != null) {
+        if (pTable.isMultiTenant() && context.getConnection().getTenantId() != null) {
             // the tenantId is one of the pks and will be handled automatically
             numUserColumns--;
             userColumnIndex++;
