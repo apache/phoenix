@@ -23,14 +23,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -61,9 +58,9 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     private static final String GOOD_DATA_ROW_KEY_VALUE = "2, 3, 0";
 
-    private static final String INDEX_NAME =  "INDEX_" + TABLE_NAME;
+    private static final String INDEX_NAME = "INDEX_" + TABLE_NAME;
 
-    private static final String DATA_INDEX_NAME =  "INDEX_" + DATA_TABLE_NAME;
+    private static final String DATA_INDEX_NAME = "INDEX_" + DATA_TABLE_NAME;
 
     private static final String DATA_INDEX_ROW_KEY = "k2, k1, k3";
 
@@ -134,8 +131,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     public void testRVCOffsetNotCoercible() throws SQLException {
         //'ab' is not an integer so this fails
         String failureSql = String.format("SELECT %s FROM %s OFFSET (%s)=('a', 'ab', 2)",
-                TABLE_ROW_KEY,TABLE_NAME,TABLE_ROW_KEY);
-        try (Statement statement = conn.createStatement()){
+                TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY);
+        try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not allow non coercible values to PK in RVC Offset");
         } catch (RowValueConstructorOffsetNotCoercibleException e) {
@@ -147,7 +144,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetNotAllowNonPKOrderBy() throws SQLException {
         String failureSql = String.format("SELECT %s, v1 FROM %s ORDER BY v1 OFFSET (%s)=(%s)",
-                TABLE_ROW_KEY,TABLE_NAME,TABLE_ROW_KEY,GOOD_TABLE_ROW_KEY_VALUE);
+                TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not allow no PK order by with RVC Offset");
@@ -161,8 +158,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetNotAllowPartialPKOrderBy() throws SQLException {
         String failureSql = String.format("SELECT %s FROM %s ORDER BY k1 OFFSET (%s)=(%s)",
-                TABLE_ROW_KEY,TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
-        try (Statement statement = conn.createStatement()){
+                TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
+        try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not allow partial PK order by with RVC Offset");
         } catch (RowValueConstructorOffsetNotCoercibleException e) {
@@ -174,8 +171,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetSamePKDifferentSortOrderBy() throws SQLException {
         String failureSql = String.format("SELECT %s FROM %s ORDER BY t_id DESC, k1, k2 OFFSET (%s)=(%s)",
-                TABLE_ROW_KEY,TABLE_NAME, TABLE_ROW_KEY,GOOD_TABLE_ROW_KEY_VALUE);
-        try (Statement statement = conn.createStatement()){
+                TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
+        try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not allow different PK order by with RVC Offset");
         } catch (RowValueConstructorOffsetNotCoercibleException e) {
@@ -187,11 +184,11 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetNotAllowedInJoins() throws SQLException {
         String tableName2 = "T_" + generateUniqueName();
-        createTestTable(getUrl(), String.format(SIMPLE_DDL,tableName2));
+        createTestTable(getUrl(), String.format(SIMPLE_DDL, tableName2));
 
         String failureSql = String.format("SELECT T1.k1,T2.k2 FROM %s AS T1, %s AS T2 WHERE T1.t_id=T2.t_id OFFSET (T1.t_id, T1.k1, T1.k2)=('a', 1, 2)",
                 TABLE_NAME, tableName2);
-        try (Statement statement = conn.createStatement()){
+        try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have JOIN in RVC Offset");
         } catch (SQLException e) {
@@ -203,8 +200,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetNotAllowedInSubQuery() throws SQLException {
         String failureSql = String.format("SELECT B.k2 FROM (SELECT %s FROM %s OFFSET (%s)=(%s)) AS B",
-                TABLE_ROW_KEY,TABLE_NAME,TABLE_ROW_KEY,GOOD_TABLE_ROW_KEY_VALUE);
-        try (Statement statement = conn.createStatement()){
+                TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
+        try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have subquery with RVC Offset");
         } catch (SQLException e) {
@@ -217,7 +214,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     public void testRVCOffsetNotAllowedOnSubQuery() throws SQLException {
         //Note subselect often gets rewritten to a flat query, in this case offset is still viable, inner orderby should require failure
         String failureSql = String.format("SELECT * FROM (SELECT T_ID,K1,K2 AS COL3 FROM %s ORDER BY K1 LIMIT 2) AS B OFFSET (%s)=(%s)",
-                TABLE_NAME,TABLE_ROW_KEY,GOOD_TABLE_ROW_KEY_VALUE);
+                TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have subquery with RVC Offset");
@@ -230,7 +227,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCOffsetLiteral() throws SQLException {
         // column doesn't work must be literal
-        String failureSql = String.format("SELECT * FROM %s OFFSET (%s)=('a', 1, k2)",TABLE_NAME,TABLE_ROW_KEY);
+        String failureSql = String.format("SELECT * FROM %s OFFSET (%s)=('a', 1, k2)", TABLE_NAME, TABLE_ROW_KEY);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have allowed column in RVC Offset");
@@ -242,7 +239,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test RVC Offset must be in non-aggregate
     @Test
     public void testRVCOffsetAggregate() {
-        String failureSql = String.format("SELECT count(*) FROM %s  OFFSET (%s)=(%s)",TABLE_NAME,TABLE_ROW_KEY,GOOD_TABLE_ROW_KEY_VALUE);
+        String failureSql = String.format("SELECT count(*) FROM %s  OFFSET (%s)=(%s)", TABLE_NAME, TABLE_ROW_KEY, GOOD_TABLE_ROW_KEY_VALUE);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have allowed aggregate with RVC Offset");
@@ -254,7 +251,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test if RVC Offset RHS has less expressions than the pk, then it fails
     @Test
     public void testRVCOffsetPartialKey() throws SQLException {
-        String failureSql = String.format("SELECT * FROM %s  OFFSET (%s)=('a', 1)",TABLE_NAME,TABLE_ROW_KEY);
+        String failureSql = String.format("SELECT * FROM %s  OFFSET (%s)=('a', 1)", TABLE_NAME, TABLE_ROW_KEY);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have allowed partial Key RVC Offset");
@@ -266,7 +263,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test if RVC Offset RHS has more expressions than the pk, then it fails
     @Test
     public void testRVCOffsetMoreThanKey() throws SQLException {
-        String failureSql = String.format("SELECT * FROM %s OFFSET (%s)=('a', 1, 2, 3)",TABLE_NAME,TABLE_ROW_KEY);
+        String failureSql = String.format("SELECT * FROM %s OFFSET (%s)=('a', 1, 2, 3)", TABLE_NAME, TABLE_ROW_KEY);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have allowed more than pk columns in Key RVC Offset");
@@ -278,7 +275,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test RVC Offset doesn't match the rowkey
     @Test
     public void testRVCOffsetLHSDoesNotMatchTable() throws SQLException {
-        String failureSql = String.format("SELECT * FROM %s LIMIT 2 OFFSET (k1,k2)=(%s)",TABLE_NAME,GOOD_TABLE_ROW_KEY_VALUE);
+        String failureSql = String.format("SELECT * FROM %s LIMIT 2 OFFSET (k1,k2)=(%s)", TABLE_NAME, GOOD_TABLE_ROW_KEY_VALUE);
         try (Statement statement = conn.createStatement()) {
             statement.execute(failureSql);
             fail("Should not have allowed the LHS to not be the same as the pk");
@@ -290,8 +287,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     // Test RVC Offset simple case, can we offset into the table and select the correct rows
     @Test
     public void testSimpleRVCOffsetLookup() throws SQLException {
-        String sql = String.format("SELECT * FROM %s LIMIT 3 OFFSET (%s)=(%s)",DATA_TABLE_NAME,DATA_ROW_KEY,GOOD_DATA_ROW_KEY_VALUE);
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        String sql = String.format("SELECT * FROM %s LIMIT 3 OFFSET (%s)=(%s)", DATA_TABLE_NAME, DATA_ROW_KEY, GOOD_DATA_ROW_KEY_VALUE);
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int k1 = rs.getInt(1);
@@ -325,8 +322,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testBindsRVCOffsetLookup() throws SQLException {
-        String sql = String.format("SELECT * FROM %s LIMIT 2 OFFSET (%s)=(?, ?, ?)",DATA_TABLE_NAME,DATA_ROW_KEY);
-        try(PreparedStatement ps = conn.prepareStatement(sql)) {
+        String sql = String.format("SELECT * FROM %s LIMIT 2 OFFSET (%s)=(?, ?, ?)", DATA_TABLE_NAME, DATA_ROW_KEY);
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, 2);
             ps.setInt(2, 3);
             ps.setInt(3, 1);
@@ -357,13 +354,12 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     }
 
 
-
     // Test RVC Offset where clause
     @Test
     public void testWhereClauseRVCOffsetLookup() throws SQLException {
-       //Offset should not overcome the where clause
-        String sql = String.format("SELECT * FROM %s WHERE (k1,k2,k3)=(3,3,3) LIMIT 2 OFFSET (%s)=(%s)",DATA_TABLE_NAME,DATA_ROW_KEY,GOOD_DATA_ROW_KEY_VALUE);
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        //Offset should not overcome the where clause
+        String sql = String.format("SELECT * FROM %s WHERE (k1,k2,k3)=(3,3,3) LIMIT 2 OFFSET (%s)=(%s)", DATA_TABLE_NAME, DATA_ROW_KEY, GOOD_DATA_ROW_KEY_VALUE);
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int k1 = rs.getInt(1);
@@ -382,24 +378,24 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         //Make a salted table
         String saltedTableName = "T_" + generateUniqueName();
 
-        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4",saltedTableName);
+        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4", saltedTableName);
 
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(saltedDDL);
         }
         conn.commit();
 
         //If we attempt to order by the row key we should not fail
         String sql = "SELECT * FROM " + saltedTableName + " ORDER BY K1,K2,K3 LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 1)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             statement.executeQuery(sql);
         }
 
         //If we attempt to order by the not row key we should fail
         sql = "SELECT * FROM " + saltedTableName + " ORDER BY K2,K1,K3 LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 1)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             fail();
-        } catch(RowValueConstructorOffsetNotCoercibleException e) {
+        } catch (RowValueConstructorOffsetNotCoercibleException e) {
             return;
         }
     }
@@ -409,9 +405,9 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         //Make a salted table
         String saltedTableName = "T_" + generateUniqueName();
 
-        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4",saltedTableName);
+        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4", saltedTableName);
 
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(saltedDDL);
             conn.commit();
         }
@@ -436,9 +432,9 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
 
-        String sql = String.format("SELECT * FROM " + saltedTableName + " ORDER BY %s LIMIT 3 OFFSET (%s)=(%s)",DATA_ROW_KEY,DATA_ROW_KEY,GOOD_DATA_ROW_KEY_VALUE);
+        String sql = String.format("SELECT * FROM " + saltedTableName + " ORDER BY %s LIMIT 3 OFFSET (%s)=(%s)", DATA_ROW_KEY, DATA_ROW_KEY, GOOD_DATA_ROW_KEY_VALUE);
 
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int k1 = rs.getInt(1);
@@ -477,13 +473,13 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
         //Simple View
         String viewDDL = "CREATE VIEW " + viewName1 + " AS SELECT * FROM " + DATA_TABLE_NAME;
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(viewDDL);
             conn.commit();
         }
         String sql = "SELECT  k2,k1,k3 FROM " + viewName1 + " LIMIT 3 OFFSET (k2,k1,k3)=(3, 3, 1)";
 
-        try(Statement statement = conn.createStatement() ; ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int k2 = rs.getInt(1);
@@ -524,11 +520,11 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         String multiTenantDDL = "CREATE TABLE %s (tenant_id VARCHAR NOT NULL, k1 TINYINT NOT NULL,\n" + "k2 TINYINT NOT NULL,\n"
                 + "k3 TINYINT NOT NULL,\n" + "v1 INTEGER,\n" + "CONSTRAINT pk PRIMARY KEY (tenant_id, k1, k2, k3)) MULTI_TENANT=true";
 
-        if(isSalted){
+        if (isSalted) {
             multiTenantDDL = multiTenantDDL + ", SALT_BUCKETS=4";
         }
 
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(String.format(multiTenantDDL, multiTenantDataTableName));
             conn.commit();
         }
@@ -539,7 +535,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
 
-        try(Connection tenant2Connection = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection tenant2Connection = DriverManager.getConnection(getUrl(), props)) {
 
             //create tenant view with new pks
             String viewName = multiTenantDataTableName + "_" + tenantId2;
@@ -658,9 +654,9 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         String multiTenantDataTableName = "T_" + generateUniqueName();
 
         String multiTenantDDL = String.format("CREATE TABLE %s (tenant_id VARCHAR NOT NULL, k1 TINYINT NOT NULL,\n" + "k2 TINYINT NOT NULL,\n"
-                + "k3 TINYINT NOT NULL,\n" + "v1 INTEGER,\n" + "CONSTRAINT pk PRIMARY KEY (tenant_id, k1, k2, k3)) MULTI_TENANT=true",multiTenantDataTableName);
+                + "k3 TINYINT NOT NULL,\n" + "v1 INTEGER,\n" + "CONSTRAINT pk PRIMARY KEY (tenant_id, k1, k2, k3)) MULTI_TENANT=true", multiTenantDataTableName);
 
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(multiTenantDDL);
             conn.commit();
         }
@@ -670,23 +666,23 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         //tenant connection
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
-        try(Connection tenant2Connection = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection tenant2Connection = DriverManager.getConnection(getUrl(), props)) {
             //create tenant view with new pks
             String viewName = multiTenantDataTableName + "_" + tenantId2;
-            try(Statement statement = tenant2Connection.createStatement()) {
+            try (Statement statement = tenant2Connection.createStatement()) {
                 statement.execute("CREATE VIEW " + viewName + " ( vk1 INTEGER NOT NULL, vv1 INTEGER, CONSTRAINT PKVIEW PRIMARY KEY(vk1))  AS SELECT * FROM "
                         + multiTenantDataTableName);
             }
 
             //create tenant view index on tenant view
             String viewIndexName = viewName + "_Index1";
-            try(Statement statement = tenant2Connection.createStatement()) {
+            try (Statement statement = tenant2Connection.createStatement()) {
                 statement.execute("CREATE INDEX " + viewIndexName + " ON " + viewName + " ( vv1 ) ");
             }
 
             String upsertDML = String.format("UPSERT INTO %s VALUES(?,?,?,?,?,?)", viewName);
             int tenantRows = 0;
-            try(PreparedStatement tps = tenant2Connection.prepareStatement(upsertDML)) {
+            try (PreparedStatement tps = tenant2Connection.prepareStatement(upsertDML)) {
                 for (int k1 = 0; k1 < 4; k1++) {
                     tps.setInt(1, k1);
                     for (int k2 = 0; k2 < 4; k2++) {
@@ -710,7 +706,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
             //View Index Queries
             String sql = "SELECT vv1,k1,k2,k3,vk1 FROM " + viewName + " ORDER BY vv1 LIMIT 3 OFFSET (vv1,k1,k2,k3,vk1)=(-196, 3,0,0,1)";
-            try(Statement statement = tenant2Connection.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+            try (Statement statement = tenant2Connection.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
                 assertTrue(rs.next());
                 {
                     int vv1 = rs.getInt(1);
@@ -760,8 +756,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexRVCOffset() throws SQLException {
-        String sql = String.format("SELECT %s FROM %s LIMIT 3 OFFSET (%s)=(3, 3, 1)",DATA_INDEX_ROW_KEY,DATA_TABLE_NAME,DATA_INDEX_ROW_KEY);
-        try(Statement statement = conn.createStatement() ; ResultSet rs = statement.executeQuery(sql)) {
+        String sql = String.format("SELECT %s FROM %s LIMIT 3 OFFSET (%s)=(3, 3, 1)", DATA_INDEX_ROW_KEY, DATA_TABLE_NAME, DATA_INDEX_ROW_KEY);
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int k2 = rs.getInt(1);
@@ -800,7 +796,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     public void testUncoveredIndexRVCOffsetFails() throws SQLException {
         //v1 is not in the index
         String sql = "SELECT  k2,k1,k3,v1 FROM " + DATA_TABLE_NAME + " LIMIT 3 OFFSET (k2,k1,k3)=(3, 3, 2)";
-        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)){
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             fail("Should not have allowed uncovered index access with RVC Offset without hinting to index.");
         } catch (RowValueConstructorOffsetNotCoercibleException e) {
             return;
@@ -812,7 +808,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     public void testIndexSaltedBaseTableRVCOffset() throws SQLException {
         String saltedTableName = "T_" + generateUniqueName();
 
-        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4",saltedTableName);
+        String saltedDDL = String.format(DATA_DDL + "SALT_BUCKETS=4", saltedTableName);
 
         try (Statement statement = conn.createStatement()) {
             statement.execute(saltedDDL);
@@ -821,7 +817,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
         String indexName = "I_" + generateUniqueName();
 
-        String indexDDL = String.format("CREATE INDEX %s ON %s (v1,k2)",indexName,saltedTableName);
+        String indexDDL = String.format("CREATE INDEX %s ON %s (v1,k2)", indexName, saltedTableName);
 
         try (Statement statement = conn.createStatement()) {
             statement.execute(indexDDL);
@@ -830,7 +826,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
         String upsertDML = String.format("UPSERT INTO %s VALUES(?,?,?,?)", saltedTableName);
         int nRows = 0;
-        try(PreparedStatement ps = conn.prepareStatement(upsertDML)) {
+        try (PreparedStatement ps = conn.prepareStatement(upsertDML)) {
             for (int k1 = 0; k1 < 4; k1++) {
                 ps.setInt(1, k1);
                 for (int k2 = 0; k2 < 4; k2++) {
@@ -849,7 +845,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
         //Note Today Salted Base Table forces salted index
         String sql = "SELECT v1,k2,k1,k3 FROM " + saltedTableName + " LIMIT 3 OFFSET (v1,k2,k1,k3)=(8, 2, 0, 0)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             assertTrue(rs.next());
             {
                 int v1 = rs.getInt(1);
@@ -902,36 +898,36 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
                 "CONSTRAINT pk PRIMARY KEY (k1, k2, k3, k4, k5, k6)) ";
 
         String longKeyTableName = "T_" + generateUniqueName();
-        String longKeyIndex1Name =  "INDEX_1_" + longKeyTableName;
-        String longKeyIndex2Name =  "INDEX_2_" + longKeyTableName;
+        String longKeyIndex1Name = "INDEX_1_" + longKeyTableName;
+        String longKeyIndex2Name = "INDEX_2_" + longKeyTableName;
 
-        String ddl = String.format(ddlTemplate,longKeyTableName);
-        try(Statement statement = conn.createStatement()) {
+        String ddl = String.format(ddlTemplate, longKeyTableName);
+        try (Statement statement = conn.createStatement()) {
             statement.execute(ddl);
         }
 
         String createIndex1 = "CREATE INDEX IF NOT EXISTS " + longKeyIndex1Name + " ON " + longKeyTableName + " (k2 ,v1, k4)";
         String createIndex2 = "CREATE INDEX IF NOT EXISTS " + longKeyIndex2Name + " ON " + longKeyTableName + " (v1, v3)";
 
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(createIndex1);
         }
-        try(Statement statement = conn.createStatement()) {
+        try (Statement statement = conn.createStatement()) {
             statement.execute(createIndex2);
         }
 
         String sql = "SELECT  k2,v1,k4 FROM " + longKeyTableName + " LIMIT 3 OFFSET (k2,v1,k4,k1,k3,k5,k6)=(2,-1,4,1,3,5,6)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
         }
         sql = "SELECT  v1,v3 FROM " + longKeyTableName + " LIMIT 3 OFFSET (v1,v3,k1,k2,k3,k4,k5,k6)=(-1,-3,1,2,3,4,5,6)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
         }
     }
 
     @Test
     public void testOffsetExplain() throws SQLException {
         String sql = "EXPLAIN SELECT * FROM " + DATA_TABLE_NAME + "  LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 2)";
-        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+        try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
             StringBuilder explainStringBuilder = new StringBuilder();
             while (rs.next()) {
                 String explain = rs.getString(1);
@@ -940,4 +936,69 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
             assertTrue(explainStringBuilder.toString().contains("With RVC Offset"));
         }
     }
+
+    @Test
+    public void testGlobalIndexViewAccess() throws Exception {
+        String ddl = "CREATE TABLE IF NOT EXISTS ARCHIVE.FIELD_HISTORY_ARCHIVE (\n" +
+                "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
+                "    PARENT_KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                "    PARENT_ID CHAR(15) NOT NULL,\n" +
+                "    CREATED_DATE DATE NOT NULL,\n" +
+                "    DATA VARCHAR   \n" +
+                "    CONSTRAINT PK PRIMARY KEY \n" +
+                "    (\n" +
+                "        ORGANIZATION_ID, \n" +
+                "        PARENT_KEY_PREFIX,\n" +
+                "        PARENT_ID,\n" +
+                "        CREATED_DATE\n" +
+                "    )\n" +
+                ") MULTI_TENANT=true";
+
+        //Index reorders the pk only
+        String indexSyncDDL = "CREATE INDEX IF NOT EXISTS FIELD_HISTORY_ARCHIVE_INDEX\n" +
+                "ON ARCHIVE.FIELD_HISTORY_ARCHIVE (PARENT_KEY_PREFIX, CREATED_DATE, PARENT_ID)\n" +
+                "INCLUDE (DATA)";
+
+        String viewDDL = "CREATE VIEW IF NOT EXISTS ARCHIVE.\"1HA\" AS SELECT * FROM ARCHIVE.\"FIELD_HISTORY_ARCHIVE\"";
+        try(Statement statement = conn.createStatement()){
+            statement.execute(ddl);
+            statement.execute(indexSyncDDL);
+            //statement.execute(viewDDL);
+            conn.commit();
+        }
+
+        String tenantId2 = "tenant2";
+
+        //tenant connection
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
+
+        try( Connection tenantConnection = DriverManager.getConnection(getUrl(), props))
+
+        {
+            try(Statement statement = tenantConnection.createStatement()) {
+                statement.execute(viewDDL);
+            }
+            String baseQuery = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA FROM ARCHIVE.\"1HA\" LIMIT 2\n";
+
+            try( PreparedStatement statement = tenantConnection.prepareStatement(baseQuery)){
+                QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
+                assertEquals(PTableType.INDEX,plan.getTableRef().getTable().getType());
+            }
+
+            String query = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA FROM ARCHIVE.\"1HA\" LIMIT 2 OFFSET (PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID) = (?,?,?)\n";
+            try (PreparedStatement statement = tenantConnection.prepareStatement(query)) {
+
+                statement.setString(1,"a");
+                statement.setDate(2, new Date(0));
+                statement.setString(3, "b");
+
+                ResultSet rs = statement.executeQuery(query);
+
+                QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
+                assertEquals(PTableType.INDEX,plan.getTableRef().getTable().getType());
+            }
+        }
+    }
+
 }
