@@ -172,7 +172,7 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
     </dependency>
-    <!-- Haddop dependencies -->
+    <!-- Hadoop dependencies -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
