@@ -605,43 +605,47 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         }
         return getMutationsWithSameTS(put, del);
     }
-
+    /**
+     * In this method, the actual list is repaired in memory using the expected list which is actually the output of
+     * rebuilding the index table row. The result of this repair is used only for verification.
+     */
     private void repairActualMutationList(List<Mutation> actualMutationList, List<Mutation> expectedMutationList)
             throws IOException {
-        // find the first (latest) actual unverified put mutation
-        Mutation actual = null;
-        for (Mutation mutation : actualMutationList) {
-            if (mutation instanceof Put && !isVerified((Put) mutation)) {
-                actual = mutation;
-                break;
-            }
-        }
-        if (actual == null) {
-            return;
-        }
-        long ts = getTimestamp(actual);
-        int expectedIndex;
-        int expectedListSize = expectedMutationList.size();
-        for (expectedIndex = 0; expectedIndex < expectedListSize; expectedIndex++) {
-            if (getTimestamp(expectedMutationList.get(expectedIndex)) <= ts) {
-                if (expectedIndex > 0) {
-                    expectedIndex--;
+        // Find the first (latest) actual unverified put mutation
+        List<Mutation> repairedMutationList = new ArrayList<>(expectedMutationList.size());
+        for (Mutation actual : actualMutationList) {
+            if (actual instanceof Put && !isVerified((Put) actual)) {
+                long ts = getTimestamp(actual);
+                int expectedIndex;
+                int expectedListSize = expectedMutationList.size();
+                for (expectedIndex = 0; expectedIndex < expectedListSize; expectedIndex++) {
+                    if (getTimestamp(expectedMutationList.get(expectedIndex)) <= ts) {
+                        if (expectedIndex > 0) {
+                            expectedIndex--;
+                        }
+                        break;
+                    }
                 }
+                if (expectedIndex == expectedListSize) {
+                    continue;
+                }
+                for (; expectedIndex < expectedListSize; expectedIndex++) {
+                    Mutation mutation = expectedMutationList.get(expectedIndex);
+                    if (mutation instanceof Put) {
+                        mutation = new Put((Put) mutation);
+                    } else {
+                        mutation = new Delete((Delete) mutation);
+                    }
+                    repairedMutationList.add(mutation);
+                }
+                // Since we repair the entire history, there is no need to more than once
                 break;
             }
         }
-        if (expectedIndex == expectedListSize) {
+        if (repairedMutationList.isEmpty()) {
             return;
         }
-        for (; expectedIndex < expectedListSize; expectedIndex++) {
-            Mutation mutation = expectedMutationList.get(expectedIndex);
-            if (mutation instanceof Put) {
-                mutation = new Put((Put) mutation);
-            } else {
-                mutation = new Delete((Delete) mutation);
-            }
-            actualMutationList.add(mutation);
-        }
+        actualMutationList.addAll(repairedMutationList);
         Collections.sort(actualMutationList, MUTATION_TS_DESC_COMPARATOR);
     }
 
@@ -665,7 +669,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             }
         }
     }
-    
+
     /**
      * There are two types of verification: without repair and with repair. Without-repair verification is done before
      * or after index rebuild. It is done before index rebuild to identify the rows to be rebuilt. It is done after
