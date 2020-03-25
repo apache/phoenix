@@ -943,31 +943,35 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     }
 
     @Test public void testGlobalIndexViewAccess() throws Exception {
-        String
-                ddl =
-                "CREATE TABLE IF NOT EXISTS ARCHIVE.FIELD_HISTORY_ARCHIVE (\n"
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + "(\n"
                         + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
                         + "    PARENT_KEY_PREFIX CHAR(3) NOT NULL,\n"
-                        + "    PARENT_ID CHAR(15) NOT NULL,\n" + "    CREATED_DATE DATE NOT NULL,\n"
-                        + "    DATA VARCHAR   \n" + "    CONSTRAINT PK PRIMARY KEY \n" + "    (\n"
-                        + "        ORGANIZATION_ID, \n" + "        PARENT_KEY_PREFIX,\n"
-                        + "        PARENT_ID,\n" + "        CREATED_DATE\n" + "    )\n"
+                        + "    PARENT_ID CHAR(15) NOT NULL,\n"
+                        + "    CREATED_DATE DATE NOT NULL,\n"
+                        + "    DATA VARCHAR   \n"
+                        + "    CONSTRAINT PK PRIMARY KEY \n"
+                        + "    (\n"
+                        + "        ORGANIZATION_ID, \n"
+                        + "        PARENT_KEY_PREFIX,\n"
+                        + "        PARENT_ID,\n"
+                        + "        CREATED_DATE\n"
+                        + "    )\n"
                         + ") MULTI_TENANT=true";
 
         //Index reorders the pk only
-        String
-                indexSyncDDL =
-                "CREATE INDEX IF NOT EXISTS FIELD_HISTORY_ARCHIVE_INDEX\n"
-                        + "ON ARCHIVE.FIELD_HISTORY_ARCHIVE (PARENT_KEY_PREFIX, CREATED_DATE, PARENT_ID)\n"
+        String indexSyncDDL = "CREATE INDEX IF NOT EXISTS " + indexName + "\n"
+                        + "ON " + tableName +" (PARENT_KEY_PREFIX, CREATED_DATE, PARENT_ID)\n"
                         + "INCLUDE (DATA)";
 
-        String
-                viewDDL =
-                "CREATE VIEW IF NOT EXISTS ARCHIVE.\"1HA\" AS SELECT * FROM ARCHIVE.\"FIELD_HISTORY_ARCHIVE\"";
+        String viewDDL = "CREATE VIEW IF NOT EXISTS " + viewName + "\n"
+                + "AS SELECT * FROM " + tableName;
         try (Statement statement = conn.createStatement()) {
             statement.execute(ddl);
             statement.execute(indexSyncDDL);
-            //statement.execute(viewDDL);
             conn.commit();
         }
 
@@ -981,20 +985,20 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
             try (Statement statement = tenantConnection.createStatement()) {
                 statement.execute(viewDDL);
             }
-            String
-                    baseQuery =
-                    "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA FROM ARCHIVE.\"1HA\" LIMIT 2\n";
+            String baseQuery = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA\n"
+                            + "FROM " + viewName + " LIMIT 2\n";
 
             try (PreparedStatement statement = tenantConnection.prepareStatement(baseQuery)) {
                 QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
                 assertEquals(PTableType.INDEX, plan.getTableRef().getTable().getType());
             }
 
-            String
-                    query =
-                    "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA FROM ARCHIVE.\"1HA\" LIMIT 2 OFFSET (PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID) = (?,?,?)\n";
-            try (PreparedStatement statement = tenantConnection.prepareStatement(query)) {
+            String query = "SELECT PARENT_ID,PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID,DATA\n"
+                            + "FROM " + viewName + "\n"
+                            + "LIMIT 2\n"
+                            + "OFFSET (PARENT_KEY_PREFIX,CREATED_DATE,PARENT_ID) = (?,?,?)\n";
 
+            try (PreparedStatement statement = tenantConnection.prepareStatement(query)) {
                 statement.setString(1, "a");
                 statement.setDate(2, new Date(0));
                 statement.setString(3, "b");
