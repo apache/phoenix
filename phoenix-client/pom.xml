@@ -447,5 +447,10 @@
       <artifactId>log4j</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <dependency>
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
 </project>
