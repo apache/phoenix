@@ -82,6 +82,9 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     private static final Logger LOGGER = Logger.getLogger(IndexUpgradeTool.class.getName());
 
+    private static final String INDEX_REBUILD_OPTION_SHORT_OPT = "rb";
+    private static final String INDEX_TOOL_OPTION_SHORT_OPT = "tool";
+
     private static final Option OPERATION_OPTION = new Option("o", "operation",
             true,
             "[Required] Operation to perform (upgrade/rollback)");
@@ -98,14 +101,16 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private static final Option LOG_FILE_OPTION = new Option("lf", "logfile",
             true,
             "[Optional] Log file path where the logs are written");
-    private static final Option INDEX_REBUILD_OPTION = new Option("rb",
+    private static final Option INDEX_REBUILD_OPTION = new Option(INDEX_REBUILD_OPTION_SHORT_OPT,
             "index-rebuild",
             false,
-            "[Optional] Rebuild the indexes");
-    private static final Option INDEX_TOOL_OPTION = new Option("tool",
+            "[Optional] Rebuild the indexes. Set -" + INDEX_TOOL_OPTION_SHORT_OPT +
+             " to pass options to IndexTool.");
+    private static final Option INDEX_TOOL_OPTION = new Option(INDEX_TOOL_OPTION_SHORT_OPT,
             "index-tool",
             true,
-            "[Optional] Options to pass to indexTool when rebuilding indexes");
+            "[Optional] Options to pass to indexTool when rebuilding indexes. " +
+            "Set -" + INDEX_REBUILD_OPTION_SHORT_OPT + " to rebuild the index.");
 
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
@@ -579,10 +584,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     private void rebuildIndexes(Connection conn, Configuration conf, ArrayList<String> tableList) {
-        if (!upgrade) {
-            return;
-        }
-        if (!rebuild) {
+        if (!upgrade || !rebuild) {
             return;
         }
 
@@ -717,7 +719,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             list.add(tenantId);
         }
 
-        if(!Strings.isNullOrEmpty(indexToolOpts)) {
+        if (!Strings.isNullOrEmpty(indexToolOpts)) {
             String[] options = indexToolOpts.split("\\s+");
             for (String opt : options) {
                 list.add(opt);
