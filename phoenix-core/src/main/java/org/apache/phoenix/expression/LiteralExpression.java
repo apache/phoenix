@@ -297,17 +297,20 @@ public class LiteralExpression extends BaseTerminalExpression {
             } else if (this.type.isArrayType()) {
                 this.maxLength = ((PhoenixArray)this.value).getMaxLength();
             }
+//            if (this.byteValue.length == 0) {
+//                LiteralExpression og = LiteralExpression.getTypedNullLiteralExpression(this.type,
+//                        this.determinism);
+//                this.value = og.value;
+//                this.type = og.type;
+//                this.determinism = og.determinism;
+//                this.byteValue = og.byteValue;
+//                this.maxLength = og.maxLength;
+//                this.scale = og.scale;
+//                this.sortOrder = og.sortOrder;
+//                return new LiteralExpression(this);
+//            }
             if (this.byteValue.length == 0) {
-                LiteralExpression og = LiteralExpression.getTypedNullLiteralExpression(this.type,
-                        this.determinism);
-                this.value = og.value;
-                this.type = og.type;
-                this.determinism = og.determinism;
-                this.byteValue = og.byteValue;
-                this.maxLength = og.maxLength;
-                this.scale = og.scale;
-                this.sortOrder = og.sortOrder;
-                return new LiteralExpression(this);
+                return LiteralExpression.getTypedNullLiteralExpression(this.type, this.determinism);
             }
             if (this.maxLength == null) {
                 this.maxLength = this.type.isFixedWidth()
