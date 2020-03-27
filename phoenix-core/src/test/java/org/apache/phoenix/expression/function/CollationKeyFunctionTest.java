@@ -225,11 +225,11 @@ public class CollationKeyFunctionTest {
 			Integer strength, Integer decomposition, SortOrder sortOrder) throws Exception {
 		LiteralExpression inputStrLiteral, localeIsoCodeLiteral, upperCaseBooleanLiteral, strengthLiteral,
 				decompositionLiteral;
-		inputStrLiteral = new LiteralExpression.Builder().setValue(inputStr).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
-		localeIsoCodeLiteral = new LiteralExpression.Builder().setValue(localeIsoCode).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
-		upperCaseBooleanLiteral = new LiteralExpression.Builder().setValue(upperCaseCollator).setDataType(PBoolean.INSTANCE).setSortOrder(sortOrder).build();
-		strengthLiteral = new LiteralExpression.Builder().setValue(strength).setDataType(PInteger.INSTANCE).setSortOrder(sortOrder).build();
-		decompositionLiteral = new LiteralExpression.Builder().setValue(decomposition).setDataType(PInteger.INSTANCE).setSortOrder(sortOrder).build();
+		inputStrLiteral = new LiteralExpression.BuilderA().setValue(inputStr).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
+		localeIsoCodeLiteral = new LiteralExpression.BuilderA().setValue(localeIsoCode).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
+		upperCaseBooleanLiteral = new LiteralExpression.BuilderA().setValue(upperCaseCollator).setDataType(PBoolean.INSTANCE).setSortOrder(sortOrder).build();
+		strengthLiteral = new LiteralExpression.BuilderA().setValue(strength).setDataType(PInteger.INSTANCE).setSortOrder(sortOrder).build();
+		decompositionLiteral = new LiteralExpression.BuilderA().setValue(decomposition).setDataType(PInteger.INSTANCE).setSortOrder(sortOrder).build();
 		return callFunction(inputStrLiteral, localeIsoCodeLiteral, upperCaseBooleanLiteral, strengthLiteral,
 				decompositionLiteral);
 

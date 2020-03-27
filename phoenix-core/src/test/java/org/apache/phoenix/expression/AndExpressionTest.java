@@ -47,8 +47,8 @@ public class AndExpressionTest {
     }
 
     private AndExpression createAnd(Boolean x, Boolean y) {
-        return createAnd(new LiteralExpression.Builder().setValue(x).buildSimple(false),
-                new LiteralExpression.Builder().setValue(y).buildSimple(false));
+        return createAnd(new LiteralExpression.BuilderB().setValue(x).build(),
+                new LiteralExpression.BuilderB().setValue(y).build());
     }
 
 

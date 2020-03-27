@@ -647,8 +647,8 @@ public class JoinCompiler {
         public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx, StatementContext rhsCtx, Strategy strategy) throws SQLException {
             if (onConditions.isEmpty()) {
                 return new Pair<List<Expression>, List<Expression>>(
-                        Collections.<Expression> singletonList(new LiteralExpression.Builder().setValue(1).buildSimple(false)),
-                        Collections.<Expression> singletonList(new LiteralExpression.Builder().setValue(1).buildSimple(false)));
+                        Collections.<Expression> singletonList(new LiteralExpression.BuilderB().setValue(1).build()),
+                        Collections.<Expression> singletonList(new LiteralExpression.BuilderB().setValue(1).build()));
 
             }
 

@@ -117,7 +117,7 @@ public class ProjectionCompiler {
                         DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
         return compile(context, statement, groupBy, Collections.<PColumn>emptyList(),
                 // Pass null expression because we don't want empty key value to be projected
-                new LiteralExpression.Builder().buildSimple(false),
+                new LiteralExpression.BuilderB().build(),
                 wildcardIncludesDynamicCols);
     }
     
@@ -169,7 +169,7 @@ public class ProjectionCompiler {
             expression = coerceIfNecessary(i-posOffset+projectedOffset, targetColumns, expression);
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (IndexUtil.getViewConstantValue(column, ptr)) {
-                expression = new LiteralExpression.Builder().setValue(column.getDataType().toObject(ptr))
+                expression = new LiteralExpression.BuilderA().setValue(column.getDataType().toObject(ptr))
                         .setDataType(expression.getDataType()).build();
             }
             projectedExpressions.add(expression);

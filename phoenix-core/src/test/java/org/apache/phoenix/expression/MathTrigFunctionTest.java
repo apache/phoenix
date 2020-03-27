@@ -159,10 +159,10 @@ public class MathTrigFunctionTest {
     private void test(Number value, PNumericType dataType, double expectedResult,
                              String testedFunction)
             throws SQLException {
-        LiteralExpression literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType)
+        LiteralExpression literal = new LiteralExpression.BuilderA().setValue(value).setDataType(dataType)
                 .setSortOrder(SortOrder.ASC).build();
         boolean ret1 = testExpression(literal, expectedResult, testedFunction);
-        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        literal = new LiteralExpression.BuilderA().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         boolean ret2 = testExpression(literal, expectedResult, testedFunction);
         assertEquals(ret1, ret2);
     }

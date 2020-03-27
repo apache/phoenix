@@ -44,10 +44,10 @@ public class NotExpression extends BaseSingleExpression {
         }
         if (child.isStateless()) {
             if (!child.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism())
+                return new LiteralExpression.BuilderA().setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism())
                         .build();
             }
-            return new LiteralExpression.Builder().setValue(!(Boolean) PBoolean.INSTANCE.toObject(ptr))
+            return new LiteralExpression.BuilderA().setValue(!(Boolean) PBoolean.INSTANCE.toObject(ptr))
                     .setDataType(PBoolean.INSTANCE).setDeterminism(child.getDeterminism()).build();
         }
         return new NotExpression(child);

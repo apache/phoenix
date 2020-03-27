@@ -61,7 +61,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -332,7 +331,7 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
-        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), new LiteralExpression.Builder().setValue(o).buildSimple(false)), op);
+        return  new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), new LiteralExpression.BuilderB().setValue(o).build()), op);
     }
 
     public static Expression kvColumn(PColumn c) {
@@ -344,7 +343,7 @@ public class TestUtil {
     }
 
     public static Expression constantComparison(CompareOp op, Expression e, Object o) {
-        return  new ComparisonExpression(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).buildSimple(false)), op);
+        return  new ComparisonExpression(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(o).build()), op);
 
     }
 
@@ -359,25 +358,25 @@ public class TestUtil {
 
     public static Expression like(Expression e, Object o, StatementContext context) {
         return useByteBasedRegex(context)?
-               ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).buildSimple(false)), LikeType.CASE_SENSITIVE):
-               StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).buildSimple(false)), LikeType.CASE_SENSITIVE);
+               ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(o).build()), LikeType.CASE_SENSITIVE):
+               StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(o).build()), LikeType.CASE_SENSITIVE);
     }
 
     public static Expression ilike(Expression e, Object o, StatementContext context) {
         return useByteBasedRegex(context)?
-                ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).buildSimple(false)), LikeType.CASE_INSENSITIVE):
-                StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.Builder().setValue(o).buildSimple(false)), LikeType.CASE_INSENSITIVE);
+                ByteBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(o).build()), LikeType.CASE_INSENSITIVE):
+                StringBasedLikeExpression.create(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(o).build()), LikeType.CASE_INSENSITIVE);
     }
 
     public static Expression substr(Expression e, Object offset, Object length) {
-        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.Builder().setValue(offset).buildSimple(false),
-                new LiteralExpression.Builder().setValue(length).buildSimple(false)));
+        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(offset).build(),
+                new LiteralExpression.BuilderB().setValue(length).build()));
     }
 
     public static Expression substr2(Expression e, Object offset) {
 
-        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.Builder().setValue(offset).buildSimple(false),
-                new LiteralExpression.Builder().buildSimple(false)));
+        return  new SubstrFunction(Arrays.asList(e, new LiteralExpression.BuilderB().setValue(offset).build(),
+                new LiteralExpression.BuilderB().build()));
     }
 
     public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
@@ -421,7 +420,7 @@ public class TestUtil {
         List<Expression> expressions = new ArrayList<Expression>(literals.length + 1);
         expressions.add(e);
         for (Object o : literals) {
-            expressions.add(new LiteralExpression.Builder().setValue(o).setDataType(childType).build());
+            expressions.add(new LiteralExpression.BuilderA().setValue(o).setDataType(childType).build());
         }
         return InListExpression.create(expressions, false, new ImmutableBytesWritable(), true);
     }

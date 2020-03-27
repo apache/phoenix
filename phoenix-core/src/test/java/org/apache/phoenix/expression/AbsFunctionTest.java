@@ -71,9 +71,9 @@ public class AbsFunctionTest {
     private static void test(Number value, PNumericType dataType, Number expected)
             throws SQLException {
         LiteralExpression literal;
-        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        literal = new LiteralExpression.BuilderA().setValue(value).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
         testExpression(literal, expected);
-        literal = new LiteralExpression.Builder().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        literal = new LiteralExpression.BuilderA().setValue(value).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
         testExpression(literal, expected);
     }
 

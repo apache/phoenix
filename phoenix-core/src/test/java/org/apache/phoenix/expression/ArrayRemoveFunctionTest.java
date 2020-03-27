@@ -66,9 +66,9 @@ public class ArrayRemoveFunctionTest {
 			Integer arrScale, PDataType elementDataType, Integer elemMaxLen, Integer elemScale, PhoenixArray expected,
 			SortOrder arraySortOrder, SortOrder elementSortOrder) throws SQLException {
 		LiteralExpression arrayLiteral, elementLiteral;
-		arrayLiteral = new LiteralExpression.Builder().setValue(array).setDataType(arrayDataType).setMaxLength(arrMaxLen)
+		arrayLiteral = new LiteralExpression.BuilderA().setValue(array).setDataType(arrayDataType).setMaxLength(arrMaxLen)
 				.setScale(arrScale).setSortOrder(arraySortOrder).setDeterminism(Determinism.ALWAYS).build();
-		elementLiteral = new LiteralExpression.Builder().setValue(element).setDataType(elementDataType)
+		elementLiteral = new LiteralExpression.BuilderA().setValue(element).setDataType(elementDataType)
 				.setMaxLength(elemMaxLen).setScale(elemScale).setSortOrder(elementSortOrder).setDeterminism(Determinism.ALWAYS).build();
 		testExpression(arrayLiteral, elementLiteral, expected);
 	}

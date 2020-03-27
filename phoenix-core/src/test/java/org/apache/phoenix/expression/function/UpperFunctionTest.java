@@ -78,8 +78,8 @@ public class UpperFunctionTest {
 
 	private static String callFunction(String inputStr, String localeIsoCode, SortOrder sortOrder) throws Exception {
 		LiteralExpression inputStrLiteral, localeIsoCodeLiteral;
-		inputStrLiteral = new LiteralExpression.Builder().setValue(inputStr).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
-		localeIsoCodeLiteral = new LiteralExpression.Builder().setValue(localeIsoCode).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
+		inputStrLiteral = new LiteralExpression.BuilderA().setValue(inputStr).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
+		localeIsoCodeLiteral = new LiteralExpression.BuilderA().setValue(localeIsoCode).setDataType(PVarchar.INSTANCE).setSortOrder(sortOrder).build();
 		List<Expression> expressions = Lists.newArrayList((Expression) inputStrLiteral,
 				(Expression) localeIsoCodeLiteral);
 		Expression upperFunction = new UpperFunction(expressions);

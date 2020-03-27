@@ -332,16 +332,16 @@ public class SortOrderExpressionTest {
     }
     
     private Expression getLiteral(Object value) throws Exception {
-        return new LiteralExpression.Builder().setValue(value).buildSimple(false);
+        return new LiteralExpression.BuilderB().setValue(value).build();
     }
     
     private Expression getLiteral(Object value, PDataType dataType) throws Exception {
-        return new LiteralExpression.Builder().setValue(value).setDataType(dataType).build();
+        return new LiteralExpression.BuilderA().setValue(value).setDataType(dataType).build();
 
     }    
     
     private Expression getInvertedLiteral(Object literal, PDataType dataType) throws Exception {
-        return new LiteralExpression.Builder().setValue(literal).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        return new LiteralExpression.BuilderA().setValue(literal).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
     }
     
     private static Date date(int month, int day, int year) {

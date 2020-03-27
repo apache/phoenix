@@ -261,12 +261,12 @@ public class PFunction implements PMetaDataEntity {
             String minValue = arg.hasMinValue()?arg.getMinValue():null;
             String maxValue = arg.hasMaxValue()?arg.getMaxValue():null;
             args.add(new FunctionArgument(argType, isArrayType, isConstant,
-                    defaultValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
-                            .toObject(defaultValue))).getValue()).buildSimple(false),
-                    minValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
-                            .toObject(minValue))).getValue()).buildSimple(false),
-                    maxValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(dataType
-                            .toObject(maxValue))).getValue()).buildSimple(false)));
+                    defaultValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(dataType
+                            .toObject(defaultValue))).getValue()).build(),
+                    minValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(dataType
+                            .toObject(minValue))).getValue()).build(),
+                    maxValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(dataType
+                            .toObject(maxValue))).getValue()).build()));
 
         }
         return new PFunction(tenantId, functionName, args, returnType, className, jarPath,

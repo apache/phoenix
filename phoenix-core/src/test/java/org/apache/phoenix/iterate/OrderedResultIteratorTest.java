@@ -61,7 +61,7 @@ public class OrderedResultIteratorTest {
         RegionScanner s = Mockito.mock(RegionScanner.class);
         Scan scan = new Scan();
         Expression exp = null;
-        exp = new LiteralExpression.Builder().setValue(Boolean.TRUE).buildSimple(false);
+        exp = new LiteralExpression.BuilderB().setValue(Boolean.TRUE).build();
         OrderByExpression ex = OrderByExpression.createByCheckIfOrderByReverse(exp, false, false, false);
         ScanRegionObserver.serializeIntoScan(scan, 0, Arrays.asList(ex), 100);
         // Check 5.1.0 & Check > 5.1.0

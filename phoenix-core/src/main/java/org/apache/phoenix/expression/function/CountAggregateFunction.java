@@ -46,7 +46,7 @@ import org.apache.phoenix.util.SchemaUtil;
 @BuiltInFunction(name=CountAggregateFunction.NAME, args= {@Argument()} )
 public class CountAggregateFunction extends SingleAggregateFunction {
     public static final String NAME = "COUNT";
-    public static final List<Expression> STAR = Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).buildSimple(false));
+    public static final List<Expression> STAR = Arrays.<Expression>asList(new LiteralExpression.BuilderB().setValue(1).setDeterminism(Determinism.ALWAYS).build());
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
 
     public CountAggregateFunction() {

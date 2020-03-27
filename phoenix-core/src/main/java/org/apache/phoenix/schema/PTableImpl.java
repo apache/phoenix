@@ -67,7 +67,6 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -1218,7 +1217,7 @@ public class PTableImpl implements PTable {
                         for (PColumn column : columns) {
                             if (columnToValueMap.containsKey(column)) {
                                 int colIndex = qualifierEncodingScheme.decode(column.getColumnQualifierBytes())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                                colValues[colIndex] = new LiteralExpression.Builder().setByteValue(columnToValueMap.get(column)).buildSimple(true);
+                                colValues[colIndex] = new LiteralExpression.BuilderA().setByteValue(columnToValueMap.get(column)).buildSimple(true);
                             }
                         }
                         

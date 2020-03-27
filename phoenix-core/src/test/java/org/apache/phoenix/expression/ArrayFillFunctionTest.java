@@ -50,8 +50,8 @@ public class ArrayFillFunctionTest {
 
     private static void test(Object element, Object length, PDataType elementDataType, Integer elementMaxLen, Integer elementScale, PDataType lengthDataType, Integer lengthMaxlen, Integer lengthScale, PhoenixArray expected, SortOrder elementSortOrder, SortOrder lengthSortOrder) throws SQLException {
         LiteralExpression elementLiteral, lengthLiteral;
-        elementLiteral = new LiteralExpression.Builder().setValue(element).setDataType(elementDataType).setMaxLength(elementMaxLen).setScale(elementScale).setSortOrder(elementSortOrder).setDeterminism(Determinism.ALWAYS).build();
-        lengthLiteral = new LiteralExpression.Builder().setValue(length).setDataType(lengthDataType).setMaxLength(lengthMaxlen).setScale(lengthScale).setSortOrder(lengthSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        elementLiteral = new LiteralExpression.BuilderA().setValue(element).setDataType(elementDataType).setMaxLength(elementMaxLen).setScale(elementScale).setSortOrder(elementSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        lengthLiteral = new LiteralExpression.BuilderA().setValue(length).setDataType(lengthDataType).setMaxLength(lengthMaxlen).setScale(lengthScale).setSortOrder(lengthSortOrder).setDeterminism(Determinism.ALWAYS).build();
         testExpression(elementLiteral, lengthLiteral, expected);
     }
 

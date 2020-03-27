@@ -59,7 +59,7 @@ public class CaseExpression extends BaseCompoundExpression {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             int index = caseExpression.evaluateIndexOf(null, ptr);
             if (index < 0) {
-                return new LiteralExpression.Builder().setDeterminism(caseExpression.getDeterminism()).buildSimple(false);
+                return new LiteralExpression.BuilderB().setDeterminism(caseExpression.getDeterminism()).build();
             }
             return caseExpression.getChildren().get(index);
         }

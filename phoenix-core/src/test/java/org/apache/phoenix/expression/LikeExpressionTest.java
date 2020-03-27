@@ -33,9 +33,9 @@ import org.junit.Test;
 public class LikeExpressionTest {
     private boolean testExpression(String value, String expression, SortOrder sortorder)
             throws SQLException {
-        LiteralExpression v=  new LiteralExpression.Builder().setValue(value).setDataType(PVarchar.INSTANCE)
+        LiteralExpression v=  new LiteralExpression.BuilderA().setValue(value).setDataType(PVarchar.INSTANCE)
                 .setSortOrder(sortorder).build();
-        LiteralExpression p=  new LiteralExpression.Builder().setValue(expression).setDataType(PVarchar.INSTANCE)
+        LiteralExpression p=  new LiteralExpression.BuilderA().setValue(expression).setDataType(PVarchar.INSTANCE)
                 .setSortOrder(sortorder).build();
       List<Expression> children = Arrays.<Expression>asList(v,p);
       LikeExpression e1 = ByteBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);

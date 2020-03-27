@@ -47,9 +47,9 @@ public class StringToArrayFunctionTest {
 
     private static void test(String string, String delimiter, String nullString, PhoenixArray expected, SortOrder stringSortOrder, SortOrder delimiterSortOrder, SortOrder nullStringSortOrder, PDataType stringType, PDataType delimiterType, PDataType nullStringType) throws SQLException {
         LiteralExpression arrayLiteral, delimiterLiteral, nullStringLiteral;
-        arrayLiteral = new LiteralExpression.Builder().setValue(string).setDataType(stringType).setSortOrder(stringSortOrder).setDeterminism(Determinism.ALWAYS).build();
-        delimiterLiteral = new LiteralExpression.Builder().setValue(delimiter).setDataType(delimiterType).setSortOrder(delimiterSortOrder).setDeterminism(Determinism.ALWAYS).build();
-        nullStringLiteral = new LiteralExpression.Builder().setValue(nullString).setDataType(nullStringType).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        arrayLiteral = new LiteralExpression.BuilderA().setValue(string).setDataType(stringType).setSortOrder(stringSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        delimiterLiteral = new LiteralExpression.BuilderA().setValue(delimiter).setDataType(delimiterType).setSortOrder(delimiterSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        nullStringLiteral = new LiteralExpression.BuilderA().setValue(nullString).setDataType(nullStringType).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
         testExpression(arrayLiteral, delimiterLiteral, nullStringLiteral, expected);
     }
 

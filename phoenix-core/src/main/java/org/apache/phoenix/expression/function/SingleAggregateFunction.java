@@ -82,7 +82,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
     };
     
     protected SingleAggregateFunction() {
-        this(Arrays.<Expression>asList(new LiteralExpression.Builder().setValue(1).setDeterminism(Determinism.ALWAYS).buildSimple(false)), true);
+        this(Arrays.<Expression>asList(new LiteralExpression.BuilderB().setValue(1).setDeterminism(Determinism.ALWAYS).build()), true);
     }
 
     public SingleAggregateFunction(List<Expression> children) {

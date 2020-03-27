@@ -192,10 +192,10 @@ public class HashCacheClient  {
             PDataType type = keyExpression.getDataType();
             keyExpression.reset();
             if (keyExpression.evaluate(tuple, ptr)) {
-                return new LiteralExpression.Builder().setValue(type.toObject(ptr, keyExpression.getSortOrder()))
+                return new LiteralExpression.BuilderA().setValue(type.toObject(ptr, keyExpression.getSortOrder()))
                         .setDataType(type).build();
             }
-            return new LiteralExpression.Builder().setDataType(type).build();
+            return new LiteralExpression.BuilderA().setDataType(type).build();
         }
         
         List<Expression> children = keyExpression.getChildren();
@@ -204,9 +204,9 @@ public class HashCacheClient  {
             PDataType type = child.getDataType();
             child.reset();
             if (child.evaluate(tuple, ptr)) {
-                values.add(new LiteralExpression.Builder().setValue(type.toObject(ptr, child.getSortOrder())).setDataType(type).build());
+                values.add(new LiteralExpression.BuilderA().setValue(type.toObject(ptr, child.getSortOrder())).setDataType(type).build());
             } else {
-                values.add(new LiteralExpression.Builder().setDataType(type).build());
+                values.add(new LiteralExpression.BuilderA().setDataType(type).build());
             }
         }
         // The early evaluation of this constant expression is not necessary, for it

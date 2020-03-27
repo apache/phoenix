@@ -158,7 +158,7 @@ public class ListJarsQueryPlan implements QueryPlan {
                     ParseNodeFactory factory = new ParseNodeFactory();
                     LiteralParseNode literal =
                             factory.literal(listFiles.next().getPath().toString());
-                    LiteralExpression expression = new LiteralExpression.Builder().setValue(literal.getValue())
+                    LiteralExpression expression = new LiteralExpression.BuilderA().setValue(literal.getValue())
                             .setDataType(PVarchar.INSTANCE).setDeterminism(Determinism.ALWAYS).build();
                     expression.evaluate(null, ptr);
                     byte[] rowKey = ByteUtil.copyKeyBytesIfNecessary(ptr);

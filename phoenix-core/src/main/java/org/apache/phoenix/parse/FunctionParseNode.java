@@ -141,7 +141,7 @@ public class FunctionParseNode extends CompoundParseNode {
         if (args.length > children.size()) {
             List<Expression> moreChildren = new ArrayList<Expression>(children);
             for (int i = children.size(); i < info.getArgs().length; i++) {
-                moreChildren.add(new LiteralExpression.Builder().setDataType(args[i].allowedTypes.length == 0 ? null :
+                moreChildren.add(new LiteralExpression.BuilderA().setDataType(args[i].allowedTypes.length == 0 ? null :
                     PDataTypeFactory.getInstance().instanceFromClass(args[i].allowedTypes[0]))
                         .setDeterminism(Determinism.ALWAYS).build());
 
@@ -181,7 +181,7 @@ public class FunctionParseNode extends CompoundParseNode {
                     // based on the function argument annonation set the parameter meta data.
                     if (child.getDataType() == null) {
                         if (allowedTypes.length > 0) {
-                            context.getBindManager().addParamMetaData(bindNode, new LiteralExpression.Builder()
+                            context.getBindManager().addParamMetaData(bindNode, new LiteralExpression.BuilderA()
                                     .setDataType(PDataTypeFactory.getInstance().instanceFromClass(
                                 allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build());
                         }
@@ -190,7 +190,7 @@ public class FunctionParseNode extends CompoundParseNode {
                     }
                 } else if (allowedTypes.length > 0) {
                     // Switch null type with typed null
-                    children.set(i, new LiteralExpression.Builder().setDataType(PDataTypeFactory.getInstance().instanceFromClass(
+                    children.set(i, new LiteralExpression.BuilderA().setDataType(PDataTypeFactory.getInstance().instanceFromClass(
                             allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build());
 
                 }
@@ -483,14 +483,14 @@ public class FunctionParseNode extends CompoundParseNode {
                 SQLParser parser = new SQLParser(strValue);
                 try {
                     LiteralParseNode node = parser.parseLiteral();
-                    LiteralExpression defaultValue = new LiteralExpression.Builder().setValue(node.getValue()).setDataType(PDataTypeFactory.getInstance().instanceFromClass(
+                    LiteralExpression defaultValue = new LiteralExpression.BuilderA().setValue(node.getValue()).setDataType(PDataTypeFactory.getInstance().instanceFromClass(
                         allowedTypes[0])).setDeterminism(Determinism.ALWAYS).build();
                     if (this.getAllowedTypes().length > 0) {
                         for (Class<? extends PDataType> type : this.getAllowedTypes()) {
                             if (defaultValue.getDataType() == null || defaultValue.getDataType().isCoercibleTo(
                                 PDataTypeFactory.getInstance().instanceFromClass(type),
                                 node.getValue())) {
-                                return new LiteralExpression.Builder().setValue(node.getValue())
+                                return new LiteralExpression.BuilderA().setValue(node.getValue())
                                     .setDataType(PDataTypeFactory.getInstance().instanceFromClass(type))
                                     .setDeterminism(Determinism.ALWAYS).build();
                             }

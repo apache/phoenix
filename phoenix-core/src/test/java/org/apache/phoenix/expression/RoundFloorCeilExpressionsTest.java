@@ -76,7 +76,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundDecimalExpression() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
         Expression roundDecimalExpression = RoundDecimalExpression.create(decimalLiteral, 3);
 
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -90,7 +90,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundNegativePrecisionDecimalExpression() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(444.44).setDataType(PDecimal.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(444.44).setDataType(PDecimal.INSTANCE).build();
         Expression roundDecimalExpression = RoundDecimalExpression.create(decimalLiteral, -2);
 
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -104,7 +104,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundDecimalExpressionNoop() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(5).setDataType(PInteger.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(5).setDataType(PInteger.INSTANCE).build();
         Expression roundDecimalExpression = RoundDecimalExpression.create(decimalLiteral, 3);
 
         assertEquals(roundDecimalExpression, decimalLiteral);
@@ -112,7 +112,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testFloorDecimalExpression() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
         Expression floorDecimalExpression = FloorDecimalExpression.create(decimalLiteral, 3);
 
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -126,7 +126,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testFloorDecimalExpressionNoop() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(5).setDataType(PInteger.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(5).setDataType(PInteger.INSTANCE).build();
         Expression floorDecimalExpression = FloorDecimalExpression.create(decimalLiteral, 3);
 
         assertEquals(floorDecimalExpression, decimalLiteral);
@@ -134,7 +134,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testCeilDecimalExpression() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
         Expression ceilDecimalExpression = CeilDecimalExpression.create(decimalLiteral, 3);
 
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -148,7 +148,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testCeilDecimalExpressionNoop() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(5).setDataType(PInteger.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(5).setDataType(PInteger.INSTANCE).build();
         Expression ceilDecimalExpression = CeilDecimalExpression.create(decimalLiteral, 3);
 
         assertEquals(ceilDecimalExpression, decimalLiteral);
@@ -156,8 +156,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundDecimalExpressionScaleParamValidation() throws Exception {
-        LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
-        LiteralExpression scale = new LiteralExpression.Builder().setValue("3").setDataType(PVarchar.INSTANCE).build();
+        LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(1.23898).setDataType(PDecimal.INSTANCE).build();
+        LiteralExpression scale = new LiteralExpression.BuilderA().setValue("3").setDataType(PVarchar.INSTANCE).build();
 
         List<Expression> childExpressions = new ArrayList<Expression>(2);
         childExpressions.add(decimalLiteral);
@@ -183,7 +183,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, upperBound);
 
         KeyPart keyPart = roundDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.Builder().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.BuilderA().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
     }
 
     @Test
@@ -196,7 +196,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, true, upperBound, false);
 
         KeyPart keyPart = floorDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.Builder().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.BuilderA().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
     }
 
     @Test
@@ -209,7 +209,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, false, upperBound, true);
 
         KeyPart keyPart = ceilDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.Builder().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, new LiteralExpression.BuilderA().setValue(new BigDecimal("1.238")).setDataType(PDecimal.INSTANCE).build()));
     }
 
     // KeyRange complex / generated tests
@@ -298,7 +298,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
          * @return  the expression containing the above parameters
          */
         public Expression getExpression(byte[] key, int scale) throws SQLException {
-            LiteralExpression decimalLiteral = new LiteralExpression.Builder().setValue(PDecimal.INSTANCE.toObject(key)).setDataType(PDecimal.INSTANCE).build();
+            LiteralExpression decimalLiteral = new LiteralExpression.BuilderA().setValue(PDecimal.INSTANCE.toObject(key)).setDataType(PDecimal.INSTANCE).build();
             switch(this) {
                 case ROUND:
                     return RoundDecimalExpression.create(decimalLiteral, scale);
@@ -416,7 +416,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      */
     private void verifyKeyPart(RoundingType exprType, int scale, KeyPart keyPart) throws SQLException {
         for(BigDecimal rhsDecimal : DECIMALS) {
-            LiteralExpression rhsExpression = new LiteralExpression.Builder().setValue(rhsDecimal).setDataType(PDecimal.INSTANCE).build();
+            LiteralExpression rhsExpression = new LiteralExpression.BuilderA().setValue(rhsDecimal).setDataType(PDecimal.INSTANCE).build();
             for(Relation relation : Relation.values()) {
                 KeyRange keyRange = keyPart.getKeyRange(relation.compareOp, rhsExpression);
                 verifyKeyRange(exprType, scale, relation, rhsDecimal, keyRange);
@@ -444,7 +444,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         final String dump = getMessage(exprType, scale, relation, rhs, range);
 
         ImmutableBytesPtr rhsPtr = new ImmutableBytesPtr();
-        new LiteralExpression.Builder().setValue(rhs).setDataType(PDecimal.INSTANCE).build().evaluate(null, rhsPtr);
+        new LiteralExpression.BuilderA().setValue(rhs).setDataType(PDecimal.INSTANCE).build().evaluate(null, rhsPtr);
         ImmutableBytesPtr lhsPtr = new ImmutableBytesPtr();
 
         // we should only get an empty range if we can verify that precision makes a match impossible
@@ -553,14 +553,14 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @BeforeClass
     public static void init() throws Exception {
-        DUMMY_DECIMAL = new LiteralExpression.Builder().setValue(new BigDecimal("2.5")).buildSimple(false);
+        DUMMY_DECIMAL = new LiteralExpression.BuilderB().setValue(new BigDecimal("2.5")).build();
     }
 
     // Date Expression Tests
     
     @Test
     public void testRoundDateExpression() throws Exception {
-        LiteralExpression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        LiteralExpression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression roundDateExpression = RoundDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -574,7 +574,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testRoundDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        Expression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression roundDateExpression = RoundDateExpression.create(dateLiteral, TimeUnit.MINUTE, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -588,7 +588,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testFloorDateExpression() throws Exception {
-        LiteralExpression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        LiteralExpression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -602,7 +602,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testFloorDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        Expression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.SECOND, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -616,7 +616,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testCeilDateExpression() throws Exception {
-        LiteralExpression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        LiteralExpression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression ceilDateExpression = CeilDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -630,7 +630,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testCeilDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        Expression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         Expression ceilDateExpression = CeilDateExpression.create(dateLiteral, TimeUnit.SECOND, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -647,7 +647,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      */
     @Test
     public void testRoundDateExpressionValidation_1() throws Exception {
-        LiteralExpression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        LiteralExpression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
         
         List<Expression> childExpressions = new ArrayList<Expression>(1);
         childExpressions.add(dateLiteral);
@@ -665,8 +665,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      */
     @Test
     public void testRoundDateExpressionValidation_2() throws Exception {
-        LiteralExpression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
-        LiteralExpression timeUnitLiteral = new LiteralExpression.Builder().setValue("millis").setDataType(PVarchar.INSTANCE).build();
+        LiteralExpression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2012-01-01 14:25:28")).setDataType(PDate.INSTANCE).build();
+        LiteralExpression timeUnitLiteral = new LiteralExpression.BuilderA().setValue("millis").setDataType(PVarchar.INSTANCE).build();
         List<Expression> childExpressions = new ArrayList<Expression>(1);
         childExpressions.add(dateLiteral);
         childExpressions.add(timeUnitLiteral);
@@ -681,7 +681,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testFloorDateExpressionForWeek() throws Exception {
-        Expression dateLiteral = new LiteralExpression.Builder().setValue(DateUtil.parseDate("2016-01-07 08:17:28")).setDataType(PDate.INSTANCE).build();
+        Expression dateLiteral = new LiteralExpression.BuilderA().setValue(DateUtil.parseDate("2016-01-07 08:17:28")).setDataType(PDate.INSTANCE).build();
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.WEEK);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();

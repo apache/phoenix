@@ -69,11 +69,11 @@ public class GetSetByteBitFunctionTest {
     private void testGetByte(byte[] bytes, int offset, PBinaryBase dataType, int expected)
             throws SQLException {
         LiteralExpression dataExpr, offsetExpr;
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
         testGetByteExpression(dataExpr, offsetExpr, expected);
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
 
         testGetByteExpression(dataExpr, offsetExpr, expected);
     }
@@ -81,13 +81,13 @@ public class GetSetByteBitFunctionTest {
     private void testSetByte(byte[] bytes, int offset, int newValue, PBinaryBase dataType,
             byte[] expected) throws SQLException {
         LiteralExpression dataExpr, offsetExpr, newValueExpr;
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
-        newValueExpr = new LiteralExpression.Builder().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        newValueExpr = new LiteralExpression.BuilderA().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
         testSetByteExpression(dataExpr, offsetExpr, newValueExpr, expected);
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
-        newValueExpr = new LiteralExpression.Builder().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        newValueExpr = new LiteralExpression.BuilderA().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
         testSetByteExpression(dataExpr, offsetExpr, newValueExpr, expected);
     }
 
@@ -138,24 +138,24 @@ public class GetSetByteBitFunctionTest {
     private void testGetBit(byte[] bytes, int offset, PBinaryBase dataType, int expected)
             throws SQLException {
         LiteralExpression dataExpr, offsetExpr;
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
         testGetBitExpression(dataExpr, offsetExpr, expected);
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
         testGetBitExpression(dataExpr, offsetExpr, expected);
     }
 
     private void testSetBit(byte[] bytes, int offset, int newValue, PBinaryBase dataType,
             byte[] expected) throws SQLException {
         LiteralExpression dataExpr, offsetExpr, newValueExpr;
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
-        newValueExpr = new LiteralExpression.Builder().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.ASC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
+        newValueExpr = new LiteralExpression.BuilderA().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.ASC).build();
         testSetBitExpression(dataExpr, offsetExpr, newValueExpr, expected);
-        dataExpr = new LiteralExpression.Builder().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
-        offsetExpr = new LiteralExpression.Builder().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
-        newValueExpr = new LiteralExpression.Builder().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        dataExpr = new LiteralExpression.BuilderA().setValue(bytes).setDataType(dataType).setSortOrder(SortOrder.DESC).build();
+        offsetExpr = new LiteralExpression.BuilderA().setValue(offset).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
+        newValueExpr = new LiteralExpression.BuilderA().setValue(newValue).setDataType(PInteger.INSTANCE).setSortOrder(SortOrder.DESC).build();
         testSetBitExpression(dataExpr, offsetExpr, newValueExpr, expected);
     }
 

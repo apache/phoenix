@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
@@ -939,12 +938,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         maxValueKv.getValueLength());
         FunctionArgument arg =
                 new FunctionArgument(type.getString(), isArrayType, isConstant,
-                        defaultValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(defaultValue))
-                                .getValue()).buildSimple(false),
-                        minValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(minValue))
-                                .getValue()).buildSimple(false),
-                        maxValue == null ? null : new LiteralExpression.Builder().setValue((new LiteralParseNode(maxValue))
-                                .getValue()).buildSimple(false), argPosition);
+                        defaultValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(defaultValue))
+                                .getValue()).build(),
+                        minValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(minValue))
+                                .getValue()).build(),
+                        maxValue == null ? null : new LiteralExpression.BuilderB().setValue((new LiteralParseNode(maxValue))
+                                .getValue()).build(), argPosition);
 
         arguments.add(arg);
     }

@@ -133,6 +133,17 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     public static class Builder {
+        private Object value;
+        private PDataType type;
+        private Determinism determinism;
+        private byte[] byteValue;
+        private Integer maxLength;
+        private Integer scale;
+        private SortOrder sortOrder;
+        private Boolean rowKeyOrderOptimizable;
+    }
+
+    public static class BuilderA extends Builder {
 
         private Object value;
         private PDataType type;
@@ -143,42 +154,42 @@ public class LiteralExpression extends BaseTerminalExpression {
         private SortOrder sortOrder;
         private Boolean rowKeyOrderOptimizable; //Changed type of this field from primitive to object since its value should be true if not explicitly set in Builder
 
-        public Builder setValue(Object value) {
+        public BuilderA setValue(Object value) {
             this.value=value;
             return this;
         }
 
-        public Builder setDataType(PDataType type) {
+        public BuilderA setDataType(PDataType type) {
             this.type=type;
             return this;
         }
 
-        public Builder setDeterminism(Determinism determinism) {
+        public BuilderA setDeterminism(Determinism determinism) {
             this.determinism=determinism;
             return this;
         }
 
-        public Builder setRowKeyOrderOptimizable(Boolean rowKeyOrderOptimizable) {
+        public BuilderA setRowKeyOrderOptimizable(Boolean rowKeyOrderOptimizable) {
             this.rowKeyOrderOptimizable=rowKeyOrderOptimizable;
             return this;
         }
 
-        public Builder setMaxLength(Integer maxLength) {
+        public BuilderA setMaxLength(Integer maxLength) {
             this.maxLength=maxLength;
             return this;
         }
 
-        public Builder setScale(Integer scale) {
+        public BuilderA setScale(Integer scale) {
             this.scale=scale;
             return this;
         }
 
-        public Builder setSortOrder(SortOrder sortOrder) {
+        public BuilderA setSortOrder(SortOrder sortOrder) {
             this.sortOrder=sortOrder;
             return this;
         }
 
-        public Builder setByteValue(byte[] byteValue) {
+        public BuilderA setByteValue(byte[] byteValue) {
             this.byteValue=byteValue;
             return this;
         }
@@ -305,6 +316,59 @@ public class LiteralExpression extends BaseTerminalExpression {
             return new LiteralExpression(this);
         }
 
+    }
+
+    public static class BuilderB extends Builder {
+        private Object value;
+        private PDataType type;
+        private Determinism determinism;
+        private byte[] byteValue;
+        private Integer maxLength;
+        private Integer scale;
+        private SortOrder sortOrder;
+        private Boolean rowKeyOrderOptimizable;
+
+        public BuilderB setValue(Object value) {
+            this.value = value;
+            return this;
+        }
+
+        public BuilderB setDeterminism(Determinism determinism) {
+            this.determinism = determinism;
+            return this;
+        }
+
+        public LiteralExpression build() {
+            if (this.determinism == null) {
+                this.determinism = Determinism.ALWAYS;
+            }
+            if (this.value instanceof Boolean) {
+                return LiteralExpression.getBooleanLiteralExpression((Boolean)this.value,
+                        this.determinism);
+            } else if (this.value == null) {
+                return LiteralExpression.getNullLiteralExpression(this.determinism);
+            }
+            if (this.sortOrder == null) {
+                this.sortOrder = SortOrder.getDefault();
+            }
+            PDataType type = PDataType.fromLiteral(this.value);
+            this.byteValue = type.toBytes(this.value);
+            if (type.isNull(this.byteValue)) {
+                return LiteralExpression.getTypedNullLiteralExpression(type,
+                        this.determinism);
+            }
+            if (type == PVarchar.INSTANCE) {
+                String s = (String) this.value;
+                if (s.length() == this.byteValue.length) { // single byte characters only
+                    type = PChar.INSTANCE;
+                }
+            }
+            this.type = type;
+            this.maxLength = type == null || !type.isFixedWidth() ? null
+                    : type.getMaxLength(this.value);
+            this.sortOrder = SortOrder.getDefault();
+            return new LiteralExpression(this);
+        }
     }
 
     /**

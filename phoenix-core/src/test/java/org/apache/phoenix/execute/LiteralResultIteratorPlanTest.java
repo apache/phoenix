@@ -161,7 +161,7 @@ public class LiteralResultIteratorPlanTest {
         for (Object[] row : RELATION) {
             Expression[] exprs = new Expression[row.length];
             for (int i = 0; i < row.length; i++) {
-                exprs[i] = new LiteralExpression.Builder().setValue(row[i]).buildSimple(false);
+                exprs[i] = new LiteralExpression.BuilderB().setValue(row[i]).build();
             }
             TupleProjector projector = new TupleProjector(exprs);
             tuples.add(projector.projectResults(baseTuple));
@@ -175,7 +175,7 @@ public class LiteralResultIteratorPlanTest {
         List<PColumn> columns = Lists.<PColumn> newArrayList();
         for (int i = 0; i < row.length; i++) {
             String name = ParseNodeFactory.createTempAlias();
-            Expression expr = new LiteralExpression.Builder().setValue(row[i]).buildSimple(false);
+            Expression expr = new LiteralExpression.BuilderB().setValue(row[i]).build();
             PName colName = PNameFactory.newName(name);
             columns.add(new PColumnImpl(PNameFactory.newName(name),
                     PNameFactory.newName(VALUE_COLUMN_FAMILY), expr.getDataType(), expr.getMaxLength(),

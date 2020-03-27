@@ -22,17 +22,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
-import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.rewrite.RowValueConstructorExpressionRewriter;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
@@ -68,7 +65,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
         boolean isRHSNull = ExpressionUtil.isNull(rhs, ptr);
         if (isLHSNull && isRHSNull) { // null == null will end up making the query degenerate
-            andNodes.add(new LiteralExpression.Builder().setValue(false).setDataType(PBoolean.INSTANCE).build());
+            andNodes.add(new LiteralExpression.BuilderA().setValue(false).setDataType(PBoolean.INSTANCE).build());
         } else if (isLHSNull) { // AND rhs IS NULL
             andNodes.add(IsNullExpression.create(rhs, false, ptr));
         } else if (isRHSNull) { // AND lhs IS NULL
@@ -93,20 +90,20 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 addEqualityExpression(lhs.getChildren().get(i), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), new LiteralExpression.Builder().setDataType(lhs.getChildren().get(i).getDataType()).build(), andNodes, ptr, rowKeyOrderOptimizable);
+                addEqualityExpression(lhs.getChildren().get(i), new LiteralExpression.BuilderA().setDataType(lhs.getChildren().get(i).getDataType()).build(), andNodes, ptr, rowKeyOrderOptimizable);
             }
             for (; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(new LiteralExpression.Builder().setDataType(rhs.getChildren().get(i).getDataType()).build(), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
+                addEqualityExpression(new LiteralExpression.BuilderA().setDataType(rhs.getChildren().get(i).getDataType()).build(), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (lhs instanceof RowValueConstructorExpression) {
             addEqualityExpression(lhs.getChildren().get(0), rhs, andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < lhs.getChildren().size(); i++) {
-                addEqualityExpression(lhs.getChildren().get(i), new LiteralExpression.Builder().setDataType(lhs.getChildren().get(i).getDataType()).build(), andNodes, ptr, rowKeyOrderOptimizable);
+                addEqualityExpression(lhs.getChildren().get(i), new LiteralExpression.BuilderA().setDataType(lhs.getChildren().get(i).getDataType()).build(), andNodes, ptr, rowKeyOrderOptimizable);
             }
         } else if (rhs instanceof RowValueConstructorExpression) {
             addEqualityExpression(lhs, rhs.getChildren().get(0), andNodes, ptr, rowKeyOrderOptimizable);
             for (int i = 1; i < rhs.getChildren().size(); i++) {
-                addEqualityExpression(new LiteralExpression.Builder().setDataType(rhs.getChildren().get(i).getDataType()).build(), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
+                addEqualityExpression(new LiteralExpression.BuilderA().setDataType(rhs.getChildren().get(i).getDataType()).build(), rhs.getChildren().get(i), andNodes, ptr, rowKeyOrderOptimizable);
             }
         }
     }
@@ -151,9 +148,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 toString(op, children));
         }
         Determinism determinism =  lhsExpr.getDeterminism().combine(rhsExpr.getDeterminism());
-        LiteralExpression.Builder btrue = new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE)
+        LiteralExpression.BuilderA btrue = new LiteralExpression.BuilderA().setDataType(PBoolean.INSTANCE)
                 .setDeterminism(determinism).setValue(true);
-        LiteralExpression.Builder bfalse= new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE)
+        LiteralExpression.BuilderA bfalse= new LiteralExpression.BuilderA().setDataType(PBoolean.INSTANCE)
                 .setDeterminism(determinism).setValue(false);
         
         Object lhsValue = null;
@@ -163,7 +160,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (lhsExpr instanceof LiteralExpression) {
             lhsValue = ((LiteralExpression)lhsExpr).getValue();
             if (lhsValue == null) {
-                return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(lhsExpr.getDeterminism()).build();
+                return new LiteralExpression.BuilderA().setDataType(PBoolean.INSTANCE).setDeterminism(lhsExpr.getDeterminism()).build();
             }
         }
         Object rhsValue = null;
@@ -171,11 +168,11 @@ public class ComparisonExpression extends BaseCompoundExpression {
         if (rhsExpr instanceof LiteralExpression) {
             rhsValue = ((LiteralExpression)rhsExpr).getValue();
             if (rhsValue == null) {
-                return new LiteralExpression.Builder().setDataType(PBoolean.INSTANCE).setDeterminism(rhsExpr.getDeterminism()).build();
+                return new LiteralExpression.BuilderA().setDataType(PBoolean.INSTANCE).setDeterminism(rhsExpr.getDeterminism()).build();
             }
         }
         if (lhsValue != null && rhsValue != null) {
-            return new LiteralExpression.Builder().setValue(ByteUtil.compare(op,lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType))).setDeterminism(determinism).buildSimple(false);
+            return new LiteralExpression.BuilderB().setValue(ByteUtil.compare(op,lhsExprDataType.compareTo(lhsValue, rhsValue, rhsExprDataType))).setDeterminism(determinism).build();
         }
         // Coerce constant to match type of lhs so that we don't need to
         // convert at filter time. Since we normalize the select statement
@@ -190,7 +187,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
                         rhsExpr.getMaxLength() < lhsExpr.getMaxLength())) {
                 // TODO: if lengths are unequal and fixed width?
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
-                    children = Arrays.asList(children.get(0), new LiteralExpression.Builder().setValue(rhsValue)
+                    children = Arrays.asList(children.get(0), new LiteralExpression.BuilderA().setValue(rhsValue)
                                     .setDataType(lhsExprDataType).setMaxLength(lhsExpr.getMaxLength()).setSortOrder(lhsExpr.getSortOrder())
                                     .setDeterminism(determinism).setRowKeyOrderOptimizable(rowKeyOrderOptimizable).build());
                 } else if (op == CompareOp.EQUAL) {
@@ -213,7 +210,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
                     default: // Else, we truncate the value
                       BigDecimal bd = (BigDecimal)rhsValue;
                       rhsValue = bd.longValue() + increment;
-                      children = Arrays.asList(lhsExpr, new LiteralExpression.Builder()
+                      children = Arrays.asList(lhsExpr, new LiteralExpression.BuilderA()
                               .setValue(rhsValue).setDataType(lhsExprDataType).setSortOrder(lhsExpr.getSortOrder())
                               .setDeterminism(rhsExpr.getDeterminism()).build());
 
@@ -263,7 +260,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
                         break;
                       }
                     }
-                    children = Arrays.asList(lhsExpr, new LiteralExpression.Builder().setValue(rhsValue)
+                    children = Arrays.asList(lhsExpr, new LiteralExpression.BuilderA().setValue(rhsValue)
                             .setDataType(rhsExprDataType).setSortOrder(lhsExpr.getSortOrder()).setDeterminism(determinism).build());
                   }
                 }

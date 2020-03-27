@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -454,7 +453,7 @@ public class WhereOptimizer {
             List<Expression> group = Lists.newArrayList();
             for (Expression expression : candidates) {
                 PDataType type = expression.getDataType();
-                group.add(new LiteralExpression.Builder().setValue(type.getSampleValue()).setDataType(type).build());
+                group.add(new LiteralExpression.BuilderA().setValue(type.getSampleValue()).setDataType(type).build());
             }
             sampleValues.add(group);
         }
@@ -485,8 +484,8 @@ public class WhereOptimizer {
         
         return count == candidates.size()
                 && (context.getScanRanges().isPointLookup() || context.getScanRanges().useSkipScanFilter())
-                && (remaining == null || remaining.equals(new LiteralExpression.Builder().setValue(true)
-                .setDeterminism(Determinism.ALWAYS).buildSimple(false)));
+                && (remaining == null || remaining.equals(new LiteralExpression.BuilderB().setValue(true)
+                .setDeterminism(Determinism.ALWAYS).build()));
     }
 
     private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {
@@ -521,7 +520,7 @@ public class WhereOptimizer {
             if (!l.equals(node.getChildren())) {
                 if (l.isEmpty()) {
                     // Don't return null here, because then our defaultReturn will kick in
-                    return new LiteralExpression.Builder().setValue(true).setDeterminism(Determinism.ALWAYS).buildSimple(false);
+                    return new LiteralExpression.BuilderB().setValue(true).setDeterminism(Determinism.ALWAYS).build();
                 }
                 if (l.size() == 1) {
                     return l.get(0);

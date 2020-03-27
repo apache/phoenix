@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ArrayToStringFunction;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.*;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -52,9 +51,9 @@ public class ArrayToStringFunctionTest {
 
     private static void test(PhoenixArray array, PDataType arrayDataType, Integer arrMaxLen, Integer arrScale, String delimiter, String nullString, String expected, SortOrder arraySortOrder, SortOrder delimiterSortOrder, SortOrder nullStringSortOrder) throws SQLException {
         LiteralExpression arrayLiteral, delimiterLiteral, nullStringLiteral;
-        arrayLiteral = new LiteralExpression.Builder().setValue(array).setDataType(arrayDataType).setMaxLength(arrMaxLen).setScale(arrScale).setSortOrder(arraySortOrder).setDeterminism(Determinism.ALWAYS).build();
-        delimiterLiteral = new LiteralExpression.Builder().setValue(delimiter).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
-        nullStringLiteral = new LiteralExpression.Builder().setValue(nullString).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        arrayLiteral = new LiteralExpression.BuilderA().setValue(array).setDataType(arrayDataType).setMaxLength(arrMaxLen).setScale(arrScale).setSortOrder(arraySortOrder).setDeterminism(Determinism.ALWAYS).build();
+        delimiterLiteral = new LiteralExpression.BuilderA().setValue(delimiter).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
+        nullStringLiteral = new LiteralExpression.BuilderA().setValue(nullString).setDataType(PVarchar.INSTANCE).setSortOrder(nullStringSortOrder).setDeterminism(Determinism.ALWAYS).build();
         testExpression(arrayLiteral, delimiterLiteral, nullStringLiteral, expected);
     }
 

@@ -124,13 +124,13 @@ public class RoundDateExpression extends ScalarFunction {
     }
     
     static Expression getTimeUnitExpr(TimeUnit timeUnit) throws SQLException {
-        return new LiteralExpression.Builder().setValue(timeUnit.name()).setDataType(PVarchar.INSTANCE)
+        return new LiteralExpression.BuilderA().setValue(timeUnit.name()).setDataType(PVarchar.INSTANCE)
                 .setDeterminism(Determinism.ALWAYS).build();
 
     }
     
     static Expression getMultiplierExpr(int multiplier) throws SQLException {
-        return new LiteralExpression.Builder().setValue(multiplier).setDataType(PInteger.INSTANCE)
+        return new LiteralExpression.BuilderA().setValue(multiplier).setDataType(PInteger.INSTANCE)
                 .setDeterminism(Determinism.ALWAYS).build();
     }
     

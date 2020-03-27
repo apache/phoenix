@@ -72,7 +72,7 @@ public class ExpressionUtil {
         if (expression.evaluate(null, ptr) && ptr.getLength() != 0) {
             value = type.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), type, expression.getSortOrder(), expression.getMaxLength(), expression.getScale());
         }
-        return new LiteralExpression.Builder().setValue(value).setDataType(type)
+        return new LiteralExpression.BuilderA().setValue(value).setDataType(type)
                 .setDeterminism(expression.getDeterminism()).build();
     }
 
@@ -81,7 +81,7 @@ public class ExpressionUtil {
     }
 
     public static LiteralExpression getNullExpression(Expression expression) throws SQLException {
-        return new LiteralExpression.Builder().setDataType(expression.getDataType())
+        return new LiteralExpression.BuilderA().setDataType(expression.getDataType())
                 .setDeterminism(expression.getDeterminism()).build();
     }
     
