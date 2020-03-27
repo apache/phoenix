@@ -498,11 +498,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     errorMsg, null, null);
             return false;
         }
+        int expectedCellCount = 0;
         for (List<Cell> cells : expected.getFamilyCellMap().values()) {
             if (cells == null) {
                 continue;
             }
             for (Cell expectedCell : cells) {
+                expectedCellCount++;
                 byte[] family = CellUtil.cloneFamily(expectedCell);
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = getCell(actual, family, qualifier);
@@ -521,6 +523,20 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     return false;
                 }
             }
+        }
+        int actualCellCount = 0;
+        for (List<Cell> cells : actual.getFamilyCellMap().values()) {
+            if (cells == null) {
+                continue;
+            }
+            actualCellCount += cells.size();
+        }
+        if (expectedCellCount != actualCellCount) {
+            String errorMsg = "Index has extra cells (in iteration " + iteration + ")";
+            byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
+            logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
+                    errorMsg);
+            return false;
         }
         return true;
     }
@@ -674,7 +690,8 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
      * There are two types of verification: without repair and with repair. Without-repair verification is done before
      * or after index rebuild. It is done before index rebuild to identify the rows to be rebuilt. It is done after
      * index rebuild to verify the rows that have been rebuilt. With-repair verification can be done anytime using
-     * the “-v ONLY” option to check the consistency of the index table.
+     * the “-v ONLY” option to check the consistency of the index table. Note that with-repair verification simulates
+     * read repair in-memory for the purpose of verification, but does not actually repair the data in the index.
      *
      * Unverified Rows
      *
@@ -765,6 +782,15 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         while (expectedIndex < expectedSize && actualIndex <actualSize) {
             previousExpected = expected;
             expected = expectedMutationList.get(expectedIndex);
+            // Check if cell expired as per the current server's time and data table ttl
+            // Index table should have the same ttl as the data table, hence we might not
+            // get a value back from index if it has already expired between our rebuild and
+            // verify
+            // TODO: have a metric to update for these cases
+            if (isTimestampBeforeTTL(currentTime, getTimestamp(expected))) {
+                verificationPhaseResult.expiredIndexRowCount++;
+                return true;
+            }
             actual = actualMutationList.get(actualIndex);
             if (expected instanceof Put) {
                 if (previousExpected instanceof Delete) {
@@ -843,8 +869,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
                 String errorMsg = "Not matching index row";
                 logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                        getTimestamp(expectedMutationList.get(0)),
-                        getTimestamp(actualMutationList.get(0)), errorMsg);
+                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg);
                 verificationPhaseResult.invalidIndexRowCount++;
                 return false;
             }
