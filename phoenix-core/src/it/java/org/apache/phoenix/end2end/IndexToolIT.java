@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -221,8 +222,6 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
-            // Check after compaction
-            TestUtil.doMajorCompaction(conn, dataTableFullName);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
             setEveryNthRowWithNull(NROWS, 5, stmt);
@@ -233,7 +232,6 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             conn.commit();
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
-            TestUtil.doMajorCompaction(conn, dataTableFullName);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
             indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,
@@ -451,6 +449,21 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
         }
     }
 
+    private void verifyIndexTableRowKey(byte[] rowKey, String indexTableFullName) {
+        // The row key for the output table : timestamp | index table name | data row key
+        // The row key for the result table : timestamp | index table name | datable table region name |
+        //                                    scan start row | scan stop row
+
+        // This method verifies the common prefix, i.e., "timestamp | index table name | ", since the rest of the
+        // fields may include the separator key
+        int offset = Bytes.indexOf(rowKey, IndexRebuildRegionScanner.ROW_KEY_SEPARATOR_BYTE);
+        offset++;
+        byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
+        assertEquals(Bytes.compareTo(rowKey, offset, indexTableFullNameBytes.length, indexTableFullNameBytes, 0,
+                indexTableFullNameBytes.length), 0);
+        assertEquals(rowKey[offset + indexTableFullNameBytes.length], IndexRebuildRegionScanner.ROW_KEY_SEPARATOR_BYTE[0]);
+    }
+
     private Cell getErrorMessageFromIndexToolOutputTable(Connection conn, String dataTableFullName, String indexTableFullName)
             throws Exception {
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
@@ -484,6 +497,14 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             }
         }
         assertTrue(dataTableNameCheck && indexTableNameCheck && errorMessageCell != null);
+        verifyIndexTableRowKey(CellUtil.cloneRow(errorMessageCell), indexTableFullName);
+        hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                .getTable(IndexTool.RESULT_TABLE_NAME_BYTES);
+        scan = new Scan();
+        scanner = hIndexTable.getScanner(scan);
+        Result result = scanner.next();
+        assert(result != null);
+        verifyIndexTableRowKey(CellUtil.cloneRow(result.rawCells()[0]), indexTableFullName);
         return errorMessageCell;
     }
 
@@ -518,7 +539,7 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             assertEquals(1, MutationCountingRegionObserver.getMutationCount());
             MutationCountingRegionObserver.setMutationCount(0);
-            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should
+            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should not
             // write any index rows
             runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BEFORE);
@@ -606,16 +627,8 @@ public class IndexToolIT extends ParallelStatsEnabledIT {
             // Run the index tool to populate the index while verifying rows
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
-            // Corrupt one cell by writing directly into the index table
-            conn.createStatement().execute("upsert into " + indexTableFullName + " values ('Phoenix', 1, 'B')");
-            conn.commit();
-            // Run the index tool using the only-verify option to detect this mismatch between the data and index table
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, -1, IndexTool.IndexVerifyType.ONLY);
-            cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            expectedValueBytes = Bytes.toBytes("Not matching value for 0:0:CODE E:A A:B");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
             dropIndexToolTables(conn);
         }
     }
