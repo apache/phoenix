@@ -1468,7 +1468,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     throw new RuntimeException(e);
                 } catch (ExecutionException e) {
                     LOGGER.info("Failed to execute task during cancel", e);
-                    continue;
                 }
             }
         } finally {

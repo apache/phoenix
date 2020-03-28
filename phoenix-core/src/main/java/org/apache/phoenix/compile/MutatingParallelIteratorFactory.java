@@ -36,11 +36,16 @@ import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Factory class used to instantiate an iterator to handle mutations made during a parallel scan.
  */
 public abstract class MutatingParallelIteratorFactory implements ParallelIteratorFactory {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            MutatingParallelIteratorFactory.class);
     protected final PhoenixConnection connection;
 
     protected MutatingParallelIteratorFactory(PhoenixConnection connection) {
@@ -50,62 +55,81 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
     /**
      * Method that does the actual mutation work
      */
-    abstract protected MutationState mutate(StatementContext parentContext, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
+    abstract protected MutationState mutate(StatementContext parentContext, ResultIterator iterator,
+            PhoenixConnection connection) throws SQLException;
     
     @Override
-    public PeekingResultIterator newIterator(final StatementContext parentContext, ResultIterator iterator, Scan scan, String tableName, QueryPlan plan) throws SQLException {
+    public PeekingResultIterator newIterator(final StatementContext parentContext,
+            ResultIterator iterator, Scan scan, String tableName,
+            QueryPlan plan) throws SQLException {
+
         final PhoenixConnection clonedConnection = new PhoenixConnection(this.connection);
-        
-        MutationState state = mutate(parentContext, iterator, clonedConnection);
-        
-        final long totalRowCount = state.getUpdateCount();
-        final boolean autoFlush = connection.getAutoCommit() || plan.getTableRef().getTable().isTransactional();
-        if (autoFlush) {
-            clonedConnection.getMutationState().join(state);
-            state = clonedConnection.getMutationState();
+        try {
+            MutationState state = mutate(parentContext, iterator, clonedConnection);
+
+            final long totalRowCount = state.getUpdateCount();
+            final boolean autoFlush = connection.getAutoCommit() ||
+                    plan.getTableRef().getTable().isTransactional();
+            if (autoFlush) {
+                clonedConnection.getMutationState().join(state);
+                state = clonedConnection.getMutationState();
+            }
+            final MutationState finalState = state;
+
+            byte[] value = PLong.INSTANCE.toBytes(totalRowCount);
+            Cell keyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
+                    SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
+            final Tuple tuple = new SingleKeyValueTuple(keyValue);
+            return new PeekingResultIterator() {
+                private boolean done = false;
+
+                @Override
+                public Tuple next() {
+                    if (done) {
+                        return null;
+                    }
+                    done = true;
+                    return tuple;
+                }
+
+                @Override
+                public void explain(List<String> planSteps) {
+                }
+
+                @Override
+                public void close() throws SQLException {
+                    try {
+                        /*
+                         * Join the child mutation states in close, since this is called in a single
+                         * threaded manner after the parallel results have been processed.
+                         * If auto-commit is on for the cloned child connection, then the finalState
+                         * here is an empty mutation state (with no mutations). However, it still
+                         * has the metrics for mutation work done by the mutating-iterator.
+                         * Joining the mutation state makes sure those metrics are passed over
+                         * to the parent connection.
+                         */
+                        MutatingParallelIteratorFactory.this.connection.getMutationState()
+                                .join(finalState);
+                    } finally {
+                        clonedConnection.close();
+                    }
+                }
+
+                @Override
+                public Tuple peek() {
+                    return done ? null : tuple;
+                }
+            };
+        } catch (Throwable ex) {
+            // Catch just to make sure we close the cloned connection and then rethrow
+            try {
+                // closeQuietly only handles IOException
+                clonedConnection.close();
+            } catch (SQLException sqlEx) {
+                LOGGER.error("Closing cloned Phoenix connection inside iterator, failed with: ",
+                        sqlEx);
+            }
+            throw ex;
         }
-        final MutationState finalState = state;
-        
-        byte[] value = PLong.INSTANCE.toBytes(totalRowCount);
-        Cell keyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
-        final Tuple tuple = new SingleKeyValueTuple(keyValue);
-        return new PeekingResultIterator() {
-            private boolean done = false;
-            
-            @Override
-            public Tuple next() throws SQLException {
-                if (done) {
-                    return null;
-                }
-                done = true;
-                return tuple;
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-
-            @Override
-            public void close() throws SQLException {
-                try {
-                    /* 
-                     * Join the child mutation states in close, since this is called in a single threaded manner
-                     * after the parallel results have been processed. 
-                     * If auto-commit is on for the cloned child connection, then the finalState here is an empty mutation 
-                     * state (with no mutations). However, it still has the metrics for mutation work done by the 
-                     * mutating-iterator. Joining the mutation state makes sure those metrics are passed over
-                     * to the parent connection.
-                     */ 
-                    MutatingParallelIteratorFactory.this.connection.getMutationState().join(finalState);
-                } finally {
-                    clonedConnection.close();
-                }
-            }
-
-            @Override
-            public Tuple peek() throws SQLException {
-                return done ? null : tuple;
-            }
-        };
     }
 }
