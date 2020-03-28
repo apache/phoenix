@@ -37,6 +37,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -110,6 +111,100 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
         conn.commit();
         conn.close();
+    }
+
+    @Test
+    public void testDelete() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
+            conn.commit();
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            // Count the number of index rows
+            String query = "SELECT COUNT(*) from " + indexTableName;
+            // There should be one row in the index table
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
+        }
+    }
+
+    @Test
+    public void testDeleteNonExistingRow() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+            String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
+            conn.createStatement().executeUpdate(dml);
+            conn.commit();
+            // Attempt to delete a row that does not exist
+            conn.createStatement().executeUpdate(dml);
+            conn.commit();
+            // Make sure this delete attempt did not make the index and data table inconsistent
+            IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null,
+                    0, IndexTool.IndexVerifyType.ONLY);
+        }
+    }
+
+    @Test
+    public void testSimulateConcurrentUpdates() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            }
+            // For the concurrent updates on the same row, the last write phase is ignored.
+            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the
+            // verify flag is set to true and/or index rows are deleted and check that this does not impact the
+            // correctness.
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            // Do multiple updates on the same data row
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1) values ('a', 'aa')");
+            conn.commit();
+            // The expected state of the index table is  {('aa', 'a', 'abcc', 'abcd'), ('bc', 'b', 'bcd', 'bcde')}
+            // Do more multiple updates on the same data row
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', null, null)");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1) values ('a', 'ab')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1) values ('b', 'ab')");
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('b', 'ab', null)");
+            conn.commit();
+            // Now the expected state of the index table is  {('ab', 'a', 'abcc' , null), ('ab', 'b', null, 'bcde')}
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * from "  + indexTableName);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abcc", rs.getString(3));
+            assertEquals(null, rs.getString(4));
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("b", rs.getString(2));
+            assertEquals(null, rs.getString(3));
+            assertEquals("bcde", rs.getString(4));
+            assertFalse(rs.next());
+        }
     }
 
     @Test
