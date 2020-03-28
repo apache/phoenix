@@ -30,6 +30,7 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
+import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -57,8 +58,8 @@ public class PhoenixIndexImportDirectReducer extends
             long ts = Long.valueOf(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             Table hTable = connection.unwrap(PhoenixConnection.class).getQueryServices()
                     .getTable(IndexTool.RESULT_TABLE_NAME_BYTES);
-            IndexRebuildRegionScanner.VerificationResult verificationResult =
-                    IndexRebuildRegionScanner.VerificationResult.getVerificationResult(hTable, ts);
+            IndexToolVerificationResult verificationResult =
+                    IndexToolVerificationResult.getVerificationResult(hTable, ts);
             context.getCounter(PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT).
                     setValue(verificationResult.getScannedDataRowCount());
             context.getCounter(PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT).

@@ -282,4 +282,31 @@ public class IndexManagementUtil {
           }
           return flattenedMutations;
       }
+
+    public static Collection<? extends Mutation> flattenMutationsByType(Collection<? extends Mutation> mutations)
+            throws IOException{
+        List<Mutation> flattenedMutations = Lists.newArrayListWithExpectedSize(mutations.size());
+        for (Mutation m : mutations) {
+            Put put = null;
+            Delete del = null;
+            for (List<Cell> cells : m.getFamilyCellMap().values()) {
+                for (Cell cell : cells) {
+                    if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                        if (put == null) {
+                            put = new Put(cell.getRow());
+                            flattenedMutations.add(put);
+                        }
+                        put.add(cell);
+                    } else {
+                        if (del == null) {
+                            del = new Delete(cell.getRow());
+                            flattenedMutations.add(del);
+                        }
+                        del.addDeleteMarker(cell);
+                    }
+                }
+            }
+        }
+        return flattenedMutations;
+    }
 }
