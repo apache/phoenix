@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -414,22 +413,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                             emptyCQ, 0, emptyCQ.length) == 0;
         }
 
-        private boolean verifyRow(byte[] rowKey) throws IOException {
-            LOG.warn("Scan " + scan + " did not return the empty column for " + region.getRegionInfo().getTable().getNameAsString());
-            Get get = new Get(rowKey);
-            get.setTimeRange(minTimestamp, maxTimestamp);
-            get.addColumn(emptyCF, emptyCQ);
-            Result result = region.get(get);
-            if (result.isEmpty()) {
-                throw new DoNotRetryIOException("The empty column does not exist in a row in " + region.getRegionInfo().getTable().getNameAsString());
-            }
-            if (Bytes.compareTo(result.getValue(emptyCF, emptyCQ), 0, VERIFIED_BYTES.length,
-                    VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
-                return false;
-            }
-            return true;
-        }
-
         /**
          *  An index row is composed of cells with the same timestamp. However, if there are multiple versions of an
          *  index row, HBase can return an index row with cells from multiple versions, and thus it can return cells
@@ -468,7 +451,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
         }
 
-
         private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) throws IOException {
             if (!indexMaintainer.isImmutableRows()) {
                 removeOlderCells(cellList);
@@ -494,8 +476,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                     return true;
                 }
             }
-            byte[] rowKey = CellUtil.cloneRow(cell);
-            return verifyRow(rowKey);
+            return false;
         }
 
         private long getMaxTimestamp(List<Cell> cellList) {

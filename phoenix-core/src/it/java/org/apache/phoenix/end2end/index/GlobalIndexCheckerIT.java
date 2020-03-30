@@ -40,9 +40,11 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -166,6 +168,48 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             // Make sure this delete attempt did not make the index and data table inconsistent
             IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null,
                     0, IndexTool.IndexVerifyType.ONLY);
+        }
+    }
+
+    @Test
+    public void testIndexRowWithoutEmptyColumn() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        long scn;
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            Thread.sleep(1000);
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+            scn = EnvironmentEdgeManager.currentTimeMillis();
+            // Configure IndexRegionObserver to fail the data write phase
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'abc','abcc', 'abccd')");
+            commitWithException(conn);
+            // The above upsert will create an unverified index row with row key {'abc', 'a'} and will make the existing
+            // index row with row key {'ab', 'a'} unverified
+            // Configure IndexRegionObserver to allow the data write phase
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            // Do major compaction which will remove the empty column cell from the index row with row key {'ab', 'a'}
+            TestUtil.doMajorCompaction(conn, indexTableName);
+        }
+        Properties props = new Properties();
+        props.setProperty("CurrentSCN", Long.toString(scn));
+        try (Connection connWithSCN = DriverManager.getConnection(getUrl(), props)) {
+            String selectSql =  "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
+            // Verify that we will read from the index table
+            assertExplainPlan(connWithSCN, selectSql, dataTableName, indexTableName);
+            ResultSet rs = connWithSCN.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
         }
     }
 
