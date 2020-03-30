@@ -182,7 +182,6 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         String indexTableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-            Thread.sleep(1000);
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)");
             scn = EnvironmentEdgeManager.currentTimeMillis();

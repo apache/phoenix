@@ -476,6 +476,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                     return true;
                 }
             }
+            // This index row does not have an empty column cell. It must be removed by compaction. This row will
+            // be treated as unverified so that it can be repaired
             return false;
         }
 
