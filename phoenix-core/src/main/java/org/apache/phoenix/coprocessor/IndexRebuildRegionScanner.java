@@ -570,7 +570,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 indexMaintainer.getEmptyKeyValueQualifier());
         Cell cell = (cellList != null && !cellList.isEmpty()) ? cellList.get(0) : null;
         if (cell == null) {
-            throw new DoNotRetryIOException("No empty column cell");
+            return false;
         }
         if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                 VERIFIED_BYTES, 0, VERIFIED_BYTES.length) == 0) {
