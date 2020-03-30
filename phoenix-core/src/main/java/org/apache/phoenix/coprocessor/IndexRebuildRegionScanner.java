@@ -833,6 +833,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                         break;
                     }
                 }
+                if (actual instanceof Delete) {
+                    break;
+                }
                 if (isMatchingMutation(expected, actual, expectedIndex)) {
                     expectedIndex++;
                     actualIndex++;
@@ -840,7 +843,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     continue;
                 }
             } else { // expected instanceof Delete
-                // Between put and delete, delete and delete, or before first delete, there can be other deletes.
+                // Between put and delete, delete and delete, or before the first delete, there can be other deletes.
                 // Skip all of them if any
                 while (getTimestamp(actual) > getTimestamp(expected) && actual instanceof Delete) {
                     actualIndex++;
@@ -859,27 +862,14 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     matchingCount++;
                     continue;
                 }
-                String errorMsg = "Delete check failure";
-                byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
-                logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                        getTimestamp(expected),
-                        getTimestamp(actual), errorMsg);
+            }
+            if (matchingCount > 0) {
+                break;
             }
             verificationPhaseResult.invalidIndexRowCount++;
             return false;
         }
         if ((expectedIndex != expectedSize) || actualIndex != actualSize) {
-            for (; expectedIndex < expectedSize; expectedIndex++) {
-                expected = expectedMutationList.get(expectedIndex);
-                // Check if cell expired as per the current server's time and data table ttl
-                // Index table should have the same ttl as the data table, hence we might not
-                // get a value back from index if it has already expired between our rebuild and
-                // verify
-                // TODO: have a metric to update for these cases
-                if (isTimestampBeforeTTL(currentTime, getTimestamp(expected))) {
-                    verificationPhaseResult.expiredIndexRowCount++;
-                }
-            }
             if (matchingCount > 0) {
                 if (verifyType != IndexTool.IndexVerifyType.ONLY) {
                     // We do not consider this as a verification issue but log it for further information.
@@ -963,13 +953,16 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 String errorMsg = "Missing index row";
                 byte[] key = keyRange.getLowerRange();
                 List<Mutation> mutationList = indexKeyToMutationMap.get(key);
+                if (mutationList.get(mutationList.size() - 1) instanceof Delete) {
+                    continue;
+                }
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(keyRange.getLowerRange()), viewConstants);
                 logToIndexToolOutputTable(dataKey,
                         keyRange.getLowerRange(),
                         getMaxTimestamp(dataKeyToMutationMap.get(dataKey)),
                         getTimestamp(mutationList.get(mutationList.size() - 1)), errorMsg);
+                verificationPhaseResult.missingIndexRowCount++;
             }
-            verificationPhaseResult.missingIndexRowCount += keys.size();
         }
         keys.addAll(invalidKeys);
     }

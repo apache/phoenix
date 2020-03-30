@@ -365,7 +365,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
             assertTrue(actualPR.equals(expectedPR));
         }
     }
-
+    @Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_cellValue() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
@@ -379,6 +379,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_emptyCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
@@ -405,6 +406,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_extraCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
