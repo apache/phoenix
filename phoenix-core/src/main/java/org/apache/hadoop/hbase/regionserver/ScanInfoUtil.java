@@ -110,7 +110,7 @@ public class ScanInfoUtil {
             oldScanInfo.getComparator());
     }
 
-    private static long getMaxLookback(Configuration conf){
+    public static long getMaxLookback(Configuration conf){
         //config param is in seconds, switch to millis
         return conf.getLong(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;

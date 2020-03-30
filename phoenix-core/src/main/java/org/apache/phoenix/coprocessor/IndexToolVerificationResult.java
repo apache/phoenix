@@ -30,17 +30,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import java.io.IOException;
 import java.util.Arrays;
 
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.REBUILT_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.RESULT_TABLE_COLUMN_FAMILY;
-import static org.apache.phoenix.mapreduce.index.IndexTool.SCANNED_DATA_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexTool.*;
 
 public class IndexToolVerificationResult {
     public static class PhaseResult {
@@ -48,26 +38,29 @@ public class IndexToolVerificationResult {
         long expiredIndexRowCount = 0;
         long missingIndexRowCount = 0;
         long invalidIndexRowCount = 0;
+        long beyondMaxLookBackMissingIndexRowCount = 0;
 
         public void add(PhaseResult phaseResult) {
             validIndexRowCount += phaseResult.validIndexRowCount;
             expiredIndexRowCount += phaseResult.expiredIndexRowCount;
             missingIndexRowCount += phaseResult.missingIndexRowCount;
             invalidIndexRowCount += phaseResult.invalidIndexRowCount;
+            beyondMaxLookBackMissingIndexRowCount += phaseResult.beyondMaxLookBackMissingIndexRowCount;
         }
 
         public PhaseResult(){}
 
         public PhaseResult(long validIndexRowCount, long expiredIndexRowCount,
-                long missingIndexRowCount, long invalidIndexRowCount) {
+                long missingIndexRowCount, long invalidIndexRowCount, long beyondMaxLookBackMissingIndexRowCount) {
             this.validIndexRowCount = validIndexRowCount;
             this.expiredIndexRowCount = expiredIndexRowCount;
             this.missingIndexRowCount = missingIndexRowCount;
             this.invalidIndexRowCount = invalidIndexRowCount;
+            this.beyondMaxLookBackMissingIndexRowCount = beyondMaxLookBackMissingIndexRowCount;
         }
 
         public long getTotalCount() {
-            return validIndexRowCount + expiredIndexRowCount + missingIndexRowCount + invalidIndexRowCount;
+            return validIndexRowCount + expiredIndexRowCount + missingIndexRowCount + invalidIndexRowCount + beyondMaxLookBackMissingIndexRowCount;
         }
 
         @Override
@@ -77,6 +70,7 @@ public class IndexToolVerificationResult {
                     ", expiredIndexRowCount=" + expiredIndexRowCount +
                     ", missingIndexRowCount=" + missingIndexRowCount +
                     ", invalidIndexRowCount=" + invalidIndexRowCount +
+                    ", beyondMaxLookBackMissingIndexRowCount=" + beyondMaxLookBackMissingIndexRowCount +
                     '}';
         }
 
@@ -92,7 +86,8 @@ public class IndexToolVerificationResult {
             return this.expiredIndexRowCount == pr.expiredIndexRowCount
                     && this.validIndexRowCount == pr.validIndexRowCount
                     && this.invalidIndexRowCount == pr.invalidIndexRowCount
-                    && this.missingIndexRowCount == pr.missingIndexRowCount;
+                    && this.missingIndexRowCount == pr.missingIndexRowCount
+                    && this.beyondMaxLookBackMissingIndexRowCount == pr.missingIndexRowCount;
         }
 
         @Override
@@ -102,6 +97,7 @@ public class IndexToolVerificationResult {
             result = 31 * result + validIndexRowCount;
             result = 31 * result + missingIndexRowCount;
             result = 31 * result + invalidIndexRowCount;
+            result = 31 * result + beyondMaxLookBackMissingIndexRowCount;
             return (int)result;
         }
     }
@@ -185,6 +181,8 @@ public class IndexToolVerificationResult {
         before.invalidIndexRowCount += count;
     }
 
+    private void addBeforeRebuildBeyondMaxLookBackMissingIndexRowCount(long count) { before.beyondMaxLookBackMissingIndexRowCount += count; }
+
     private void addAfterRebuildValidIndexRowCount(long count) {
         after.validIndexRowCount += count;
     }
@@ -200,6 +198,8 @@ public class IndexToolVerificationResult {
     private void addAfterRebuildInvalidIndexRowCount(long count) {
         after.invalidIndexRowCount += count;
     }
+
+    private void addAfterRebuildBeyondMaxLookBackMissingIndexRowCount(long count) { after.beyondMaxLookBackMissingIndexRowCount += count; }
 
     private static boolean isAfterRebuildInvalidIndexRowCount(Cell cell) {
         if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
@@ -229,6 +229,8 @@ public class IndexToolVerificationResult {
             addBeforeRebuildMissingIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES)) {
             addBeforeRebuildInvalidIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeRebuildBeyondMaxLookBackMissingIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES)) {
             addAfterRebuildValidIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES)) {
@@ -237,6 +239,8 @@ public class IndexToolVerificationResult {
             addAfterRebuildMissingIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES)) {
             addAfterRebuildInvalidIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES)) {
+            addAfterRebuildBeyondMaxLookBackMissingIndexRowCount(getValue(cell));
         }
     }
 

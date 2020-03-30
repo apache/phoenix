@@ -72,6 +72,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
@@ -154,6 +155,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
     private int  singleRowRebuildReturnCode;
     private Map<byte[], NavigableSet<byte[]>> familyMap;
     private byte[][] viewConstants;
+    private final Configuration config;
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -161,6 +163,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                               UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
+        this.config = config;
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
             pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
                     QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
@@ -839,6 +842,9 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                     matchingCount++;
                     continue;
                 }
+                else if (isTimestampBeforeMaxLookBack(currentTime, getTimestamp(expected))){
+                    // the corresponding index mutations may have been compacted or it is real bug, we are not so we
+                }
             } else { // expected instanceof Delete
                 // Between put and delete, delete and delete, or before first delete, there can be other deletes.
                 // Skip all of them if any
@@ -979,6 +985,13 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             return false;
         }
         return tsToCheck < (currentTime - (long) indexTableTTL * 1000);
+    }
+
+    private boolean isTimestampBeforeMaxLookBack(long currentTime, long tsToCheck){
+        if (!ScanInfoUtil.isMaxLookbackTimeEnabled(config))
+            return false;
+        long maxLookback = ScanInfoUtil.getMaxLookback(config);
+        return tsToCheck < (currentTime - maxLookback);
     }
 
     private void addVerifyTask(final List<KeyRange> keys,
