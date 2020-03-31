@@ -94,7 +94,7 @@
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.6.4</slf4j.version>
+    <slf4j.version>1.7.25</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <commons-io.version>2.5</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
@@ -109,8 +109,7 @@
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
-    <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
-    <jodatime.version>1.6</jodatime.version>
+    <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <tephra.version>0.15.0-incubating</tephra.version>
     <omid.version>1.0.1</omid.version>
@@ -125,7 +124,7 @@
     <jcodings.version>1.0.18</jcodings.version>
     <thrift.version>0.9.0</thrift.version>
     <!-- Test Dependencies -->
-    <mockito.version>1.8.5</mockito.version>
+    <mockito.version>1.10.19</mockito.version>
     <junit.version>4.13</junit.version>
     <hamcrest.version>1.3</hamcrest.version>
 
