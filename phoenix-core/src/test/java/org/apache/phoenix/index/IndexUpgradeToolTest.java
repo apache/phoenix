@@ -38,7 +38,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -51,6 +50,7 @@ public class IndexUpgradeToolTest {
     private final boolean upgrade;
     private static final String DUMMY_STRING_VALUE = "anyValue";
     private static final String DUMMY_VERIFY_VALUE = "someVerifyValue";
+    private static final String ONLY_VERIFY_VALUE = "ONLY";
     private IndexUpgradeTool indexUpgradeTool=null;
     private String outputFile;
 
@@ -101,7 +101,7 @@ public class IndexUpgradeToolTest {
         if (!upgrade) {
             return;
         }
-        String [] indexToolOpts = {"-v", DUMMY_VERIFY_VALUE, "-runfg", "-st", "100"};
+        String [] indexToolOpts = {"-v", ONLY_VERIFY_VALUE, "-runfg", "-st", "100"};
         String indexToolarg = String.join(" ", indexToolOpts);
         String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
                 INPUT_LIST, "-lf", outputFile, "-d", "-rb", "-tool", indexToolarg };
@@ -113,15 +113,16 @@ public class IndexUpgradeToolTest {
                 DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
         List<String> argList =  Arrays.asList(values);
         Assert.assertTrue(argList.contains("-v"));
-        Assert.assertTrue(argList.contains(DUMMY_VERIFY_VALUE));
+        Assert.assertTrue(argList.contains(ONLY_VERIFY_VALUE));
         Assert.assertEquals("verify option and value are not passed consecutively", 1,
-                argList.indexOf(DUMMY_VERIFY_VALUE) - argList.indexOf("-v"));
+                argList.indexOf(ONLY_VERIFY_VALUE) - argList.indexOf("-v"));
         Assert.assertTrue(argList.contains("-runfg"));
         Assert.assertTrue(argList.contains("-st"));
 
-        // ensure that index tool can parse the options
+        // ensure that index tool can parse the options and raises no exceptions
         IndexTool it = new IndexTool();
-        it.parseOptions(values);
+        CommandLine commandLine = it.parseOptions(values);
+        it.populateIndexToolAttributes(commandLine);
     }
 
     @Test
@@ -129,7 +130,7 @@ public class IndexUpgradeToolTest {
         if (!upgrade) {
             return;
         }
-        String [] indexToolOpts = {"-v"+DUMMY_VERIFY_VALUE, "     -runfg", " -st  ", "100  "};
+        String [] indexToolOpts = {"-v"+ONLY_VERIFY_VALUE, "     -runfg", " -st  ", "100  "};
         String indexToolarg = String.join(" ", indexToolOpts);
         String [] args = {"-o", upgrade ? UPGRADE_OP : ROLLBACK_OP, "-tb",
                 INPUT_LIST, "-rb", "-tool", indexToolarg };
@@ -140,13 +141,27 @@ public class IndexUpgradeToolTest {
         String [] values = indexUpgradeTool.getIndexToolArgValues(DUMMY_STRING_VALUE,
                 DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
         List<String> argList =  Arrays.asList(values);
-        Assert.assertTrue(argList.contains("-v" + DUMMY_VERIFY_VALUE));
+        Assert.assertTrue(argList.contains("-v" + ONLY_VERIFY_VALUE));
         Assert.assertTrue(argList.contains("-runfg"));
         Assert.assertTrue(argList.contains("-st"));
 
         // ensure that index tool can parse the options and raises no exceptions
         IndexTool it = new IndexTool();
-        it.parseOptions(values);
+        CommandLine commandLine = it.parseOptions(values);
+        it.populateIndexToolAttributes(commandLine);
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testBadIndexToolOptions() {
+        String [] indexToolOpts = {"-v" + DUMMY_VERIFY_VALUE};
+        String indexToolarg = String.join(" ", indexToolOpts);
+        String [] args = {"-o", UPGRADE_OP, "-tb", INPUT_LIST, "-rb", "-tool", indexToolarg };
+        setup(args);
+        String [] values = indexUpgradeTool.getIndexToolArgValues(DUMMY_STRING_VALUE,
+                DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE, DUMMY_STRING_VALUE);
+        IndexTool it = new IndexTool();
+        CommandLine commandLine = it.parseOptions(values);
+        it.populateIndexToolAttributes(commandLine);
     }
 
     @Parameters(name ="IndexUpgradeToolTest_mutable={1}")
