@@ -306,13 +306,12 @@ public class PhoenixMRJobSubmitter {
     }
 
     public Set<String> getSubmittedYarnApps() throws Exception {
-        String rmHost = PhoenixMRJobUtil.getActiveResourceManagerHost(conf, zkQuorum);
+        String rmAddress = PhoenixMRJobUtil.getActiveResourceManagerAddress(conf, zkQuorum);
         Map<String, String> urlParams = new HashMap<String, String>();
         urlParams.put(YarnApplication.APP_STATES_ELEMENT, YarnApplication.state.NEW.toString()
                 + "," + YarnApplication.state.ACCEPTED + "," + YarnApplication.state.SUBMITTED
                 + "," + YarnApplication.state.RUNNING);
-        int rmPort = PhoenixMRJobUtil.getRMPort(conf);
-        String response = PhoenixMRJobUtil.getJobsInformationFromRM(rmHost, rmPort, urlParams);
+        String response = PhoenixMRJobUtil.getJobsInformationFromRM(rmAddress, urlParams);
         LOGGER.debug("Already Submitted/Running Apps = " + response);
         JSONObject jobsJson = new JSONObject(response);
         JSONObject appsJson = jobsJson.optJSONObject(YarnApplication.APPS_ELEMENT);
