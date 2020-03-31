@@ -19,13 +19,19 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.*;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -50,6 +56,33 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     private static final int ROW_LOCK_WAIT_TIME = 10000;
 
     private final Object lock = new Object();
+
+    private long verifyIndexTable(String tableName, String indexName, Connection conn) throws Exception {
+        // This checks the state of every raw index row without rebuilding any row
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
+        // This checks the state of an index row after it is repaired
+        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        // We want to check the index rows again as they may be modified by the read repair
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.ONLY);
+        // Now we rebuild the entire index table and expect that it is still good after the full rebuild
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.AFTER);
+        // Truncate, rebuild and verify the index table
+        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
+        TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        try (Admin admin = pConn.getQueryServices().getAdmin()) {
+            admin.disableTable(physicalTableName);
+            admin.truncateTable(physicalTableName, true);
+        }
+        IndexToolIT.runIndexTool(true, false, "", tableName, indexName, null,
+                0, IndexTool.IndexVerifyType.AFTER);
+        long actualRowCountAfterCompaction = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        assertEquals(actualRowCount, actualRowCountAfterCompaction);
+        return actualRowCount;
+    }
 
     @Test
     public void testSynchronousDeletesAndUpsertValues() throws Exception {
@@ -130,7 +163,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         t2.start();
 
         doneSignal.await(60, TimeUnit.SECONDS);
-        IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        verifyIndexTable(tableName, indexName, conn);
     }
 
     @Test
@@ -191,7 +224,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         t2.start();
 
         doneSignal.await(60, TimeUnit.SECONDS);
-        IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        verifyIndexTable(tableName, indexName, conn);
     }
 
     @Test @Repeat(5)
@@ -204,9 +237,10 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         final String indexName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName
-                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
+                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER," +
+                "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE(v2, v3)");
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
         Runnable[] runnables = new Runnable[nThreads];
         for (int i = 0; i < nThreads; i++) {
@@ -216,11 +250,12 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                     try {
                         Connection conn = DriverManager.getConnection(getUrl());
                         for (int i = 0; i < 10000; i++) {
-                            boolean isNull = RAND.nextBoolean();
-                            int randInt = RAND.nextInt() % nIndexValues;
                             conn.createStatement().execute(
                                     "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
-                                            + (isNull ? null : randInt) + ")");
+                                            + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ", "
+                                            + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                            + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                            + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
                             if ((i % batchSize) == 0) {
                                 conn.commit();
                             }
@@ -241,8 +276,69 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         }
 
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
-        long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
+        long actualRowCount = verifyIndexTable(tableName, indexName, conn);
         assertEquals(nRows, actualRowCount);
+    }
+
+    @Test
+    public void testConcurrentUpsertsWithNoIndexedColumns() throws Exception {
+        int nThreads = 4;
+        final int batchSize = 100;
+        final int nRows = 997;
+        final String tableName = generateUniqueName();
+        final String indexName = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER," +
+                "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
+        TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE(v2, v3)");
+        final CountDownLatch doneSignal = new CountDownLatch(nThreads);
+        Runnable[] runnables = new Runnable[nThreads];
+        for (int i = 0; i < nThreads; i++) {
+            runnables[i] = new Runnable() {
+
+                @Override public void run() {
+                    try {
+                        Connection conn = DriverManager.getConnection(getUrl());
+                        for (int i = 0; i < 1000; i++) {
+                            if (RAND.nextInt() % 1000 < 10) {
+                                // Do not include the indexed column in upserts
+                                conn.createStatement().execute(
+                                        "UPSERT INTO " + tableName + " (k1, k2, b.v2, c.v3, d.v4) VALUES ("
+                                                + (RAND.nextInt() % nRows) + ", 0, "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
+                            } else {
+                                conn.createStatement().execute(
+                                        "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
+                            }
+                            if ((i % batchSize) == 0) {
+                                conn.commit();
+                            }
+                        }
+                        conn.commit();
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+        }
+        for (int i = 0; i < nThreads; i++) {
+            Thread t = new Thread(runnables[i]);
+            t.start();
+        }
+
+        assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+        verifyIndexTable(tableName, indexName, conn);
     }
 
     @Test
