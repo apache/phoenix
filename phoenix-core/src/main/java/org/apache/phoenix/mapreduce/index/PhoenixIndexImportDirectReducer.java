@@ -80,6 +80,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getBeforeRebuildMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getBeforeRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount());
             }
             if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT).
@@ -90,6 +94,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getAfterRebuildMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getAfterRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
             }
             if (verificationResult.isVerificationFailed(verifyType)) {
                 throw new IOException("Index verification failed! " + verificationResult);

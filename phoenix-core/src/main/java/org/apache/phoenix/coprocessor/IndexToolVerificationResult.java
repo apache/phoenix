@@ -30,17 +30,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import java.io.IOException;
 import java.util.Arrays;
 
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.REBUILT_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.RESULT_TABLE_COLUMN_FAMILY;
-import static org.apache.phoenix.mapreduce.index.IndexTool.SCANNED_DATA_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexTool.*;
 
 public class IndexToolVerificationResult {
     public static class PhaseResult {
@@ -48,26 +38,33 @@ public class IndexToolVerificationResult {
         long expiredIndexRowCount = 0;
         long missingIndexRowCount = 0;
         long invalidIndexRowCount = 0;
+        long beyondMaxLookBackMissingIndexRowCount = 0;
+        long beyondMaxLookBackInvalidIndexRowCount = 0;
 
         public void add(PhaseResult phaseResult) {
             validIndexRowCount += phaseResult.validIndexRowCount;
             expiredIndexRowCount += phaseResult.expiredIndexRowCount;
             missingIndexRowCount += phaseResult.missingIndexRowCount;
             invalidIndexRowCount += phaseResult.invalidIndexRowCount;
+            beyondMaxLookBackMissingIndexRowCount += phaseResult.beyondMaxLookBackMissingIndexRowCount;
+            beyondMaxLookBackInvalidIndexRowCount += phaseResult.beyondMaxLookBackInvalidIndexRowCount;
         }
 
         public PhaseResult(){}
 
         public PhaseResult(long validIndexRowCount, long expiredIndexRowCount,
-                long missingIndexRowCount, long invalidIndexRowCount) {
+                long missingIndexRowCount, long invalidIndexRowCount,
+                long beyondMaxLookBackMissingIndexRowCount, long beyondMaxLookBackInvalidIndexRowCount) {
             this.validIndexRowCount = validIndexRowCount;
             this.expiredIndexRowCount = expiredIndexRowCount;
             this.missingIndexRowCount = missingIndexRowCount;
             this.invalidIndexRowCount = invalidIndexRowCount;
+            this.beyondMaxLookBackInvalidIndexRowCount = beyondMaxLookBackInvalidIndexRowCount;
+            this.beyondMaxLookBackMissingIndexRowCount = beyondMaxLookBackMissingIndexRowCount;
         }
 
         public long getTotalCount() {
-            return validIndexRowCount + expiredIndexRowCount + missingIndexRowCount + invalidIndexRowCount;
+            return validIndexRowCount + expiredIndexRowCount + missingIndexRowCount + invalidIndexRowCount + beyondMaxLookBackMissingIndexRowCount + beyondMaxLookBackInvalidIndexRowCount;
         }
 
         @Override
@@ -77,7 +74,8 @@ public class IndexToolVerificationResult {
                     ", expiredIndexRowCount=" + expiredIndexRowCount +
                     ", missingIndexRowCount=" + missingIndexRowCount +
                     ", invalidIndexRowCount=" + invalidIndexRowCount +
-                    '}';
+                    ", beyondMaxLookBackMissingIndexRowCount=" + beyondMaxLookBackMissingIndexRowCount +
+                    ", beyondMaxLookBackInvalidIndexRowCount=" + beyondMaxLookBackInvalidIndexRowCount;
         }
 
         @Override
@@ -92,7 +90,9 @@ public class IndexToolVerificationResult {
             return this.expiredIndexRowCount == pr.expiredIndexRowCount
                     && this.validIndexRowCount == pr.validIndexRowCount
                     && this.invalidIndexRowCount == pr.invalidIndexRowCount
-                    && this.missingIndexRowCount == pr.missingIndexRowCount;
+                    && this.missingIndexRowCount == pr.missingIndexRowCount
+                    && this.beyondMaxLookBackInvalidIndexRowCount == pr.beyondMaxLookBackInvalidIndexRowCount
+                    && this.beyondMaxLookBackMissingIndexRowCount == pr.beyondMaxLookBackMissingIndexRowCount;
         }
 
         @Override
@@ -102,6 +102,8 @@ public class IndexToolVerificationResult {
             result = 31 * result + validIndexRowCount;
             result = 31 * result + missingIndexRowCount;
             result = 31 * result + invalidIndexRowCount;
+            result = 31 * result + beyondMaxLookBackMissingIndexRowCount;
+            result = 31 * result + beyondMaxLookBackInvalidIndexRowCount;
             return (int)result;
         }
     }
@@ -141,6 +143,14 @@ public class IndexToolVerificationResult {
         return before.invalidIndexRowCount;
     }
 
+    public long getBeforeRebuildBeyondMaxLookBackMissingIndexRowCount() {
+        return before.beyondMaxLookBackMissingIndexRowCount;
+    };
+
+    public long getBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount() {
+        return before.beyondMaxLookBackInvalidIndexRowCount;
+    };
+
     public long getBeforeRebuildMissingIndexRowCount() {
         return before.missingIndexRowCount;
     }
@@ -160,6 +170,14 @@ public class IndexToolVerificationResult {
     public long getAfterRebuildMissingIndexRowCount() {
         return after.missingIndexRowCount;
     }
+
+    public long getAfterRebuildBeyondMaxLookBackMissingIndexRowCount() {
+        return after.beyondMaxLookBackMissingIndexRowCount;
+    };
+
+    public long getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount() {
+        return after.beyondMaxLookBackInvalidIndexRowCount;
+    };
 
     private void addScannedDataRowCount(long count) {
         this.scannedDataRowCount += count;
@@ -185,6 +203,14 @@ public class IndexToolVerificationResult {
         before.invalidIndexRowCount += count;
     }
 
+    private void addBeforeRebuildBeyondMaxLookBackMissingIndexRowCount(long count) {
+        before.beyondMaxLookBackMissingIndexRowCount += count;
+    }
+
+    private void addBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount(long count) {
+        before.beyondMaxLookBackInvalidIndexRowCount += count;
+    }
+
     private void addAfterRebuildValidIndexRowCount(long count) {
         after.validIndexRowCount += count;
     }
@@ -199,6 +225,14 @@ public class IndexToolVerificationResult {
 
     private void addAfterRebuildInvalidIndexRowCount(long count) {
         after.invalidIndexRowCount += count;
+    }
+
+    private void addAfterRebuildBeyondMaxLookBackMissingIndexRowCount(long count) {
+        after.beyondMaxLookBackMissingIndexRowCount += count;
+    }
+
+    private void addAfterRebuildBeyondMaxLookBackInvalidIndexRowCount(long count) {
+        after.beyondMaxLookBackInvalidIndexRowCount += count;
     }
 
     private static boolean isAfterRebuildInvalidIndexRowCount(Cell cell) {
@@ -229,6 +263,10 @@ public class IndexToolVerificationResult {
             addBeforeRebuildMissingIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES)) {
             addBeforeRebuildInvalidIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeRebuildBeyondMaxLookBackMissingIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES)) {
             addAfterRebuildValidIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES)) {
@@ -237,6 +275,10 @@ public class IndexToolVerificationResult {
             addAfterRebuildMissingIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES)) {
             addAfterRebuildInvalidIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES)) {
+            addAfterRebuildBeyondMaxLookBackMissingIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES)) {
+            addAfterRebuildBeyondMaxLookBackInvalidIndexRowCount(getValue(cell));
         }
     }
 
@@ -284,11 +326,13 @@ public class IndexToolVerificationResult {
         if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.NONE) {
             return false;
         } else if (verifyType == IndexTool.IndexVerifyType.ONLY) {
-            if (before.invalidIndexRowCount + before.missingIndexRowCount > 0) {
+            if (before.invalidIndexRowCount + before.missingIndexRowCount
+                    + before.beyondMaxLookBackInvalidIndexRowCount + before.beyondMaxLookBackMissingIndexRowCount > 0) {
                 return true;
             }
         } else if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
-            if (after.invalidIndexRowCount + after.missingIndexRowCount > 0) {
+            if (after.invalidIndexRowCount + after.missingIndexRowCount
+                    + after.beyondMaxLookBackInvalidIndexRowCount + after.beyondMaxLookBackMissingIndexRowCount > 0) {
                 return true;
             }
         }

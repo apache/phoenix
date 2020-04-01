@@ -121,7 +121,7 @@ public class ScanInfoUtil {
             DEFAULT_PHOENIX_MAX_LOOKBACK_AGE));
     }
 
-    private static boolean isMaxLookbackTimeEnabled(long maxLookbackTime){
+    public static boolean isMaxLookbackTimeEnabled(long maxLookbackTime){
         return maxLookbackTime > 0L;
     }
 }
