@@ -17,13 +17,18 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Map;
+
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
@@ -31,17 +36,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Map;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import com.google.common.collect.Maps;
 
 public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     private static final String
@@ -52,7 +49,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     private static String dataTableFullName, indexTableFullName,
             schemaName, dataTableName, indexTableName;
-    static CustomEnvironmentEdge customEdge = new CustomEnvironmentEdge();
+    static MyClock myClock;
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
@@ -68,26 +65,24 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
         indexTableName = "I_"+generateUniqueName();
         indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         try (Connection conn = getConnection()) {
-            incrementEdgeByOne();
             conn.createStatement().execute(String.format(CREATE_TABLE_DDL, dataTableFullName));
             conn.commit();
-            incrementEdgeByOne();
             conn.createStatement().execute(String.format(CREATE_INDEX_DDL, indexTableName,
                     dataTableFullName));
             conn.commit();
         }
     }
 
-    private static void incrementEdgeByOne() {
-        customEdge.incrementValue(1);
-        EnvironmentEdgeManager.injectEdge(customEdge);
-    }
-
     private static void populateDataTable() throws SQLException {
+        myClock = new MyClock();
+        EnvironmentEdgeManager.injectEdge(myClock);
+        //So that we don't have to recompute the values below
+        myClock.tickTime();
+        myClock.tickTime();
         try (Connection conn = getConnection()) {
             //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
             for (int i=0; i<5; i++) {
-                incrementEdgeByOne();
+                myClock.tickTime();
                 PreparedStatement ps = conn.prepareStatement(
                         String.format(UPSERT_TABLE_DML, dataTableFullName));
                 ps.setInt(1, i+1);
@@ -97,6 +92,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
                 conn.commit();
             }
         }
+        EnvironmentEdgeManager.injectEdge(null);
     }
 
     private static void setupMiniCluster() throws Exception {
@@ -117,7 +113,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private int countRowsInIndex() throws SQLException {
-        incrementEdgeByOne();
         String select = "SELECT COUNT(*) FROM "+indexTableFullName;
         try(Connection conn = getConnection()) {
             ResultSet rs = conn.createStatement().executeQuery(select);
@@ -129,18 +124,14 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(getUrl(),
-                PropertiesUtil.deepCopy(TEST_PROPERTIES));
-    }
-
-    @Before
-    public void beforeTest() {
-        incrementEdgeByOne();
+        return DriverManager.getConnection(getUrl());
     }
 
     @Test
     public void testValidTimeRange() throws Exception {
-        String [] args = {"--deleteall", "--starttime", "1" , "--endtime", "9"};
+        String [] args = {"--delete-all-and-rebuild",
+                "--starttime", myClock.getRelativeTimeAsString(1),
+                "--endtime", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // all rows should be rebuilt
         Assert.assertEquals(5, countRowsInIndex());
@@ -149,7 +140,9 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Ignore("Until PHOENIX-5783 is fixed")
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
-        String [] args = {"--deleteall", "--starttime", "6" , "--endtime", "9"};
+        String [] args = {"--delete-all-and-rebuild",
+                "--starttime", myClock.getRelativeTimeAsString(6),
+                "--endtime", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // only last 3 rows should be rebuilt
         Assert.assertEquals(3, countRowsInIndex());
@@ -157,7 +150,9 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_endTimeInBetween() throws Exception {
-        String [] args = {"--deleteall", "--starttime", "1" , "--endtime", "6"};
+        String [] args = {"--delete-all-and-rebuild",
+                "--starttime", myClock.getRelativeTimeAsString(1),
+                "--endtime", myClock.getRelativeTimeAsString(6)};
         runIndexTool(args, 0);
         // only first 2 should be rebuilt
         Assert.assertEquals(2, countRowsInIndex());
@@ -165,7 +160,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testNoTimeRangePassed() throws Exception {
-        String [] args = {"--deleteall"};
+        String [] args = {"--delete-all-and-rebuild"};
         runIndexTool(args, 0);
         // all rows should be rebuilt
         Assert.assertEquals(5, countRowsInIndex());
@@ -175,7 +170,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testValidTimeRange_onlyStartTimePassed() throws Exception {
         //starttime passed of last upsert
-        String [] args = {"--deleteall", "--starttime", "8"};
+        String [] args = {"--delete-all-and-rebuild",
+                "--starttime", myClock.getRelativeTimeAsString(8)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -183,7 +179,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testValidTimeRange_onlyEndTimePassed() throws Exception {
         //end time passed as time of second upsert
-        String [] args = {"--deleteall", "--endtime", "5"};
+        String [] args = {"--delete-all-and-rebuild",
+                "--endtime", myClock.getRelativeTimeAsString(5)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -194,20 +191,30 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
                 IndexTool.IndexVerifyType.NONE, args);
     }
 
-    private static class CustomEnvironmentEdge extends EnvironmentEdge {
-        protected long value = 1L;
+    private static class MyClock extends EnvironmentEdge {
+        public long epoch;
+        public volatile long time;
 
-        public void setValue(long newValue) {
-            value = newValue;
-        }
-
-        public void incrementValue(long addedValue) {
-            value += addedValue;
+        public MyClock() {
+            epoch = System.currentTimeMillis();
+            time = epoch;
         }
 
         @Override
         public long currentTime() {
-            return this.value;
+            return time;
+        }
+
+        public long getRelativeTime(long n) {
+            return epoch + n - 1;
+        }
+
+        public String getRelativeTimeAsString(long n) {
+            return Long.toString(getRelativeTime(n));
+        }
+
+        public void tickTime() {
+            time++;
         }
     }
 
