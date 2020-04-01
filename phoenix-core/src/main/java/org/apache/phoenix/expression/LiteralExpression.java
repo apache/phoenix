@@ -133,26 +133,17 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     public static class Builder {
-        private Object value;
-        private PDataType type;
-        private Determinism determinism;
-        private byte[] byteValue;
-        private Integer maxLength;
-        private Integer scale;
-        private SortOrder sortOrder;
-        private Boolean rowKeyOrderOptimizable;
+        public Object value;
+        public PDataType type;
+        public Determinism determinism;
+        public byte[] byteValue;
+        public Integer maxLength;
+        public Integer scale;
+        public SortOrder sortOrder;
+        public Boolean rowKeyOrderOptimizable;
     }
 
     public static class BuilderA extends Builder {
-
-        private Object value;
-        private PDataType type;
-        private Determinism determinism;
-        private byte[] byteValue;
-        private Integer maxLength;
-        private Integer scale;
-        private SortOrder sortOrder;
-        private Boolean rowKeyOrderOptimizable; //Changed type of this field from primitive to object since its value should be true if not explicitly set in Builder
 
         public BuilderA setValue(Object value) {
             this.value=value;
@@ -192,55 +183,6 @@ public class LiteralExpression extends BaseTerminalExpression {
         public BuilderA setByteValue(byte[] byteValue) {
             this.byteValue=byteValue;
             return this;
-        }
-
-        /**
-         * Method to create LiteralExpression after deriving certain attributes
-         *
-         * ONLY use this build method for LiteralExpressions with:
-         * (A) no attributes set,
-         * (B) value and/or determinism set (either CAN be null),
-         * (C) ONLY byteValue set (CAN be null)
-         * If any other attributes are set, use build()
-         * @param byteValueOnly TRUE if the only known attribute before build is byteValue; FALSE otherwise
-         * @return LiteralExpression
-         */
-        public LiteralExpression buildSimple(boolean byteValueOnly) {
-            if (byteValueOnly) {
-                this.byteValue = this.byteValue != null ? this.byteValue : ByteUtil.EMPTY_BYTE_ARRAY;
-                this.sortOrder = SortOrder.ASC;
-                this.determinism = Determinism.ALWAYS;
-                return new LiteralExpression(this);
-            }
-            if (this.determinism == null) {
-                this.determinism = Determinism.ALWAYS;
-            }
-            if (this.value instanceof Boolean) {
-                return LiteralExpression.getBooleanLiteralExpression((Boolean)this.value,
-                        this.determinism);
-            } else if (this.value == null) {
-                return LiteralExpression.getNullLiteralExpression(this.determinism);
-            }
-            if (this.sortOrder == null) {
-                this.sortOrder = SortOrder.getDefault();
-            }
-            PDataType type = PDataType.fromLiteral(this.value);
-            this.byteValue = type.toBytes(this.value);
-            if (type.isNull(this.byteValue)) {
-                return LiteralExpression.getTypedNullLiteralExpression(type,
-                        this.determinism);
-            }
-            if (type == PVarchar.INSTANCE) {
-                String s = (String) this.value;
-                if (s.length() == this.byteValue.length) { // single byte characters only
-                    type = PChar.INSTANCE;
-                }
-            }
-            this.type = type;
-            this.maxLength = type == null || !type.isFixedWidth() ? null
-                    : type.getMaxLength(this.value);
-            this.sortOrder = SortOrder.getDefault();
-            return new LiteralExpression(this);
         }
 
         /**
@@ -310,14 +252,6 @@ public class LiteralExpression extends BaseTerminalExpression {
     }
 
     public static class BuilderB extends Builder {
-        private Object value;
-        private PDataType type;
-        private Determinism determinism;
-        private byte[] byteValue;
-        private Integer maxLength;
-        private Integer scale;
-        private SortOrder sortOrder;
-        private Boolean rowKeyOrderOptimizable;
 
         public BuilderB setValue(Object value) {
             this.value = value;
@@ -326,11 +260,6 @@ public class LiteralExpression extends BaseTerminalExpression {
 
         public BuilderB setDeterminism(Determinism determinism) {
             this.determinism = determinism;
-            return this;
-        }
-
-        public BuilderB setByteValue(byte[] byteValue) {
-            this.byteValue = byteValue;
             return this;
         }
 
@@ -344,9 +273,6 @@ public class LiteralExpression extends BaseTerminalExpression {
             } else if (this.value == null) {
                 return LiteralExpression.getNullLiteralExpression(this.determinism);
             }
-            if (this.sortOrder == null) {
-                this.sortOrder = SortOrder.getDefault();
-            }
             PDataType type = PDataType.fromLiteral(this.value);
             this.byteValue = type.toBytes(this.value);
             if (type.isNull(this.byteValue)) {
@@ -359,6 +285,9 @@ public class LiteralExpression extends BaseTerminalExpression {
                     type = PChar.INSTANCE;
                 }
             }
+            if (this.sortOrder == null) {
+                this.sortOrder = SortOrder.getDefault();
+            }
             this.type = type;
             this.maxLength = type == null || !type.isFixedWidth() ? null
                     : type.getMaxLength(this.value);
@@ -366,6 +295,23 @@ public class LiteralExpression extends BaseTerminalExpression {
             return new LiteralExpression(this);
         }
     }
+
+    public static class BuilderC extends Builder {
+
+        public BuilderC setByteValue(byte[] byteValue) {
+            this.byteValue = byteValue;
+            return this;
+        }
+
+        public LiteralExpression build() {
+            this.byteValue = this.byteValue != null ? this.byteValue : ByteUtil.EMPTY_BYTE_ARRAY;
+            this.sortOrder = SortOrder.ASC;
+            this.determinism = Determinism.ALWAYS;
+            return new LiteralExpression(this);
+        }
+    }
+
+
 
     /**
      * Constructs a LiteralExpression from a Builder after its attributes have been initialized/derived

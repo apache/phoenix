@@ -241,7 +241,7 @@ public class ImmutableStorageSchemeTest {
         List<Expression> children = Lists.newArrayListWithExpectedSize(1);
         List<Integer> failedValues = Lists.newArrayList();
         while (curr <= Short.MAX_VALUE) {
-            children.add(new LiteralExpression.BuilderB().setValue(curr).setDataType(PSmallint.INSTANCE).build());
+            children.add(new LiteralExpression.BuilderA().setValue(curr).setDataType(PSmallint.INSTANCE).build());
             ImmutableBytesPtr ptr = evaluate(children);
             ColumnValueDecoder decoder = immutableStorageScheme.getDecoder();
             assertTrue(decoder.decode(ptr, 0));

@@ -1036,7 +1036,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     byte[] value = ptr.copyBytesIfNecessary();
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
-                        colValues[indexArrayPos] = new LiteralExpression.BuilderA().setByteValue(value).buildSimple(true);
+                        colValues[indexArrayPos] = new LiteralExpression.BuilderC().setByteValue(value).build();
                     }
                 }
                 
