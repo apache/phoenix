@@ -173,7 +173,8 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     public static void waitForTaskState(Connection conn, PTable.TaskType taskType, String expectedTableName,
             PTable.TaskStatus expectedTaskStatus) throws InterruptedException,
             SQLException {
-        int maxTries = 100, nTries = 0;
+        int maxTries = 200, nTries = 0;
+        String taskStatus = "";
         do {
             Thread.sleep(2000);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
@@ -181,8 +182,6 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                     " WHERE " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "' AND " +
                     PhoenixDatabaseMetaData.TASK_TYPE + " = " +
                     taskType.getSerializedValue());
-
-            String taskStatus = null;
 
             while (rs.next()) {
                 taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
@@ -192,6 +191,6 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                 }
             }
         } while (++nTries < maxTries);
-        fail("Ran out of time waiting for task state to become " + expectedTaskStatus);
+        fail(String.format("Ran out of time waiting for current task state %s to become %s", taskStatus, expectedTaskStatus));
     }
 }
