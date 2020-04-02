@@ -250,21 +250,24 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
+          <!-- Common settings for all executions -->
+          <configuration>
+            <encoding>UTF-8</encoding>
+            <forkCount>${numForkedIT}</forkCount>
+            <runOrder>alphabetical</runOrder>
+            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+            <shutdown>kill</shutdown>
+            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+            <trimStackTrace>false</trimStackTrace>
+          </configuration>
           <executions>
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
                 <threadCount>20</threadCount-->
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <shutdown>kill</shutdown>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -275,11 +278,7 @@
             <execution>
               <id>ParallelStatsDisabledTest</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
                 <threadCount>20</threadCount-->
                 <!-- We're intermittantly hitting this assertion when running in parallel:
@@ -291,9 +290,6 @@
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
 		<!--enableAssertions>false</enableAssertions-->
                 <argLine>-Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <shutdown>kill</shutdown>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -304,15 +300,9 @@
             <execution>
               <id>HBaseManagedTimeTests</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
-                <shutdown>kill</shutdown>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -322,15 +312,9 @@
 	    <execution>
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
                  <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                 <shutdown>kill</shutdown>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
@@ -340,15 +324,9 @@
 <execution>
               <id>SplitSystemCatalogTests</id>
               <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
                  <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.SplitSystemCatalogTests</groups>
-                 <shutdown>kill</shutdown>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
