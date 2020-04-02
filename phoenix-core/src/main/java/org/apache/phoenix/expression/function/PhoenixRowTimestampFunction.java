@@ -18,8 +18,8 @@
 package org.apache.phoenix.expression.function;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
@@ -28,8 +28,6 @@ import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -46,8 +44,6 @@ import java.util.List;
         nodeClass= PhoenixRowTimestampParseNode.class,
         args = {})
 public class PhoenixRowTimestampFunction extends ScalarFunction {
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRowTimestampFunction.class);
-
     public static final String NAME = "PHOENIX_ROW_TIMESTAMP";
     private byte[] emptyCF;
     private byte[] emptyCQ;
@@ -73,19 +69,12 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
 
         long ts = tuple.getValue(0).getTimestamp();
         Cell emptyColumnKV = tuple.getValue(emptyCF, emptyCQ);
-        if ((emptyColumnKV != null) && isEmptyColumn(emptyColumnKV)) {
+        if ((emptyColumnKV != null) && CellUtil.matchingColumn(emptyColumnKV, emptyCF, emptyCQ)) {
             ts = emptyColumnKV.getTimestamp();
         }
         Date rowTimestamp = new Date(ts);
         ptr.set(PDate.INSTANCE.toBytes(rowTimestamp));
         return true;
-    }
-
-    private boolean isEmptyColumn(Cell cell) {
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                emptyCF, 0, emptyCF.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        emptyCQ, 0, emptyCQ.length) == 0;
     }
 
     @Override

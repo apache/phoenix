@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -47,7 +48,9 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
 
         // PhoenixRowTimestampFunction does not take any parameters.
-        assert children.size() == 0;
+        if (children.size() != 0) {
+            throw new IllegalArgumentException("PhoenixRowTimestampFunction does not take any parameters");
+        }
 
         // Get the empty column family and qualifier for the context.
         PTable table = context.getCurrentTable().getTable();
@@ -83,7 +86,7 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
 
         // Add the empty column to the projection list.
         // According to PHOENIX-4179 this will then return the timestamp of the empty column cell.
-        IndexUtil.addEmptyColumnToScan(context.getScan(), emptyColumnFamilyName, emptyColumnName);
+        context.getScan().addColumn(emptyColumnFamilyName, emptyColumnName);
         return new PhoenixRowTimestampFunction(emptyColumnExpression, emptyColumnFamilyName, emptyColumnName);
     }
 }

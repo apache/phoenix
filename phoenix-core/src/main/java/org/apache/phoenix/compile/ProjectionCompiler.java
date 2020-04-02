@@ -507,8 +507,9 @@ public class ProjectionCompiler {
                 } else {
                     for (byte[] cq : entry.getValue()) {
                             PColumn column = family.getPColumnForColumnQualifier(cq);
-                            // Continue: If an EMPTY_COLUMN is in the projection list, since
-                            // no new KeyValue is returned.
+                            // Continue: If an EMPTY_COLUMN is in the projection list,
+                            // since the table column list does not contain the EMPTY_COLUMN
+                            // no value is returned.
                             if (column == null) continue;
                             Integer maxLength = column.getMaxLength();
                             int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
