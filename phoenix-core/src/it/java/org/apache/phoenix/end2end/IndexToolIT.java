@@ -596,18 +596,12 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             // The index tool output table should report that there is a missing index row
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
             try {
-                String expectedErrorMsg = "Missing index row beyond maxLookBack";
+                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
                 String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
                 assertTrue(expectedErrorMsg.equals(actualErrorMsg));
             }catch(Exception ex){
                 Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
             }
-            /*
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
-
-             */
             IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
             dropIndexToolTables(conn);
         }
@@ -639,10 +633,13 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, -1, IndexTool.IndexVerifyType.ONLY);
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row beyond maxLookBack");
-            byte[] actualValueBytes = cell.getValueArray();
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
+            try {
+                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
+                String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                assertTrue(expectedErrorMsg.equals(actualErrorMsg));
+            }catch(Exception ex){
+                Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+            }
             // Delete the output table for the next test
             dropIndexToolTables(conn);
             // Run the index tool to populate the index while verifying rows
@@ -682,17 +679,12 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
                         indexTableFullName);
             try {
-                String expectedErrorMsg = "Missing index row beyond maxLookBack";
+                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
                 String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
                 assertTrue(expectedErrorMsg.equals(actualErrorMsg));
             }catch(Exception ex){
                 Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
             }
-            /*
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(),
-                cell.getValueLength(), expectedValueBytes, 0, expectedValueBytes.length) == 0);
-             */
 
             // Run the index tool to populate the index while verifying rows
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,

@@ -40,7 +40,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.*;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -363,7 +362,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
             assertTrue(actualPR.equals(expectedPR));
         }
     }
-    //@Ignore
+
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_cellValue() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
@@ -377,7 +376,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
     }
 
-    //@Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_emptyCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
@@ -404,7 +402,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
     }
 
-    //@Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_extraCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
@@ -487,8 +484,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     // Test the major compaction on index table only.
-    // All expected mutations are beyond the maxLookBack, and there is no matching ones in actual list for any of them because of major compaction
-    // We will report such row as a invalid beyond maxLookBack row.
+    // All expected mutations are beyond the maxLookBack, and there are no matching ones in the actual list because of major compaction.
+    // We will report such row as an invalid beyond maxLookBack row.
     @Test
     public void testVerifySingleIndexRow_compactionOnIndexTable_noExpectedMutationWithinMaxLookBack() throws Exception {
         String dataRowKey = "k1";

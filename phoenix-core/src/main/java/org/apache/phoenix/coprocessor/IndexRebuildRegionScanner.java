@@ -62,7 +62,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
@@ -98,6 +98,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
 
 public class IndexRebuildRegionScanner extends BaseRegionScanner {
+    public static final String ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK = "Missing index row beyond maxLookBack";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
     public static final String NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY = "index.verify.threads.max";
@@ -836,7 +837,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             repairActualMutationList(actualMutationList, expectedMutationList);
         }
         cleanUpActualMutationList(actualMutationList);
-        long currentTime = EnvironmentEdgeManager.currentTime();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         int actualIndex = 0;
         int expectedIndex = 0;
         int expectedSize = expectedMutationList.size();
@@ -913,7 +914,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         if (isTimestampBeyondMaxLookBack(currentTime, getTimestamp(expectedMutationList.get(expectedIndex)))){
             if (expectedIndex > 0) {
                 // if current expected index mutation is beyond max look back window, we only need to make sure its latest
-                // mutation get the matching one, as SCN query is required to be within the MaxLookBack window.
+                // mutation is a matching one, as an SCN query is required.
                 verificationPhaseResult.validIndexRowCount++;
                 return true;
             }
@@ -991,7 +992,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         // TODO: metrics for expired rows
         if (!keys.isEmpty()) {
             Iterator<KeyRange> itr = keys.iterator();
-            long currentTime = EnvironmentEdgeManager.currentTime();
+            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             while(itr.hasNext()) {
                 KeyRange keyRange = itr.next();
                 byte[] key = keyRange.getLowerRange();
@@ -1010,10 +1011,10 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
                 if (mutation instanceof Delete) {
                     continue;
                 }
-                long currentTime = EnvironmentEdgeManager.currentTime();
+                long currentTime = EnvironmentEdgeManager.currentTimeMillis();
                 String errorMsg;
                 if (isTimestampBeyondMaxLookBack(currentTime, getTimestamp(mutation))){
-                    errorMsg = "Missing index row beyond maxLookBack";
+                    errorMsg = ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
                     verificationPhaseResult.beyondMaxLookBackMissingIndexRowCount++;
                 }
                 else {
