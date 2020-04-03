@@ -39,6 +39,8 @@ import java.util.concurrent.TimeoutException;
 
 import javax.security.auth.login.AppConfigurationEntry;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -56,14 +58,9 @@ import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ZKBasedMasterElectionUtil;
-import org.codehaus.jettison.json.JSONArray;
-import org.codehaus.jettison.json.JSONObject;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
 
 
 public class PhoenixMRJobSubmitter {
@@ -313,25 +310,20 @@ public class PhoenixMRJobSubmitter {
                 + "," + YarnApplication.state.RUNNING);
         String response = PhoenixMRJobUtil.getJobsInformationFromRM(rmAddress, urlParams);
         LOGGER.debug("Already Submitted/Running Apps = " + response);
-        JSONObject jobsJson = new JSONObject(response);
-        JSONObject appsJson = jobsJson.optJSONObject(YarnApplication.APPS_ELEMENT);
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode jsonNode = objectMapper.readTree(response);
+        JsonNode appsJson = jsonNode.get(YarnApplication.APPS_ELEMENT);
         Set<String> yarnApplicationSet = new HashSet<String>();
 
         if (appsJson == null) {
             return yarnApplicationSet;
         }
-        JSONArray appJson = appsJson.optJSONArray(YarnApplication.APP_ELEMENT);
+        JsonNode appJson = appsJson.get(YarnApplication.APP_ELEMENT);
         if (appJson == null) {
             return yarnApplicationSet;
         }
-        for (int i = 0; i < appJson.length(); i++) {
-
-            Gson gson = new GsonBuilder().create();
-            YarnApplication yarnApplication =
-                    gson.fromJson(appJson.getJSONObject(i).toString(),
-                        new TypeToken<YarnApplication>() {
-                        }.getType());
-            yarnApplicationSet.add(yarnApplication.getName());
+        for (final JsonNode clientVersion : appJson) {
+            yarnApplicationSet.add(clientVersion.get("name").textValue());
         }
 
         return yarnApplicationSet;

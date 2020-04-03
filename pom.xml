@@ -117,8 +117,6 @@
     <i18n-util.version>1.0.4</i18n-util.version>
     <twill.version>0.8.0</twill.version>
     <guice.version>4.0</guice.version>
-    <gson.version>2.2.4</gson.version>
-    <jettison.version>1.1</jettison.version>
     <zookeeper.version>3.4.10</zookeeper.version>
     <curator.version>4.0.0</curator.version>
     <jcodings.version>1.0.18</jcodings.version>
@@ -1190,22 +1188,6 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.code.gson</groupId>
-        <artifactId>gson</artifactId>
-        <version>${gson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jettison</groupId>
-        <artifactId>jettison</artifactId>
-        <version>${jettison.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>stax</groupId>
-            <artifactId>stax-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.google.inject</groupId>

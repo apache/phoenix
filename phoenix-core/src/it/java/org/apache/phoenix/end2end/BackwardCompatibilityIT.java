@@ -41,6 +41,9 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -65,10 +68,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.stream.JsonReader;
+
 
 /**
  * This class is meant for testing all compatible client versions 
@@ -139,13 +139,12 @@ public class BackwardCompatibilityIT {
             hbaseProfile = m.group();
         }
         List<String> clientVersions = Lists.newArrayList();
-        JsonParser jsonParser = new JsonParser();
-        JsonReader jsonReader =
-                new JsonReader(new FileReader(COMPATIBLE_CLIENTS_JSON));
-        JsonObject jsonObject =
-                jsonParser.parse(jsonReader).getAsJsonObject();
-        for (JsonElement clientVersion : jsonObject.get(hbaseProfile).getAsJsonArray()) {
-            clientVersions.add(clientVersion.getAsString() + "-HBase-" + hbaseProfile);
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        JsonNode jsonNode = mapper.readTree(new FileReader(COMPATIBLE_CLIENTS_JSON));
+        JsonNode HBaseProfile = jsonNode.get(hbaseProfile);
+        for (final JsonNode clientVersion : HBaseProfile) {
+            clientVersions.add(clientVersion.textValue() + "-HBase-" + hbaseProfile);
         }
         return clientVersions;
     }

@@ -139,7 +139,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ClusterConnection;
@@ -4514,14 +4514,17 @@ public class MetaDataClient {
                                     tenantId, indexName);
                             if (tasks == null || tasks.size() == 0) {
                                 Timestamp ts = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-                                JsonObject jsonObject = new JsonObject();
-                                jsonObject.addProperty(INDEX_NAME, indexName);
-                                jsonObject.addProperty(REBUILD_ALL, true);
+                                Map<String, Object> props = new HashMap<String, Object>() {{
+                                    put(INDEX_NAME, indexName);
+                                    put(REBUILD_ALL, true);
+                                }};
+                                ObjectMapper mapper = new ObjectMapper();
                                 try {
+                                    String json = mapper.writeValueAsString(props);
                                     Task.addTask(connection, PTable.TaskType.INDEX_REBUILD,
                                             tenantId, schemaName,
                                             dataTableName, PTable.TaskStatus.CREATED.toString(),
-                                            jsonObject.toString(), null, ts, null, true);
+                                            json, null, ts, null, true);
                                     connection.commit();
                                 } catch (IOException e) {
                                     throw new SQLException("Exception happened while adding a System.Task" + e.toString());

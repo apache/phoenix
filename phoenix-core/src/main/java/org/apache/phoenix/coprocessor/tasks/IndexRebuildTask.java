@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.coprocessor.tasks;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Strings;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.mapreduce.Cluster;
@@ -65,9 +67,10 @@ public class IndexRebuildTask extends BaseTask  {
             if (Strings.isNullOrEmpty(taskRecord.getData())) {
                 data = "{}";
             }
-            JsonParser jsonParser = new JsonParser();
-            JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
-            String indexName = getIndexName(jsonObject);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.readValue(data, JsonNode.class);
+            String indexName = getIndexName(jsonNode);
+
             if (Strings.isNullOrEmpty(indexName)) {
                 String str = "Index name is not found. Index rebuild cannot continue " +
                         "Data : " + data;
@@ -76,16 +79,16 @@ public class IndexRebuildTask extends BaseTask  {
             }
 
             boolean shouldDisable = false;
-            if (jsonObject.has(DISABLE_BEFORE)) {
-                String disableBefore = jsonObject.get(DISABLE_BEFORE).toString();
+            if (jsonNode.has(DISABLE_BEFORE)) {
+                String disableBefore = jsonNode.get(DISABLE_BEFORE).toString();
                 if (!Strings.isNullOrEmpty(disableBefore)) {
                     shouldDisable = Boolean.valueOf(disableBefore);
                 }
             }
 
             boolean rebuildAll = false;
-            if (jsonObject.has(REBUILD_ALL)) {
-                String rebuildAllStr = jsonObject.get(REBUILD_ALL).toString();
+            if (jsonNode.has(REBUILD_ALL)) {
+                String rebuildAllStr = jsonNode.get(REBUILD_ALL).toString();
                 if (!Strings.isNullOrEmpty(rebuildAllStr)) {
                     rebuildAll = Boolean.valueOf(rebuildAllStr);
                 }
@@ -103,9 +106,10 @@ public class IndexRebuildTask extends BaseTask  {
 
             Job job = indexToolRes.getValue();
 
-            jsonObject.addProperty(JOB_ID, job.getJobID().toString());
+            ((ObjectNode) jsonNode).put(JOB_ID, job.getJobID().toString());
             Task.addTask(conn.unwrap(PhoenixConnection.class ), taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
-                    taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(), jsonObject.toString(), taskRecord.getPriority(),
+                    taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
+                    jsonNode.toString(), taskRecord.getPriority(),
                     taskRecord.getTimeStamp(), null, true);
             // It will take some time to finish, so we will check the status in a separate task.
             return null;
@@ -129,24 +133,24 @@ public class IndexRebuildTask extends BaseTask  {
 
     }
 
-    private String getIndexName(JsonObject jsonObject) {
+    private String getIndexName(JsonNode jsonNode) {
         String indexName = null;
         // Get index name from data column.
-        if (jsonObject.has(INDEX_NAME)) {
-            indexName = jsonObject.get(INDEX_NAME).toString().replaceAll("\"", "");
+        if (jsonNode.has(INDEX_NAME)) {
+            indexName = jsonNode.get(INDEX_NAME).toString().replaceAll("\"", "");
         }
         return indexName;
     }
 
-    private String getJobID(String data) {
+    private String getJobID(String data) throws JsonProcessingException {
         if (Strings.isNullOrEmpty(data)) {
             data = "{}";
         }
-        JsonParser jsonParser = new JsonParser();
-        JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode jsonNode = mapper.readTree(data);
         String jobId = null;
-        if (jsonObject.has(JOB_ID)) {
-            jobId = jsonObject.get(JOB_ID).toString().replaceAll("\"", "");
+        if (jsonNode.has(JOB_ID)) {
+            jobId = jsonNode.get(JOB_ID).textValue().replaceAll("\"", "");
         }
         return jobId;
     }
