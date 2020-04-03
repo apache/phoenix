@@ -873,15 +873,10 @@ runTests () {
   echo ""
   echo ""
 
+  copyCount=`$PS auxwww | $GREP ${PROJECT_NAME}PatchProcess | $AWK '{print $2}' | $AWK 'BEGIN {total = 0} {total += 1} END {print total}'`
+  echo "WARNING: $copyCount another phoenix build processes detected."
 
-  ### kill any process remaining from another test, maybe even another project
-  jps | grep surefirebooter | cut -d ' ' -f 1 | xargs kill -9 2>/dev/null
-  
   failed_tests=""
-  ### Kill any rogue build processes from the last attempt
-  condemnedCount=`$PS auxwww | $GREP ${PROJECT_NAME}PatchProcess | $AWK '{print $2}' | $AWK 'BEGIN {total = 0} {total += 1} END {print total}'`
-  echo "WARNING: $condemnedCount rogue build processes detected, terminating."
-  $PS auxwww | $GREP ${PROJECT_NAME}PatchProcess | $AWK '{print $2}' | /usr/bin/xargs -t -I {} /bin/kill -9 {} > /dev/null
   echo "$MVN clean verify -Dsurefire.rerunFailingTestsCount=2 -D${PROJECT_NAME}PatchProcess"
   export MAVEN_OPTS="${MAVEN_OPTS}"
   ulimit -a
