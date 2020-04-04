@@ -739,7 +739,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
         while (iterator.hasNext()) {
             Mutation mutation = iterator.next();
             if ((mutation instanceof Put && !isVerified((Put) mutation)) ||
-                    (mutation instanceof Delete && isDeleteFamilyVersion(mutation))) {
+                    (mutation instanceof Delete && !isDeleteFamily(mutation))) {
                 iterator.remove();
             } else {
                 if (previous != null && getTimestamp(previous) == getTimestamp(mutation) &&
@@ -922,7 +922,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             // All expected mutations are beyond the maxLookBack window, none of them can find its matching one in actual list
             // It may be caused by real bug or compaction on the data table.
             // We report it as a failure, so "before" option can trigger the index rebuild for this row.
-            // This repair is required, when there is only on index row for a given data table row and the timestamp of that row
+            // This repair is required, when there is only one index row for a given data table row and the timestamp of that row
             // can be beyond maxLookBack.
             verificationPhaseResult.beyondMaxLookBackInvalidIndexRowCount++;
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
