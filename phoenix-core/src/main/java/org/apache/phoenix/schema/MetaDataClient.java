@@ -121,6 +121,7 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
@@ -135,7 +136,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.HashSet;
 
+import org.apache.hadoop.conf.Configuration;
 import com.google.gson.JsonObject;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
@@ -147,6 +150,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
@@ -222,6 +226,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme.QualifierOutOfRangeException;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.Task;
@@ -1684,6 +1689,41 @@ public class MetaDataClient {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(colName.toString());
+                }
+            }
+
+            Configuration config = connection.getQueryServices().getConfiguration();
+            long threshold = Long.parseLong(config.get(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD));
+
+            if (threshold > 0 && !statement.isAsync()) {
+                Set<String> columnFamilies = new HashSet<>();
+                for (ColumnDef column : columnDefs){
+                    try {
+                        String columnFamily = IndexUtil
+                                .getDataColumnFamilyName(column.getColumnDefName().getColumnName());
+                        columnFamilies.add(!columnFamily.equals("") ? columnFamily
+                                : dataTable.getDefaultFamilyName()!= null ?
+                                        dataTable.getDefaultFamilyName().toString()
+                                        : QueryConstants.DEFAULT_COLUMN_FAMILY);
+                    } catch (Exception ignored){
+                        ; // We ignore any exception during this phase
+                    }
+                }
+                long estimatedBytes = 0;
+                for (String colFamily : columnFamilies) {
+                    GuidePostsInfo gps = connection.getQueryServices().getTableStats(
+                            new GuidePostsKey(Bytes.toBytes(tableRef.getTable().toString()),
+                                    Bytes.toBytes(colFamily)));
+                    long[] byteCounts = gps.getByteCounts();
+                    for (long byteCount : byteCounts) {
+                        estimatedBytes += byteCount;
+                    }
+
+                    if (threshold < estimatedBytes) {
+                        throw new SQLExceptionInfo
+                                .Builder(SQLExceptionCode.ABOVE_INDEX_NON_ASYNC_THRESHOLD)
+                                .build().buildException();
+                    }
                 }
             }
 
