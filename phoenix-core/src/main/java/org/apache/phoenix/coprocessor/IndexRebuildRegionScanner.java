@@ -920,7 +920,7 @@ public class IndexRebuildRegionScanner extends BaseRegionScanner {
             }
 
             // All expected mutations are beyond the maxLookBack window, none of them can find its matching one in actual list
-            // It may be caused by real bug or compaction on the data table.
+            // It may be caused by real bug or compaction on the index table.
             // We report it as a failure, so "before" option can trigger the index rebuild for this row.
             // This repair is required, when there is only one index row for a given data table row and the timestamp of that row
             // can be beyond maxLookBack.
