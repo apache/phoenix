@@ -135,7 +135,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.HashSet;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import com.google.gson.JsonObject;
 import org.apache.hadoop.hbase.HConstants;
@@ -167,6 +169,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -1684,6 +1687,41 @@ public class MetaDataClient {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(colName.toString());
+                }
+            }
+
+            Configuration config = connection.getQueryServices().getConfiguration();
+            long threshold = Long.parseLong(config.get(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD));
+
+            if (threshold > 0 && !statement.isAsync()) {
+                Set<String> columnFamilies = new HashSet<>();
+                for (ColumnDef column : columnDefs){
+                    try {
+                        String columnFamily = IndexUtil
+                                .getDataColumnFamilyName(column.getColumnDefName().getColumnName());
+                        columnFamilies.add(!columnFamily.equals("") ? columnFamily
+                                : dataTable.getDefaultFamilyName()!= null ?
+                                        dataTable.getDefaultFamilyName().toString()
+                                        : QueryConstants.DEFAULT_COLUMN_FAMILY);
+                    } catch (Exception ignored){
+                        ; // We ignore any exception during this phase
+                    }
+                }
+                long estimatedBytes = 0;
+                for (String colFamily : columnFamilies) {
+                    GuidePostsInfo gps = connection.getQueryServices().getTableStats(
+                            new GuidePostsKey(Bytes.toBytes(tableRef.getTable().toString()),
+                                    Bytes.toBytes(colFamily)));
+                    long[] byteCounts = gps.getByteCounts();
+                    for (long byteCount : byteCounts) {
+                        estimatedBytes += byteCount;
+                    }
+
+                    if (threshold < estimatedBytes) {
+                        throw new SQLExceptionInfo
+                                .Builder(SQLExceptionCode.ABOVE_INDEX_NON_ASYNC_THRESHOLD)
+                                .build().buildException();
+                    }
                 }
             }
 

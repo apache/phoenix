@@ -130,7 +130,7 @@
     <servlet.api.version>3.1.0</servlet.api.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
-    <junit.version>4.12</junit.version>
+    <junit.version>4.13</junit.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -1203,7 +1203,7 @@
     </profile>
   </profiles>
 
-  <reporting>
+ <reporting>
       <plugins>
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>

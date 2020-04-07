@@ -331,6 +331,9 @@ public enum SQLExceptionCode {
             + " property can only be set for views"),
     CANNOT_SET_OR_ALTER_VIEW_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
             + PhoenixDatabaseMetaData.VIEW_TTL + " property on an table with TTL,"),
+    ABOVE_INDEX_NON_ASYNC_THRESHOLD(1097, "44A34", "The estimated read size for index creation "
+            + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
+            + " limit or create ASYNC index."),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
