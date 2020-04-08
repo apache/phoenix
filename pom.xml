@@ -583,14 +583,6 @@
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
-            <!-- Not our code -->
-            <exclude>python/requests-kerberos/**</exclude>
-            <exclude>python/phoenixdb/phoenixdb/avatica/proto/*</exclude>
-            <exclude>python/phoenixdb/*.rst</exclude>
-            <exclude>python/phoenixdb/ci/**</exclude>
-            <exclude>python/phoenixdb/doc/*.rst</exclude>
-            <exclude>python/phoenixdb/doc/conf.py</exclude>
-            <exclude>python/phoenixdb/doc/Makefile</exclude>
           </excludes>
         </configuration>
       </plugin>
