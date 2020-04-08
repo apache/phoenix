@@ -29,7 +29,6 @@
 
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
-    <argparse4j.version>0.8.1</argparse4j.version>
   </properties>
 
   <build>
@@ -291,12 +290,6 @@
       <groupId>sqlline</groupId>
       <artifactId>sqlline</artifactId>
     </dependency>
-    <dependency>
-      <groupId>net.sourceforge.argparse4j</groupId>
-      <artifactId>argparse4j</artifactId>
-      <version>${argparse4j.version}</version>
-    </dependency>
-
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
