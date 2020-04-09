@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -221,8 +222,8 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         throws IOException {
         Scan scan = new Scan();
         byte[] partialKey = generatePartialOutputTableRowKey(ts, indexName);
-        scan.withStartRow(partialKey);
-        scan.withStopRow(ByteUtil.calculateTheClosestNextRowKeyForPrefix(partialKey));
+        scan.setStartRow(partialKey);
+        scan.setStopRow(ByteUtil.calculateTheClosestNextRowKeyForPrefix(partialKey));
         ResultScanner scanner = outputTable.getScanner(scan);
         return new IndexVerificationOutputRowIterator(scanner.iterator());
     }
