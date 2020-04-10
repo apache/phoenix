@@ -16,10 +16,10 @@ public class PhoenixRowTimestampFunctionTest {
         boolean hasPhoenixRowTimestampParseNode = false;
         for (ParseNode childNode : parseNode.getChildren()) {
             if (childNode.getClass().isAssignableFrom(PhoenixRowTimestampParseNode.class)) {
-                assertEquals("", childNode.getChildren().size(), 0);
+                assertEquals(0, childNode.getChildren().size());
                 hasPhoenixRowTimestampParseNode = true;
             }
-         }
+        }
         assertTrue(hasPhoenixRowTimestampParseNode);
     }
 
@@ -36,10 +36,10 @@ public class PhoenixRowTimestampFunctionTest {
     public void testSelectWithPhoenixRowTimestamp() throws Exception {
         SQLParser parser = new SQLParser("SELECT PHOENIX_ROW_TIMESTAMP() FROM xyz");
         List<AliasedNode> nodes = parser.parseQuery().getSelect();
-        assertEquals("", nodes.size(), 1);
+        assertEquals(1, nodes.size());
         assertTrue("PHOENIX_ROW_TIMESTAMP() should parse to PhoenixRowTimestampParseNode",
                 nodes.get(0).getNode().getClass().isAssignableFrom(PhoenixRowTimestampParseNode.class));
-        assertEquals("", nodes.get(0).getNode().getChildren().size(), 0);
+        assertEquals(0, nodes.get(0).getNode().getChildren().size());
     }
 
 }

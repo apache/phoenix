@@ -154,38 +154,47 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             String dml = "UPSERT INTO " + tableName + " (PK, KV1, KV2) VALUES (?, ?, ?)";
-            PreparedStatement stmt = conn.prepareStatement(dml);
-
-            int count = 5;
-            for (int id = 0; id < count; ++id) {
-                stmt.setInt(1, id);
-                stmt.setString(2, "KV1_" + id);
-                stmt.setString(3, "KV2_" + id);
-                stmt.executeUpdate();
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                int count = NUM_ROWS;
+                for (int id = 0; id < count; ++id) {
+                    stmt.setInt(1, id);
+                    stmt.setString(2, "KV1_" + id);
+                    stmt.setString(3, "KV2_" + id);
+                    stmt.executeUpdate();
+                }
+            } finally {
+                conn.commit();
             }
-            conn.commit();
 
-            String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
-
-            ResultSet rs = conn.createStatement().executeQuery(dql);
             // verify row timestamp returned by the query matches the empty column cell timestamp
-            verifyHbaseAllRowsTimestamp(tableName, rs, count);
+            String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(dql);
+                verifyHbaseAllRowsTimestamp(tableName, rs, NUM_ROWS);
+            }
 
             // update one row
-            conn.createStatement().execute("UPSERT INTO " + tableName
-                    + " (PK, KV1) VALUES (2, 'KV1_foo')");
-            conn.commit();
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("UPSERT INTO " + tableName
+                        + " (PK, KV1) VALUES (2, 'KV1_foo')");
+            } finally {
+                conn.commit();
+            }
 
-            rs = conn.createStatement().executeQuery(dql);
             // verify again after update
-            verifyHbaseAllRowsTimestamp(tableName, rs, count);
+            try (Statement stmt = conn.createStatement()) {
+                // verify row timestamp returned by the query matches the empty column cell timestamp
+                ResultSet rs = stmt.executeQuery(dql);
+                verifyHbaseAllRowsTimestamp(tableName, rs, NUM_ROWS);
+            }
 
             dql = "SELECT ROWKEY_BYTES_STRING(), PHOENIX_ROW_TIMESTAMP() FROM " + tableName
                     + " WHERE PK >= 1 AND PK <=3 ";
-            rs = conn.createStatement().executeQuery(dql);
-
-            while (rs.next()) {
-                verifyHbaseRowTimestamp(tableName, rs.getString(1), rs.getDate(2));
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(dql);
+                while (rs.next()) {
+                    verifyHbaseRowTimestamp(tableName, rs.getString(1), rs.getDate(2));
+                }
             }
         }
     }
@@ -203,23 +212,25 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
 
             long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
             Date rowTimestampDate = new Date(rowTimestamp);
-            PreparedStatement stmt = conn.prepareStatement(dml);
-
-            int count = 5;
-            for (int id = 0; id < count; ++id) {
-                stmt.setInt(1, id);
-                stmt.setDate(2, rowTimestampDate);
-                stmt.setString(3, "KV1_" + id);
-                stmt.setString(4, "KV2_" + id);
-                stmt.executeUpdate();
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                int count = NUM_ROWS;
+                for (int id = 0; id < count; ++id) {
+                    stmt.setInt(1, id);
+                    stmt.setDate(2, rowTimestampDate);
+                    stmt.setString(3, "KV1_" + id);
+                    stmt.setString(4, "KV2_" + id);
+                    stmt.executeUpdate();
+                }
+            } finally {
+                conn.commit();
             }
-            conn.commit();
 
             String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
-
-            ResultSet rs = conn.createStatement().executeQuery(dql);
-            while(rs.next()) {
-                assertEquals(rs.getDate(1), rowTimestampDate);
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(dql);
+                while (rs.next()) {
+                    assertEquals(rs.getDate(1), rowTimestampDate);
+                }
             }
         }
     }
@@ -395,4 +406,24 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    // case: Comparision with TO_TIME()
+    public void testTimestampComparePredicate() throws Exception {
+        long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
+        String tableName = createTestData(rowTimestamp, NUM_ROWS);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql = "SELECT COUNT(*) FROM " + tableName +
+                    " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
+                    " (PHOENIX_ROW_TIMESTAMP() > TO_TIME('2005-10-01 14:03:22.559')))";
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(sql);
+                while(rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    assertFalse(rs.wasNull());
+                    assertTrue(rowCount == NUM_ROWS);
+                }
+                rs.close();
+            }
+        }
+    }
 }

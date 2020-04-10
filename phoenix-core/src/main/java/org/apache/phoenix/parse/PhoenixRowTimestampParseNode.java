@@ -60,7 +60,7 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
                 table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
 
         // Create an empty column key value expression.
-        // This will cause the empty column key value to evaluated during scan filter processing.
+        // This will cause the empty column key value to be evaluated during scan filter processing.
         List<Expression> emptyColumnExpression = Arrays.asList(new Expression[] {new KeyValueColumnExpression(new PDatum() {
             @Override
             public boolean isNullable() {

@@ -51,6 +51,11 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
     public PhoenixRowTimestampFunction() {
     }
 
+    /**
+     *  {@link org.apache.phoenix.parse.PhoenixRowTimestampParseNode#create}
+     *  @param children An EMPTY_COLUMN key value expression injected thru create
+     *  will cause the empty column key value to be evaluated during scan filter processing.
+     */
     public PhoenixRowTimestampFunction(List<Expression> children, byte[] emptyCF, byte[] emptyCQ) {
         super(children);
         this.emptyCF = emptyCF;
@@ -65,8 +70,23 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 
-        if (tuple == null || tuple.size() == 0) return false;
+        if (tuple == null || tuple.size() == 0) {
+            return false;
+        }
 
+        /**
+         * The evaluate method is called under the following conditions -
+         * 1. When PHOENIX_ROW_TIMESTAMP() is evaluated in the projection list.
+         *    Since the EMPTY_COLUMN is not part of the table column list,
+         *    emptyColumnKV will be null.
+         *    PHOENIX-4179 ensures that the maxTS (which will be EMPTY_COLUMN ts)
+         *    is returned for the tuple.
+         *
+         * 2. When PHOENIX_ROW_TIMESTAMP() is evaluated in the backend as part of the where clause.
+         *    Here the emptyColumnKV will not be null, since we ensured that by adding it to
+         *    scan column list in PhoenixRowTimestampParseNode.
+         *    In this case the emptyColumnKV.getTimestamp() is used.
+         */
         long ts = tuple.getValue(0).getTimestamp();
         Cell emptyColumnKV = tuple.getValue(emptyCF, emptyCQ);
         if ((emptyColumnKV != null) && CellUtil.matchingColumn(emptyColumnKV, emptyCF, emptyCQ)) {
