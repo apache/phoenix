@@ -351,4 +351,49 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    // case: All rows selected should have the phoenix_row_timestamp() > date column
+    // Since we used a past date for column PK2
+    // Projected columns should return non null and expected values.
+    public void testSimpleSelectColsWithPhoenixRowTimestampPredicate() throws Exception {
+        long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
+        String tableName = createTestData(rowTimestamp, NUM_ROWS);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql = "SELECT KV1 FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(sql);
+                int actualCount = 0;
+                while(rs.next()) {
+                    String kv1Value = rs.getString(1);
+                    assertFalse(rs.wasNull());
+                    assertTrue(kv1Value.substring(0, "KV2_".length()).compareToIgnoreCase("KV1_") == 0);
+                    actualCount++;
+                }
+                assertEquals(NUM_ROWS, actualCount);
+                rs.close();
+            }
+        }
+    }
+
+    @Test
+    // case: Aggregate SQLs work with PhoenixRowTimestamp predicate.
+    public void testSelectCountWithPhoenixRowTimestampPredicate() throws Exception {
+        long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
+        String tableName = createTestData(rowTimestamp, NUM_ROWS);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql = "SELECT COUNT(*) FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 ";
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(sql);
+                while(rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    assertFalse(rs.wasNull());
+                    assertTrue(rowCount == NUM_ROWS);
+                }
+                rs.close();
+            }
+        }
+    }
+
 }
