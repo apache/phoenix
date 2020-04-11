@@ -57,6 +57,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
@@ -422,6 +423,11 @@ public class ProjectionCompiler {
                     projectTableColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 }
             } else {
+                if (node instanceof PhoenixRowTimestampParseNode) {
+                    if (statement.isAggregate()) {
+                        ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
+                    }
+                }
                 Expression expression = node.accept(selectVisitor);
                 projectedExpressions.add(expression);
                 expression = coerceIfNecessary(index, targetColumns, expression);

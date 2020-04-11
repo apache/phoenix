@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -47,10 +48,12 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     private final boolean encoded;
+    private final boolean optimized;
     private final String tableDDLOptions;
     private static final int NUM_ROWS = 5;
     private static final long TS_OFFSET = 120000;
@@ -62,6 +65,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME = "+ storage.toString());
         this.tableDDLOptions = optionBuilder.toString();
         this.encoded = (encoding != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) ? true : false;
+        this.optimized = storage == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? true : false;
     }
 
     @Parameterized.Parameters(name = "encoding={0},storage={1}")
@@ -412,10 +416,10 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String sql = "SELECT COUNT(*) FROM " + tableName +
-                    " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
-                    " (PHOENIX_ROW_TIMESTAMP() > TO_TIME('2005-10-01 14:03:22.559')))";
             try (Statement stmt = conn.createStatement()) {
+                String sql = "SELECT COUNT(*) FROM " + tableName +
+                        " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
+                        " (PHOENIX_ROW_TIMESTAMP() > TO_TIME('2005-10-01 14:03:22.559')))";
                 ResultSet rs = stmt.executeQuery(sql);
                 while(rs.next()) {
                     int rowCount = rs.getInt(1);
@@ -423,6 +427,44 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
                     assertTrue(rowCount == NUM_ROWS);
                 }
                 rs.close();
+            }
+            try (Statement stmt = conn.createStatement()) {
+                String sql = "SELECT COUNT(*) FROM " + tableName +
+                        " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
+                        " (PHOENIX_ROW_TIMESTAMP() < TO_TIME('2005-10-01 14:03:22.559')))";
+                ResultSet rs = stmt.executeQuery(sql);
+                while(rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    assertFalse(rs.wasNull());
+                    assertTrue(rowCount == 0);
+                }
+                rs.close();
+            }
+
+        }
+    }
+
+    @Test
+    // case: PHOENIX_ROW_TIMESTAMP() in select clause when aggregating should fail.
+    public void testPhoenixRowTimestampWhenAggShouldFail() throws Exception {
+        // Do not need to run for all test combinations
+        if (encoded || !optimized) {
+            return;
+        }
+        long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
+        String tableName = createTestData(rowTimestamp, NUM_ROWS);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            try (Statement stmt = conn.createStatement()) {
+                String sql = "SELECT PHOENIX_ROW_TIMESTAMP(), PK1, COUNT(*) FROM " + tableName +
+                        " WHERE ((PHOENIX_ROW_TIMESTAMP() > PK2) AND " +
+                        " (PHOENIX_ROW_TIMESTAMP() > TO_TIME('2005-10-01 14:03:22.559')))" +
+                        " GROUP BY PHOENIX_ROW_TIMESTAMP(), PK1";
+                try {
+                    ResultSet rs = stmt.executeQuery(sql);
+                    fail();
+                } catch (Exception e) {
+                    Assert.assertTrue(e.getMessage().contains("ERROR 1018 (42Y27"));
+                }
             }
         }
     }
