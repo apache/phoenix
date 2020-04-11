@@ -20,18 +20,15 @@ package org.apache.phoenix.expression.function;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 
@@ -45,23 +42,30 @@ import java.util.List;
         args = {})
 public class PhoenixRowTimestampFunction extends ScalarFunction {
     public static final String NAME = "PHOENIX_ROW_TIMESTAMP";
-    private byte[] emptyCF;
-    private byte[] emptyCQ;
 
     public PhoenixRowTimestampFunction() {
     }
 
     /**
-     *  {@link org.apache.phoenix.parse.PhoenixRowTimestampParseNode#create}
-     *  @param children An EMPTY_COLUMN key value expression injected thru create
+     *  @param children An EMPTY_COLUMN key value expression injected thru
+     *  {@link org.apache.phoenix.parse.PhoenixRowTimestampParseNode#create create}
      *  will cause the empty column key value to be evaluated during scan filter processing.
-     *  @param emptyCF empty column family
-     *  @param emptyCQ empty column column
      */
-    public PhoenixRowTimestampFunction(List<Expression> children, byte[] emptyCF, byte[] emptyCQ) {
+    public PhoenixRowTimestampFunction(List<Expression> children) {
         super(children);
-        this.emptyCF = emptyCF;
-        this.emptyCQ = emptyCQ;
+        if ((children.size() != 1) || !children.get(0).getClass().isAssignableFrom(
+                KeyValueColumnExpression.class)) {
+            throw new IllegalArgumentException(
+                    "PhoenixRowTimestampFunction should only have an "
+                            + "EMPTY_COLUMN key value expression."
+            );
+        }
+        if (!(children.get(0).getDataType().equals(PDate.INSTANCE))) {
+            throw new IllegalArgumentException(
+                    "PhoenixRowTimestampFunction should have an "
+                            + "EMPTY_COLUMN key value expression of type PDate"
+            );
+        }
     }
 
     @Override
@@ -89,6 +93,8 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
             return false;
         }
 
+        byte[] emptyCF = ((KeyValueColumnExpression)children.get(0)).getColumnFamily();
+        byte[] emptyCQ = ((KeyValueColumnExpression)children.get(0)).getColumnQualifier();
         long ts = tuple.getValue(0).getTimestamp();
         Cell emptyColumnKV = tuple.getValue(emptyCF, emptyCQ);
         if ((emptyColumnKV != null) && CellUtil.matchingColumn(emptyColumnKV, emptyCF, emptyCQ)) {
@@ -114,34 +120,4 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
         return Determinism.PER_ROW;
     }
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        int emptyCFLength = WritableUtils.readVInt(input);
-        int emptyCQLength = WritableUtils.readVInt(input);
-        if (emptyCFLength > 0) {
-            emptyCF = new byte[emptyCFLength];
-            input.readFully(emptyCF, 0, emptyCFLength);
-        }
-        if (emptyCQLength > 0) {
-            emptyCQ = new byte[emptyCQLength];
-            input.readFully(emptyCQ, 0, emptyCQLength);
-        }
-    }
-
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        int emptyCFLength = emptyCF.length;
-        int emptyCQLength = emptyCQ.length;
-
-        WritableUtils.writeVInt(output, emptyCFLength);
-        WritableUtils.writeVInt(output, emptyCQLength);
-        if (emptyCFLength > 0) {
-            output.write(emptyCF, 0, emptyCFLength);
-        }
-        if (emptyCQLength > 0) {
-            output.write(emptyCQ, 0, emptyCQLength);
-        }
-    }
 }

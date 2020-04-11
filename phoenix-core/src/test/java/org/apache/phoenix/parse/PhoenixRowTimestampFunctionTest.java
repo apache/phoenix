@@ -38,7 +38,8 @@ public class PhoenixRowTimestampFunctionTest {
         List<AliasedNode> nodes = parser.parseQuery().getSelect();
         assertEquals(1, nodes.size());
         assertTrue("PHOENIX_ROW_TIMESTAMP() should parse to PhoenixRowTimestampParseNode",
-                nodes.get(0).getNode().getClass().isAssignableFrom(PhoenixRowTimestampParseNode.class));
+                nodes.get(0).getNode().getClass()
+                        .isAssignableFrom(PhoenixRowTimestampParseNode.class));
         assertEquals(0, nodes.get(0).getNode().getChildren().size());
     }
 

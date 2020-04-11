@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -30,7 +29,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.sql.SQLException;
@@ -45,26 +43,34 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
     }
 
     @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
+    /**
+     * Note: Although this ParseNode does not take any children, we are injecting an EMPTY_COLUMN
+     * KeyValueColumnExpression so that the EMPTY_COLUMN is evaluated during scan filter processing.
+     */
+    public FunctionExpression create(List<Expression> children, StatementContext context)
+            throws SQLException {
 
         // PhoenixRowTimestampFunction does not take any parameters.
         if (children.size() != 0) {
-            throw new IllegalArgumentException("PhoenixRowTimestampFunction does not take any parameters");
+            throw new IllegalArgumentException(
+                    "PhoenixRowTimestampFunction does not take any parameters"
+            );
         }
 
         // Get the empty column family and qualifier for the context.
         PTable table = context.getCurrentTable().getTable();
         byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-        byte[] emptyColumnName = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                QueryConstants.EMPTY_COLUMN_BYTES :
-                table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+        byte[] emptyColumnName =
+                table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
+                        ? QueryConstants.EMPTY_COLUMN_BYTES
+                        : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
 
         // Create an empty column key value expression.
         // This will cause the empty column key value to be evaluated during scan filter processing.
-        List<Expression> emptyColumnExpression = Arrays.asList(new Expression[] {new KeyValueColumnExpression(new PDatum() {
+        Expression emptyColumnExpression = new KeyValueColumnExpression(new PDatum() {
             @Override
             public boolean isNullable() {
-                return true;
+                return false;
             }
             @Override
             public PDataType getDataType() {
@@ -82,11 +88,12 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
             public SortOrder getSortOrder() {
                 return SortOrder.getDefault();
             }
-        }, emptyColumnFamilyName, emptyColumnName)});
+        }, emptyColumnFamilyName, emptyColumnName);
+        List<Expression> expressionList = Arrays.asList(new Expression[] {emptyColumnExpression});
 
         // Add the empty column to the projection list.
         // According to PHOENIX-4179 this will then return the timestamp of the empty column cell.
         context.getScan().addColumn(emptyColumnFamilyName, emptyColumnName);
-        return new PhoenixRowTimestampFunction(emptyColumnExpression, emptyColumnFamilyName, emptyColumnName);
+        return new PhoenixRowTimestampFunction(expressionList);
     }
 }

@@ -64,8 +64,10 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
         optionBuilder.append(" COLUMN_ENCODED_BYTES = " + encoding.ordinal());
         optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME = "+ storage.toString());
         this.tableDDLOptions = optionBuilder.toString();
-        this.encoded = (encoding != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) ? true : false;
-        this.optimized = storage == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? true : false;
+        this.encoded = (encoding != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
+                            ? true : false;
+        this.optimized = storage == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+                            ? true : false;
     }
 
     @Parameterized.Parameters(name = "encoding={0},storage={1}")
@@ -186,8 +188,8 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             }
 
             // verify again after update
+            // verify row timestamp returned by the query matches the empty column cell timestamp
             try (Statement stmt = conn.createStatement()) {
-                // verify row timestamp returned by the query matches the empty column cell timestamp
                 ResultSet rs = stmt.executeQuery(dql);
                 verifyHbaseAllRowsTimestamp(tableName, rs, NUM_ROWS);
             }
@@ -197,7 +199,8 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             try (Statement stmt = conn.createStatement()) {
                 ResultSet rs = stmt.executeQuery(dql);
                 while (rs.next()) {
-                    verifyHbaseRowTimestamp(tableName, rs.getString(1), rs.getDate(2));
+                    verifyHbaseRowTimestamp(tableName,
+                            rs.getString(1), rs.getDate(2));
                 }
             }
         }
@@ -344,7 +347,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     // case: All rows selected should have the phoenix_row_timestamp() > date column
     // Since we used a past date for column PK2
     // Additional columns should return non null values.
-    public void testRowTimestampFunctionAndAdditionalColsWithGreaterThanPredicate() throws Exception {
+    public void testRowTimestampFunctionAndColsWithGreaterThanPredicate() throws Exception {
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
         String tableName = createTestData(rowTimestamp, NUM_ROWS);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -381,7 +384,8 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
                 while(rs.next()) {
                     String kv1Value = rs.getString(1);
                     assertFalse(rs.wasNull());
-                    assertTrue(kv1Value.substring(0, "KV2_".length()).compareToIgnoreCase("KV1_") == 0);
+                    assertTrue(kv1Value.substring(0, "KV2_".length())
+                            .compareToIgnoreCase("KV1_") == 0);
                     actualCount++;
                 }
                 assertEquals(NUM_ROWS, actualCount);
