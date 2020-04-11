@@ -9,32 +9,9 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_REJECTED_TASK_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
-import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.*;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
@@ -49,13 +26,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -154,6 +126,51 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
 
         assertTrue(verifyMetricsFromSink());
+    }
+
+    @Test
+    public void testTableLevelPhoenixMetricsForUpsertSelect() throws Exception {
+        String tableName = generateUniqueName();
+        createTableAndInsertValues(tableName, false);
+        Connection conn = DriverManager.getConnection(getUrl());
+        String query = "SELECT * FROM " + tableName;
+        ResultSet rs = conn.createStatement().executeQuery(query);
+
+        while (rs.next()) {
+            rs.getString(1);
+            rs.getString(2);
+        }
+        String tableName2 =  generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        conn.createStatement().execute(ddl);
+        String upsertSelect = "UPSERT INTO " + tableName2 + " SELECT * FROM " + tableName;
+        conn.createStatement().executeUpdate(upsertSelect);
+        conn.commit();
+        query = "SELECT * FROM " + tableName2;
+        conn.createStatement().executeQuery(query);
+        conn.commit();
+        Map<String, Long>map = PhoenixRuntime.getTableLevelMetrics();
+        String selectSqlCounterMetrictable2 = tableName2+"_table_"+ MetricType.SELECT_SQL_COUNTER;
+        String selectSqlCounterMetrictable1 = tableName+"_table_"+ MetricType.SELECT_SQL_COUNTER;
+        String mutationBytesTable1 = tableName+"_table_"+ MetricType.MUTATION_BYTES;
+        String mutationBytesTable2 = tableName2+"_table_"+ MetricType.MUTATION_BYTES;
+        String mutationBatchSizeTable1 = tableName+"_table_"+ MetricType.MUTATION_BATCH_SIZE;
+        String mutationBatchSizeTable2 = tableName2+"_table_"+ MetricType.MUTATION_BATCH_SIZE;
+        String mutationSqlCounterTable1 = tableName+"_table_"+ MetricType.MUTATION_SQL_COUNTER;
+        String mutationSqlCounterTable2 = tableName2+"_table_"+ MetricType.MUTATION_SQL_COUNTER;
+        String taskExceutedCounterTable1 = tableName +"_table_"+ MetricType.TASK_EXECUTED_COUNTER;
+        String taskExceutedCounterTable2 = tableName2 +"_table_"+ MetricType.TASK_EXECUTED_COUNTER;
+
+        assertTrue(map.get(selectSqlCounterMetrictable2) > 0);
+        assertTrue(map.get(selectSqlCounterMetrictable1) > 0);
+        assertTrue(map.get(mutationBytesTable1) > 0);
+        assertTrue(map.get(mutationBytesTable2) > 0);
+        assertTrue(map.get(mutationBatchSizeTable1) > 0);
+        assertTrue(map.get(mutationBatchSizeTable2) > 0);
+        assertTrue(map.get(mutationSqlCounterTable1) > 0);
+        assertTrue(map.get(mutationSqlCounterTable2) > 0);
+        assertTrue(map.get(taskExceutedCounterTable1) > 0);
+        assertTrue(map.get(taskExceutedCounterTable2) > 0);
     }
 
     @Test

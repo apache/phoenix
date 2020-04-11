@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
-import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.monitoring.*;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -52,7 +52,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  */
 @SuppressWarnings("rawtypes")
 public class JobManager<T> extends AbstractRoundRobinQueue<T> {
-	
     private static final AtomicLong PHOENIX_POOL_INDEX = new AtomicLong(1);
 	
     public JobManager(int maxSize) {
@@ -260,6 +259,7 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
                 metrics.getNumTasks().increment();
             }
             GLOBAL_TASK_EXECUTED_COUNTER.increment();
+            GlobalPhoenixTable.getInstance().addOrCreateTable(metrics.getTableName(),MetricType.TASK_EXECUTED_COUNTER,0);
             super.execute(task);
         }
 

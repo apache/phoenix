@@ -53,6 +53,8 @@ import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
+import org.apache.phoenix.monitoring.GlobalPhoenixTable;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
@@ -62,12 +64,14 @@ public class ScanningResultIterator implements ResultIterator {
     private final ScanMetricsHolder scanMetricsHolder;
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
+    String tableName;
 
-    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder) {
+    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, String tableName) {
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
+        this.tableName = tableName;
     }
 
     @Override
@@ -75,6 +79,10 @@ public class ScanningResultIterator implements ResultIterator {
         // close the scanner so that metrics are available
         scanner.close();
         updateMetrics();
+    }
+
+    private String getTableName(){
+        return this.tableName;
     }
 
     private void changeMetric(CombinableMetric metric, Long value) {
@@ -120,6 +128,9 @@ public class ScanningResultIterator implements ResultIterator {
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
 
             changeMetric(GLOBAL_SCAN_BYTES,
+                    scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
+
+            GlobalPhoenixTable.getInstance().addOrCreateTable(this.getTableName(), MetricType.SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
             changeMetric(GLOBAL_HBASE_COUNT_RPC_CALLS,
                     scanMetricsMap.get(RPC_CALLS_METRIC_NAME));

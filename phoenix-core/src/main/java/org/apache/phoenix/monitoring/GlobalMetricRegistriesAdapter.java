@@ -20,6 +20,7 @@ package org.apache.phoenix.monitoring;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.metrics.Counter;
 import org.apache.hadoop.hbase.metrics.Gauge;
@@ -98,6 +99,7 @@ public class GlobalMetricRegistriesAdapter {
             MetricsRecordBuilder builder = collector.addRecord(hadoopMetricsInfo);
             builder.setContext(hbaseMetricRegistryInfo.getMetricsContext());
             builder.tag(hadoopMetricsInfo, metricTag);
+
             this.snapshotAllMetrics(metricRegistry, builder);
         }
 
