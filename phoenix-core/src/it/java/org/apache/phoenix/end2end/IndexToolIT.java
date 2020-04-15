@@ -648,7 +648,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             // IndexTool will go through each data table row and record the mismatches in the output table
             // called PHOENIX_INDEX_TOOL
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, -1, IndexTool.IndexVerifyType.ONLY);
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
             Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
             try {
                 String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
@@ -690,7 +690,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement()
                     .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC",
                         indexTableName, dataTableFullName));
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, -1,
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                 IndexTool.IndexVerifyType.ONLY);
             Cell cell =
                     getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
