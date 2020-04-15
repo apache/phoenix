@@ -30,10 +30,11 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.phoenix.util.JacksonUtil;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -245,10 +246,9 @@ public class TaskRegionObserver extends BaseRegionObserver {
             if (Strings.isNullOrEmpty(data)) {
                 data = "{}";
             }
-            JsonParser jsonParser = new JsonParser();
-            JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
-            jsonObject.addProperty(TASK_DETAILS, taskStatus);
-            data = jsonObject.toString();
+            JsonNode jsonNode = JacksonUtil.getObjectReader().readTree(data);
+            ((ObjectNode) jsonNode).put(TASK_DETAILS, taskStatus);
+            data = jsonNode.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
             Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),

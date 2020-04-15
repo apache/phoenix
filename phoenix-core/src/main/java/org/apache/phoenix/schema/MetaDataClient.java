@@ -138,9 +138,7 @@ import java.util.Set;
 import java.util.HashSet;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.gson.JsonObject;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Admin;
@@ -172,6 +170,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.util.ViewUtil;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -4475,7 +4474,7 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
             String dataTableName = statement.getTableName();
-            String indexName = statement.getTable().getName().getTableName();
+            final String indexName = statement.getTable().getName().getTableName();
             boolean isAsync = statement.isAsync();
             boolean isRebuildAll = statement.isRebuildAll();
             String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
@@ -4558,14 +4557,16 @@ public class MetaDataClient {
                                     tenantId, indexName);
                             if (tasks == null || tasks.size() == 0) {
                                 Timestamp ts = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-                                JsonObject jsonObject = new JsonObject();
-                                jsonObject.addProperty(INDEX_NAME, indexName);
-                                jsonObject.addProperty(REBUILD_ALL, true);
+                                Map<String, Object> props = new HashMap<String, Object>() {{
+                                    put(INDEX_NAME, indexName);
+                                    put(REBUILD_ALL, true);
+                                }};
                                 try {
+                                    String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
                                     Task.addTask(connection, PTable.TaskType.INDEX_REBUILD,
                                             tenantId, schemaName,
                                             dataTableName, PTable.TaskStatus.CREATED.toString(),
-                                            jsonObject.toString(), null, ts, null, true);
+                                            json, null, ts, null, true);
                                     connection.commit();
                                 } catch (IOException e) {
                                     throw new SQLException("Exception happened while adding a System.Task" + e.toString());

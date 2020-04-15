@@ -139,7 +139,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             count = getUtility().countRows(indexHTable);
             assertEquals(0, count);
 
-            String data = "{IndexName:" + indexName + "}";
+            String data = "{\"IndexName\":\"" + indexName + "\"}";
 
             // Run IndexRebuildTask
             TaskRegionObserver.SelfHealingTask task =

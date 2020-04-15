@@ -26,7 +26,7 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.apache.phoenix.util.json.JsonUpsertExecutor;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.phoenix.util.JacksonUtil;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
@@ -65,11 +65,9 @@ public class JsonToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>>
 
     @VisibleForTesting
     static class JsonLineParser implements LineParser<Map<?, ?>> {
-        private final ObjectMapper mapper = new ObjectMapper();
-
         @Override
         public Map<?, ?> parse(String input) throws IOException {
-            return mapper.readValue(input, Map.class);
+            return JacksonUtil.getObjectReader(Map.class).readValue(input);
         }
     }
 }

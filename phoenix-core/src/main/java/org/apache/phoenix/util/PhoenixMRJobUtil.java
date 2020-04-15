@@ -40,7 +40,6 @@ import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.Activ
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.Stat;
-import org.codehaus.jettison.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,7 +89,7 @@ public class PhoenixMRJobUtil {
     }
 
     public static String getActiveResourceManagerAddress(Configuration config, String zkQuorum)
-            throws IOException, InterruptedException, JSONException, KeeperException,
+            throws IOException, InterruptedException, KeeperException,
             InvalidProtocolBufferException, ZooKeeperConnectionException {
         // In case of yarn HA is NOT enabled
         String resourceManager = PhoenixMRJobUtil.getRMWebAddress(config);

@@ -15,9 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-{
-    "_comment": "Lists all phoenix compatible client versions against the current branch version for a given hbase profile If hbase profile is 1.3, phoenix client versions 4.14.3 and 4.15.0 are tested against current branch version",
-    "1.3": ["4.14.3", "4.15.0"],
-    "1.4": ["4.14.3", "4.15.0"],
-    "1.5": ["4.15.0"]
+package org.apache.phoenix.util;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.ObjectWriter;
+
+public final class JacksonUtil {
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    private JacksonUtil() {
+    }
+
+    public static ObjectReader getObjectReader(Class clazz) {
+        return mapper.readerFor(clazz);
+    }
+
+    public static ObjectReader getObjectReader(){
+        return mapper.reader();
+    }
+
+    public static ObjectWriter getObjectWriter(Class clazz) {
+        return mapper.writerFor(clazz);
+    }
+
+    public static ObjectWriter getObjectWriter(){
+        return mapper.writer();
+    }
 }
