@@ -96,7 +96,7 @@ public class PhoenixIndexImportDirectReducer extends
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
             }
-            if (verificationResult.isVerificationFailed(verifyType)) {
+            if (verificationResult.isVerificationFailed()) {
                 throw new IOException("Index verification failed! " + verificationResult);
             }
         } catch (Exception e) {
