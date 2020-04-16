@@ -65,6 +65,7 @@ import java.util.Properties;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
@@ -102,6 +103,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         VALID_NEW_UNVERIFIED_MUTATIONS,
         //extra mutations mimicking incoming mutations
         VALID_MORE_MUTATIONS,
+        // mimicking the case where the data cells expired but index has them still
+        VALID_EXTRA_CELL,
         EXPIRED,
         INVALID_EXTRA_CELL,
         INVALID_EMPTY_CELL,
@@ -354,7 +357,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     @Test
     public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
         IndexToolVerificationResult.PhaseResult
-                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0);
+                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0,0);
         for (Map.Entry<byte[], List<Mutation>>
                 entry : indexKeyToMutationMapLocal.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.EXPIRED);
@@ -439,6 +442,18 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testVerifySingleIndexRow_validIndexRowCount_extraCell() throws IOException {
+        for (Map.Entry<byte[], List<Mutation>>
+                entry : indexKeyToMutationMapLocal.entrySet()) {
+            initializeLocalMockitoSetup(entry, TestType.VALID_EXTRA_CELL);
+            //test code
+            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+
+            assertEquals(1, actualPR.getIndexHasExtraCellsCount());
+        }
+    }
+
+    @Test
     public void testVerifySingleIndexRow_actualMutations_empty() throws IOException {
         byte [] validRowKey = getValidRowKey();
         when(indexRow.getRow()).thenReturn(validRowKey);
@@ -450,11 +465,11 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private IndexToolVerificationResult.PhaseResult getValidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(1,0,0,0);
+        return new IndexToolVerificationResult.PhaseResult(1,0,0,0,0, 0);
     }
 
     private IndexToolVerificationResult.PhaseResult getInvalidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1);
+        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1, 0, 0);
     }
 
     private void initializeLocalMockitoSetup(Map.Entry<byte[], List<Mutation>> entry,
@@ -505,6 +520,20 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
             newActualMutations.add(getDeleteMutation(actualMutations.get(0), null));
             newActualMutations.add(getDeleteMutation(actualMutations.get(0), new Long(1)));
             newActualMutations.add(getUnverifiedPutMutation(actualMutations.get(0), new Long(1)));
+        }
+        if(testType.equals(TestType.VALID_EXTRA_CELL)) {
+            for (Mutation m : newActualMutations) {
+                if (m instanceof Put) {
+                    List<Cell> origList = m.getFamilyCellMap().firstEntry().getValue();
+                    Cell newCell =
+                            CellUtil.createCell(m.getRow(), CellUtil.cloneFamily(origList.get(0)),
+                                    Bytes.toBytes("EXTRACOL"), m.getTimestamp(), KeyValue.Type.Put.getCode(),
+                                    Bytes.toBytes("asdfg"));
+                    byte[] fam = CellUtil.cloneFamily(origList.get(0));
+                    m.getFamilyCellMap().get(fam).add(newCell);
+                    break;
+                }
+            }
         }
         return newActualMutations;
     }
