@@ -59,29 +59,10 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <configuration>
-          <finalName>phoenix-${project.version}-server</finalName>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-install-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>install-file</goal>
-            </goals>
-            <id>default-install</id>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-            <phase>install</phase>
-          </execution>
-        </executions>
-        <configuration>
-          <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
- 	  <pomFile>${basedir}/pom.xml</pomFile>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -102,10 +83,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <finalName>
-                  phoenix-${project.version}-${hbase.profile.string}-server
-                </finalName>
-                <shadedArtifactAttached>false</shadedArtifactAttached>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>

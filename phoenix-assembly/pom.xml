@@ -42,7 +42,27 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>Symlink to deprecated client jar name</id>
+            <id>client without classifier</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory></workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-client-${project.version}-${hbase.profile.string}.jar
+                </argument>
+                <argument>
+                  phoenix-client-${project.version}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>client without version and classifier</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
@@ -56,7 +76,49 @@
                   phoenix-client-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
-                  phoenix-${project.version}-${hbase.profile.string}-client.jar
+                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
+                  phoenix-client.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>server without classifier</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-server-${project.version}-${hbase.profile.string}.jar
+                </argument>
+                <argument>
+                  phoenix-server-${project.version}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>server without version and classifier</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-server-${project.version}-${hbase.profile.string}.jar
+                </argument>
+                <argument>
+                  <!-- We are overwriting the unshaded server JAR, but we don't care -->
+                  phoenix-server.jar
                 </argument>
               </arguments>
             </configuration>
