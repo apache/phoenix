@@ -354,8 +354,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
               <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <createSourcesJar>true</createSourcesJar>
@@ -394,8 +394,8 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedClassifierName>${hbase.profile.string}-embedded</shadedClassifierName>
               <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>${hbase.profile.string}-embedded</shadedClassifierName>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <artifactSet>
