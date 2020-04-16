@@ -81,6 +81,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
+                        setValue(verificationResult.getBeforeIndexHasExtraCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
+                        setValue(verificationResult.getBeforeIndexHasMissingCellsCount());
             }
             if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT).
@@ -95,6 +99,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getAfterRebuildBeyondMaxLookBackMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
+                        setValue(verificationResult.getAfterIndexHasExtraCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
+                        setValue(verificationResult.getAfterIndexHasMissingCellsCount());
             }
             if (verificationResult.isVerificationFailed()) {
                 throw new IOException("Index verification failed! " + verificationResult);
