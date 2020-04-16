@@ -280,17 +280,9 @@ public class IndexToolVerificationResult {
         return verificationResult;
     }
 
-    public boolean isVerificationFailed(IndexTool.IndexVerifyType verifyType) {
-        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.NONE) {
-            return false;
-        } else if (verifyType == IndexTool.IndexVerifyType.ONLY) {
-            if (before.invalidIndexRowCount + before.missingIndexRowCount > 0) {
-                return true;
-            }
-        } else if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
-            if (after.invalidIndexRowCount + after.missingIndexRowCount > 0) {
-                return true;
-            }
+    public boolean isVerificationFailed() {
+        if (after.invalidIndexRowCount + after.missingIndexRowCount > 0) {
+            return true;
         }
         return false;
     }
