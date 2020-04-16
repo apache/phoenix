@@ -295,8 +295,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
             byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
-            setStartRow(buildIndexScan, dataRowKey, true);
-            setStopRow(buildIndexScan, dataRowKey, true);
+            setSingleRow(buildIndexScan, dataRowKey);
             buildIndexScan.setTimeRange(0, maxTimestamp);
             // Pass the index row key to the partial index builder which will rebuild the index row and check if the
             // row key of this rebuilt index row matches with the passed index row key
@@ -376,8 +375,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Now we will do a single row scan to retrieve the verified index row built from the data table row.
                 // Note we cannot read all versions in one scan as the max number of row versions for an index table
                 // can be 1. In that case, we will get only one (i.e., the most recent) version instead of all versions
-                setStartRow(singleRowIndexScan, indexRowKey, true);
-                setStopRow(singleRowIndexScan, indexRowKey, true);
+                setSingleRow(singleRowIndexScan, indexRowKey);
                 singleRowIndexScan.setTimeRange(minTimestamp, ts);
                 RegionScanner singleRowScanner = region.getScanner(singleRowIndexScan);
                 row.clear();

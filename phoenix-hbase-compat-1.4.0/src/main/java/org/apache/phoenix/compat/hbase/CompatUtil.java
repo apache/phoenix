@@ -30,7 +30,7 @@ public abstract class CompatUtil {
         return scan.withStartRow(indexRowKey, inclusive);
     }
 
-    public static Scan setStopRow(Scan scan, byte[] indexRowKey, boolean inclusive) {
-        return scan.withStopRow(indexRowKey, inclusive);
+    public static Scan setSingleRow(Scan scan, byte[] indexRowKey) {
+        return scan.withStartRow(indexRowKey, true).withStopRow(indexRowKey, true);
     }
 }

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.hadoop.hbase.client.Scan;
 
 public class CompatUtil {
@@ -37,11 +36,7 @@ public class CompatUtil {
         }
     }
 
-    public static Scan setStopRow(Scan scan, byte[] indexRowKey, boolean inclusive) {
-        if (inclusive) {
-            return scan.setStopRow(indexRowKey);
-        } else {
-            throw new NotImplementedException();
-        }
+    public static Scan setSingleRow(Scan scan, byte[] indexRowKey) {
+        return scan.setStartRow(indexRowKey).setStopRow(indexRowKey);
     }
 }
