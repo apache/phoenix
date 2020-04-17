@@ -138,9 +138,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
 import org.apache.hadoop.conf.Configuration;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.gson.JsonObject;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ClusterConnection;
@@ -173,6 +171,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.util.ViewUtil;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -4556,9 +4555,8 @@ public class MetaDataClient {
                                     put(INDEX_NAME, indexName);
                                     put(REBUILD_ALL, true);
                                 }};
-                                ObjectMapper mapper = new ObjectMapper();
                                 try {
-                                    String json = mapper.writeValueAsString(props);
+                                    String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
                                     Task.addTask(connection, PTable.TaskType.INDEX_REBUILD,
                                             tenantId, schemaName,
                                             dataTableName, PTable.TaskStatus.CREATED.toString(),

@@ -40,7 +40,6 @@ import java.util.concurrent.TimeoutException;
 import javax.security.auth.login.AppConfigurationEntry;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -54,6 +53,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -310,8 +310,7 @@ public class PhoenixMRJobSubmitter {
                 + "," + YarnApplication.state.RUNNING);
         String response = PhoenixMRJobUtil.getJobsInformationFromRM(rmAddress, urlParams);
         LOGGER.debug("Already Submitted/Running Apps = " + response);
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode jsonNode = objectMapper.readTree(response);
+        JsonNode jsonNode = JacksonUtil.getObjectReader().readTree(response);
         JsonNode appsJson = jsonNode.get(YarnApplication.APPS_ELEMENT);
         Set<String> yarnApplicationSet = new HashSet<String>();
 

@@ -28,7 +28,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.phoenix.util.JacksonUtil;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -163,8 +164,7 @@ public class TraceServlet extends HttpServlet {
         EntityFactory nutrientEntityFactory = new EntityFactory(con, sqlQuery);
         List<Map<String, Object>> nutrients = nutrientEntityFactory
                 .findMultiple();
-        ObjectMapper mapper = new ObjectMapper();
-        json = mapper.writeValueAsString(nutrients);
+        json = JacksonUtil.getObjectWriter().writeValueAsString(nutrients);
       } catch (Exception e) {
         json = "{error:true,msg:'Server Error:" + e.getMessage() + "'}";
       } finally {

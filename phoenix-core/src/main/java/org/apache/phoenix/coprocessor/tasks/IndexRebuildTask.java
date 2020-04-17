@@ -19,7 +19,6 @@ package org.apache.phoenix.coprocessor.tasks;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
@@ -32,6 +31,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,8 +67,7 @@ public class IndexRebuildTask extends BaseTask  {
             if (Strings.isNullOrEmpty(taskRecord.getData())) {
                 data = "{}";
             }
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode jsonNode = mapper.readValue(data, JsonNode.class);
+            JsonNode jsonNode = JacksonUtil.getObjectReader(JsonNode.class).readValue(data);
             String indexName = getIndexName(jsonNode);
 
             if (Strings.isNullOrEmpty(indexName)) {
@@ -146,8 +145,7 @@ public class IndexRebuildTask extends BaseTask  {
         if (Strings.isNullOrEmpty(data)) {
             data = "{}";
         }
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode jsonNode = mapper.readTree(data);
+        JsonNode jsonNode = JacksonUtil.getObjectReader().readTree(data);
         String jobId = null;
         if (jsonNode.has(JOB_ID)) {
             jobId = jsonNode.get(JOB_ID).textValue().replaceAll("\"", "");

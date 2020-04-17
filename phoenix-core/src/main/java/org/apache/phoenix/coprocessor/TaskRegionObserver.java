@@ -34,7 +34,6 @@ import javax.annotation.concurrent.GuardedBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.conf.Configuration;
@@ -50,6 +49,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.TaskType;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -252,8 +252,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
             if (Strings.isNullOrEmpty(data)) {
                 data = "{}";
             }
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode jsonNode = mapper.readTree(data);
+            JsonNode jsonNode = JacksonUtil.getObjectReader().readTree(data);
             ((ObjectNode) jsonNode).put(TASK_DETAILS, taskStatus);
             data = jsonNode.toString();
 
