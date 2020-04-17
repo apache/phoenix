@@ -53,7 +53,7 @@ import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
-import org.apache.phoenix.monitoring.GlobalPhoenixTable;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -130,7 +130,7 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(GLOBAL_SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
 
-            GlobalPhoenixTable.getInstance().addOrCreateTable(this.getTableName(), MetricType.SCAN_BYTES,
+            PhoenixTableRegistry.getInstance().addOrCreateTable(this.getTableName(), MetricType.SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
             changeMetric(GLOBAL_HBASE_COUNT_RPC_CALLS,
                     scanMetricsMap.get(RPC_CALLS_METRIC_NAME));

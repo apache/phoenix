@@ -32,7 +32,7 @@ import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isPossibleToUseEncodedCQFilter;
 import static org.apache.phoenix.util.ScanUtil.hasDynamicColumns;
-import org.apache.phoenix.monitoring.GlobalPhoenixTable;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
@@ -1364,7 +1364,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } catch (TimeoutException e) {
             context.getOverallQueryMetrics().queryTimedOut();
             GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
-            GlobalPhoenixTable.getInstance().addOrCreateTable(context.getCurrentTable().getTable().getTableName().toString(),QUERY_TIMEOUT_COUNTER,0);
+            PhoenixTableRegistry.getInstance().addOrCreateTable(context.getCurrentTable().getTable().getPhysicalName().toString(),QUERY_TIMEOUT_COUNTER,1);
             // thrown when a thread times out waiting for the future.get() call to return
             toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
                     .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
@@ -1400,7 +1400,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 if (toThrow != null) {
                     GLOBAL_FAILED_QUERY_COUNTER.increment();
                     context.getOverallQueryMetrics().queryFailed();
-                    GlobalPhoenixTable.getInstance().addOrCreateTable(context.getCurrentTable().getTable().getTableName().toString(),QUERY_FAILED_COUNTER,0);
+                    PhoenixTableRegistry.getInstance().addOrCreateTable(context.getCurrentTable().getTable().getPhysicalName().toString(),QUERY_FAILED_COUNTER,1);
                     throw toThrow;
                 }
             }

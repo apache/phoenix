@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -69,7 +70,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
-import org.apache.phoenix.monitoring.GlobalPhoenixTable;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -1369,9 +1370,12 @@ public class PhoenixRuntime {
     }
 
    public static Map<String,Long>getTableLevelMetrics(){
-        return GlobalPhoenixTable.getInstance().getTableLevelMetrics();
+        return PhoenixTableRegistry.getInstance().getTableLevelMetrics();
    }
-    
+
+   public static void resetPhoenixTableLevelMetrics(){
+         PhoenixTableRegistry.getInstance().clearTableLevelMetrics();
+   }
     /**
      * 
      * @return whether or not the global client metrics are being collected
@@ -1382,7 +1386,7 @@ public class PhoenixRuntime {
     
     private static Map<String, Long> createMetricMap(Map<MetricType, Long> metricInfoMap) {
     	Map<String, Long> metricMap = Maps.newHashMapWithExpectedSize(metricInfoMap.size());
-    	for (Map.Entry<MetricType, Long> entry : metricInfoMap.entrySet()) {
+        for (Entry<MetricType, Long> entry : metricInfoMap.entrySet()) {
     		metricMap.put(entry.getKey().shortName(), entry.getValue());
     	}
     	return metricMap;

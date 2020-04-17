@@ -73,7 +73,7 @@ import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
-import org.apache.phoenix.monitoring.GlobalPhoenixTable;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 import org.apache.phoenix.monitoring.MutationMetricQueue;
 import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
@@ -1062,7 +1062,7 @@ public class MutationState implements SQLCloseable {
                     }
                     numMutations = mutationList.size();
                     GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
-                    GlobalPhoenixTable.getInstance().addOrCreateTable(Bytes.toString(htableName), MUTATION_BATCH_SIZE, numMutations);
+                    PhoenixTableRegistry.getInstance().addOrCreateTable(table.getPhysicalName().toString(), MUTATION_BATCH_SIZE, numMutations);
 
                     mutationSizeBytes = calculateMutationSize(mutationList);
                     startTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -1201,12 +1201,12 @@ public class MutationState implements SQLCloseable {
                     sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
                     numFailedMutations = uncommittedStatementIndexes.length;
                     GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
-                    GlobalPhoenixTable.getInstance().addOrCreateTable(Bytes.toString(htableName),MUTATION_BATCH_FAILED_SIZE, numFailedMutations);
+                    PhoenixTableRegistry.getInstance().addOrCreateTable(table.getPhysicalName().toString(),MUTATION_BATCH_FAILED_SIZE, numFailedMutations);
                 } finally {
                     MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes,
                             mutationCommitTime, numFailedMutations);
                     mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
-                    GlobalPhoenixTable.getInstance().addOrCreateTable(Bytes.toString(htableName),MUTATION_BYTES, mutationSizeBytes);
+                    PhoenixTableRegistry.getInstance().addOrCreateTable(table.getPhysicalName().toString(),MUTATION_BYTES, mutationSizeBytes);
                     try {
                         if (cache != null) cache.close();
                     } finally {

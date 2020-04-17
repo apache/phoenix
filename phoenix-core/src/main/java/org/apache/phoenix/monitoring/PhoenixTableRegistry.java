@@ -20,11 +20,11 @@ import java.util.concurrent.ConcurrentMap;
  * Register each tableMetrics and store the instance of it associated with TableName in a map
  */
 
-public class GlobalPhoenixTable  {
-    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalPhoenixTable.class);
+public class PhoenixTableRegistry  {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTableRegistry.class);
     private static final boolean isTableLevelMetricsEnabled = QueryServicesOptions.withDefaults().isTableLevelMetricsEnabled();
 
-    private static ConcurrentMap<String,TableLevelMetrics>tablePhoenixMapping;
+    private static ConcurrentMap<String,TableLevelMetricRegistry>tablePhoenixMapping;
 
     static MetricRegistry metricRegistry;
     static {
@@ -42,16 +42,16 @@ public class GlobalPhoenixTable  {
         return MetricRegistries.global().create(registryInfo);
     }
 
-    private static GlobalPhoenixTable instance = new GlobalPhoenixTable();
-    public static GlobalPhoenixTable getInstance(){
+    private static PhoenixTableRegistry instance = new PhoenixTableRegistry();
+    public static PhoenixTableRegistry getInstance(){
         return instance;
     }
 
     public void  addOrCreateTable(String tableName, MetricType type, long value){
         if(isTableLevelMetricsEnabled) {
-            TableLevelMetrics tInstance = tablePhoenixMapping.get(tableName);
+            TableLevelMetricRegistry tInstance = tablePhoenixMapping.get(tableName);
             if (tInstance == null) {
-                tInstance = new TableLevelMetrics(tableName);
+                tInstance = new TableLevelMetricRegistry(tableName);
                 tInstance.registerMetrics(metricRegistry);
                 tablePhoenixMapping.put(tableName, tInstance);
             }
@@ -63,7 +63,7 @@ public class GlobalPhoenixTable  {
     public void deleteTable(String tableName){
         if(isTableLevelMetricsEnabled) {
             if(tablePhoenixMapping.containsKey(tableName)){
-                TableLevelMetrics tInstance = tablePhoenixMapping.get(tableName);
+                TableLevelMetricRegistry tInstance = tablePhoenixMapping.get(tableName);
                 tInstance.removeMetricRegistry(metricRegistry);
                 tablePhoenixMapping.remove(tableName);
             }
@@ -72,21 +72,16 @@ public class GlobalPhoenixTable  {
 
     @VisibleForTesting
     public Map<String,Long> getTableLevelMetrics(){
-        Map<String,Long>TableMap = new HashMap<>();
-        ConcurrentMap<String,TableLevelMetrics>map = tablePhoenixMapping;
-
-        for(TableLevelMetrics table : map.values()) {
-            TableMap.put(table.getTableName() + "_table_" + MetricType.SELECT_SQL_COUNTER, table.getSelectCounter());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.MUTATION_BATCH_FAILED_SIZE, table.getMutationBatchFailedSize());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.MUTATION_BYTES, table.getMutationBytes());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.MUTATION_BATCH_SIZE, table.getMutationBatchSize());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.MUTATION_SQL_COUNTER, table.getMutationSqlCounter());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.QUERY_TIMEOUT_COUNTER, table.getQueryTimeOutCounter());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.QUERY_FAILED_COUNTER, table.getQueryFailedCounter());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.NUM_PARALLEL_SCANS, table.getNumParallelScans());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.SCAN_BYTES, table.getScanBytes());
-            TableMap.put(table.getTableName() + "_table_" + MetricType.TASK_EXECUTED_COUNTER, table.getTaskExecutedCounter());
+        Map<String,Long>tableMap = new HashMap<>();
+        ConcurrentMap<String,TableLevelMetricRegistry>map = tablePhoenixMapping;
+        for(TableLevelMetricRegistry table : map.values()) {
+            tableMap.putAll(table.getMetricMap());
         }
-        return TableMap;
+        return tableMap;
+    }
+
+    @VisibleForTesting
+    public void clearTableLevelMetrics(){
+        tablePhoenixMapping.clear();
     }
 }

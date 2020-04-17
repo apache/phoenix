@@ -129,7 +129,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder,hri.getRegionNameAsString());
+                scan, scanMetricsHolder,hri.getTable().toString());
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }
