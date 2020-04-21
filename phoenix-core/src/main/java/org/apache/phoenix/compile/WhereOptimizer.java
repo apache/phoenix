@@ -1458,6 +1458,7 @@ public class WhereOptimizer {
                     return KeyRange.EMPTY_RANGE;
                 }
                 // If we're not dealing with single keys, then we can use our normal intersection
+                //   however, if we truncate a span then we need to change exclusive to inclusive
                 if (otherRange.intersect(KeyRange.getKeyRange(trailingBytes)) == KeyRange.EMPTY_RANGE) {
                     // Exit early since the upper range is the same as the lower range
                     if (result.isSingleKey()) {
@@ -1465,6 +1466,9 @@ public class WhereOptimizer {
                     }
                     ptr.set(result.getLowerRange(), 0, lowerOffset - separatorLength);
                     lowerRange = ptr.copyBytes();
+                    if(pkPos < otherPKPos && !lowerInclusive) {
+                        lowerInclusive = true;
+                    }
                 }
             }
             boolean upperInclusive = result.isUpperInclusive();
