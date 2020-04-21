@@ -19,17 +19,17 @@ package org.apache.phoenix.mapreduce;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.ViewInfoTracker;
+import org.apache.phoenix.mapreduce.util.ViewInfoTracker.ViewTTLJobState;
 import org.apache.phoenix.mapreduce.util.MultiViewJobStatusTracker;
 import org.apache.phoenix.mapreduce.util.DefaultMultiViewJobStatusTracker;
 import org.apache.phoenix.mapreduce.util.PhoenixViewTtlUtil;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.PhoenixRuntime;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,35 +85,35 @@ public class ViewTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTracker
         }
     }
 
-    private void deletingExpiredRows(PhoenixConnection connection, ViewInfoTracker value, Configuration config)
+    private void deletingExpiredRows(PhoenixConnection connection, ViewInfoTracker view, Configuration config)
             throws SQLException {
 
-        String deleteIfExpiredStatement = "DELETE FROM " + value.getViewName() +
-                " WHERE TO_NUMBER(NOW()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) > " + value.getViewTtl();
+        String deleteIfExpiredStatement = "DELETE FROM " + view.getViewName() +
+                " WHERE TO_NUMBER(NOW()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) > " + view.getViewTtl();
 
-        PTable view = PhoenixRuntime.getTable(connection, value.getViewName());
-
-        deletingExpiredRows(connection, view, deleteIfExpiredStatement, config);
-    }
-
-    private void deletingExpiredRows(PhoenixConnection connection, PTable view, String deleteIfExpiredStatement,
-                                     Configuration config) throws SQLException {
         try {
             this.multiViewJobStatusTracker.updateJobStatus(view, 0,
-                    JobStatus.State.PREP.getValue(), config, 0);
+                    ViewTTLJobState.PREP.getValue(), config, 0);
 
             long startTime = System.currentTimeMillis();
             this.multiViewJobStatusTracker.updateJobStatus(view, 0,
-                    JobStatus.State.RUNNING.getValue(), config, 0 );
+                    ViewTTLJobState.RUNNING.getValue(), config, 0 );
             connection.setAutoCommit(true);
             int numberOfDeletedRows = connection.createStatement().executeUpdate(deleteIfExpiredStatement);
 
             this.multiViewJobStatusTracker.updateJobStatus(view, numberOfDeletedRows,
-                    JobStatus.State.SUCCEEDED.getValue(), config, System.currentTimeMillis() - startTime);
+                    ViewTTLJobState.SUCCEEDED.getValue(), config, System.currentTimeMillis() - startTime);
         } catch (Exception e) {
-            this.multiViewJobStatusTracker.updateJobStatus(view, 0,
-                    JobStatus.State.FAILED.getValue(), config, 0);
-            LOGGER.info("Deleting Expired Rows has an exception for : " + e.getMessage());
+            int state;
+            if (e instanceof SQLException && ((SQLException) e).getErrorCode() == SQLExceptionCode.TABLE_UNDEFINED.getErrorCode()) {
+                LOGGER.info("View has been deleted : " + e.getMessage());
+                state = ViewTTLJobState.DELETED.getValue();
+            } else {
+                LOGGER.info("Deleting Expired Rows has an exception for : " + e.getMessage());
+                state = ViewTTLJobState.FAILED.getValue();
+            }
+
+            this.multiViewJobStatusTracker.updateJobStatus(view, 0, state, config, 0);
             throw e;
         }
     }

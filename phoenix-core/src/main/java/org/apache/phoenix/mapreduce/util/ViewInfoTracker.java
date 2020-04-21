@@ -24,6 +24,25 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ViewInfoTracker implements ViewInfoWritable {
+    public enum ViewTTLJobState {
+        RUNNING(1),
+        SUCCEEDED(2),
+        FAILED(3),
+        PREP(4),
+        KILLED(5),
+        DELETED(6);
+
+        int value;
+
+        ViewTTLJobState(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return this.value;
+        }
+    }
+
     String tenantId;
     String viewName;
     long viewTtl;

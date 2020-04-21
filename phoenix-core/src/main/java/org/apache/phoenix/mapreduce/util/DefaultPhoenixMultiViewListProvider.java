@@ -78,12 +78,9 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                     viewInfoWritables.add(viewInfoTracker);
                 }
             }
-        } catch (SQLException e ) {
+        }  catch (Exception e) {
             LOGGER.error("Getting view info failed with: " + e.getMessage());
-        } catch (Exception e) {
-
         }
-
         return viewInfoWritables;
     }
 
