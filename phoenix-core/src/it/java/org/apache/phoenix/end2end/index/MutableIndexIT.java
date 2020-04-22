@@ -201,6 +201,39 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
     
     @Test
+    public void testUpsertIntoViewOnTableWithIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (ID VARCHAR PRIMARY KEY, V1 VARCHAR)";
+            conn.createStatement().execute(baseTableDDL);
+
+            // Create an Index on the base table
+            String tableIndex = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + tableIndex + 
+                " ON " + baseTable + " (V1)");
+
+            // Create a view on the base table
+            String viewDDL = "CREATE VIEW IF NOT EXISTS " + view 
+                    + " (V2 INTEGER) AS SELECT * FROM " + baseTable
+                    + " WHERE ID='a'";
+            conn.createStatement().execute(viewDDL);
+
+            String upsert = "UPSERT INTO " + view + " (ID, V1, V2) "
+                    + "VALUES ('a' ,'ab', 7)";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+            
+            ResultSet rs = conn.createStatement().executeQuery("SELECT ID, V1 from " + baseTable);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));         
+        }
+    }
+    
+    @Test
     public void testCoveredColumns() throws Exception {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
