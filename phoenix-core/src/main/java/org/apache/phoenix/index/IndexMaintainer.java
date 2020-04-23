@@ -649,7 +649,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 // Ignore view constants from the data table, as these
                 // don't need to appear in the index (as they're the
                 // same for all rows in this index)
-                if (!viewConstantColumnBitSet.get(i) || !isViewIndex()) {
+                if (!viewConstantColumnBitSet.get(i) || isIndexOnBaseTable()) {
                     int pos = rowKeyMetaData.getIndexPkPosition(i-dataPosOffset);
                     if (Boolean.TRUE.equals(hasValue)) {
                         dataRowKeyLocator[0][pos] = ptr.getOffset();
@@ -964,7 +964,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     private int getNumViewConstants() {
-        if (!isViewIndex()) {
+        if (isIndexOnBaseTable()) {
             return 0;
         }
         BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
@@ -1664,7 +1664,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int numViewConstantColumns = 0;
         BitSet viewConstantColumnBitSet = rowKeyMetaData.getViewConstantColumnBitSet();
         for (int i = dataPkOffset; i < indexDataColumnCount; i++) {
-            if (!viewConstantColumnBitSet.get(i) || !isViewIndex()) {
+            if (!viewConstantColumnBitSet.get(i) || isIndexOnBaseTable()) {
                 int indexPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
                 this.dataPkPosition[indexPkPosition] = i;
             } else {
@@ -1899,11 +1899,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return immutableRows;
     }
     
-    public boolean isViewIndex() {
+    public boolean isIndexOnBaseTable() {
         if (parentTableType == null) {
-            return true;
+            return false;
         }
-        return parentTableType != PTableType.TABLE;
+        return parentTableType == PTableType.TABLE;
     }
     
     public Set<ColumnReference> getIndexedColumns() {
