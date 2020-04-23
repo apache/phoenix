@@ -17,22 +17,45 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.clearspring.analytics.util.Lists;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
+import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TableViewFinderResult;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.ParseNodeVisitor;
+import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.TraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -333,4 +356,120 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test public void testGetViewWhereWithViewTTL() throws Exception {
+        String tenantId = generateUniqueName();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        String schema = generateUniqueName();
+
+        String multiTenantTableName = schema + "." + generateUniqueName();
+        String globalViewName = schema + "." + generateUniqueName();
+
+        String view1 = generateUniqueName();
+        String view2 = generateUniqueName();
+        String customObjectView1 = schema + "." + view1;
+        String customObjectView2 = schema + "." + view2;
+
+        String tenantView = generateUniqueName();
+        String tenantViewOnGlobalView = schema + "." + tenantView;
+        String tenantViewIndex = tenantView + "_INDEX";
+        String tenantIndex = schema + "." + tenantViewIndex;
+
+        String
+                multiTenantTableDDL =
+                "CREATE TABLE IF NOT EXISTS " + multiTenantTableName
+                        + "(TENANT_ID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, ID VARCHAR, NUM BIGINT "
+                        + "CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP)) MULTI_TENANT=true";
+
+        String
+                globalViewDDL =
+                "CREATE VIEW IF NOT EXISTS " + globalViewName + "(G1 BIGINT, G2 BIGINT) "
+                        + "AS SELECT * FROM " + multiTenantTableName + " WHERE KP = '001' VIEW_TTL=30";
+
+        String viewDDL = "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) AS SELECT * FROM %s VIEW_TTL=30";
+        String
+                viewIndexDDL =
+                "CREATE INDEX IF NOT EXISTS " + tenantViewIndex + " ON " + tenantViewOnGlobalView
+                        + "(NUM DESC) INCLUDE (ID)";
+
+        String
+                customObjectViewDDL =
+                "CREATE VIEW IF NOT EXISTS %s (V1 BIGINT, V2 BIGINT) " + "AS SELECT * FROM "
+                        + multiTenantTableName + " WHERE KP = '%s' VIEW_TTL=30";
+
+        String selectFromViewSQL = "SELECT * FROM %s";
+
+        List<String> dmls = Arrays.asList(new String[] {
+                String.format(viewDDL, tenantViewOnGlobalView, globalViewName),
+                String.format(customObjectViewDDL, customObjectView1, view1),
+                String.format(customObjectViewDDL, customObjectView2, view2),
+                viewIndexDDL
+        });
+
+        // Create the various tables and views
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // Base table.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(multiTenantTableDDL);
+            }
+            // Global view.
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(globalViewDDL);
+            }
+            // Tenant views and indexes.
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                for (String dml : dmls) {
+                    try (Statement stmt = tenantConn.createStatement()) {
+                        stmt.execute(dml);
+                    }
+                }
+            }
+        }
+
+        List<String> sqls = Arrays.asList(new String[] {
+                String.format(selectFromViewSQL, tenantViewOnGlobalView),
+                String.format(selectFromViewSQL, customObjectView1),
+                String.format(selectFromViewSQL, customObjectView2),
+                String.format(selectFromViewSQL, tenantIndex)
+        });
+
+        // Validate the view where clause for the above sqls.
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+            for (String sql : sqls) {
+                try (Statement stmt = tenantConn.createStatement()) {
+                    PhoenixStatement pstmt = stmt.unwrap(PhoenixStatement.class);
+                    QueryPlan plan = pstmt.compileQuery(sql);
+                    validatePhoenixRowTimestampParseNodeExists(plan);
+                }
+            }
+        }
+
+    }
+
+    private void validatePhoenixRowTimestampParseNodeExists(QueryPlan plan) {
+        ParseNode parsedNode;
+        final AtomicInteger count = new AtomicInteger(0);
+        try {
+            parsedNode =
+                    ViewUtil.getViewWhereWithViewTTL(plan.getContext(),
+                            plan.getTableRef().getTable());
+            if (parsedNode != null) {
+                parsedNode.accept(new StatelessTraverseAllParseNodeVisitor() {
+                    @Override
+                    public boolean visitEnter(FunctionParseNode node) throws SQLException {
+                        if(node instanceof PhoenixRowTimestampParseNode) {
+                            count.set(1);
+                        }
+                        return super.visitEnter(node);
+                    }
+                });
+            }
+            Assert.assertEquals(1, count.get());
+        } catch (SQLException e) {
+            fail();
+        }
+
+    }
+
 }

@@ -653,6 +653,7 @@ public class QueryCompiler {
         PTable table = tableRef.getTable();
 
         ParseNode viewWhere = null;
+        // Using getViewTTL > 0 as a indicator that view/view-index has VIEW_TTL set.
         if (table.getViewTTL() > 0) {
             viewWhere = ViewUtil.getViewWhereWithViewTTL(context, table);
         } else if (table.getViewStatement() != null) {

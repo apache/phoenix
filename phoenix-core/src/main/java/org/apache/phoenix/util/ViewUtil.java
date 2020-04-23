@@ -635,12 +635,14 @@ public class ViewUtil {
     public static ParseNode getViewWhereWithViewTTL(StatementContext context, PTable table)
             throws SQLException {
         ParseNode viewWhere = null;
-
-        Long nowTS = context.getConnection().getSCN() == null ?
-                EnvironmentEdgeManager.currentTimeMillis() : context.getConnection().getSCN();
         String viewStatement = null;
-        String viewTTLFilterClause = String.format(
-                "((%d - TO_NUMBER(phoenix_row_timestamp())) < %d)", nowTS, table.getViewTTL());
+        String viewTTLFilterClause = context.getConnection().getSCN() == null ?
+                String.format(
+                        "((TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                        table.getViewTTL()) :
+                String.format(
+                "((%d - TO_NUMBER(phoenix_row_timestamp())) < %d)",
+                        context.getConnection().getSCN(), table.getViewTTL());
 
         if (table.getViewStatement() != null) {
             viewStatement = table.getViewStatement();

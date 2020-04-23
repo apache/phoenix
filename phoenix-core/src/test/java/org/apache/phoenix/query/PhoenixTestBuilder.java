@@ -211,6 +211,8 @@ public class PhoenixTestBuilder {
         // returns the connection to be used for DML queries.
         Connection getConnection();
 
+        // The connection to be used for the Reader.
+        // Please make sure the connection is closed after use or called with try-with resources.
         void setConnection(Connection connection);
 
         // returns the target entity - whether to use the table, global-view, the tenant-view or
@@ -247,6 +249,8 @@ public class PhoenixTestBuilder {
         // returns the connection to be used for upserting rows.
         Connection getConnection();
 
+        // The connection to be used for the Writer.
+        // Please make sure the connection is closed after use or called with try-with resources.
         void setConnection(Connection connection);
 
         // returns the target entity - whether to use the table, global-view or the tenant-view.
