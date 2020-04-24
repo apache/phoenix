@@ -71,7 +71,7 @@ public class PherfMainIT extends ResultBaseTestIT {
         String[] args = {"-q", "-l",
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
-                "-scenarioFile", ".*timeout_test_scenario.xml" };
+                "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
         Pherf p = new Pherf(args);
         p.run();
 
@@ -93,7 +93,7 @@ public class PherfMainIT extends ResultBaseTestIT {
         String[] args = {"-q", "-l",
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
-                "-scenarioFile", ".*timeout_test_scenario.xml" };
+                "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
         Pherf p = new Pherf(args);
         p.run();
 
@@ -115,7 +115,7 @@ public class PherfMainIT extends ResultBaseTestIT {
         String[] args = {"-q", "-l",
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
-                "-scenarioFile", ".*timeout_test_scenario.xml" };
+                "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
         Pherf p = new Pherf(args);
         p.run();
 
