@@ -28,7 +28,6 @@ import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.util.DefaultEnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
