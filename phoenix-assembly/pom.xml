@@ -49,7 +49,7 @@
             </goals>
             <configuration>
               <executable>ln</executable>
-              <workingDirectory></workingDirectory>
+              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
                 <argument>
@@ -183,7 +183,19 @@
     <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <artifactId>phoenix-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-pherf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-tracing-webapp</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
