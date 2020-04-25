@@ -26,28 +26,28 @@ import java.util.List;
 
 public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
 
-    public List<InputSplit> generateSplits(List<ViewInfoWritable> viewsWithTTL, Configuration configuration) {
-        int numViewsInSplit = PhoenixConfigurationUtil.getViewTTLDeleteMapperSplitSize(configuration);
-        int numberOfMappers = viewsWithTTL.size() / numViewsInSplit;
-        if (Math.ceil(viewsWithTTL.size() % numViewsInSplit) > 0) {
+    public List<InputSplit> generateSplits(List<ViewInfoWritable> views, Configuration configuration) {
+        int numViewsInSplit = PhoenixConfigurationUtil.getMultiViewSplitSize(configuration);
+        int numberOfMappers = views.size() / numViewsInSplit;
+        if (Math.ceil(views.size() % numViewsInSplit) > 0) {
             numberOfMappers++;
         }
 
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(numberOfMappers);
-        // Split the viewsWithTTL into splits
+        // Split the views into splits
 
         for (int i = 0; i < numberOfMappers; i++) {
-            psplits.add(new PhoenixMultiViewInputSplit(viewsWithTTL.subList(
-                    i * numViewsInSplit, getUpperBound(numViewsInSplit, i, viewsWithTTL))));
+            psplits.add(new PhoenixMultiViewInputSplit(views.subList(
+                    i * numViewsInSplit, getUpperBound(numViewsInSplit, i, views.size()))));
         }
 
         return psplits;
     }
 
-    private int getUpperBound(int numViewsInSplit, int i, List<ViewInfoWritable> viewsWithTTL) {
+    public int getUpperBound(int numViewsInSplit, int i, int viewSize) {
         int upper = (i + 1) * numViewsInSplit;
-        if (viewsWithTTL.size() < upper) {
-            upper = viewsWithTTL.size();
+        if (viewSize < upper) {
+            upper = viewSize;
         }
 
         return upper;

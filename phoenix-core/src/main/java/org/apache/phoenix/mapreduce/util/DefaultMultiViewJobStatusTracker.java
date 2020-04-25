@@ -18,7 +18,7 @@
 package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.util.ViewInfoTracker.ViewTTLJobState;
+import org.apache.phoenix.mapreduce.util.ViewInfoWritable.ViewInfoJobState;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,11 +28,11 @@ public class DefaultMultiViewJobStatusTracker implements MultiViewJobStatusTrack
 
     public void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state,
                                 Configuration config, long duration) {
-        if (state == ViewTTLJobState.SUCCEEDED.getValue()) {
+        if (state == ViewInfoJobState.SUCCEEDED.getValue()) {
             LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s : " +
                             "number of deleted row %d, duration : %d.",
                     view.getViewName(), view.getTenantId(), numberOfDeletedRows, duration));
-        } else if (state == ViewTTLJobState.DELETED.getValue()) {
+        } else if (state == ViewInfoJobState.DELETED.getValue()) {
             LOGGER.debug(String.format("View has been deleted, view info : view %s, TenantID %s : %d.",
                     view.getViewName(), view.getTenantId()));
         } else {

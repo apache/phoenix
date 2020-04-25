@@ -27,7 +27,7 @@ import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.phoenix.mapreduce.ViewTTLTool;
-import org.apache.phoenix.mapreduce.util.PhoenixViewTtlUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.junit.Test;
 
@@ -43,7 +43,9 @@ import static org.junit.Assert.assertEquals;
 
 public class ViewTTLToolIT extends ParallelStatsDisabledIT {
 
-    private final int NUMBER_OF_UPSERT_ROWS = 10;
+    private final int ONE = 1;
+    private final int ZERO = 0;
+    private final int NUMBER_OF_UPSERT_ROWS = 202;
     private final long VIEW_TTL_EXPIRE_IN_A_MILLISECOND = 1;
     private final long VIEW_TTL_EXPIRE_IN_A_DAY = 1000 * 60 * 60 * 24;
 
@@ -109,8 +111,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void verifyMultiTenantTableNumberOfRows(String tableName, String tenantId, int expectedRows,
-                                                    Connection conn) throws Exception {
+    private void verifyNumberOfRows(String tableName, String tenantId, int expectedRows,
+                                    Connection conn) throws Exception {
         String query = "SELECT COUNT(*) FROM " + tableName;
         if (tenantId != null) {
             query = query + " WHERE TENANT_ID = '" + tenantId + "'";
@@ -164,16 +166,16 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String fullViewName2 = schema + "." + viewName2;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, fullTableName);
             createViewAndUpsertData(tenant1Connection, fullTableName, fullViewName1, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
             createViewAndUpsertData(tenant2Connection, fullTableName, fullViewName2, VIEW_TTL_EXPIRE_IN_A_DAY);
 
-            verifyMultiTenantTableNumberOfRows(fullTableName, null, NUMBER_OF_UPSERT_ROWS * 2, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, null, NUMBER_OF_UPSERT_ROWS * 2, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             //running MR job to delete expired rows.
             ViewTTLTool viewTtlTool = new ViewTTLTool();
@@ -182,9 +184,9 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
-            verifyMultiTenantTableNumberOfRows(fullTableName, null, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, null, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
         }
     }
 
@@ -207,8 +209,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String indexTable = "_IDX_" + fullTableName;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, fullTableName);
             createViewAndUpsertData(tenant1Connection, fullTableName, fullViewName1, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
@@ -218,8 +220,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
                     "CREATE INDEX " + indexView + " ON " + fullViewName2 + "(NUM) INCLUDE (ID)");
 
             // before running MR deleting job, all rows should be present in multi tenant table.
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
 
             // running MR job to delete expired rows.
@@ -230,8 +232,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             assertEquals(0, status);
 
             // first run should delete expired rows for tenant1 but not tenant2
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
 
             // alter the view ttl and all rows should expired immediately.
@@ -242,7 +244,7 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
 
             // MR job should delete rows from multi-tenant table and index table for tenant2.
             verifyGlobalTableNumberOfRows(indexTable, 0);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, 0, globalConn);
         }
     }
 
@@ -263,8 +265,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String fullViewName2 = schema + "." + viewName2;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, fullTableName);
             //create global views with PK
@@ -277,8 +279,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
                     VIEW_TTL_EXPIRE_IN_A_DAY);
 
             // before running MR deleting job, all rows should be present in multi tenant table.
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             // running MR job to delete expired rows.
             ViewTTLTool viewTtlTool = new ViewTTLTool();
@@ -288,8 +290,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             assertEquals(0, status);
 
             // first run should delete expired rows for tenant1 but not tenant2
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             // alter the view ttl and all rows should expired immediately.
             alterViewTtl(tenant2Connection, fullViewName2, VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
@@ -298,14 +300,13 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             assertEquals(0, status);
 
             // MR job should delete rows from the multi-tenant table
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, 0, globalConn);
         }
     }
 
     @Test
     public void testAllViewCases() throws Exception {
         String schema1 = generateUniqueName();
-
         String baseTable1 = generateUniqueName();
         String baseTable2 = generateUniqueName();
         String globalTable = generateUniqueName();
@@ -323,8 +324,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String indexTable = "_IDX_" + fullTable12;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
             createMultiTenantTable(globalConn, fullTable11);
             createMultiTenantTable(globalConn, fullTable12);
 
@@ -342,13 +343,13 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             globalConn.commit();
 
             globalConn.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s " +
-                    "WHERE ID > 150 AND ID < 251 ", viewName1, globalTable));
+                    "WHERE NUM = 1", viewName1, globalTable));
             globalConn.createStatement().execute(
                     String.format("ALTER VIEW %s SET VIEW_TTL= %d", viewName1, VIEW_TTL_EXPIRE_IN_A_DAY));
 
             globalConn.createStatement().execute(
                     String.format("CREATE VIEW %s AS SELECT * FROM %s " +
-                    "WHERE ID > 350 AND ID < 951", viewName2, globalTable));
+                    "WHERE NUM = 2", viewName2, globalTable));
             globalConn.createStatement().execute(
                     String.format("ALTER VIEW %s SET VIEW_TTL= %d", viewName2, VIEW_TTL_EXPIRE_IN_A_DAY));
 
@@ -366,10 +367,11 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     "CREATE INDEX " + indexView + " ON " + schema1 + "." + viewName2 + "(NUM) INCLUDE (ID)");
 
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable11, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable11, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable12, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable12, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+
 
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
             verifyGlobalTableNumberOfRows(globalTable, NUMBER_OF_UPSERT_ROWS);
@@ -381,10 +383,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             int status = viewTtlTool.run(new String[]{"-runfg","-a"});
             assertEquals(0, status);
 
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable11, tenant1, ZERO, globalConn);
+            verifyNumberOfRows(fullTable11, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable12, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTable12, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
             verifyGlobalTableNumberOfRows(indexTable, NUMBER_OF_UPSERT_ROWS);
             verifyGlobalTableNumberOfRows(globalTable, NUMBER_OF_UPSERT_ROWS);
 
@@ -398,14 +400,15 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             viewTtlTool.run(new String[]{"-runfg","-a"});
             assertEquals(0, status);
 
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable11, tenant2, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant1, 0, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTable12, tenant2, 0, globalConn);
-
+            verifyNumberOfRows(fullTable11, tenant1, ZERO, globalConn);
+            verifyNumberOfRows(fullTable11, tenant2, ZERO, globalConn);
+            verifyNumberOfRows(fullTable12, tenant1, ZERO, globalConn);
+            verifyNumberOfRows(fullTable12, tenant2, ZERO, globalConn);
+            verifyNumberOfRows(viewName1, null, ONE, globalConn);
+            verifyNumberOfRows(viewName2, null, ZERO, globalConn);
             // index view
-            verifyGlobalTableNumberOfRows(indexTable, 0);
-            verifyGlobalTableNumberOfRows(globalTable, NUMBER_OF_UPSERT_ROWS);
+            verifyGlobalTableNumberOfRows(indexTable, ZERO);
+            verifyGlobalTableNumberOfRows(globalTable, NUMBER_OF_UPSERT_ROWS - ONE);
         }
     }
 
@@ -423,8 +426,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String fullViewName = schema + "." + viewName;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, fullTableName);
             //create global views with PK
@@ -437,8 +440,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
                     VIEW_TTL_EXPIRE_IN_A_MILLISECOND);
 
             // before running MR deleting job, all rows should be present in multi tenant table.
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             // running MR job to delete expired rows.
             ViewTTLTool viewTtlTool = new ViewTTLTool();
@@ -448,15 +451,15 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             assertEquals(0, status);
 
             //should NOT delete any expired rows for tenant1 and tenant2
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             status = viewTtlTool.run(new String[]{"-runfg", "-id", tenant2, "-v", fullViewName});
             assertEquals(0, status);
 
             //should delete expired rows for tenant2 but not tenant1
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(fullTableName, tenant2, 0, globalConn);
+            verifyNumberOfRows(fullTableName, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(fullTableName, tenant2, 0, globalConn);
         }
     }
 
@@ -473,8 +476,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String indexView2 = viewName2 + "_IDX";
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTable);
             createViewAndUpsertData(tenant1Connection, baseTable, viewName1, VIEW_TTL_EXPIRE_IN_A_DAY);
@@ -487,8 +490,8 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
                     "CREATE INDEX " + indexView2 + " ON " + viewName2 + "(NUM) INCLUDE (ID)");
 
             // before running MR deleting job, all rows should be present in multi tenant table.
-            verifyMultiTenantTableNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
-            verifyMultiTenantTableNumberOfRows(baseTable, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(baseTable, tenant1, NUMBER_OF_UPSERT_ROWS, globalConn);
+            verifyNumberOfRows(baseTable, tenant2, NUMBER_OF_UPSERT_ROWS, globalConn);
 
             verifyIndexTableNumberOfRowsForATenant(indexTable,
                     ".*" + tenant1 + ".*", NUMBER_OF_UPSERT_ROWS);
@@ -515,7 +518,6 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String baseTable = generateUniqueName();
         String indexTable = "_IDX_" + baseTable;
         String tenant = generateUniqueName();
-        tenant = "xyz";
         String viewName1 = generateUniqueName();
         String viewName2 = generateUniqueName();
         String viewName3 = generateUniqueName();
@@ -525,7 +527,7 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
         String indexView3 = viewName3 + "_IDX";
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenantConnection = PhoenixViewTtlUtil.buildTenantConnection(getUrl(), tenant)) {
+             Connection tenantConnection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant)) {
 
             String ddl = "CREATE TABLE " + baseTable + "(TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, " +
                     "AGE BIGINT NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID, AGE)) " +

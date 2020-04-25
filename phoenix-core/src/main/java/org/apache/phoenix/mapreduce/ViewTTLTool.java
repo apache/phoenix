@@ -51,6 +51,8 @@ public class ViewTTLTool extends Configured implements Tool {
 
     public static final int DEFAULT_MAPPER_SPLIT_SIZE = 10;
 
+    public static final int DEFAULT_QUERY_BATCH_SIZE = 100;
+
     private static final Option DELETE_ALL_VIEW_OPTION = new Option("a", "all", false,
             "Delete all views from all tables.");
     private static final Option TABLE_NAME_OPTION = new Option("t", "table", true,
@@ -63,6 +65,8 @@ public class ViewTTLTool extends Configured implements Tool {
             "Define job priority from 0(highest) to 4");
     private static final Option SPLIT_SIZE_OPTION = new Option("s", "split-size-per-mapper", true,
             "Define split size for each mapper.");
+    private static final Option BATCH_SIZE_OPTION = new Option("b", "batch-size-for-query-more", true,
+            "Define batch size for fetching views metadata from syscat.");
     private static final Option RUN_FOREGROUND_OPTION = new Option("runfg",
             "run-foreground", false, "If specified, runs ViewTTLTool " +
             "in Foreground. Default - Runs the build in background");
@@ -80,6 +84,7 @@ public class ViewTTLTool extends Configured implements Tool {
     private JobPriority jobPriority;
     private boolean isForeground;
     private int splitSize;
+    private int batchSize;
     private Job job;
 
     public void parseArgs(String[] args) {
@@ -115,6 +120,14 @@ public class ViewTTLTool extends Configured implements Tool {
         } else {
             splitSize = DEFAULT_MAPPER_SPLIT_SIZE;
         }
+
+        if (cmdLine.hasOption(BATCH_SIZE_OPTION.getOpt())) {
+            batchSize = Integer.valueOf(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
+        } else {
+            batchSize = DEFAULT_MAPPER_SPLIT_SIZE;
+        }
+
+
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     }
 
@@ -159,6 +172,10 @@ public class ViewTTLTool extends Configured implements Tool {
         return this.splitSize;
     }
 
+    public int getBatchSize() {
+        return this.batchSize;
+    }
+
     public CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
         CommandLineParser parser = new PosixParser();
@@ -198,6 +215,7 @@ public class ViewTTLTool extends Configured implements Tool {
         options.addOption(JOB_PRIORITY_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(SPLIT_SIZE_OPTION);
+        options.addOption(BATCH_SIZE_OPTION);
 
         return options;
     }

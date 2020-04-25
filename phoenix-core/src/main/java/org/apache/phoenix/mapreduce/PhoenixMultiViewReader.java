@@ -23,15 +23,18 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.phoenix.mapreduce.util.ViewInfoTracker;
 import org.apache.phoenix.mapreduce.util.ViewInfoWritable;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 
-public class PhoenixMultiViewReader<T extends Writable> extends
-        RecordReader<NullWritable,T> {
+public class PhoenixMultiViewReader<T extends Writable> extends RecordReader<NullWritable,T> {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMultiViewReader.class);
+
     private Configuration  configuration;
     private Class<T> inputClass;
     Iterator<ViewInfoWritable> it;
@@ -41,11 +44,15 @@ public class PhoenixMultiViewReader<T extends Writable> extends
         this.inputClass = inputClass;
     }
 
-    @Override public void initialize(InputSplit split, TaskAttemptContext context)
-            throws IOException, InterruptedException {
-        final PhoenixMultiViewInputSplit pSplit = (PhoenixMultiViewInputSplit)split;
-        final List<ViewInfoWritable> viewInfoTracker = pSplit.getViewInfoTrackerList();
-        it = viewInfoTracker.iterator();
+    @Override public void initialize(InputSplit split, TaskAttemptContext context) throws IOException {
+        if (split instanceof PhoenixMultiViewInputSplit) {
+            final PhoenixMultiViewInputSplit pSplit = (PhoenixMultiViewInputSplit)split;
+            final List<ViewInfoWritable> viewInfoTracker = pSplit.getViewInfoTrackerList();
+            it = viewInfoTracker.iterator();
+        } else {
+            LOGGER.error("InputSplit class cannot cast to PhoenixMultiViewInputSplit.");
+            throw new IOException("InputSplit class cannot cast to PhoenixMultiViewInputSplit");
+        }
     }
 
     @Override public boolean nextKeyValue() throws IOException, InterruptedException {

@@ -23,5 +23,5 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import java.util.List;
 
 public interface MultiViewSplitStrategy {
-    List<InputSplit> generateSplits(List<ViewInfoWritable> viewsWithTTL, Configuration configuration);
+    List<InputSplit> generateSplits(List<ViewInfoWritable> views, Configuration configuration);
 }

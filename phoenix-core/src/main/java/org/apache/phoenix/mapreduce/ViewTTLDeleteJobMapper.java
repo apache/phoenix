@@ -25,63 +25,69 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.ViewInfoTracker;
-import org.apache.phoenix.mapreduce.util.ViewInfoTracker.ViewTTLJobState;
+import org.apache.phoenix.mapreduce.util.ViewInfoWritable.ViewInfoJobState;
 import org.apache.phoenix.mapreduce.util.MultiViewJobStatusTracker;
 import org.apache.phoenix.mapreduce.util.DefaultMultiViewJobStatusTracker;
-import org.apache.phoenix.mapreduce.util.PhoenixViewTtlUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.SQLException;
 
 public class ViewTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTracker, NullWritable, NullWritable> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLDeleteJobMapper.class);
     private MultiViewJobStatusTracker multiViewJobStatusTracker;
 
-    private void initMultiViewJobStatusTracker(Configuration config) {
+    private void initMultiViewJobStatusTracker(Configuration config) throws Exception {
         try {
             Class<?> defaultViewDeletionTrackerClass = DefaultMultiViewJobStatusTracker.class;
-            if (config.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_MAPPER_TRACKER_CLAZZ) != null) {
+            if (config.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ) != null) {
                 LOGGER.info("Using customized tracker class : " +
-                        config.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_MAPPER_TRACKER_CLAZZ));
+                        config.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ));
                 defaultViewDeletionTrackerClass = Class.forName(
-                        config.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_MAPPER_TRACKER_CLAZZ));
+                        config.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ));
             } else {
                 LOGGER.info("Using default tracker class ");
             }
             this.multiViewJobStatusTracker = (MultiViewJobStatusTracker) defaultViewDeletionTrackerClass.newInstance();
         } catch (Exception e) {
-            LOGGER.info("exception " + e.getMessage());
-            LOGGER.info("stack trace" + e.getStackTrace().toString());
+            LOGGER.error("Getting exception While initializing initMultiViewJobStatusTracker with error message");
+            LOGGER.error("stack trace" + e.getStackTrace().toString());
+            throw e;
         }
     }
 
     @Override
-    protected void map(NullWritable key, ViewInfoTracker value,
-                       Context context) {
-        final Configuration config = context.getConfiguration();
+    protected void map(NullWritable key, ViewInfoTracker value, Context context) throws IOException  {
+        try {
+            final Configuration config = context.getConfiguration();
 
-        if (this.multiViewJobStatusTracker == null) {
-            initMultiViewJobStatusTracker(config);
-        }
-
-        LOGGER.debug(String.format("Deleting from view %s, TenantID %s, and TTL value: %d",
-                value.getViewName(), value.getTenantId(), value.getViewTtl()));
-
-        try (PhoenixConnection connection =(PhoenixConnection) ConnectionUtil.getInputConnection(config) ){
-            if (value.getTenantId() != null && !value.getTenantId().equals("NULL")) {
-                try (PhoenixConnection tenantConnection = (PhoenixConnection)PhoenixViewTtlUtil.
-                        buildTenantConnection(connection.getURL(), value.getTenantId())) {
-                    deletingExpiredRows(tenantConnection, value, config);
-                }
-            } else {
-                deletingExpiredRows(connection, value, config);
+            if (this.multiViewJobStatusTracker == null) {
+                initMultiViewJobStatusTracker(config);
             }
 
+            LOGGER.debug(String.format("Deleting from view %s, TenantID %s, and TTL value: %d",
+                    value.getViewName(), value.getTenantId(), value.getViewTtl()));
+
+            try (PhoenixConnection connection = (PhoenixConnection) ConnectionUtil.getInputConnection(config)) {
+                if (value.getTenantId() != null && !value.getTenantId().equals("NULL")) {
+                    try (PhoenixConnection tenantConnection = (PhoenixConnection) PhoenixMultiInputUtil.
+                            buildTenantConnection(connection.getURL(), value.getTenantId())) {
+                        deletingExpiredRows(tenantConnection, value, config);
+                    }
+                } else {
+                    deletingExpiredRows(connection, value, config);
+                }
+            }
         } catch (SQLException e) {
-            LOGGER.error("Mapper got an exception while deleting expired rows : "
-                    + e.getErrorCode() + e.getSQLState(), e.getStackTrace());
+            LOGGER.error("Mapper got an exception while deleting expired rows : " + e.getMessage() );
+            throw new IOException(e.getMessage(), e.getCause());
+        } catch (Exception e) {
+            LOGGER.error("Getting IOException while running View TTL Deletion Job mapper with error : "
+                    + e.getMessage());
+            throw new IOException(e.getMessage(), e.getCause());
         }
     }
 
@@ -93,28 +99,30 @@ public class ViewTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTracker
 
         try {
             this.multiViewJobStatusTracker.updateJobStatus(view, 0,
-                    ViewTTLJobState.PREP.getValue(), config, 0);
+                    ViewInfoJobState.PREP.getValue(), config, 0);
 
             long startTime = System.currentTimeMillis();
             this.multiViewJobStatusTracker.updateJobStatus(view, 0,
-                    ViewTTLJobState.RUNNING.getValue(), config, 0 );
+                    ViewInfoJobState.RUNNING.getValue(), config, 0 );
             connection.setAutoCommit(true);
             int numberOfDeletedRows = connection.createStatement().executeUpdate(deleteIfExpiredStatement);
 
             this.multiViewJobStatusTracker.updateJobStatus(view, numberOfDeletedRows,
-                    ViewTTLJobState.SUCCEEDED.getValue(), config, System.currentTimeMillis() - startTime);
+                    ViewInfoJobState.SUCCEEDED.getValue(), config, System.currentTimeMillis() - startTime);
         } catch (Exception e) {
-            int state;
+            String viewInfo = view.getTenantId() == null ? view.getViewName() : view.getTenantId() + "." + view.getViewName();
+
             if (e instanceof SQLException && ((SQLException) e).getErrorCode() == SQLExceptionCode.TABLE_UNDEFINED.getErrorCode()) {
-                LOGGER.info("View has been deleted : " + e.getMessage());
-                state = ViewTTLJobState.DELETED.getValue();
+                LOGGER.info(viewInfo + " has been deleted : " + e.getMessage());
+                this.multiViewJobStatusTracker.updateJobStatus(view, 0,
+                        ViewInfoJobState.DELETED.getValue(), config, 0);
             } else {
-                LOGGER.info("Deleting Expired Rows has an exception for : " + e.getMessage());
-                state = ViewTTLJobState.FAILED.getValue();
+                LOGGER.error("Deleting " + viewInfo + " expired rows has an exception for : " + e.getMessage());
+                this.multiViewJobStatusTracker.updateJobStatus(view, 0,
+                        ViewInfoJobState.FAILED.getValue(), config, 0);
+                throw e;
             }
 
-            this.multiViewJobStatusTracker.updateJobStatus(view, 0, state, config, 0);
-            throw e;
         }
     }
 }

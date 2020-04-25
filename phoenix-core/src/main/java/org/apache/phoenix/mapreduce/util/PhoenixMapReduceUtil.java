@@ -26,8 +26,6 @@ import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.mapreduce.PhoenixMultiViewInputFormat;
-import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
-import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.ViewTTLTool;
 
 import java.io.IOException;
@@ -139,7 +137,8 @@ public final class PhoenixMapReduceUtil {
         job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
         tool.setViewTTLJobInputConfig(configuration);
         PhoenixConfigurationUtil.setSchemaType(configuration, PhoenixConfigurationUtil.SchemaType.QUERY);
-        PhoenixConfigurationUtil.setViewTTLDeleteMapperSplitSize(configuration, tool.getSplitSize());
+        PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());
+        PhoenixConfigurationUtil.setMultiViewQueryMoreSplitSize(configuration, tool.getBatchSize());
     }
 
     /**

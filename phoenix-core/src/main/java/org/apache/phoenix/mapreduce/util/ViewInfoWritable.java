@@ -24,6 +24,25 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public interface ViewInfoWritable extends Writable {
+    public enum ViewInfoJobState {
+        RUNNING(1),
+        SUCCEEDED(2),
+        FAILED(3),
+        PREP(4),
+        KILLED(5),
+        DELETED(6);
+
+        int value;
+
+        ViewInfoJobState(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return this.value;
+        }
+    }
+
     void write(DataOutput output) throws IOException;
     void readFields(DataInput input) throws IOException;
     String getTenantId();

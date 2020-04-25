@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.ViewTTLTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -38,7 +39,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_NOT_DEFIN
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 
-public class PhoenixViewTtlUtil {
+public class PhoenixMultiInputUtil {
     public static final String SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY =
             "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, VIEW_TTL FROM " +
                     SYSTEM_CATALOG_NAME + " WHERE " +
@@ -51,6 +52,18 @@ public class PhoenixViewTtlUtil {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(url, props);
+    }
+
+    public static String constructAllViewInitialQuery(int limit) {
+       return SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY + " LIMIT " + limit;
+    }
+
+    public static String constructQueryMoreQuery(String tenantId, String schema, String viewName, int limit) {
+        return  String.format("SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, VIEW_TTL " +
+                        "FROM SYSTEM.CATALOG " +
+                        "WHERE TABLE_TYPE = 'v' AND VIEW_TTL IS NOT NULL AND " +
+                        "(TENANT_ID,TABLE_SCHEM,TABLE_NAME) > ('%s','%s','%s') LIMIT %d",
+                tenantId, schema, viewName, limit);
     }
 
     public static String constructViewMetadataQueryBasedOnView(String fullName, String tenantId) {
@@ -88,5 +101,25 @@ public class PhoenixViewTtlUtil {
         String query = SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY;
 
         return  query + " AND " + TENANT_ID + "=" + tenant;
+    }
+
+    public static String getFetchViewQuery(Configuration configuration) {
+        String query;
+        if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_ALL_VIEWS) != null) {
+            query = PhoenixMultiInputUtil.constructAllViewInitialQuery(
+                    PhoenixConfigurationUtil.getMultiViewQueryMoreSplitSize(configuration));
+        } else if ((configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_TABLE) != null)) {
+            query = PhoenixMultiInputUtil.constructViewMetadataQueryBasedOnTable(
+                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_TABLE));
+        } else if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID) != null &&
+                configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_VIEW) == null) {
+            query = PhoenixMultiInputUtil.constructViewMetadataQueryBasedOnTenant(
+                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
+        } else {
+            query = PhoenixMultiInputUtil.constructViewMetadataQueryBasedOnView(
+                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_VIEW),
+                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
+        }
+        return query;
     }
 }

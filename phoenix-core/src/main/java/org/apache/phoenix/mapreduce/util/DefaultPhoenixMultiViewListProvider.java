@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -39,7 +38,11 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
 
     public List<ViewInfoWritable> getPhoenixMultiViewList(Configuration configuration) {
         List<ViewInfoWritable> viewInfoWritables = new ArrayList<>();
-        String query = getFetchViewQuery(configuration);
+
+        String query = PhoenixMultiInputUtil.getFetchViewQuery(configuration);
+        boolean isQueryMore =
+                configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_ALL_VIEWS) != null;
+        int limit = PhoenixConfigurationUtil.getMultiViewQueryMoreSplitSize(configuration);
         try (PhoenixConnection connection = (PhoenixConnection)
                 ConnectionUtil.getInputConnection(configuration, new Properties())){
             TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, configuration);
@@ -47,62 +50,57 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                     .getTable(SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
                             connection.getQueryServices().getProps())
                             .getName());
-            ResultSet viewRs = connection.createStatement().executeQuery(query);
-            while (viewRs.next()) {
-                String schema = viewRs.getString(2);
-                String tableName = viewRs.getString(3);
-                String tenantId = viewRs.getString(1);
-                String fullTableName = tableName;
-                Long viewTtlValue = viewRs.getLong(4);
+            do {
+                ResultSet viewRs = connection.createStatement().executeQuery(query);
+                String schema = null;
+                String tableName = null;
+                String tenantId = null;
+                String fullTableName = null;
 
-                if (schema != null && schema.length() > 0) {
-                    fullTableName = SchemaUtil.getTableName(schema, tableName);
+                while (viewRs.next()) {
+                    schema = viewRs.getString(2);
+                    tableName = viewRs.getString(3);
+                    tenantId = viewRs.getString(1);
+                    fullTableName = tableName;
+                    Long viewTtlValue = viewRs.getLong(4);
+
+                    if (schema != null && schema.length() > 0) {
+                        fullTableName = SchemaUtil.getTableName(schema, tableName);
+                    }
+
+                    byte[] tenantIdInBytes = tenantId == null ?
+                            new byte[0] : tenantId.getBytes(StandardCharsets.UTF_8);
+                    byte[] tableNameInBytes = tableName ==
+                            null ? new byte[0] : tableName.getBytes(StandardCharsets.UTF_8);
+                    byte[] schemaInBytes = schema == null ? new byte[0] : schema.getBytes(StandardCharsets.UTF_8);
+
+                    boolean hasChildViews = ViewUtil.hasChildViews(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
+                            tableNameInBytes, System.currentTimeMillis());
+
+                    if (hasChildViews) {
+                        LOGGER.debug("Skip intermediate view : " + fullTableName);
+                    } else {
+                        // this will only apply for leaf view
+                        ViewInfoWritable viewInfoTracker = new ViewInfoTracker(
+                                tenantId,
+                                fullTableName,
+                                viewTtlValue
+                        );
+                        viewInfoWritables.add(viewInfoTracker);
+                    }
                 }
-
-                byte[] tenantIdInBytes = tenantId == null ? new byte[0] : tenantId.getBytes(StandardCharsets.UTF_8);
-                byte[] tableNameInBytes = tableName == null ? new byte[0] : tableName.getBytes(StandardCharsets.UTF_8);
-                byte[] schemaInBytes = schema == null ? new byte[0] : schema.getBytes(StandardCharsets.UTF_8);
-
-                boolean hasChildViews = ViewUtil.hasChildViews(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
-                        tableNameInBytes, System.currentTimeMillis());
-
-                if (hasChildViews) {
-                    LOGGER.debug("Skip intermediate view : " + fullTableName);
-                } else {
-                    // this will only apply for leaf view
-                    ViewInfoWritable viewInfoTracker = new ViewInfoTracker(
-                            tenantId,
-                            fullTableName,
-                            viewTtlValue
-                    );
-                    viewInfoWritables.add(viewInfoTracker);
+                if (isQueryMore) {
+                    if (fullTableName == null) {
+                        isQueryMore = false;
+                    } else {
+                        query = PhoenixMultiInputUtil.constructQueryMoreQuery(tenantId, schema, tableName, limit);
+                    }
                 }
-            }
+            } while (isQueryMore);
+
         }  catch (Exception e) {
             LOGGER.error("Getting view info failed with: " + e.getMessage());
         }
         return viewInfoWritables;
-    }
-
-    public static String getFetchViewQuery(Configuration configuration) {
-        String query;
-        if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_ALL_VIEWS) != null) {
-            query = PhoenixViewTtlUtil.SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY;
-        } else if ((configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_TABLE) != null)) {
-            query = PhoenixViewTtlUtil.constructViewMetadataQueryBasedOnTable(
-                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_TABLE));
-        } else if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID) != null &&
-                configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_VIEW) == null) {
-
-            query = PhoenixViewTtlUtil.constructViewMetadataQueryBasedOnTenant(
-                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
-
-        } else {
-            query = PhoenixViewTtlUtil.constructViewMetadataQueryBasedOnView(
-                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_VIEW_TTL_DELETE_JOB_PER_VIEW),
-                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
-        }
-
-        return query;
     }
 }
