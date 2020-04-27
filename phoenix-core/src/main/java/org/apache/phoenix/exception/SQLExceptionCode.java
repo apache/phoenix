@@ -513,6 +513,9 @@ public enum SQLExceptionCode {
                     info.getMutationSizeBytes());
         }
     }),
+    NEW_INTERNAL_CONNECTION_THROTTLED(731, "410M1", "Could not create connection " +
+            "because the internal connections already has the maximum number" +
+            " of connections to the target cluster."),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
