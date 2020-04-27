@@ -64,6 +64,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
             QueryPlan plan) throws SQLException {
 
         final PhoenixConnection clonedConnection = new PhoenixConnection(this.connection);
+        connection.addChildConnection(clonedConnection);
         try {
             MutationState state = mutate(parentContext, iterator, clonedConnection);
 

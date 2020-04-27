@@ -279,6 +279,9 @@ public interface QueryServices extends SQLCloseable {
     //max number of connections from a single client to a single cluster. 0 is unlimited.
     public static final String CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS =
         "phoenix.client.connection.max.allowed.connections";
+    //max number of connections from a single client to a single cluster. 0 is unlimited.
+    public static final String INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS =
+            "phoenix.internal.connection.max.allowed.connections";
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
