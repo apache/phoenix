@@ -339,6 +339,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @GuardedBy("connectionCountLock")
     private int connectionCount = 0;
+
+    @GuardedBy("connectionCountLock")
+    private int internalConnectionCount = 0;
+
     private final Object connectionCountLock = new Object();
     private final boolean returnSequenceValues ;
 
@@ -370,6 +374,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
     private final int maxConnectionsAllowed;
+    private final int maxInternalConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes();
 
@@ -455,7 +460,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.isAutoUpgradeEnabled = config.getBoolean(AUTO_UPGRADE_ENABLED, QueryServicesOptions.DEFAULT_AUTO_UPGRADE_ENABLED);
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
-        this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0);
+        this.maxInternalConnectionsAllowed = config.getInt(QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS,
+                QueryServicesOptions.DEFAULT_INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS);
+        this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0) || (maxInternalConnectionsAllowed > 0);
         if (!QueryUtil.isServerConnection(props)) {
             //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
             try {
@@ -5221,12 +5228,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void addConnection(PhoenixConnection connection) throws SQLException {
         if (returnSequenceValues || shouldThrottleNumConnections) {
             synchronized (connectionCountLock) {
-                if (shouldThrottleNumConnections && connectionCount + 1 > maxConnectionsAllowed){
-                    GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_CONNECTION_THROTTLED).
-                        build().buildException();
+
+                /*
+                 * If we are throttling connections internal connections and client created connections
+                 *   are counted separately against each respective quota.
+                 */
+                if(shouldThrottleNumConnections) {
+                    int futureConnections = 1 + ( connection.isInternalConnection() ? internalConnectionCount : connectionCount);
+                    int allowedConnections = connection.isInternalConnection() ? maxInternalConnectionsAllowed : maxConnectionsAllowed;
+                    if(allowedConnections != 0 && futureConnections > allowedConnections) {
+                        GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
+                        if(connection.isInternalConnection()) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_INTERNAL_CONNECTION_THROTTLED).
+                                    build().buildException();
+                        }
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_CONNECTION_THROTTLED).
+                                build().buildException();
+                    }
                 }
-                connectionCount++;
+
+                if(!connection.isInternalConnection()) {
+                    connectionCount++;
+                } else {
+                    internalConnectionCount++;
+                }
             }
         }
         // If lease renewal isn't enabled, these are never cleaned up. Tracking when renewals
@@ -5241,14 +5266,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (returnSequenceValues) {
             ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
             synchronized (connectionCountLock) {
-                if (--connectionCount <= 0) {
-                    if (!this.sequenceMap.isEmpty()) {
-                        formerSequenceMap = this.sequenceMap;
-                        this.sequenceMap = Maps.newConcurrentMap();
+                if(!connection.isInternalConnection()) {
+                    if (connectionCount + internalConnectionCount - 1 <= 0) {
+                        if (!this.sequenceMap.isEmpty()) {
+                            formerSequenceMap = this.sequenceMap;
+                            this.sequenceMap = Maps.newConcurrentMap();
+                        }
                     }
-                }
-                if (connectionCount < 0) {
-                    connectionCount = 0;
                 }
             }
             // Since we're using the former sequenceMap, we can do this outside
@@ -5257,9 +5281,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // When there are no more connections, attempt to return any sequences
                 returnAllSequences(formerSequenceMap);
             }
-        } else if (shouldThrottleNumConnections){ //still need to decrement connection count
+        }
+        if (returnSequenceValues || shouldThrottleNumConnections){ //still need to decrement connection count
             synchronized (connectionCountLock) {
-                if (connectionCount > 0) {
+                if(connection.isInternalConnection() && internalConnectionCount > 0) {
+                    --internalConnectionCount;
+                } else if (connectionCount > 0) {
                     --connectionCount;
                 }
             }
