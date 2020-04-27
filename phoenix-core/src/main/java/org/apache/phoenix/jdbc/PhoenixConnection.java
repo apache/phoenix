@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 
@@ -53,6 +54,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -173,6 +175,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private Double logSamplingRate;
     private String sourceOfOperation;
 
+    private Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
+    private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
+
+    //For now just the copy constructor paths will have this as true as I don't want to change the
+    //public interfaces.
+    private final boolean isInternalConnection;
+
     static {
         Tracing.addTraceMetricsSource();
     }
@@ -189,7 +198,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), connection.metaData, connection
                 .getMutationState(), isDescRowKeyOrderUpgrade,
-                isRunningUpgrade, connection.buildingIndex);
+                isRunningUpgrade, connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -206,7 +215,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), connection.getMetaDataCache(), mutationState,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex);
+                .isRunningUpgrade(), connection.buildingIndex, true);
     }
 
     public PhoenixConnection(PhoenixConnection connection, long scn)
@@ -217,7 +226,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 	public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), props, connection.metaData, connection
                 .getMutationState(), connection.isDescVarLengthRowKeyUpgrade(),
-                connection.isRunningUpgrade(), connection.buildingIndex);
+                connection.isRunningUpgrade(), connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -226,7 +235,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info, PMetaData metaData) throws SQLException {
-        this(services, url, info, metaData, null, false, false, false);
+        this(services, url, info, metaData, null, false, false, false, false);
     }
 
     public PhoenixConnection(PhoenixConnection connection,
@@ -234,16 +243,17 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     throws SQLException {
         this(services, connection.url, info, connection.metaData, null,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex);
+                .isRunningUpgrade(), connection.buildingIndex, true);
     }
 
     private PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info, PMetaData metaData, MutationState mutationState,
             boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade,
-            boolean buildingIndex) throws SQLException {
+            boolean buildingIndex, boolean isInternalConnection) throws SQLException {
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
+        this.isInternalConnection = isInternalConnection;
 
         // Filter user provided properties based on property policy, if
         // provided and QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED is true
@@ -389,9 +399,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         
         this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
                 QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
+        if(isInternalConnection) {
+            GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.increment();
+        } else {
+            GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
+        }
         this.sourceOfOperation =
                 this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
-        GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
@@ -442,6 +456,26 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     .getString());
         }
         return result.build();
+    }
+
+    public boolean isInternalConnection() {
+        return isInternalConnection;
+    }
+
+    /**
+     * This method, and *only* this method is thread safe
+     * @param connection
+     */
+    public void addChildConnection(PhoenixConnection connection) {
+        //double check for performance
+        if(childConnections == null) {
+            synchronized (queueCreationLock) {
+                if (childConnections == null) {
+                    childConnections = new ConcurrentLinkedQueue<>();
+                }
+            }
+        }
+        childConnections.add(connection);
     }
 
     public Sampler<?> getSampler() {
@@ -658,13 +692,22 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     traceScope.close();
                 }
                 closeStatements();
+                synchronized (queueCreationLock) {
+                    if (childConnections != null) {
+                        SQLCloseables.closeAllQuietly(childConnections);
+                    }
+                }
             } finally {
                 services.removeConnection(this);
             }
             
         } finally {
             isClosed = true;
-            GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+            if(isInternalConnection()){
+                GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
+            } else {
+                GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+            }
         }
     }
 
