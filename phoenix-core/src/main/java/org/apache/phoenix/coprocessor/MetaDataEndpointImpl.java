@@ -617,7 +617,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     && table.getViewType() != ViewType.MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
-                    table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                    table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
