@@ -21,7 +21,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES;
@@ -480,8 +479,9 @@ public class IndexToolVerificationResult {
     }
 
     public boolean isVerificationFailed() {
-        if (getAfter().getInvalidIndexRowCount() + getAfter().getMissingIndexRowCount() +
-                getAfter().getBeyondMaxLookBackInvalidIndexRowCount() + getAfter().getBeyondMaxLookBackMissingIndexRowCount() > 0) {
+        //we don't want to count max look back failures alone as failing an index rebuild job
+        //so we omit them from the below calculation.
+        if (getAfter().getInvalidIndexRowCount() + getAfter().getMissingIndexRowCount() > 0) {
             return true;
         }
         return false;
