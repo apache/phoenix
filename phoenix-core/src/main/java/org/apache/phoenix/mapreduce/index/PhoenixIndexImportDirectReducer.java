@@ -131,11 +131,14 @@ public class PhoenixIndexImportDirectReducer extends
             updateCounters(verifyType, context);
         }
 
-        try {
-            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
-        } catch (SQLException e) {
-            LOGGER.error(" Failed to update the status to Active");
-            throw new RuntimeException(e.getMessage());
+        if (verifyType != IndexTool.IndexVerifyType.ONLY) {
+            // "ONLY" option should not turn index state to ACTIVE, as it doesn't rebuild the index
+            try {
+                IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
+            } catch (SQLException e) {
+                LOGGER.error(" Failed to update the status to Active");
+                throw new RuntimeException(e.getMessage());
+            }
         }
     }
 
