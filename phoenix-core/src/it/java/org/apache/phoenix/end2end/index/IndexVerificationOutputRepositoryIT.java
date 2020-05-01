@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -26,8 +30,14 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
+import org.bouncycastle.util.Strings;
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -39,6 +49,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.DEFAULT_LOG_TTL;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_AFTER_VALUE;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_BEFORE_VALUE;
 import static org.junit.Assert.assertEquals;
@@ -92,6 +104,36 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
             verifyOutputRow(outputRepository, scanMaxTs+1, indexNameBytes, secondExpectedRow);
         }
 
+    }
+
+    @Test
+    public void testTTLOnOutputTable() throws SQLException, IOException {
+        String mockString = "mock_value";
+        byte[] mockStringBytes = Strings.toByteArray(mockString);
+        ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
+        customClock.setValue(1);
+        EnvironmentEdgeManager.injectEdge(customClock);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            HTable hTable = new HTable(config, OUTPUT_TABLE_NAME_BYTES);
+
+            IndexVerificationOutputRepository
+                    outputRepository =
+                    new IndexVerificationOutputRepository(mockStringBytes, conn);
+
+            outputRepository.createOutputTable(conn);
+            TestUtil.assertTableHasTtl(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+            outputRepository.logToIndexToolOutputTable(mockStringBytes, mockStringBytes,
+                    1, 2, mockString, mockStringBytes, mockStringBytes,
+                    EnvironmentEdgeManager.currentTimeMillis(), mockStringBytes, true);
+
+            Assert.assertEquals(1, TestUtil.getRowCount(hTable, false));
+
+            customClock.incrementValue(1000*(DEFAULT_LOG_TTL+5));
+            EnvironmentEdgeManager.injectEdge(customClock);
+            int count = TestUtil.getRowCount(hTable, false);
+
+            Assert.assertEquals(0, count);
+        }
     }
 
     public void verifyOutputRow(IndexVerificationOutputRepository outputRepository, long scanMaxTs,
@@ -168,5 +210,18 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
             dataTableName + " (val1) include (val2, val3)");
         conn.commit();
+    }
+
+    @After
+    public void dropOutputTable() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Admin admin = queryServices.getAdmin();
+            TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME_BYTES);
+            if (admin.tableExists(outputTableName)) {
+                ((HBaseAdmin) admin).disableTable(OUTPUT_TABLE_NAME_BYTES);
+                ((HBaseAdmin) admin).deleteTable(OUTPUT_TABLE_NAME_BYTES);
+            }
+        }
     }
 }

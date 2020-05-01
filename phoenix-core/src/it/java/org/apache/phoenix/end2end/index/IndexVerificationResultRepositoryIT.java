@@ -17,21 +17,36 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
+import org.bouncycastle.util.Strings;
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.DEFAULT_LOG_TTL;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
@@ -50,22 +65,51 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
         byte[] indexNameBytes = Bytes.toBytes(indexName);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             createTableAndIndex(conn, tableName, indexName);
-            IndexVerificationResultRepository resultRepository =
-                new IndexVerificationResultRepository(conn, indexNameBytes);
-            resultRepository.createResultTable(conn);
-            byte[] regionOne = Bytes.toBytes("a.1.00000000000000000000");
-            byte[] regionTwo = Bytes.toBytes("a.2.00000000000000000000");
             long scanMaxTs = EnvironmentEdgeManager.currentTimeMillis();
             IndexToolVerificationResult expectedResult = getExpectedResult(scanMaxTs);
-            resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
-                regionOne);
-            resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
-                regionTwo);
+            IndexVerificationResultRepository resultRepository = setupResultRepository(conn, indexNameBytes, expectedResult);
             IndexToolVerificationResult actualResult =
                 resultRepository.getVerificationResult(conn, scanMaxTs);
             assertVerificationResult(expectedResult, actualResult);
-
         }
+    }
+
+    @Test
+    public void testTTLOnResultTable() throws SQLException, IOException {
+        String mockString = "mock_value";
+        byte[] mockStringBytes = Strings.toByteArray(mockString);
+        ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
+        customClock.setValue(1);
+        EnvironmentEdgeManager.injectEdge(customClock);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            HTable hTable = new HTable(config, RESULT_TABLE_NAME_BYTES);
+            long scanMaxTs = EnvironmentEdgeManager.currentTimeMillis();
+            IndexToolVerificationResult expectedResult = getExpectedResult(scanMaxTs);
+            setupResultRepository(conn, mockStringBytes,expectedResult);
+
+            Assert.assertEquals(2, TestUtil.getRowCount(hTable, false));
+
+            customClock.incrementValue(1000*(DEFAULT_LOG_TTL+5));
+            EnvironmentEdgeManager.injectEdge(customClock);
+            int count = TestUtil.getRowCount(hTable, false);
+
+            Assert.assertEquals(0, count);
+        }
+    }
+
+    private IndexVerificationResultRepository setupResultRepository(Connection conn, byte[] indexNameBytes,IndexToolVerificationResult expectedResult)
+            throws SQLException, IOException {
+        IndexVerificationResultRepository resultRepository =
+                new IndexVerificationResultRepository(conn, indexNameBytes);
+        resultRepository.createResultTable(conn);
+        TestUtil.assertTableHasTtl(conn, TableName.valueOf(RESULT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+        byte[] regionOne = Bytes.toBytes("a.1.00000000000000000000");
+        byte[] regionTwo = Bytes.toBytes("a.2.00000000000000000000");
+        resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
+                regionOne);
+        resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
+                regionTwo);
+        return resultRepository;
     }
 
     private void assertVerificationResult(IndexToolVerificationResult expectedResult, IndexToolVerificationResult actualResult) {
@@ -138,5 +182,18 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
         conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
             dataTableName + " (val1) include (val2, val3)");
         conn.commit();
+    }
+
+    @After
+    public void dropResultTable() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Admin admin = queryServices.getAdmin();
+            TableName outputTableName = TableName.valueOf(RESULT_TABLE_NAME_BYTES);
+            if (admin.tableExists(outputTableName)) {
+                ((HBaseAdmin) admin).disableTable(RESULT_TABLE_NAME_BYTES);
+                ((HBaseAdmin) admin).deleteTable(RESULT_TABLE_NAME_BYTES);
+            }
+        }
     }
 }
