@@ -131,8 +131,9 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         if (!admin.tableExists(resultTableName)) {
             HTableDescriptor tableDescriptor = new
                 HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
-            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
             HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
+            columnDescriptor.setValue(HColumnDescriptor.TTL,
+                    String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
             tableDescriptor.addFamily(columnDescriptor);
             admin.createTable(tableDescriptor);
             setResultTable(admin.getConnection().getTable(resultTableName));
