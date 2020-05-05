@@ -470,6 +470,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             } catch(Exception ex) {
                 Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
             }
+
+            // VERIFY option should not change the index state.
+            Assert.assertEquals(PIndexState.BUILDING, TestUtil.getIndexState(conn, indexTableFullName));
+
             // Delete the output table for the next test
             IndexToolIT.dropIndexToolTables(conn);
             // Run the index tool to populate the index while verifying rows
@@ -480,4 +484,5 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexToolIT.dropIndexToolTables(conn);
         }
     }
+
 }
