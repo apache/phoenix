@@ -1108,6 +1108,8 @@ checkLineLengths
 if [[ $JENKINS == "true" ]] ; then
   runTests
   (( RESULT = RESULT + $? ))
+JIRA_COMMENT_FOOTER="Code Coverage results: $BUILD_URL/artifact/phoenix-core/target/site/jacoco/index.html
+$JIRA_COMMENT_FOOTER"
 JIRA_COMMENT_FOOTER="Test results: $BUILD_URL/testReport/
 $JIRA_COMMENT_FOOTER"
 fi
