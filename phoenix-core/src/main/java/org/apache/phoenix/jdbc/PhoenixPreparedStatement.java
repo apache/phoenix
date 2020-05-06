@@ -45,6 +45,7 @@ import java.util.BitSet;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.util.TimeZone;
 
 import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.MutationPlan;
@@ -52,6 +53,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
@@ -369,7 +371,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
         if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
+            String tz = this.connection.getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+            int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+            TimeZone timezone = Calendar.getInstance().getTimeZone();
+            long msFromEpochGmt = x.getTime();
+            int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+            Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+            gmtCal.setTime(x);
+            gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+
+            x = new Date(gmtCal.getTimeInMillis() - offset);
         }
         setParameter(parameterIndex, x);
     }
@@ -377,7 +391,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
         if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
+            String tz = this.connection.getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+            int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+            TimeZone timezone = Calendar.getInstance().getTimeZone();
+            long msFromEpochGmt = x.getTime();
+            int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+            Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+            gmtCal.setTime(x);
+            gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+
+            x = new Date(gmtCal.getTimeInMillis() - offset);
         }
         cal.setTime(x);
         setParameter(parameterIndex, new Date(cal.getTimeInMillis()));
@@ -491,7 +517,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
         if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
+            String tz = this.connection.getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+            int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+            TimeZone timezone = Calendar.getInstance().getTimeZone();
+            long msFromEpochGmt = x.getTime();
+            int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+            Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+            gmtCal.setTime(x);
+            gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+
+            x  = new Time(gmtCal.getTimeInMillis() - offset);
         }
         setParameter(parameterIndex, x);
     }
@@ -499,7 +537,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
         if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
+            String tz = this.connection.getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+            int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+            TimeZone timezone = Calendar.getInstance().getTimeZone();
+            long msFromEpochGmt = x.getTime();
+            int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+            Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+            gmtCal.setTime(x);
+            gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+
+            x  = new Time(gmtCal.getTimeInMillis() - offset);
         }
         cal.setTime(x);
         setParameter(parameterIndex, new Time(cal.getTimeInMillis()));
@@ -508,13 +558,25 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
         if (x != null) { // Since Timestamp is mutable, make a copy
             int nanos = x.getNanos();
-            x = new Timestamp(x.getTime());
+            String tz = this.connection.getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+            int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+            TimeZone timezone = Calendar.getInstance().getTimeZone();
+            long msFromEpochGmt = x.getTime();
+            int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+            Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+            gmtCal.setTime(x);
+            gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+
+            x = new Timestamp(gmtCal.getTimeInMillis() - offset);
             x.setNanos(nanos);
         }
         // TODO: deal with Calendar
         setParameter(parameterIndex, x);
     }
-    
+
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
         setTimestampParameter(parameterIndex, x, null);

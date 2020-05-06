@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -568,12 +569,12 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
         assertEquals(200.8, rs.getDouble(13), 0);
         assertEquals(new BigDecimal("-654624562.3462642362"), rs.getBigDecimal(14));
         assertEquals(true, rs.getBoolean(15));
-        assertEquals(DateUtil.parseTime("1900-10-01 14:03:22.559"), rs.getTime(16));
-        assertEquals(DateUtil.parseDate("1900-10-01 14:03:22.559"), rs.getDate(17));
-        assertEquals(DateUtil.parseTimestamp("1900-10-01 14:03:22.559"), rs.getTimestamp(18));
-        assertEquals(DateUtil.parseTime("2005-10-01 14:03:22.559"), rs.getTime(19));
-        assertEquals(DateUtil.parseDate("2005-10-01 14:03:22.559"), rs.getDate(20));
-        assertEquals(DateUtil.parseTimestamp("2005-10-01 14:03:22.559"), rs.getTimestamp(21));
+        assertEquals(getDateUtilContext().parseTime("1900-10-01 14:03:22.559"), rs.getTime(16));
+        assertEquals(getDateUtilContext().parseDate("1900-10-01 14:03:22.559"), rs.getDate(17));
+        assertEquals(getDateUtilContext().parseTimestamp("1900-10-01 14:03:22.559"), rs.getTimestamp(18));
+        assertEquals(getDateUtilContext().parseTime("2005-10-01 14:03:22.559"), rs.getTime(19));
+        assertEquals(getDateUtilContext().parseDate("2005-10-01 14:03:22.559"), rs.getDate(20));
+        assertEquals(getDateUtilContext().parseTimestamp("2005-10-01 14:03:22.559"), rs.getTimestamp(21));
         assertEquals("ABCD", rs.getString(22));
         assertEquals("EF", rs.getString(23));
         assertArrayEquals(
@@ -810,33 +811,33 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
         assertArrayEquals(new boolean[]{true, false}, (boolean[])(rs.getArray(15).getArray()));
         assertArrayEquals(
                 new Time[]{
-                        DateUtil.parseTime("1900-10-01 14:03:22.559"),
-                        DateUtil.parseTime("1990-10-01 14:03:22.559")},
+                        getDateUtilContext().parseTime("1900-10-01 14:03:22.559"),
+                        getDateUtilContext().parseTime("1990-10-01 14:03:22.559")},
                 (Time[])(rs.getArray(16).getArray()));
         assertArrayEquals(
                 new Date[]{
-                        DateUtil.parseDate("1900-10-01 14:03:22.559"),
-                        DateUtil.parseDate("1990-10-01 14:03:22.559")},
+                        getDateUtilContext().parseDate("1900-10-01 14:03:22.559"),
+                        getDateUtilContext().parseDate("1990-10-01 14:03:22.559")},
                 (Date[])(rs.getArray(17).getArray()));
         assertArrayEquals(
                 new Timestamp[]{
-                        DateUtil.parseTimestamp("1900-10-01 14:03:22.559"),
-                        DateUtil.parseTimestamp("1990-10-01 14:03:22.559")},
+                        getDateUtilContext().parseTimestamp("1900-10-01 14:03:22.559"),
+                        getDateUtilContext().parseTimestamp("1990-10-01 14:03:22.559")},
                 (Timestamp[])(rs.getArray(18).getArray()));
         assertArrayEquals(
                 new Time[]{
-                        DateUtil.parseTime("2005-10-01 14:03:22.559"),
-                        DateUtil.parseTime("2006-10-01 14:03:22.559")},
+                        getDateUtilContext().parseTime("2005-10-01 14:03:22.559"),
+                        getDateUtilContext().parseTime("2006-10-01 14:03:22.559")},
                 (Time[])(rs.getArray(19).getArray()));
         assertArrayEquals(
                 new Date[]{
-                        DateUtil.parseDate("2005-10-01 14:03:22.559"),
-                        DateUtil.parseDate("2006-10-01 14:03:22.559")},
+                        getDateUtilContext().parseDate("2005-10-01 14:03:22.559"),
+                        getDateUtilContext().parseDate("2006-10-01 14:03:22.559")},
                 (Date[])(rs.getArray(20).getArray()));
         assertArrayEquals(
                 new Timestamp[]{
-                        DateUtil.parseTimestamp("2005-10-01 14:03:22.559"),
-                        DateUtil.parseTimestamp("2006-10-01 14:03:22.559")},
+                        getDateUtilContext().parseTimestamp("2005-10-01 14:03:22.559"),
+                        getDateUtilContext().parseTimestamp("2006-10-01 14:03:22.559")},
                 (Timestamp[])(rs.getArray(21).getArray()));
         assertArrayEquals(new String[]{"ABCD", "XY"}, (String[])(rs.getArray(22).getArray()));
 

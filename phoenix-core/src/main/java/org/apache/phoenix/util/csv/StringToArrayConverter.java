@@ -30,7 +30,6 @@ import com.google.common.base.Function;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.util.DateUtil;
 
 /**
  * Converts strings with delimited values into Phoenix arrays.

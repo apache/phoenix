@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -31,9 +32,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.text.ParseException;
+import java.util.Calendar;
 
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -44,11 +45,11 @@ public class TruncateFunctionIT extends ParallelStatsDisabledIT {
     private static final String DS3 = "1970-01-30 01:30:24.353";
     
     private static Date toDate(String s) throws ParseException {
-        return DateUtil.parseDate(s);
+        return getDateUtilContext().parseDate(s);
     }
     
     private static Timestamp toTimestamp(String s) throws ParseException {
-        return DateUtil.parseTimestamp(s);
+        return getDateUtilContext().parseTimestamp(s);
     }
     
     @Test
@@ -89,17 +90,20 @@ public class TruncateFunctionIT extends ParallelStatsDisabledIT {
             
             assertTrue (rs.next());
             assertEquals(ROW1, rs.getString(1));
-            assertEquals(new Date((long) 7 * QueryConstants.MILLIS_IN_DAY), rs.getDate(2));
+            assertEquals(new Date((long) 7 * QueryConstants.MILLIS_IN_DAY - Calendar.getInstance()
+                    .getTimeZone().getRawOffset()), rs.getDate(2));
             assertEquals(toTimestamp("1970-01-10 00:58:00.000"), rs.getTimestamp(3));
             
             assertTrue (rs.next());
             assertEquals(ROW2, rs.getString(1));
-            assertEquals(new Date((long) 14 * QueryConstants.MILLIS_IN_DAY), rs.getDate(2));
+            assertEquals(new Date((long) 14 * QueryConstants.MILLIS_IN_DAY - Calendar.getInstance()
+                    .getTimeZone().getRawOffset()), rs.getDate(2));
             assertEquals(toTimestamp("1970-01-20 01:02:40.000"), rs.getTimestamp(3));
             
             assertTrue (rs.next());
             assertEquals(ROW3, rs.getString(1));
-            assertEquals(new Date((long) 28 * QueryConstants.MILLIS_IN_DAY), rs.getDate(2));
+            assertEquals(new Date((long) 28 * QueryConstants.MILLIS_IN_DAY - Calendar.getInstance()
+                    .getTimeZone().getRawOffset()), rs.getDate(2));
             assertEquals(toTimestamp("1970-01-30 01:30:20.000"), rs.getTimestamp(3));
             
             assertFalse(rs.next());

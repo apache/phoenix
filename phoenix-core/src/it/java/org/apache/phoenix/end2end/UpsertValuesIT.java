@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
@@ -45,7 +46,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -104,7 +104,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery(select);
         Date then = new Date(EnvironmentEdgeManager.currentTimeMillis());
         assertTrue(rs.next());
-        Date date = DateUtil.parseDate(dateString);
+        Date date = getDateUtilContext().parseDate(dateString);
         assertEquals(date,rs.getDate(1));
         assertTrue(rs.next());
         assertTrue(rs.getDate(1).after(now) && rs.getDate(1).before(then));
@@ -532,7 +532,7 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
     }
     
     private static Date toDate(String dateString) {
-        return DateUtil.parseDate(dateString);
+        return getDateUtilContext().parseDate(dateString);
     }
     
     @Test

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
@@ -101,7 +102,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.TRUE);
         verify(preparedStatement).setObject(6, binaryData);
-        verify(preparedStatement).setObject(7, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
+        verify(preparedStatement).setObject(7, getDateUtilContext().parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -132,7 +133,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.TRUE);
         verify(preparedStatement).setObject(6, binaryData);
-        verify(preparedStatement).setObject(7, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
+        verify(preparedStatement).setObject(7, getDateUtilContext().parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -154,7 +155,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.FALSE);
         verify(preparedStatement).setObject(6, binaryData);
-        verify(preparedStatement).setObject(7, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
+        verify(preparedStatement).setObject(7, getDateUtilContext().parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -213,7 +214,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.TRUE);
         verify(preparedStatement).setObject(6, Bytes.toBytes(asciiValue));
-        verify(preparedStatement).setObject(7, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
+        verify(preparedStatement).setObject(7, getDateUtilContext().parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }

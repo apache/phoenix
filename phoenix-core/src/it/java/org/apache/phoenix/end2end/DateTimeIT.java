@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -423,7 +424,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void selectBetweenDates() throws Exception {
-        Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
+        Format formatter = getDateUtilContext().getDateFormatter("yyyy-MM-dd");
         Calendar cal = Calendar.getInstance();
         cal.setTime(date);
         java.util.Date dateToday = cal.getTime();
@@ -455,7 +456,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectLiteralDate() throws Exception {
-        String s = DateUtil.DEFAULT_DATE_FORMATTER.format(date);
+        String s = getDateUtilContext().getDateFormatter(DateUtil.DEFAULT_MS_DATE_FORMAT,
+                DateUtil.DEFAULT_TIME_ZONE_ID).format(date);
         String query = "SELECT DATE '" + s + "' FROM " + this.tableName;
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
@@ -522,7 +524,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDateBetweenLiterals() throws Exception {
-        Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
+        Format formatter = getDateUtilContext().getDateFormatter("yyyy-MM-dd");
         Calendar cal = Calendar.getInstance();
         cal.setTime(date);
         java.util.Date dateToday = cal.getTime();
@@ -674,9 +676,9 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, unsignedDates, " +
                 "unsignedTimestamps, unsignedTimes FROM " + tableName + " where k1 = 1");
         assertTrue(rs.next());
-        assertEquals(DateUtil.parseDate("2010-06-20 12:00:00"), rs.getDate(2));
-        assertEquals(DateUtil.parseTimestamp("2012-07-28 12:00:00"), rs.getTimestamp(3));
-        assertEquals(DateUtil.parseTime("2015-12-25 12:00:00"), rs.getTime(4));
+        assertEquals(getDateUtilContext().parseDate("2010-06-20 12:00:00"), rs.getDate(2));
+        assertEquals(getDateUtilContext().parseTimestamp("2012-07-28 12:00:00"), rs.getTimestamp(3));
+        assertEquals(getDateUtilContext().parseTime("2015-12-25 12:00:00"), rs.getTime(4));
         assertFalse(rs.next());
     }
 
@@ -1693,7 +1695,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
 
     private static Date toDate(String dateString) {
-        return DateUtil.parseDate(dateString);
+        return getDateUtilContext().parseDate(dateString);
     }
 
     @Test
@@ -1958,7 +1960,9 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
             Calendar cal = Calendar.getInstance(TimeZone.getTimeZone(timeZoneId));
             cal.setTime(date);
-            String dateStr = DateUtil.getDateFormatter(DateUtil.DEFAULT_MS_DATE_FORMAT).format(date);
+
+            String dateStr = getDateUtilContext().getDateFormatter(DateUtil.DEFAULT_MS_DATE_FORMAT,
+                    timeZoneId).format(date);
 
             String dml = "UPSERT INTO " + tableName + " VALUES (" +
                     "1," +

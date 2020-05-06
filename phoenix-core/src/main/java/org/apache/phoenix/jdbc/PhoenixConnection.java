@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.Calendar;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -171,6 +172,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
     private Double logSamplingRate;
+    private static ThreadLocal<DateUtil> DateUtilContext
+            = new ThreadLocal<>();
+
+    public static DateUtil getDateUtilContext() {
+        DateUtil dateUtil = DateUtilContext.get();
+        return dateUtil == null ? new DateUtil(DateUtil.DEFAULT_TIME_ZONE_ID) : dateUtil;
+    }
 
     static {
         Tracing.addTraceMetricsSource();
@@ -331,11 +339,16 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         int maxSizeBytes = this.services.getProps().getInt(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-        String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
-                DateUtil.DEFAULT_TIME_ZONE_ID);
-        Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
-        Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
-        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
+
+        String timeZoneID = this.services.getProps().get(
+                QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, DateUtil.DEFAULT_TIME_ZONE_ID);
+
+        DateUtilContext.set(new DateUtil(timeZoneID));
+
+        Format dateFormat = getDateUtilContext().getDateFormatter(datePattern, timeZoneID);
+        Format timeFormat = getDateUtilContext().getDateFormatter(timePattern, timeZoneID);
+        Format timestampFormat = getDateUtilContext().getDateFormatter(timestampPattern, timeZoneID);
+
         formatters.put(PDate.INSTANCE, dateFormat);
         formatters.put(PTime.INSTANCE, timeFormat);
         formatters.put(PTimestamp.INSTANCE, timestampFormat);

@@ -49,6 +49,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Function;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 /** {@link UpsertExecutor} over {@link Map} objects, as parsed from JSON. */
 public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
 
@@ -171,7 +173,7 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
                 }
                 String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
-                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
+                this.dateTimeParser = getDateUtilContext().getDateTimeParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }
@@ -186,7 +188,7 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
                 return null;
             }
             if (dataType == PTimestamp.INSTANCE) {
-                return DateUtil.parseTimestamp(input.toString());
+                return getDateUtilContext().parseTimestamp(input.toString());
             }
             if (dateTimeParser != null && input instanceof String) {
                 final String s = (String) input;

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -154,7 +155,8 @@ public class SortOrderExpressionTest {
                 return (other instanceof String) && "12/11/01 12:00 AM".equalsIgnoreCase((String) other);
             }
         };
-        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")),
+        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "",
+                        getDateUtilContext().getDateFormatter("MM/dd/yy hh:mm a")),
             caseInsensitiveExpected);
     }
     

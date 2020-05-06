@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB2_NAME;
@@ -52,7 +53,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     private static final Date D1 = toDate(DS1);
 
     private static Date toDate(String dateString) {
-        return DateUtil.parseDate(dateString);
+        return getDateUtilContext().parseDate(dateString);
     }
     
     protected static void initGroupByRowKeyColumns(String pTSDBtableName) throws Exception {
@@ -833,7 +834,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
 
         initPTSDBTableValues1(pTSDBTableName);
         String format = "HH:mm:ss";
-        Format dateFormatter = DateUtil.getDateFormatter(format);
+        Format dateFormatter = getDateUtilContext().getDateFormatter(format);
         String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -855,7 +856,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
         initPTSDBTableValues1(pTSDBTableName);
 
         String format = "yyyy-MM-dd HH:mm:ss.S";
-        Format dateFormatter = DateUtil.getDateFormatter(format);
+        Format dateFormatter = getDateUtilContext().getDateFormatter(format);
         String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y' and \"DATE\"=TO_DATE(?,'" + format + "')";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

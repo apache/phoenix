@@ -25,6 +25,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 public class PUnsignedDate extends PDataType<Date> {
 
     public static final PUnsignedDate INSTANCE = new PUnsignedDate();

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
@@ -37,7 +38,6 @@ import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
@@ -73,12 +73,12 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
                 + " (s VARCHAR NOT NULL PRIMARY KEY, dt DATE, t TIME, ts TIMESTAMP, \"DEC\" DECIMAL, doub DOUBLE, undoub UNSIGNED_DOUBLE, fl FLOAT, unfl UNSIGNED_FLOAT)";
             conn.createStatement().execute(ddl);
             
-            Date dateUpserted = DateUtil.parseDate("2012-01-01 14:25:28");
+            Date dateUpserted = getDateUtilContext().parseDate("2012-01-01 14:25:28");
             dateUpserted = new Date(dateUpserted.getTime() + millisPart); // this makes the dateUpserted equivalent to 2012-01-01 14:25:28.660 
             long millis = dateUpserted.getTime();
 
             Time timeUpserted = new Time(millis);
-            Timestamp tsUpserted = DateUtil.getTimestamp(millis, nanosPart);
+            Timestamp tsUpserted = getDateUtilContext().getTimestamp(millis, nanosPart);
             
             stmt =  conn.prepareStatement(
                 "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -104,19 +104,19 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(dt, 'day'), ROUND(dt, 'hour', 1), ROUND(dt, 'minute', 1), ROUND(dt, 'second', 1), "
                 + " ROUND(dt,'week'), ROUND(dt,'month') , ROUND(dt,'year') FROM " + tableName);
         assertTrue(rs.next());
-        Date expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date expectedDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         assertEquals(expectedDate, rs.getDate(1));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:00:00");
         assertEquals(expectedDate, rs.getDate(2));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:25:00");
         assertEquals(expectedDate, rs.getDate(3));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:29"); 
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:25:29");
         assertEquals(expectedDate, rs.getDate(4));
-        expectedDate = DateUtil.parseDate("2012-01-02 00:00:00"); 
+        expectedDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         assertEquals(expectedDate, rs.getDate(5));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(6));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(7));
     }
     
@@ -134,19 +134,19 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(dt, 'day', 1), FLOOR(dt, 'hour', 1), FLOOR(dt, 'minute', 1), FLOOR(dt, 'second', 1),"
                 + " FLOOR(dt,'week'), FLOOR(dt,'month'), FLOOR(dt,'year') FROM " + tableName);
         assertTrue(rs.next());
-        Date expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        Date expectedDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(1));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:00:00");
         assertEquals(expectedDate, rs.getDate(2));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:25:00");
         assertEquals(expectedDate, rs.getDate(3));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:28");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:25:28");
         assertEquals(expectedDate, rs.getDate(4));
-        expectedDate = DateUtil.parseDate("2011-12-26 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2011-12-26 00:00:00");
         assertEquals(expectedDate, rs.getDate(5));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(6));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(7));
     }
     
@@ -165,19 +165,19 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
                 + " CEIL(dt,'week') , CEIL(dt,'month') , CEIL(dt,'year')  FROM " + tableName);
         assertTrue(rs.next());
         //Date upserted is 2012-01-01 14:25:28.660. So we will end up bumping up in every case.
-        Date expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date expectedDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         assertEquals(expectedDate, rs.getDate(1));
-        expectedDate = DateUtil.parseDate("2012-01-01 15:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 15:00:00");
         assertEquals(expectedDate, rs.getDate(2));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:26:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:26:00");
         assertEquals(expectedDate, rs.getDate(3));
-        expectedDate = DateUtil.parseDate("2012-01-01 14:25:29");
+        expectedDate = getDateUtilContext().parseDate("2012-01-01 14:25:29");
         assertEquals(expectedDate, rs.getDate(4));
-        expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         assertEquals(expectedDate, rs.getDate(5));
-        expectedDate = DateUtil.parseDate("2012-02-01 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2012-02-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(6));
-        expectedDate = DateUtil.parseDate("2013-01-01 00:00:00");
+        expectedDate = getDateUtilContext().parseDate("2013-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(7));
     }
     
@@ -197,18 +197,23 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
                 + tableName);
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-02 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(2));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(3));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:29")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(4));
         
         // Rounding of "2012-01-01 14:25:28.660" + nanosPart will end up bumping up the millisecond part of date. 
         // That is, it should be  evaluated as "2012-01-01 14:25:28.661". 
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime() + millisPart + 1);
+        expectedTimestamp = new Timestamp(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28").getTime() + millisPart + 1);
         assertEquals(expectedTimestamp, rs.getTimestamp(5));
     }
     
@@ -228,21 +233,28 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
             + tableName);
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(2));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(3));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:28")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(4));
         
         // FLOOR of "2012-01-01 14:25:28.660" + nanosPart will end up removing the nanos part. 
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime() + millisPart);
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:28")
+                .getTime() + millisPart);
         assertEquals(expectedTimestamp, rs.getTimestamp(5));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2011-12-26 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2011-12-26 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(6));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(7));
     }
     
@@ -269,24 +281,32 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
                 + " CEIL(ts,'week'), CEIL(ts,'month') , CEIL(ts,'year') FROM " + tableName);
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-02 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(1));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 15:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 15:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(2));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:26:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:26:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(3));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-01 14:25:29")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(4));
         
         // CEIL of "2012-01-01 14:25:28.660" + nanosPart will end up bumping up the millisecond part of date. 
         // That is, it should be  evaluated as "2012-01-01 14:25:28.661". 
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-01 14:25:28").getTime() + millisPart + 1);
+        expectedTimestamp = new Timestamp(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28").getTime() + millisPart + 1);
         assertEquals(expectedTimestamp, rs.getTimestamp(5));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-01-02 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(6));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2012-02-01 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2012-02-01 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(7));
-        expectedTimestamp = new Timestamp(DateUtil.parseDate("2013-01-01 00:00:00").getTime());
+        expectedTimestamp = new Timestamp(getDateUtilContext().parseDate("2013-01-01 00:00:00")
+                .getTime());
         assertEquals(expectedTimestamp, rs.getTimestamp(8));
     }
     
@@ -304,19 +324,20 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(t, 'day', 1), ROUND(t, 'hour', 1), ROUND(t, 'minute', 1), ROUND(t, 'second', 1),"
                 + " ROUND(t,'week') , ROUND(t,'month') , ROUND(t,'year') FROM " + tableName);
         assertTrue(rs.next());
-        Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        Time expectedTime = new Time(getDateUtilContext().parseDate("2012-01-02 00:00:00")
+                .getTime());
         assertEquals(expectedTime, rs.getTime(1));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(2));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:25:00").getTime());
         assertEquals(expectedTime, rs.getTime(3));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:25:29").getTime());
         assertEquals(expectedTime, rs.getTime(4));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-02 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(5));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(6));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(7));
     }
     
@@ -326,19 +347,19 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(t, 'day', 1), FLOOR(t, 'hour', 1), FLOOR(t, 'minute', 1), FLOOR(t, 'second', 1), "
                 + " FLOOR(t, 'week'),  FLOOR(t, 'month'), FLOOR(t, 'year') FROM " + tableName);
         assertTrue(rs.next());
-        Time expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        Time expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(1));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(2));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:25:00").getTime());
         assertEquals(expectedTime, rs.getTime(3));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:28").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:25:28").getTime());
         assertEquals(expectedTime, rs.getTime(4));
-        expectedTime = new Time(DateUtil.parseDate("2011-12-26 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2011-12-26 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(5));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(6));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(7));
     }
     
@@ -348,19 +369,20 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(t, 'day', 1), CEIL(t, 'hour', 1), CEIL(t, 'minute', 1), CEIL(t, 'second', 1),"
                 + " CEIL(t,'week') , CEIL(t,'month') , CEIL(t,'year') FROM " + tableName);
         assertTrue(rs.next());
-        Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        Time expectedTime = new Time(getDateUtilContext().parseDate("2012-01-02 00:00:00")
+                .getTime());
         assertEquals(expectedTime, rs.getTime(1));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 15:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 15:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(2));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:26:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:26:00").getTime());
         assertEquals(expectedTime, rs.getTime(3));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-01 14:25:29").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-01 14:25:29").getTime());
         assertEquals(expectedTime, rs.getTime(4));
-        expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-01-02 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(5));
-        expectedTime = new Time(DateUtil.parseDate("2012-02-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2012-02-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(6));
-        expectedTime = new Time(DateUtil.parseDate("2013-01-01 00:00:00").getTime());
+        expectedTime = new Time(getDateUtilContext().parseDate("2013-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(7));
     }
 
@@ -548,7 +570,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 					+ "TIME_AGG_TABLE(" + "    ID, " + "    THE_DATE)"
 					+ "VALUES (?, ?)");
 			stmt.setInt(1, 1);
-			stmt.setTimestamp(2, DateUtil.parseTimestamp(dateString));
+			stmt.setTimestamp(2, getDateUtilContext().parseTimestamp(dateString));
 			stmt.execute();
 			conn.commit();
 
@@ -560,17 +582,17 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 							+ ",TRUNC(THE_DATE,'MILLISECOND') AS mil_from_dt "
 							+ "FROM TIME_AGG_TABLE").executeQuery();
 			assertTrue(rs.next());
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("THE_DATE"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 00:00:00.0"),
 					rs.getTimestamp("day_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:00:00.0"),
 					rs.getTimestamp("hour_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:00.0"),
 					rs.getTimestamp("min_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.0"),
 					rs.getTimestamp("sec_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("mil_from_dt"));
 			rs.close();
 
@@ -582,17 +604,17 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 							+ ",ROUND(THE_DATE,'MILLISECOND') AS mil_from_dt "
 							+ "FROM TIME_AGG_TABLE").executeQuery();
 			assertTrue(rs.next());
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("THE_DATE"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 00:00:00.0"),
 					rs.getTimestamp("day_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:00:00.0"),
 					rs.getTimestamp("hour_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:00.0"),
 					rs.getTimestamp("min_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:12.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:12.0"),
 					rs.getTimestamp("sec_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("mil_from_dt"));
 			rs.close();
 
@@ -604,17 +626,17 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 							+ ",FLOOR(THE_DATE,'MILLISECOND') AS mil_from_dt "
 							+ "FROM TIME_AGG_TABLE").executeQuery();
 			assertTrue(rs.next());
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("THE_DATE"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 00:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 00:00:00.0"),
 					rs.getTimestamp("day_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:00:00.0"),
 					rs.getTimestamp("hour_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:00.0"),
 					rs.getTimestamp("min_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.0"),
 					rs.getTimestamp("sec_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("mil_from_dt"));
 			rs.close();
 
@@ -626,17 +648,17 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 							+ ",CEIL(THE_DATE,'MILLISECOND') AS mil_from_dt "
 							+ "FROM TIME_AGG_TABLE").executeQuery();
 			assertTrue(rs.next());
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("THE_DATE"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-09 00:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-09 00:00:00.0"),
 					rs.getTimestamp("day_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 10:00:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 10:00:00.0"),
 					rs.getTimestamp("hour_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:10:00.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:10:00.0"),
 					rs.getTimestamp("min_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:12.0"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:12.0"),
 					rs.getTimestamp("sec_from_dt"));
-			assertEquals(DateUtil.parseTimestamp("2015-03-08 09:09:11.665"),
+			assertEquals(getDateUtilContext().parseTimestamp("2015-03-08 09:09:11.665"),
 					rs.getTimestamp("mil_from_dt"));
 			rs.close();
 		} finally {

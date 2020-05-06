@@ -27,9 +27,12 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Calendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
+import java.util.TimeZone;
+
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -59,6 +62,7 @@ public class ConnectionlessTest {
     private static final String name1 = "Eli";
     private static final String name2 = "Simon";
     private static final Date now = new Date(System.currentTimeMillis());
+    private static final Date expected = getExpectedDate(now);
     private static final byte[] unsaltedRowKey1 = ByteUtil.concat(
             PChar.INSTANCE.toBytes(orgId), PChar.INSTANCE.toBytes(keyPrefix1), PChar.INSTANCE.toBytes(entityHistoryId1));
     private static final byte[] unsaltedRowKey2 = ByteUtil.concat(
@@ -73,7 +77,16 @@ public class ConnectionlessTest {
     private static String getUrl() {
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS;
     }
-    
+
+    public static Date getExpectedDate(Date now){
+        TimeZone timezone = Calendar.getInstance().getTimeZone();
+        long msFromEpochGmt = now.getTime();
+        int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+        Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+        gmtCal.setTime(now);
+        gmtCal.add(Calendar.MILLISECOND, offsetFromUTC);
+        return new Date(gmtCal.getTimeInMillis());
+    }
     @BeforeClass
     public static synchronized void verifyDriverRegistered() throws SQLException {
         assertTrue(DriverManager.getDriver(getUrl()) == PhoenixDriver.INSTANCE);
@@ -110,13 +123,13 @@ public class ConnectionlessTest {
         statement.setString(2, keyPrefix2);
         statement.setString(3, entityHistoryId2);
         statement.setString(4, name2);
-        statement.setDate(5,now);
+        statement.setDate(5, now);
         statement.execute();
         statement.setString(1, orgId);
         statement.setString(2, keyPrefix1);
         statement.setString(3, entityHistoryId1);
         statement.setString(4, name1);
-        statement.setDate(5,now);
+        statement.setDate(5, now);
         statement.execute();
         
         Iterator<Pair<byte[],List<Cell>>> dataIterator = PhoenixRuntime.getUncommittedDataIterator(conn);
@@ -148,8 +161,8 @@ public class ConnectionlessTest {
         assertEquals(name1, PVarchar.INSTANCE.toObject(CellUtil.cloneValue(kv)));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, CellUtil.cloneRow(kv));        
-        assertEquals(now, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
+        assertArrayEquals(expectedRowKey1, CellUtil.cloneRow(kv));
+        assertEquals(expected, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
     }
 
     private static void assertRow2(Iterator<Cell> iterator, byte[] expectedRowKey2) {
@@ -164,7 +177,7 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, CellUtil.cloneRow(kv));        
-        assertEquals(now, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
+        assertEquals(expected, PDate.INSTANCE.toObject(CellUtil.cloneValue(kv)));
     }
     
     @Test

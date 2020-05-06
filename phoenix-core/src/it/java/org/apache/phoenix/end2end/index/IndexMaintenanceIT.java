@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -36,7 +37,6 @@ import java.util.Properties;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -77,7 +77,7 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
         stmt.setInt(3, i);
         stmt.setLong(4, i);
         stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
+        Date date = new Date(getDateUtilContext().parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
         stmt.setDate(6, date);
         stmt.setString(7, "a.varchar" + String.valueOf(i));
         stmt.setString(8, "a.char" + String.valueOf(i));
@@ -100,7 +100,8 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
                 + "_A.VARCHAR" + String.valueOf(i) + "_" + StringUtils.rightPad("B.CHAR" + String.valueOf(i), 10, ' '),
                 rs.getString(1));
         assertEquals(i * 3, rs.getInt(2));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i) * MILLIS_IN_DAY);
+        Date date = new Date(getDateUtilContext().parseDate("2015-01-01 00:00:00")
+                .getTime() + (i) * MILLIS_IN_DAY);
         assertEquals(date, rs.getDate(3));
         assertEquals(date, rs.getDate(4));
         assertEquals(date, rs.getDate(5));
@@ -150,7 +151,7 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
             PreparedStatement stmt = conn.prepareStatement(whereSql);
             stmt.setString(1, "VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ");
             stmt.setInt(2, 3);
-            Date date = DateUtil.parseDate("2015-01-02 00:00:00");
+            Date date = getDateUtilContext().parseDate("2015-01-02 00:00:00");
             stmt.setDate(3, date);
             stmt.setDate(4, date);
             stmt.setDate(5, date);
@@ -253,7 +254,7 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
             stmt.setInt(3, 1);
             stmt.setLong(4, 1l);
             stmt.setBigDecimal(5, new BigDecimal(0.5));
-            stmt.setDate(6, DateUtil.parseDate("2015-01-01 00:00:00"));
+            stmt.setDate(6, getDateUtilContext().parseDate("2015-01-01 00:00:00"));
             stmt.setString(7, "a.varchar_updated");
             stmt.setLong(8, 101);
             stmt.executeUpdate();

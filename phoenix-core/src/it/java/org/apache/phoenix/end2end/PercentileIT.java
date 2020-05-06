@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
@@ -498,7 +499,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
     private static void populateINDEX_DATA_TABLETable(String indexDataTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+        Date date = getDateUtilContext().parseDate("2015-01-01 00:00:00");
         try {
             String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName
                 + " VALUES(?, ?, ?, ?, ?, ?)";

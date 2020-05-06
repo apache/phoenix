@@ -24,7 +24,8 @@ import java.util.List;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataType.PDataCodec;
-import org.apache.phoenix.util.DateUtil;
+
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 
 public abstract class DateScalarFunction extends ScalarFunction {
     protected PDataCodec inputCodec;
@@ -49,6 +50,6 @@ public abstract class DateScalarFunction extends ScalarFunction {
     
     private void init() {
         PDataType returnType = getChildren().get(0).getDataType();
-        inputCodec = DateUtil.getCodecFor(returnType);
+        inputCodec = getDateUtilContext().getCodecFor(returnType);
     }
 }

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -61,51 +62,51 @@ public class DateUtilTest {
         
         /*
          * The right way to deal with timestamps when you have both milliseconds and nanos to assign
-         * is to use the DateUtil.getTimestamp(long millis, int nanos).
+         * is to use the getDateUtilContext().GetInstance("GMT")getTimestamp(long millis, int nanos).
          */
-        ts1 = DateUtil.getTimestamp(120055,  60);
-        ts2 = DateUtil.getTimestamp(120100, 60);
+        ts1 = getDateUtilContext().getTimestamp(120055,  60);
+        ts2 = getDateUtilContext().getTimestamp(120100, 60);
         assertFalse(ts1.equals(ts2));
         assertTrue(ts2.after(ts1));
     }
 
     @Test
     public void testGetDateParser_DefaultTimeZone() throws ParseException {
-        Date date = new Date(DateUtil.getDateTimeParser("yyyy-MM-dd", PDate.INSTANCE).parseDateTime("1970-01-01"));
+        Date date = new Date(getDateUtilContext().getDateTimeParser("yyyy-MM-dd", PDate.INSTANCE).parseDateTime("1970-01-01"));
         assertEquals(0, date.getTime());
     }
 
     @Test
     public void testGetDateParser_CustomTimeZone() throws ParseException {
-        Date date = new Date(DateUtil.getDateTimeParser(
+        Date date = new Date(getDateUtilContext().getDateTimeParser(
                 "yyyy-MM-dd", PDate.INSTANCE, TimeZone.getTimeZone("GMT+1").getID()).parseDateTime("1970-01-01"));
         assertEquals(-ONE_HOUR_IN_MILLIS, date.getTime());
     }
 
     @Test
     public void testGetDateParser_LocalTimeZone() throws ParseException {
-        Date date = new Date(DateUtil.getDateTimeParser(
+        Date date = new Date(getDateUtilContext().getDateTimeParser(
                 "yyyy-MM-dd", PDate.INSTANCE, TimeZone.getDefault().getID()).parseDateTime("1970-01-01"));
         assertEquals(Date.valueOf("1970-01-01"), date);
     }
 
     @Test
     public void testGetTimestampParser_DefaultTimeZone() throws ParseException {
-        Timestamp ts = new Timestamp(DateUtil.getDateTimeParser("yyyy-MM-dd HH:mm:ss", PTimestamp.INSTANCE)
+        Timestamp ts = new Timestamp(getDateUtilContext().getDateTimeParser("yyyy-MM-dd HH:mm:ss", PTimestamp.INSTANCE)
                 .parseDateTime("1970-01-01 00:00:00"));
         assertEquals(0, ts.getTime());
     }
 
     @Test
     public void testGetTimestampParser_CustomTimeZone() throws ParseException {
-        Timestamp ts = new Timestamp(DateUtil.getDateTimeParser("yyyy-MM-dd HH:mm:ss", PTimestamp.INSTANCE, TimeZone.getTimeZone("GMT+1").getID())
+        Timestamp ts = new Timestamp(getDateUtilContext().getDateTimeParser("yyyy-MM-dd HH:mm:ss", PTimestamp.INSTANCE, TimeZone.getTimeZone("GMT+1").getID())
                 .parseDateTime("1970-01-01 00:00:00"));
         assertEquals(-ONE_HOUR_IN_MILLIS, ts.getTime());
     }
 
     @Test
     public void testGetTimestampParser_LocalTimeZone() throws ParseException {
-        Timestamp ts = new Timestamp(DateUtil.getDateTimeParser(
+        Timestamp ts = new Timestamp(getDateUtilContext().getDateTimeParser(
                 "yyyy-MM-dd HH:mm:ss",
                 PTimestamp.INSTANCE, TimeZone.getDefault().getID()).parseDateTime("1970-01-01 00:00:00"));
         assertEquals(Timestamp.valueOf("1970-01-01 00:00:00"), ts);
@@ -113,13 +114,13 @@ public class DateUtilTest {
 
     @Test
     public void testGetTimeParser_DefaultTimeZone() throws ParseException {
-        Time time = new Time(DateUtil.getDateTimeParser("HH:mm:ss", PTime.INSTANCE).parseDateTime("00:00:00"));
+        Time time = new Time(getDateUtilContext().getDateTimeParser("HH:mm:ss", PTime.INSTANCE).parseDateTime("00:00:00"));
         assertEquals(0, time.getTime());
     }
 
     @Test
     public void testGetTimeParser_CustomTimeZone() throws ParseException {
-        Time time = new Time(DateUtil.getDateTimeParser(
+        Time time = new Time(getDateUtilContext().getDateTimeParser(
                 "HH:mm:ss",
                 PTime.INSTANCE, TimeZone.getTimeZone("GMT+1").getID()).parseDateTime("00:00:00"));
         assertEquals(-ONE_HOUR_IN_MILLIS, time.getTime());
@@ -127,73 +128,76 @@ public class DateUtilTest {
 
     @Test
     public void testGetTimeParser_LocalTimeZone() throws ParseException {
-        Time time = new Time(DateUtil.getDateTimeParser(
+        Time time = new Time(getDateUtilContext().getDateTimeParser(
                 "HH:mm:ss", PTime.INSTANCE, TimeZone.getDefault().getID()).parseDateTime("00:00:00"));
         assertEquals(Time.valueOf("00:00:00"), time);
     }
 
     @Test
     public void testParseDate() {
-        assertEquals(10000L, DateUtil.parseDate("1970-01-01 00:00:10").getTime());
+        Timestamp d1 = new Timestamp(10000L);
+        Timestamp d2 = new Timestamp(getDateUtilContext().parseDate("1970-01-01 00:00:10").getTime());
+        assertEquals(10000L, getDateUtilContext().parseDate("1970-01-01 00:00:10").getTime());
     }
 
     @Test
     public void testParseDate_PureDate() {
-        assertEquals(0L, DateUtil.parseDate("1970-01-01").getTime());
+        assertEquals(0L, getDateUtilContext().parseDate("1970-01-01").getTime());
     }
 
     @Test(expected = IllegalDataException.class)
     public void testParseDate_InvalidDate() {
-        DateUtil.parseDate("not-a-date");
+        getDateUtilContext().parseDate("not-a-date");
     }
 
     @Test
     public void testParseTime() {
-        assertEquals(10000L, DateUtil.parseTime("1970-01-01 00:00:10").getTime());
+        assertEquals(10000L, getDateUtilContext().parseTime("1970-01-01 00:00:10").getTime());
     }
 
     @Test(expected=IllegalDataException.class)
     public void testParseTime_InvalidTime() {
-        DateUtil.parseDate("not-a-time");
+        getDateUtilContext().parseDate("not-a-time");
     }
 
     @Test
     public void testParseTimestamp() {
-        assertEquals(10000L, DateUtil.parseTimestamp("1970-01-01 00:00:10").getTime());
+        assertEquals(10000L, getDateUtilContext().parseTimestamp("1970-01-01 00:00:10").getTime());
     }
 
     @Test
     public void testParseTimestamp_WithMillis() {
-        assertEquals(10123L, DateUtil.parseTimestamp("1970-01-01 00:00:10.123").getTime());
+        assertEquals(10123L, getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.123").getTime());
     }
 
     @Test
     public void testParseTimestamp_WithNanos() {
-        assertEquals(123000000, DateUtil.parseTimestamp("1970-01-01 00:00:10.123").getNanos());
+        assertEquals(123000000, getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.123").getNanos());
 
-        assertEquals(123456780, DateUtil.parseTimestamp("1970-01-01 00:00:10.12345678").getNanos
+        assertEquals(123456780, getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.12345678").getNanos
                 ());
-        assertEquals(999999999, DateUtil.parseTimestamp("1970-01-01 00:00:10.999999999").getNanos
+        assertEquals(999999999, getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.999999999").getNanos
                 ());
 
     }
 
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_tooLargeNanos() {
-        DateUtil.parseTimestamp("1970-01-01 00:00:10.9999999999");
+        getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.9999999999");
     }
 
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_missingNanos() {
-        DateUtil.parseTimestamp("1970-01-01 00:00:10.");
+        getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.");
     }
+
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_negativeNanos() {
-        DateUtil.parseTimestamp("1970-01-01 00:00:10.-1");
+        getDateUtilContext().parseTimestamp("1970-01-01 00:00:10.-1");
     }
 
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_InvalidTimestamp() {
-        DateUtil.parseTimestamp("not-a-timestamp");
+        getDateUtilContext().parseTimestamp("not-a-timestamp");
     }
 }

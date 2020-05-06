@@ -18,6 +18,7 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
@@ -145,7 +146,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1679,7 +1679,7 @@ public abstract class BaseTest {
         stmt.setInt(3, index);
         stmt.setLong(4, index);
         stmt.setBigDecimal(5, new BigDecimal(index));
-        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+        Date date = getDateUtilContext().parseDate("2015-01-01 00:00:00");
         stmt.setDate(6, date);
         stmt.setString(7, "varchar_a");
         stmt.setString(8, "chara");

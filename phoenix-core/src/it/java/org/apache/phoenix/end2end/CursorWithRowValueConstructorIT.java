@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID7;
 import static org.apache.phoenix.util.TestUtil.PARENTID3;
@@ -442,11 +443,13 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+PARENTID3+"'");
-        query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(date)+"')");
+        query = query.replaceFirst("\\?", "TO_DATE('"+getDateUtilContext()
+                .getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(date)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID3+"'");
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+PARENTID7+"'");
-        query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(date)+"')");
+        query = query.replaceFirst("\\?", "TO_DATE('"+getDateUtilContext()
+                .getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(date)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID7+"'");
         String cursorName = generateUniqueName();
         String cursor = "DECLARE " + cursorName + " CURSOR FOR "+query;
@@ -470,11 +473,13 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
                 " WHERE (organization_id, parent_id, created_date, entity_history_id) IN ((?,?,?,?),(?,?,?,?))";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+PARENTID3+"'");
-        query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(midnight)+"')");
+        query = query.replaceFirst("\\?", "TO_DATE('"+getDateUtilContext()
+                .getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(midnight)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID3+"'");
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
         query = query.replaceFirst("\\?", "'"+PARENTID7+"'");
-        query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(midnight)+"')");
+        query = query.replaceFirst("\\?", "TO_DATE('"+getDateUtilContext()
+                .getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(midnight)+"')");
         query = query.replaceFirst("\\?", "'"+ENTITYHISTID7+"'");
         String cursorName2 = generateUniqueName();
         cursor = "DECLARE " + cursorName2 + " CURSOR FOR "+query;
@@ -517,7 +522,8 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
 
         String query = "SELECT a_timestamp, a_string FROM "+aTable+" WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
         query = query.replaceFirst("\\?", "'"+tenantId+"'");
-        query = query.replaceFirst("\\?", "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_TIMESTAMP_FORMAT).format(tsValue)+"')");
+        query = query.replaceFirst("\\?", "TO_DATE('"+getDateUtilContext()
+                .getDateFormatter(DateUtil.DEFAULT_TIMESTAMP_FORMAT).format(tsValue)+"')");
 
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

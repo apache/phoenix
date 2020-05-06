@@ -38,6 +38,8 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 
 /**
  *
@@ -91,12 +93,12 @@ public class ToDateFunction extends ScalarFunction {
     
     private void init(String dateFormat, String timeZoneId) {
         this.dateFormat = dateFormat;
-        this.dateParser = DateUtil.getDateTimeParser(dateFormat, getDataType(), timeZoneId);
+        this.dateParser = getDateUtilContext().getDateTimeParser(dateFormat, getDataType(), timeZoneId);
         // Store resolved timeZoneId, as if it's LOCAL, we don't want the
         // server to evaluate using the local time zone. Instead, we want
         // to use the client local time zone.
         this.timeZoneId = this.dateParser.getTimeZone().getID();
-        this.codec = DateUtil.getCodecFor(getDataType());
+        this.codec = getDateUtilContext().getCodecFor(getDataType());
     }
 
     @Override
@@ -167,13 +169,13 @@ public class ToDateFunction extends ScalarFunction {
         String timeZoneId;
         String dateFormat = WritableUtils.readString(input);  
         if (dateFormat.length() != 0) { // pre 4.3
-            timeZoneId = DateUtil.DEFAULT_TIME_ZONE_ID;         
+            timeZoneId = DateUtil.DEFAULT_TIME_ZONE_ID;
         } else {
             int nChildren = children.size();
             if (nChildren == 1) {
                 dateFormat = WritableUtils.readString(input); 
                 timeZoneId =  WritableUtils.readString(input);
-            } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+            } else if (nChildren == 2 || getDateUtilContext().LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
                 dateFormat = getDateFormatArg();
                 timeZoneId =  WritableUtils.readString(input);
             } else {
@@ -194,7 +196,7 @@ public class ToDateFunction extends ScalarFunction {
         if (nChildren == 1) {
             WritableUtils.writeString(output, dateFormat);
             WritableUtils.writeString(output, timeZoneId);
-        } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+        } else if (nChildren == 2 || getDateUtilContext().LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
             WritableUtils.writeString(output, timeZoneId);
         }
     }

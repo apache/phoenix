@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID1;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
@@ -52,7 +53,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -784,7 +784,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     @Test
     public void testRVCWithCeilAndFloorNeededForTimestamp() throws Exception {
         String tenantId = getOrganizationId();
-        Date dateUpserted = DateUtil.parseDate("2012-01-01 14:25:28");
+        Date dateUpserted = getDateUtilContext().parseDate("2012-01-01 14:25:28");
         dateUpserted = new Date(dateUpserted.getTime() + 660); // this makes the dateUpserted equivalent to 2012-01-01 14:25:28.660
         String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), dateUpserted, null, getUrl(), null);
         String query = "SELECT a_integer, a_date FROM " + tableName + " WHERE ?=organization_id  AND (a_integer, a_date) <= (9, ?) AND (a_integer, a_date) >= (6, ?)";
@@ -793,7 +793,8 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
-            Timestamp timestampWithNanos = DateUtil.getTimestamp(dateUpserted.getTime() + 2 * MILLIS_IN_DAY, 300);
+            Timestamp timestampWithNanos = getDateUtilContext()
+                    .getTimestamp(dateUpserted.getTime() + 2 * MILLIS_IN_DAY, 300);
             timestampWithNanos.setNanos(0);
             statement.setTimestamp(2, timestampWithNanos);
             statement.setTimestamp(3, timestampWithNanos);
