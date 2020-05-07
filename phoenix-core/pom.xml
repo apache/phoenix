@@ -463,16 +463,17 @@
 
     <!-- Other dependencies -->
     <dependency>
+      <groupId>org.threeten</groupId>
+      <artifactId>threeten-extra</artifactId>
+      <version>1.7.1</version>
+    </dependency>
+    <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.inject</groupId>
       <artifactId>guice</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
     </dependency>
     <dependency>
       <groupId>com.github.stephenc.findbugs</groupId>

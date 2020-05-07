@@ -28,6 +28,15 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+
+import org.threeten.extra.chrono.BritishCutoverChronology;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -40,13 +49,6 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-import org.joda.time.chrono.ISOChronology;
-import org.joda.time.chrono.GJChronology;
-import org.joda.time.format.DateTimeFormatter;
-import org.joda.time.format.DateTimeFormatterBuilder;
-import org.joda.time.format.ISODateTimeFormat;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -72,13 +74,26 @@ public class DateUtil {
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
 
-    private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
-        .append(ISODateTimeFormat.dateParser())
-        .appendOptional(new DateTimeFormatterBuilder()
-                .appendLiteral(' ').toParser())
-        .appendOptional(new DateTimeFormatterBuilder()
-                .append(ISODateTimeFormat.timeParser()).toParser())
-        .toFormatter().withChronology(GJChronology.getInstanceUTC());
+    private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
+            .append(DateTimeFormatter.ISO_DATE)
+            .appendOptional(new DateTimeFormatterBuilder()
+                    .appendLiteral(' ').toFormatter())
+            .appendOptional(new DateTimeFormatterBuilder()
+                    .append(DateTimeFormatter.ISO_TIME)
+            .toFormatter()).toFormatter().withChronology(BritishCutoverChronology.INSTANCE);
+
+    private static final DateTimeFormatter ISO_LOCAL_DATE_TIME_FORMATTER =
+            new DateTimeFormatterBuilder()
+            .append(DateTimeFormatter.ISO_DATE)
+            .appendOptional(new DateTimeFormatterBuilder()
+                    .appendLiteral('T').toFormatter())
+            .appendOptional(new DateTimeFormatterBuilder()
+                    .append(DateTimeFormatter.ISO_TIME)
+                    .toFormatter()).toFormatter().withChronology(BritishCutoverChronology.INSTANCE);
+
+    private static final DateTimeFormatter ISO_WEEK_DATE_TIME_FORMATTER =
+            new DateTimeFormatterBuilder()
+            .append(DateTimeFormatter.ISO_WEEK_DATE).toFormatter();
     
     private DateUtil() {
     }
@@ -207,7 +222,7 @@ public class DateUtil {
             String nanosStr = timestampValue.substring(period + 1);
             if (nanosStr.length() > 9)
                 throw new IllegalDataException("nanos > 999999999 or < 0");
-            if(nanosStr.length() > 3 ) {
+            if(nanosStr.length() > 3) {
                 int nanos = Integer.parseInt(nanosStr);
                 for (int i = 0; i < 9 - nanosStr.length(); i++) {
                     nanos *= 10;
@@ -299,13 +314,39 @@ public class DateUtil {
             }
             // Otherwise, create new DateTimeParser
             return new DateTimeParser() {
-                private final DateTimeFormatter formatter = JULIAN_DATE_TIME_FORMATTER
-                        .withZone(DateTimeZone.forTimeZone(timeZone));
+                private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER
+                        .withZone(ZoneId.of(timeZone.getID()));
+
+                private final DateTimeFormatter local_date_formatter = ISO_LOCAL_DATE_TIME_FORMATTER
+                        .withZone(ZoneId.of(timeZone.getID()));
+
+                private final DateTimeFormatter week_formatter = ISO_WEEK_DATE_TIME_FORMATTER
+                        .withZone(ZoneId.of(timeZone.getID()));
 
                 @Override
                 public long parseDateTime(String dateTimeString) throws IllegalDataException {
                     try {
-                        return formatter.parseDateTime(dateTimeString).getMillis();
+                        ZonedDateTime localDate;
+                        try {
+                            localDate = LocalDateTime.parse(dateTimeString, formatter)
+                                    .atZone(ZoneId.of(timeZone.getID()));
+                        } catch (Exception e) {
+                            try {
+                                localDate = LocalDate.parse(dateTimeString, formatter)
+                                        .atStartOfDay().atZone(ZoneId.of(timeZone.getID()));
+                            } catch (Exception e2) {
+                                try {
+                                    localDate = LocalDateTime.parse(dateTimeString,
+                                            local_date_formatter).atZone(ZoneId
+                                            .of(timeZone.getID()));
+                                } catch (Exception e3) {
+                                    localDate = LocalDate.parse(dateTimeString,
+                                            week_formatter).atStartOfDay().atZone(ZoneId
+                                            .of(timeZone.getID()));
+                                }
+                            }
+                        }
+                        return localDate.toEpochSecond() * 1000 + localDate.getNano() / 1000000;
                     } catch(IllegalArgumentException ex) {
                         throw new IllegalDataException(ex);
                     }
@@ -329,22 +370,45 @@ public class DateUtil {
             return INSTANCE;
         }
 
-        private final DateTimeFormatter formatter = JULIAN_DATE_TIME_FORMATTER.withZone(DateTimeZone.UTC);
+        private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER
+                .withZone(ZoneId.of("UTC"));
+
+        private final DateTimeFormatter local_date_formatter = ISO_LOCAL_DATE_TIME_FORMATTER
+                .withZone(ZoneId.of("UTC"));
+
+        private final DateTimeFormatter week_formatter = ISO_WEEK_DATE_TIME_FORMATTER
+                .withZone(ZoneId.of("UTC"));
 
         private JulianDateFormatParser() {}
 
         @Override
         public long parseDateTime(String dateTimeString) throws IllegalDataException {
             try {
-                return formatter.parseDateTime(dateTimeString).getMillis();
-            } catch(IllegalArgumentException ex) {
+                ZonedDateTime localDate;
+                if (dateTimeString.contains("T")){
+                    localDate = LocalDateTime.parse(dateTimeString,
+                            local_date_formatter).atZone(ZoneId.of("UTC"));
+                } else if (dateTimeString.contains("W")) {
+                    localDate = LocalDate.parse(dateTimeString, week_formatter)
+                            .atStartOfDay().atZone(ZoneId.of("UTC"));
+                } else {
+                    try {
+                        localDate = LocalDateTime.parse(dateTimeString, formatter)
+                                .atZone(ZoneId.of("UTC"));
+                    } catch (Exception e) {
+                        localDate = LocalDate.parse(dateTimeString, formatter)
+                                .atStartOfDay().atZone(ZoneId.of("UTC"));
+                    }
+                }
+                return localDate.toEpochSecond() * 1000 + localDate.getNano() / 1000000;
+            } catch(DateTimeParseException ex) {
                 throw new IllegalDataException(ex);
             }
         }
 
         @Override
         public TimeZone getTimeZone() {
-            return formatter.getZone().toTimeZone();
+            return TimeZone.getTimeZone(formatter.getZone());
         }
     }
 }
