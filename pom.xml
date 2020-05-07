@@ -131,12 +131,15 @@
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
+    <jacoco-maven-plugin.version>0.7.9</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <!-- Empty argument when code coverage is deactivated -->
+    <jacocoArgLine></jacocoArgLine>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -272,7 +275,7 @@
                 <reuseForks>true</reuseForks>
                 <!--parallel>methods</parallel>
                 <threadCount>20</threadCount-->
-                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                <argLine>@{jacocoArgLine} -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -294,7 +297,7 @@
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
 		<!--enableAssertions>false</enableAssertions-->
-                <argLine>-Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -306,7 +309,7 @@
               <id>HBaseManagedTimeTests</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
               </configuration>
               <goals>
@@ -318,7 +321,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -330,7 +333,7 @@
               <id>SplitSystemCatalogTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                  <groups>org.apache.phoenix.end2end.SplitSystemCatalogTests</groups>
               </configuration>
               <goals>
@@ -515,7 +518,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
@@ -1508,6 +1511,42 @@
         <hbase.compat.version>2.0.1</hbase.compat.version>
         <hbase.version>2.0.4</hbase.version>
       </properties>
+    </profile>
+    <profile>
+      <id>codecoverage</id>
+      <activation>
+        <property>
+            <name>code.coverage</name>
+            <value>!deactivate</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+                <configuration>
+                  <propertyName>jacocoArgLine</propertyName>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
   <reporting>
