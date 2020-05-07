@@ -405,9 +405,7 @@
 
                    hbaseMajor == 1 &amp;&amp; (
                      ("${hbase.compat.version}".equals("1.5.0")
-                       &amp;&amp; hbaseMinor == 6)
-                     || ("${hbase.compat.version}".equals("1.5.0")
-                       &amp;&amp; hbaseMinor == 5)
+                       &amp;&amp; (hbaseMinor == 5 || hbaseMinor == 6))
                      || ("${hbase.compat.version}".equals("1.4.0")
                        &amp;&amp; hbaseMinor == 4)
                      || ("${hbase.compat.version}".equals("1.3.0")
@@ -1178,6 +1176,7 @@
       <properties>
         <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.profile>1.6</hbase.profile>
+        <hadoop-two.version>2.8.5</hadoop-two.version>
         <hbase.compat.version>1.5.0</hbase.compat.version>
         <hbase.version>1.6.0</hbase.version>
       </properties>
