@@ -56,7 +56,7 @@ import org.apache.twill.common.Cancellable;
 import org.apache.twill.discovery.DiscoveryServiceClient;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.zookeeper.ZKClient;
-import org.joda.time.Chronology;
+import java.time.chrono.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

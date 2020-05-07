@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -27,7 +29,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
 
 /**
  * Implementation of DayOfWeekFunction(Date/Timestamp)
@@ -69,8 +70,11 @@ public class DayOfWeekFunction extends DateScalarFunction {
             return true;
         }
         long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
-        DateTime jodaDT = new DateTime(dateTime);
-        int day = jodaDT.getDayOfWeek();
+        Date dt = new Date(dateTime);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(dt);
+        int day = calendar.get(Calendar.DAY_OF_WEEK) - 1;
+        day = day == 0 ? 7 : day;
         PDataType returnDataType = getDataType();
         byte[] byteValue = new byte[returnDataType.getByteSize()];
         returnDataType.getCodec().encodeInt(day, byteValue, 0);

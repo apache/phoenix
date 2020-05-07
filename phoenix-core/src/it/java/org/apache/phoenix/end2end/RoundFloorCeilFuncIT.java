@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Calendar;
 import java.util.Properties;
 
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -114,9 +115,9 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         assertEquals(expectedDate, rs.getDate(4));
         expectedDate = DateUtil.parseDate("2012-01-02 00:00:00"); 
         assertEquals(expectedDate, rs.getDate(5));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(6));
-        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00"); 
+        expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(7));
     }
     
@@ -319,7 +320,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
         assertEquals(expectedTime, rs.getTime(7));
     }
-    
+
     @Test
     public void testFloorTime() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());

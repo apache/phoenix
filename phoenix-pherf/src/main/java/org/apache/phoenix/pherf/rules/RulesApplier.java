@@ -27,14 +27,12 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
@@ -299,28 +297,33 @@ public class RulesApplier {
     }
 
     public String generateRandomDate(String min, String max) throws Exception {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
-        DateTime minDt;
-        DateTime maxDt;
-        DateTime dt;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(
+                PherfConstants.DEFAULT_DATE_PATTERN);
+        ZonedDateTime minDt;
+        ZonedDateTime maxDt;
+        ZonedDateTime dt;
 
-        minDt = fmtr.parseDateTime(checkDatePattern(min));
-        maxDt = fmtr.parseDateTime(checkDatePattern(max));
+        minDt = LocalDateTime.parse(min, formatter).atZone(ZoneId.of("UTC"));
+        maxDt = LocalDateTime.parse(max, formatter).atZone(ZoneId.of("UTC"));
 
         // Get Ms Date between min and max
         synchronized (randomDataGenerator) {
             //Make sure date generated is exactly between the passed limits
-            long rndLong = randomDataGenerator.nextLong(minDt.getMillis()+1, maxDt.getMillis()-1);
-            dt = new DateTime(rndLong, PherfConstants.DEFAULT_TIME_ZONE);
+            long rndLong = randomDataGenerator.nextLong(minDt.toEpochSecond() * 1000L +
+                    minDt.getNano() / 1000000, maxDt.toEpochSecond() * 1000L +
+                    maxDt.getNano() / 1000000 - 1);
+            Instant instant = Instant.ofEpochMilli(rndLong);
+            dt = ZonedDateTime.ofInstant(instant, ZoneId.of("UTC"));
         }
 
-        return fmtr.print(dt);
+        return dt.format(formatter);
     }
 
     public String getCurrentDate() {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
-        DateTime dt = new DateTime(PherfConstants.DEFAULT_TIME_ZONE);
-        return fmtr.print(dt);
+        DateTimeFormatter formatter = DateTimeFormatter
+                .ofPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        ZonedDateTime dt = ZonedDateTime.now().withZoneSameInstant(ZoneId.of("UTC"));
+        return dt.format(formatter);
     }
 
     /**
@@ -396,9 +399,10 @@ public class RulesApplier {
 
     // Checks if date is in defult pattern
     public String checkDatePattern(String date) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
-        DateTime parsedDate = fmtr.parseDateTime(date);
-        return fmtr.print(parsedDate);
+        DateTimeFormatter formatter = DateTimeFormatter
+                .ofPattern(PherfConstants.DEFAULT_DATE_PATTERN);
+        ZonedDateTime localDate = LocalDateTime.parse(date, formatter).atZone(ZoneId.of("UTC"));
+        return localDate.format(formatter);
     }
 
     /**

@@ -17,16 +17,18 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
+import org.apache.commons.lang.time.DateUtils;
 import org.apache.phoenix.expression.Expression;
-import org.joda.time.DateTime;
 
 /**
  * 
- * Ceil function that rounds up the {@link DateTime} to next year. 
+ * Ceil function that rounds up the {@link Date} to next year.
  */
-public class CeilYearExpression extends RoundJodaDateExpression {
+public class CeilYearExpression extends RoundJavaDateExpression {
     
     public CeilYearExpression() {
         super();
@@ -37,8 +39,9 @@ public class CeilYearExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.year().roundCeilingCopy().getMillis();
+    public long roundDateTime(Date dateTime) {
+        return DateUtils.ceiling(dateTime, Calendar.YEAR).getTime() +
+                Calendar.getInstance().getTimeZone().getRawOffset();
     }
 
 }

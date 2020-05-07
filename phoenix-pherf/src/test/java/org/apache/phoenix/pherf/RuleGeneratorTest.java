@@ -25,6 +25,10 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -42,10 +46,6 @@ import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.workload.WriteWorkload;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 import org.junit.Test;
 
 public class RuleGeneratorTest {
@@ -437,11 +437,12 @@ public class RuleGeneratorTest {
      * @param value
      */
     private void assertDateBetween(DataValue value) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
+        DateTimeFormatter fmtr = DateTimeFormatter
+                .ofPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(ZoneId.of("UTC"));
 
-        DateTime dt = fmtr.parseDateTime(value.getValue());
-        DateTime min = fmtr.parseDateTime(value.getMinValue());
-        DateTime max = fmtr.parseDateTime(value.getMaxValue());
+        ZonedDateTime dt = LocalDateTime.parse(value.getValue(), fmtr).atZone(ZoneId.of("UTC"));
+        ZonedDateTime min = LocalDateTime.parse(value.getMinValue(), fmtr).atZone(ZoneId.of("UTC"));
+        ZonedDateTime max = LocalDateTime.parse(value.getMaxValue(), fmtr).atZone(ZoneId.of("UTC"));
 
         assertTrue("Value " + dt + " is not after minValue", dt.isAfter(min));
         assertTrue("Value " + dt + " is not before maxValue", dt.isBefore(max));

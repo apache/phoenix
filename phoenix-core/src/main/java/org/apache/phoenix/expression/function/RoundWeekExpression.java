@@ -17,16 +17,19 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.joda.time.DateTime;
+
+import static java.lang.Math.abs;
 
 /**
  * 
- * Rounds off the given {@link DateTime} to the nearest Monday.
+ * Rounds off the given {@link Date} to the nearest Monday.
  */
-public class RoundWeekExpression extends RoundJodaDateExpression {
+public class RoundWeekExpression extends RoundJavaDateExpression {
 
     public RoundWeekExpression(){}
     
@@ -35,7 +38,15 @@ public class RoundWeekExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.weekOfWeekyear().roundHalfEvenCopy().getMillis();
+    public long roundDateTime(Date dateTime) {
+        long nextMonday = new CeilWeekExpression().roundDateTime(dateTime);
+        long prevMonday = new FloorWeekExpression().roundDateTime(dateTime);
+
+        if ( abs(dateTime.getTime() - prevMonday) < abs(dateTime.getTime() - nextMonday)){
+            return prevMonday;
+        }
+        else {
+            return nextMonday;
+        }
     }
 }

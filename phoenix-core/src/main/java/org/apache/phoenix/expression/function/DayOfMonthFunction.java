@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
+import java.util.Calendar;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -28,7 +29,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
+import java.util.Date;
 
 /**
  * 
@@ -58,8 +59,10 @@ public class DayOfMonthFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime);
-        int day = dt.getDayOfMonth();
+        Date dt = new Date(dateTime);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(dt);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(day, byteValue, 0);
