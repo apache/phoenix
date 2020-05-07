@@ -49,7 +49,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import org.joda.time.Chronology;
+import java.time.chrono.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -591,7 +591,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c3 DECIMAL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) DEFAULT 'E' || 'F',"
-                + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05'))"
+                + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-06-05'))"
                 + ")";
 
         verifyDefaultExpression(sharedTable2, ddl);
@@ -607,7 +607,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c3 DECIMAL NOT NULL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR NOT NULL DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) NOT NULL DEFAULT 'E' || 'F',"
-                + "c6 INTEGER NOT NULL DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05')),"
+                + "c6 INTEGER NOT NULL DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-06-05')),"
                 + "CONSTRAINT pk_key PRIMARY KEY (pk,c1,c2,c3,c4,c5,c6)"
                 + ")";
 
@@ -1053,7 +1053,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 + "c3 DECIMAL DEFAULT TO_NUMBER('" + DEFAULT_CURRENCY_SYMBOL + "123.33', '\u00A4###.##'),"
                 + "c4 VARCHAR DEFAULT 'AB' || 'CD',"
                 + "c5 CHAR(5) DEFAULT 'E' || 'F',"
-                + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-6-05'))"
+                + "c6 INTEGER DEFAULT \"MONTH\"(TO_TIMESTAMP('2015-06-05'))"
                 + ")";
 
         Connection conn = DriverManager.getConnection(getUrl());

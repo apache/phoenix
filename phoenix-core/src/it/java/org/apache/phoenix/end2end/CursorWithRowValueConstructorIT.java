@@ -511,7 +511,7 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
         stmt.setString(1, tenantId);
         stmt.setString(2, ROW4);
-        Timestamp tsValue = new Timestamp(System.nanoTime());
+        Timestamp tsValue = new Timestamp(System.currentTimeMillis());
         stmt.setTimestamp(3, tsValue);
         stmt.execute();
 

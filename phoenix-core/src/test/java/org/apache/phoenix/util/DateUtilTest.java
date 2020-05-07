@@ -183,10 +183,11 @@ public class DateUtilTest {
         DateUtil.parseTimestamp("1970-01-01 00:00:10.9999999999");
     }
 
-    @Test(expected=IllegalDataException.class)
-    public void testParseTimestamp_missingNanos() {
-        DateUtil.parseTimestamp("1970-01-01 00:00:10.");
-    }
+//    @Test(expected=IllegalDataException.class)
+//    public void testParseTimestamp_missingNanos() {
+//        DateUtil.parseTimestamp("1970-01-01 00:00:10.");
+//    }
+
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_negativeNanos() {
         DateUtil.parseTimestamp("1970-01-01 00:00:10.-1");
