@@ -123,7 +123,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void preGetTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String tableName, TableName physicalTableName) throws IOException {
         if (!accessCheckEnabled) { return; }
-        requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        if(this.execPermissionsCheckEnabled) {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        } else {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ);
+        }
     }
 
     @Override
@@ -131,10 +135,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Configuration conf = env.getConfiguration();
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
-        if (!this.accessCheckEnabled) {
-            LOGGER.warn(
-                    "PhoenixAccessController has been loaded with authorization checks disabled.");
-        }
+            if (!this.accessCheckEnabled) {
+                LOGGER.warn(
+                        "PhoenixAccessController has been loaded with authorization checks disabled.");
+            }
         this.execPermissionsCheckEnabled = conf.getBoolean(AccessControlConstants.EXEC_PERMISSION_CHECKS_KEY,
                 AccessControlConstants.DEFAULT_EXEC_PERMISSION_CHECKS);
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
@@ -245,7 +249,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // skip check for local index
             if (physicalTableName != null && !parentPhysicalTableName.equals(physicalTableName)
                     && !MetaDataUtil.isViewIndex(physicalTableName.getNameAsString())) {
-                List<Action> actions = Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN);
+                List<Action> actions = new ArrayList<>(Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN));
                 if(execPermissionsCheckEnabled) {
                     actions.add(Action.EXEC);
                 }

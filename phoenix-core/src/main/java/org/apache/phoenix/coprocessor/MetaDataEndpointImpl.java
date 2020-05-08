@@ -2215,7 +2215,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         String tableType = request.getTableType();
         byte[] schemaName = null;
         byte[] tableName = null;
-
+        boolean dropTableStats = false;
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
             List<Mutation> childLinkMutations = Lists.newArrayList();
@@ -2326,8 +2326,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
+                dropTableStats = true;
             } finally {
                 ServerUtil.releaseRowLocks(locks);
+                if(dropTableStats) {
+                    Thread statsDeleteHandler = new Thread(new StatsDeleteHandler(env,
+                            loadedTable, tableNamesToDelete, sharedTablesToDelete),
+                            "thread-statsdeletehandler");
+                    statsDeleteHandler.setDaemon(true);
+                    statsDeleteHandler.start();
+                }
             }
         } catch (Throwable t) {
           LOGGER.error("dropTable failed", t);
@@ -2336,6 +2344,50 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
     }
 
+    class StatsDeleteHandler implements Runnable {
+        PTable deletedTable;
+        List<byte[]> physicalTableNames;
+        List<MetaDataProtocol.SharedTableState> sharedTableStates;
+        RegionCoprocessorEnvironment env;
+
+        StatsDeleteHandler(RegionCoprocessorEnvironment env, PTable deletedTable, List<byte[]> physicalTableNames,
+                          List<MetaDataProtocol.SharedTableState> sharedTableStates) {
+            this.deletedTable = deletedTable;
+            this.physicalTableNames = physicalTableNames;
+            this.sharedTableStates = sharedTableStates;
+            this.env = env;
+        }
+
+        @Override
+        public void run() {
+            try {
+                User.runAsLoginUser(new PrivilegedExceptionAction<Object>() {
+                    @Override
+                    public Object run() throws Exception {
+                        try (PhoenixConnection connection =
+                                     QueryUtil.getConnectionOnServer(env.getConfiguration())
+                                             .unwrap(PhoenixConnection.class)) {
+                            try{
+                                MetaDataUtil.deleteFromStatsTable(connection, deletedTable,
+                                        physicalTableNames, sharedTableStates);
+                                LOGGER.info("Table stats deleted successfully. "+
+                                        deletedTable.getPhysicalName().getString());
+                            } catch(Throwable t) {
+                                LOGGER.warn("Exception while deleting stats of table "
+                                        + deletedTable.getPhysicalName().getString()
+                                        + " please check and delete stats manually");
+                            }
+                        }
+                        return null;
+                    }
+                });
+            } catch (IOException e) {
+                LOGGER.warn("Exception while deleting stats of table "
+                        + deletedTable.getPhysicalName().getString()
+                        + " please check and delete stats manually");
+            }
+        }
+    }
     private RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks) throws IOException {
         RowLock rowLock = region.getRowLock(lockKey, false);
         if (rowLock == null) {
@@ -3990,8 +4042,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private TableName getParentPhysicalTableName(PTable table) {
-        return table
-                .getType() == PTableType.VIEW
+        return (table
+                .getType() == PTableType.VIEW || (table.getType() == INDEX && table.getViewIndexId() != null))
                 ? TableName.valueOf(table.getPhysicalName().getBytes())
                 : table.getType() == PTableType.INDEX
                 ? TableName

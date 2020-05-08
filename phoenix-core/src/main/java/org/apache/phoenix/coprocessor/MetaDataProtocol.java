@@ -32,12 +32,7 @@ import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -194,7 +189,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private List<PName> physicalNames;
         private PDataType viewIndexIdType;
         private Long viewIndexId;
-        
+
         public SharedTableState(PTable table) {
             this.tenantId = table.getTenantId();
             this.schemaName = table.getSchemaName();
