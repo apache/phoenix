@@ -2,7 +2,7 @@ SqlLine
 =======
 https://github.com/julianhyde/sqlline
 
-Execute SQL from command line. Sqlline manual is available at http://www.hydromatic.net/sqlline/manual.html
+Execute SQL from command line. Sqlline manual is available at https://julianhyde.github.io/sqlline/manual.html
 	
 	Usage: 
 	$ sqlline.py <zookeeper> <optional_sql_file> 
