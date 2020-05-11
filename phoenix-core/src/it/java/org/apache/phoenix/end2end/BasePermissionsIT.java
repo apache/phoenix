@@ -38,6 +38,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
@@ -64,11 +65,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -207,6 +204,12 @@ public abstract class BasePermissionsIT extends BaseTest {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
     }
 
+    private static void configureStatsConfigurations(Configuration conf) {
+        conf.set(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        conf.set(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
+        conf.set(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
+        conf.set(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+    }
     public static HBaseTestingUtility getUtility(){
         return testUtil;
     }
@@ -383,13 +386,17 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     AccessTestAction createTable(final String tableName) throws SQLException {
+        return createTable(tableName, NUM_RECORDS);
+    }
+
+    AccessTestAction createTable(final String tableName, final int numRecordsToInsert) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk INTEGER not null primary key, data VARCHAR, val integer)"));
                     try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?, ?)")) {
-                        for (int i = 0; i < NUM_RECORDS; i++) {
+                        for (int i = 0; i < numRecordsToInsert; i++) {
                             pstmt.setInt(1, i);
                             pstmt.setString(2, Integer.toString(i));
                             pstmt.setInt(3, i);
@@ -397,6 +404,19 @@ public abstract class BasePermissionsIT extends BaseTest {
                         }
                     }
                     conn.commit();
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction updateStatsOnTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    assertFalse(stmt.execute("UPDATE STATISTICS " + tableName + " SET \""
+                            + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\" = 5"));
                 }
                 return null;
             }
@@ -432,6 +452,37 @@ public abstract class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute(String.format("DROP TABLE IF EXISTS %s CASCADE", tableName)));
+                }
+                return null;
+            }
+        };
+
+    }
+
+    private AccessTestAction deleteDataFromStatsTable() throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    conn.setAutoCommit(true);
+                    assertNotEquals(0, stmt.executeUpdate("DELETE FROM SYSTEM.STATS"));
+                }
+                return null;
+            }
+        };
+
+    }
+
+    private AccessTestAction readStatsAfterTableDelete(final String physicalTableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    conn.setAutoCommit(true);
+                    ResultSet rs = stmt.executeQuery("SELECT count(*) from SYSTEM.STATS" +
+                            " WHERE PHYSICAL_NAME = '"+ physicalTableName +"'");
+                    rs.next();
+                    assertEquals(0, rs.getInt(1));
                 }
                 return null;
             }
@@ -1219,6 +1270,69 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     @Test
+    public void testDeletingStatsShouldNotFailWithADEWhenTableDropped() throws Throwable {
+        final String schema = "STATS_ENABLED";
+        final String tableName = "DELETE_TABLE_IT";
+        final String phoenixTableName = schema + "." + tableName;
+        final String indexName1 = tableName + "_IDX1";
+        final String lIndexName1 = tableName + "_LIDX1";
+        final String viewName1 = schema+"."+tableName + "_V1";
+        final String viewIndexName1 = tableName + "_VIDX1";
+        grantSystemTableAccess();
+        try {
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser1);
+                        //Neded Global ADMIN for flush operation during drop table
+                        AccessControlClient.grant(getUtility().getConnection(),regularUser1.getName(), Permission.Action.ADMIN);
+                        if (isNamespaceMapped) {
+                            grantPermissions(regularUser1.getName(), schema, Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), schema, Permission.Action.CREATE);
+                        } else {
+                            grantPermissions(regularUser1.getName(),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+                        }
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            verifyAllowed(createTable(phoenixTableName, 100), regularUser1);
+            verifyAllowed(createIndex(indexName1,phoenixTableName),regularUser1);
+            verifyAllowed(createLocalIndex(lIndexName1, phoenixTableName), regularUser1);
+            verifyAllowed(createView(viewName1,phoenixTableName),regularUser1);
+            verifyAllowed(createIndex(viewIndexName1, viewName1), regularUser1);
+            verifyAllowed(updateStatsOnTable(phoenixTableName), regularUser1);
+            Thread.sleep(10000);
+            // Normal deletes should  fail when no write permissions given on stats table.
+            verifyDenied(deleteDataFromStatsTable(), AccessDeniedException.class, regularUser1);
+            verifyAllowed(dropIndex(viewIndexName1, viewName1), regularUser1);
+            verifyAllowed(dropView(viewName1),regularUser1);
+            verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser1);
+            Thread.sleep(3000);
+            verifyAllowed(readStatsAfterTableDelete(SchemaUtil.getPhysicalHBaseTableName(
+                    schema, indexName1, isNamespaceMapped).getString()), regularUser1);
+            verifyAllowed(dropIndex(lIndexName1,  phoenixTableName), regularUser1);
+            verifyAllowed(dropTable(phoenixTableName), regularUser1);
+            Thread.sleep(3000);
+            verifyAllowed(readStatsAfterTableDelete(SchemaUtil.getPhysicalHBaseTableName(
+                    schema, tableName, isNamespaceMapped).getString()), regularUser1);
+        } finally {
+            revokeAll();
+        }
+    }
+
+    @Test
     public void testUpsertIntoImmutableTable() throws Throwable {
         final String schema = generateUniqueName();
         final String tableName = generateUniqueName();
@@ -1291,5 +1405,4 @@ public abstract class BasePermissionsIT extends BaseTest {
             }
         };
     }
-
 }

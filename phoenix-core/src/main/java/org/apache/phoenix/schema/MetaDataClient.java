@@ -3398,7 +3398,6 @@ public class MetaDataClient {
                         for (PTable index : table.getIndexes()) {
                             tableRefs.add(new TableRef(null, index, ts, false));
                         }
-                        deleteFromStatsTable(tableRefs, ts);
                     }
                     if (!dropMetaData) {
                         MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null,
@@ -3412,32 +3411,6 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
-        }
-    }
-
-    private void deleteFromStatsTable(List<TableRef> tableRefs, long ts) throws SQLException {
-    	boolean isAutoCommit = connection.getAutoCommit();
-    	try {
-	        connection.setAutoCommit(true);
-            StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
-            for (TableRef ref : tableRefs) {
-                buf.append("'" + ref.getTable().getPhysicalName().getString() + "',");
-            }
-            buf.setCharAt(buf.length() - 1, ')');
-            if(tableRefs.get(0).getTable().getIndexType()==IndexType.LOCAL) {
-                buf.append(" AND COLUMN_FAMILY IN(");
-                if (tableRefs.get(0).getTable().getColumnFamilies().isEmpty()) {
-                    buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
-                } else {
-                    for(PColumnFamily cf : tableRefs.get(0).getTable().getColumnFamilies()) {
-                        buf.append("'" + cf.getName().getString() + "',");
-                    }
-                }
-                buf.setCharAt(buf.length() - 1, ')');
-            }
-            connection.createStatement().execute(buf.toString());
-        } finally {
-        	connection.setAutoCommit(isAutoCommit);
         }
     }
 
