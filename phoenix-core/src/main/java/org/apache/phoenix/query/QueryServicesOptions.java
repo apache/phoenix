@@ -37,6 +37,7 @@ import static org.apache.phoenix.query.QueryServices.EXPLAIN_ROW_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.TABLE_LEVEL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
@@ -277,6 +278,7 @@ public class QueryServicesOptions {
     public static final String DEFAULT_TRANSACTION_PROVIDER = TransactionFactory.Provider.getDefault().name();
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
+    public static final boolean DEFAULT_IS_TABLE_LEVEL_METRICS_ENABLED = true;
     public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
 
     public static final boolean DEFAULT_TRANSACTIONAL = false;
@@ -423,6 +425,7 @@ public class QueryServicesOptions {
             .setIfUnset(NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_RETRIES_FOR_SCHEMA_UPDATE_CHECK)
             .setIfUnset(DELAY_FOR_SCHEMA_UPDATE_CHECK, DEFAULT_DELAY_FOR_SCHEMA_UPDATE_CHECK)
             .setIfUnset(GLOBAL_METRICS_ENABLED, DEFAULT_IS_GLOBAL_METRICS_ENABLED)
+            .setIfUnset(TABLE_LEVEL_METRICS_ENABLED, DEFAULT_IS_TABLE_LEVEL_METRICS_ENABLED)
             .setIfUnset(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY)
             .setIfUnset(USE_BYTE_BASED_REGEX_ATTRIB, DEFAULT_USE_BYTE_BASED_REGEX)
             .setIfUnset(FORCE_ROW_KEY_ORDER_ATTRIB, DEFAULT_FORCE_ROW_KEY_ORDER)
@@ -675,6 +678,10 @@ public class QueryServicesOptions {
 
     public boolean isGlobalMetricsEnabled() {
         return config.getBoolean(GLOBAL_METRICS_ENABLED, DEFAULT_IS_GLOBAL_METRICS_ENABLED);
+    }
+
+    public boolean isTableLevelMetricsEnabled() {
+        return config.getBoolean(TABLE_LEVEL_METRICS_ENABLED, DEFAULT_IS_GLOBAL_METRICS_ENABLED);
     }
 
     public boolean isUseByteBasedRegex() {

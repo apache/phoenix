@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -128,7 +129,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder);
+                scan, scanMetricsHolder,hri.getTable().toString());
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }

@@ -18,6 +18,8 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -107,6 +109,7 @@ public class ParallelIterators extends BaseResultIterators {
         int numScans = scanLocations.size();
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
+        PhoenixTableRegistry.getInstance().addOrCreateTable(physicalTableName,NUM_PARALLEL_SCANS,numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();

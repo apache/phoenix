@@ -222,6 +222,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB = "phoenix.table.istransactional.default";
     public static final String DEFAULT_TRANSACTION_PROVIDER_ATTRIB = "phoenix.table.transaction.provider.default";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
+    public static final String TABLE_LEVEL_METRICS_ENABLED = "phoenix.query.table.metrics.enabled";
 
     // Tag Name to determine the Phoenix Client Type
     public static final String CLIENT_METRICS_TAG = "phoenix.client.metrics.tag";

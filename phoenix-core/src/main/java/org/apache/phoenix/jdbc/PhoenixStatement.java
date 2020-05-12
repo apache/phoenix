@@ -20,6 +20,9 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_SQL_COUNTER;
+
 
 import java.io.File;
 import java.io.IOException;
@@ -98,6 +101,7 @@ import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
+import org.apache.phoenix.monitoring.PhoenixTableRegistry;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
@@ -221,7 +225,7 @@ import com.google.common.math.IntMath;
 public class PhoenixStatement implements Statement, SQLCloseable {
 	
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
-    
+
     public enum Operation {
         QUERY("queried", false),
         DELETE("deleted", true),
@@ -289,10 +293,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throws SQLException {
         return executeQuery(stmt, true, queryLogger);
     }
+
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
         final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
-        
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
@@ -301,12 +305,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
-                        
                         if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                 && stmt.getOperation() != Operation.UPGRADE) {
                             throw new UpgradeRequiredException();
                         }
                         QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+                        PhoenixTableRegistry.getInstance().addOrCreateTable(plan.getTableRef().getTable().getPhysicalName().toString(), SELECT_SQL_COUNTER, 1);
                         // Send mutations to hbase, so they are visible to subsequent reads.
                         // Use original plan for data table so that data and immutable indexes will be sent
                         // TODO: for joins, we need to iterate through all tables, but we need the original table,
@@ -411,6 +415,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
                                     state.startTransaction(plan.getTargetRef().getTable().getTransactionProvider());
                                 }
+                                PhoenixTableRegistry.getInstance().addOrCreateTable(plan.getTargetRef().getTable().getPhysicalName().toString(),MUTATION_SQL_COUNTER,1);
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);
                                 state.checkpointIfNeccessary(plan);
