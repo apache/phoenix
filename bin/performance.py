@@ -19,6 +19,7 @@
 #
 ############################################################################
 
+from __future__ import print_function
 import os
 import subprocess
 import sys
@@ -27,7 +28,7 @@ import phoenix_utils
 
 def queryex(description, statement):
     global statements
-    print "Query # %s - %s" % (description, statement)
+    print("Query # %s - %s" % (description, statement))
     statements = statements + statement
 
 def delfile(filename):
@@ -35,9 +36,9 @@ def delfile(filename):
         os.remove(filename)
 
 def usage():
-    print "Performance script arguments not specified. Usage: performance.py \
-<zookeeper> <row count>"
-    print "Example: performance.py localhost 100000"
+    print("Performance script arguments not specified. Usage: performance.py \
+<zookeeper> <row count>")
+    print("Example: performance.py localhost 100000")
 
 
 def createFileWithContent(filename, content):
@@ -78,17 +79,17 @@ elif os.name == 'nt':
     hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
     hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
 if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
     sys.exit(-1)
 
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, _, v) = x.partition('=')
+        (k, _, v) = x.decode().partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
+if 'JAVA_HOME' in hbase_env:
     java_home = hbase_env['JAVA_HOME']
 
 if java_home:
@@ -110,10 +111,10 @@ SPLIT ON ('CSGoogle','CSSalesforce','EUApple','EUGoogle','EUSalesforce',\
 'NAApple','NAGoogle','NASalesforce');" % (table)
 
 # generate and upsert data
-print "Phoenix Performance Evaluation Script 1.0"
-print "-----------------------------------------"
+print("Phoenix Performance Evaluation Script 1.0")
+print("-----------------------------------------")
 
-print "\nCreating performance table..."
+print("\nCreating performance table...")
 createFileWithContent(ddl, createtable)
 
 exitcode = subprocess.call(execute + ddl, shell=True)
@@ -127,13 +128,13 @@ queryex("3 - Group By Second PK", "SELECT DOMAIN FROM %s GROUP BY DOMAIN;" % (ta
 queryex("4 - Truncate + Group By", "SELECT TRUNC(DATE,'DAY') DAY FROM %s GROUP BY TRUNC(DATE,'DAY');" % (table))
 queryex("5 - Filter + Count", "SELECT COUNT(1) FROM %s WHERE CORE<10;" % (table))
 
-print "\nGenerating and upserting data..."
+print("\nGenerating and upserting data...")
 exitcode = subprocess.call('%s -jar %s %s %s' % (java_cmd, phoenix_utils.testjar, data, rowcount),
                            shell=True)
 if exitcode != 0:
     sys.exit(exitcode)
 
-print "\n"
+print("\n")
 createFileWithContent(qry, statements)
 
 exitcode = subprocess.call(execute + data + ' ' + qry, shell=True)

@@ -25,6 +25,8 @@
 # usage: traceserver.py [start|stop]
 #
 
+from __future__ import print_function
+from phoenix_utils import tryDecode
 import datetime
 import getpass
 import os
@@ -49,9 +51,9 @@ command = None
 args = sys.argv
 
 if len(args) > 1:
-    if args[1] == 'start':
+    if tryDecode(args[1]) == 'start':
         command = 'start'
-    elif args[1] == 'stop':
+    elif tryDecode(args[1]) == 'stop':
         command = 'stop'
 if command:
     args = args[2:]
@@ -60,7 +62,7 @@ if os.name == 'nt':
     args = subprocess.list2cmdline(args[1:])
 else:
     import pipes    # pipes module isn't available on Windows
-    args = " ".join([pipes.quote(v) for v in args[1:]])
+    args = " ".join([pipes.quote(tryDecode(v)) for v in args[1:]])
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
@@ -86,23 +88,23 @@ elif os.name == 'nt':
     hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
     hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
 if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
     sys.exit(-1)
 
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, _, v) = x.partition('=')
+        (k, _, v) = tryDecode(x).partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
+if 'JAVA_HOME' in hbase_env:
     java_home = hbase_env['JAVA_HOME']
-if hbase_env.has_key('HBASE_PID_DIR'):
+if 'HBASE_PID_DIR' in hbase_env:
     hbase_pid_dir = hbase_env['HBASE_PID_DIR']
-if hbase_env.has_key('HBASE_LOG_DIR'):
+if 'HBASE_LOG_DIR' in hbase_env:
     phoenix_log_dir = hbase_env['HBASE_LOG_DIR']
-if hbase_env.has_key('PHOENIX_TRACESERVER_OPTS'):
+if 'PHOENIX_TRACESERVER_OPTS' in hbase_env:
     opts = hbase_env['PHOENIX_TRACESERVER_OPTS']
 
 log_file_path = os.path.join(phoenix_log_dir, phoenix_log_file)
@@ -130,7 +132,7 @@ java_cmd = '%(java)s  ' + \
 
 if command == 'start':
     if not daemon_supported:
-        print >> sys.stderr, "daemon mode not supported on this platform"
+        sys.stderr.write("daemon mode not supported on this platform{}".format(os.linesep))
         sys.exit(-1)
 
     # run in the background
@@ -143,7 +145,7 @@ if command == 'start':
             stdout = out,
             stderr = out,
         )
-        print 'starting Trace Server, logging to %s' % log_file_path
+        print('starting Trace Server, logging to %s' % log_file_path)
         with context:
             # this block is the main() for the forked daemon process
             child = None
@@ -156,21 +158,23 @@ if command == 'start':
                 sys.exit(0)
             signal.signal(signal.SIGTERM, handler)
 
-            print '%s launching %s' % (datetime.datetime.now(), cmd)
+            print('%s launching %s' % (datetime.datetime.now(), cmd))
             child = subprocess.Popen(cmd.split())
             sys.exit(child.wait())
 
 elif command == 'stop':
     if not daemon_supported:
-        print >> sys.stderr, "daemon mode not supported on this platform"
+        sys.stderr.write("daemon mode not supported on this platform{}".format(os.linesep))
         sys.exit(-1)
 
     if not os.path.exists(pid_file_path):
-        print >> sys.stderr, "no Trace Server to stop because PID file not found, %s" % pid_file_path
+        sys.stderr.write("no Trace Server to stop because PID file not found, {}{}"
+                         .format(pid_file_path, os.linesep))
         sys.exit(0)
 
     if not os.path.isfile(pid_file_path):
-        print >> sys.stderr, "PID path exists but is not a file! %s" % pid_file_path
+        sys.stderr.write("PID path exists but is not a file! {}{}"
+                         .format(pid_file_path, os.linesep))
         sys.exit(1)
 
     pid = None
@@ -179,9 +183,9 @@ elif command == 'stop':
     if not pid:
         sys.exit("cannot read PID file, %s" % pid_file_path)
 
-    print "stopping Trace Server pid %s" % pid
+    print("stopping Trace Server pid %s" % pid)
     with open(out_file_path, 'a+') as out:
-        print >> out, "%s terminating Trace Server" % datetime.datetime.now()
+        out.write("%s terminating Trace Server%s" % (datetime.datetime.now(), os.linesep))
     os.kill(pid, signal.SIGTERM)
 
 else:
