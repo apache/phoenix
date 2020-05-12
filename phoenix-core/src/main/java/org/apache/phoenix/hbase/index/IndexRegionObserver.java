@@ -1058,7 +1058,11 @@ public class IndexRegionObserver extends BaseRegionObserver {
           // postBatchMutateIndispensably() is called
           removePendingRows(context);
           context.rowLocks.clear();
-          rethrowIndexingException(e);
+          if (context.rebuild) {
+              throw new IOException(String.format("%s for rebuild", e.getMessage()));
+          } else {
+              rethrowIndexingException(e);
+          }
       }
       throw new RuntimeException(
               "Somehow didn't complete the index update, but didn't return succesfully either!");
