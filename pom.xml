@@ -1516,8 +1516,7 @@
       <id>codecoverage</id>
       <activation>
         <property>
-            <name>code.coverage</name>
-            <value>!deactivate</value>
+            <name>!skip.code-coverage</name>
         </property>
       </activation>
       <build>
