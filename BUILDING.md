@@ -73,8 +73,18 @@ Use the m2e eclipse plugin and do Import->Maven Project and just pick the root '
 Running the tests
 -----------------
 
-All tests  
+All Unit tests  
 `$ mvn clean test`
+
+All Unit Tests and Integration tests
+`$ mvn clean verify`
+
+The verify maven target will also run dependency:analyze-only, which checks if the dependencies 
+used in the code and declared in the maven projects match. The code coverage report would be
+generated at /target/site/jacoco/index.html
+
+To skip code coverage analysis
+`$ mvn verify -Dskip.code-coverage`
 
 Findbugs
 --------
