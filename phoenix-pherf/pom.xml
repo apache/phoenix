@@ -31,6 +31,9 @@
 	<properties>
 		<top.dir>${project.basedir}/..</top.dir>
 		<shaded.package>org.apache.phoenix.shaded</shaded.package>
+		<!-- JaCoCo thresholds overriden for phoenix-pherf -->
+		<jacoco.instruction.coverage.percentage>0.650</jacoco.instruction.coverage.percentage>
+		<jacoco.branch.coverage.percentage>0.500</jacoco.branch.coverage.percentage>
 	</properties>
 
 	<dependencies>
