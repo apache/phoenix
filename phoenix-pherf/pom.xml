@@ -41,6 +41,9 @@
     <system-rules.version>1.8.0</system-rules.version>
     <stax.version>1.0.1</stax.version>
     <jaxb.version>2.2.11</jaxb.version>
+    <!-- JaCoCo thresholds overriden for phoenix-pherf -->
+    <jacoco.instruction.coverage.percentage>0.650</jacoco.instruction.coverage.percentage>
+    <jacoco.branch.coverage.percentage>0.500</jacoco.branch.coverage.percentage>
   </properties>
 
   <dependencyManagement>
