@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -48,7 +49,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -266,20 +267,23 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         if (keys.size() > 0) {
             addVerifyTask(keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
         }
-        List<Boolean> taskResultList = null;
+        Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
         try {
             LOGGER.debug("Waiting on index verify tasks to complete...");
-            taskResultList = this.pool.submitUninterruptible(tasks);
+            resultsAndFutures = this.pool.submitUninterruptible(tasks);
         } catch (ExecutionException e) {
             throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
         } catch (EarlyExitFailure e) {
             throw new RuntimeException("Stopped while waiting for batch, quitting!", e);
         }
-        for (Boolean result : taskResultList) {
+        int index = 0;
+        for (Boolean result : resultsAndFutures.getFirst()) {
             if (result == null) {
+                Throwable cause = ServerUtil.getExceptionFromFailedFuture(resultsAndFutures.getSecond().get(index));
                 // there was a failure
-                throw new IOException(exceptionMessage);
+                throw new IOException(exceptionMessage, cause);
             }
+            index++;
         }
         for (IndexToolVerificationResult.PhaseResult result : verificationPhaseResultList) {
             verificationPhaseResult.add(result);

@@ -40,8 +40,9 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
   /**
    * @param failures the tables to which the index write did not succeed
    */
-  public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures, boolean disableIndexOnFailure) {
-    super(disableIndexOnFailure);
+  public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures, boolean disableIndexOnFailure,
+          Throwable cause) {
+    super(cause, disableIndexOnFailure);
     this.failures = failures;
   }
 
