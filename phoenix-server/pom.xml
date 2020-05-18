@@ -97,6 +97,7 @@
                 <artifactSet>
                 <includes>
                   <include>org.apache.phoenix:phoenix-core</include>
+                  <include>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</include>
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
                   <include>org.apache.tephra:tephra*</include>
