@@ -23,11 +23,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -40,11 +42,9 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -53,24 +53,23 @@ import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.IndexScrutiny;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -106,8 +105,10 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -161,7 +162,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Parameters(
-            name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3},useSnapshot={4}")
+            name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3}," +
+                "useSnapshot={4},useTenant={5}")
     public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
@@ -382,7 +384,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                 if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                     IndexVerificationOutputRepository.DATA_TABLE_NAME_BYTES, 0, IndexVerificationOutputRepository.DATA_TABLE_NAME_BYTES.length) == 0) {
                     dataTableNameCheck = true;
-                    assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+                    assertTrue("Value was different! Expected: " + Bytes.toString(dataTableFullNameBytes)
+                            + " Actual: " + Bytes.toString(cell.getValueArray(),
+                        cell.getValueOffset(), cell.getValueLength()),
+                        Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                             dataTableFullNameBytes, 0, dataTableFullNameBytes.length) == 0);
                 } else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                     IndexVerificationOutputRepository.INDEX_TABLE_NAME_BYTES, 0, IndexVerificationOutputRepository.INDEX_TABLE_NAME_BYTES.length) == 0) {
@@ -404,8 +409,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         scan = new Scan();
         scanner = hIndexTable.getScanner(scan);
         Result result = scanner.next();
-        assert(result != null);
-        verifyIndexTableRowKey(CellUtil.cloneRow(result.rawCells()[0]), indexTableFullName);
+        if (result != null) {
+            verifyIndexTableRowKey(CellUtil.cloneRow(result.rawCells()[0]), indexTableFullName);
+        }
+
         return errorMessageCell;
     }
 
@@ -630,8 +637,18 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
+                                            String dataTable, String indxTable, String tenantId,
+                                            IndexTool.IndexVerifyType verifyType, Long startTime,
+                                            Long endTime, Long incrementalVerify) {
+        return getArgList(directApi, useSnapshot, schemaName, dataTable, indxTable, tenantId,
+            verifyType, startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, incrementalVerify);
+    }
+
+    private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
                             String dataTable, String indxTable, String tenantId,
-                            IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime, Long incrementalVerify) {
+                            IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime,
+                                            IndexTool.IndexDisableLoggingType disableLoggingType,
+                                            Long incrementalVerify) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -644,7 +661,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         if (directApi) {
             args.add("-direct");
         }
-        args.add("-v" + verifyType.getValue()); // verify index rows inline
+        args.add("-v");
+        args.add(verifyType.getValue()); // verify index rows inline
 
         // Need to run this job in foreground for the test to be deterministic
         args.add("-runfg");
@@ -664,6 +682,12 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add("-et");
             args.add(String.valueOf(endTime));
         }
+
+        if (disableLoggingType != IndexTool.IndexDisableLoggingType.NONE) {
+            args.add("-dl");
+            args.add(disableLoggingType.getValue());
+        }
+
         if(incrementalVerify!=null) {
             args.add("-rv");
             args.add(String.valueOf(incrementalVerify));
@@ -689,10 +713,13 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     public static String [] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
-            String dataTable, String indexTable, String tenantId,
-            IndexTool.IndexVerifyType verifyType, Long incrementalVerify) {
+                                         String dataTable, String indexTable, String tenantId,
+                                         IndexTool.IndexVerifyType verifyType, Long startTime,
+                                         Long endTime,
+                                         IndexTool.IndexDisableLoggingType disableLoggingType,
+                                         Long incrementalVerify ) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
-                tenantId, verifyType, null, null, incrementalVerify);
+            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify);
         return args.toArray(new String[0]);
     }
 

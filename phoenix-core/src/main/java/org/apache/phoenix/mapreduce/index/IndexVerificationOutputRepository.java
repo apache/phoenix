@@ -50,6 +50,9 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     private Table indexTable;
     private byte[] indexName;
     private Table outputTable;
+    private IndexTool.IndexDisableLoggingType disableLoggingVerifyType =
+        IndexTool.IndexDisableLoggingType.NONE;
+
     public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
     public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
     public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
@@ -98,10 +101,20 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         indexTable = queryServices.getTable(indexName);
     }
 
-    public IndexVerificationOutputRepository(byte[] indexName, HTableFactory hTableFactory) throws IOException {
+    @VisibleForTesting
+    public IndexVerificationOutputRepository(Table outputTable, Table indexTable,
+                                             IndexTool.IndexDisableLoggingType disableLoggingVerifyType) throws SQLException {
+        this.outputTable = outputTable;
+        this.indexTable = indexTable;
+        this.disableLoggingVerifyType = disableLoggingVerifyType;
+    }
+
+    public IndexVerificationOutputRepository(byte[] indexName, HTableFactory hTableFactory,
+                                             IndexTool.IndexDisableLoggingType disableLoggingVerifyType) throws IOException {
         this.indexName = indexName;
         outputTable = hTableFactory.getTable(new ImmutableBytesPtr(OUTPUT_TABLE_NAME_BYTES));
         indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
+        this.disableLoggingVerifyType = disableLoggingVerifyType;
     }
 
     public static byte[] generateOutputTableRowKey(long ts, byte[] indexTableName, byte[] dataRowKey ) {
@@ -162,29 +175,48 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
                                           String errorMsg, byte[] expectedValue, byte[] actualValue,
                                           long scanMaxTs, byte[] tableName, boolean isBeforeRebuild)
         throws IOException {
-        byte[] rowKey = generateOutputTableRowKey(scanMaxTs, indexTable.getName().toBytes(), dataRowKey);
-        Put put = new Put(rowKey);
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, DATA_TABLE_NAME_BYTES, tableName);
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_NAME_BYTES, indexName);
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, DATA_TABLE_TS_BYTES, Bytes.toBytes(Long.toString(dataRowTs)));
+        if (shouldLogOutput(isBeforeRebuild)) {
+            byte[] rowKey = generateOutputTableRowKey(scanMaxTs, indexTable.getName().toBytes(), dataRowKey);
+            Put put = new Put(rowKey);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, DATA_TABLE_NAME_BYTES, tableName);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_NAME_BYTES, indexName);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, DATA_TABLE_TS_BYTES, Bytes.toBytes(Long.toString(dataRowTs)));
 
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_ROW_KEY_BYTES, indexRowKey);
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_TS_BYTES, Bytes.toBytes(Long.toString(indexRowTs)));
-        byte[] errorMessageBytes;
-        if (expectedValue != null) {
-            errorMessageBytes = getErrorMessageBytes(errorMsg, expectedValue, actualValue);
-            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, EXPECTED_VALUE_BYTES, expectedValue);
-            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ACTUAL_VALUE_BYTES, actualValue);
-        } else {
-            errorMessageBytes = Bytes.toBytes(errorMsg);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_ROW_KEY_BYTES, indexRowKey);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, INDEX_TABLE_TS_BYTES, Bytes.toBytes(Long.toString(indexRowTs)));
+            byte[] errorMessageBytes;
+            if (expectedValue != null) {
+                errorMessageBytes = getErrorMessageBytes(errorMsg, expectedValue, actualValue);
+                put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, EXPECTED_VALUE_BYTES, expectedValue);
+                put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ACTUAL_VALUE_BYTES, actualValue);
+            } else {
+                errorMessageBytes = Bytes.toBytes(errorMsg);
+            }
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ERROR_MESSAGE_BYTES, errorMessageBytes);
+            if (isBeforeRebuild) {
+                put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES, PHASE_BEFORE_VALUE);
+            } else {
+                put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES, PHASE_AFTER_VALUE);
+            }
+            outputTable.put(put);
         }
-        put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ERROR_MESSAGE_BYTES, errorMessageBytes);
-        if (isBeforeRebuild) {
-            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES, PHASE_BEFORE_VALUE);
-        } else {
-            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES, PHASE_AFTER_VALUE);
+    }
+
+    public boolean shouldLogOutput(boolean isBeforeRebuild) {
+        if (disableLoggingVerifyType.equals(IndexTool.IndexDisableLoggingType.BOTH)) {
+            return false;
         }
-        outputTable.put(put);
+        if (disableLoggingVerifyType.equals(IndexTool.IndexDisableLoggingType.NONE)) {
+            return true;
+        }
+        if (isBeforeRebuild &&
+            (disableLoggingVerifyType.equals(IndexTool.IndexDisableLoggingType.AFTER))) {
+            return true;
+        }
+        if (!isBeforeRebuild && disableLoggingVerifyType.equals(IndexTool.IndexDisableLoggingType.BEFORE)) {
+            return true;
+        }
+        return false;
     }
 
     public static byte[] getErrorMessageBytes(String errorMsg, byte[] expectedValue, byte[] actualValue) {

@@ -23,6 +23,9 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -34,6 +37,8 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
+import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -44,6 +49,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -89,7 +95,9 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REB
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.CURRENT_SCN_VALUE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
@@ -136,6 +144,17 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
+    @After
+    public void cleanup() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            deleteAllRows(conn,
+                TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES));
+            deleteAllRows(conn,
+                TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
+        }
+    }
+
     @Test
     public void testWithSetNull() throws Exception {
         // This tests the cases where a column having a null value is overwritten with a not null value and vice versa;
@@ -166,10 +185,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexTool
                     indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertTrue("Index rebuild failed!", indexTool.getJob().isSuccessful());
+            TestUtil.assertIndexState(conn, indexTableFullName, PIndexState.ACTIVE, null);
             long actualRowCount = IndexScrutiny
                     .scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
             IndexToolIT.setEveryNthRowWithNull(NROWS, 5, stmt);
             conn.commit();
@@ -192,7 +211,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -259,7 +277,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                             .getTable(indexToolOutputTable.getName());
             Result r = hIndexToolTable.getScanner(scan).next();
             assertTrue(r == null);
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -376,7 +393,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(2 * NROWS, actualRowCount);
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -416,7 +432,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BOTH);
             assertEquals(0, IndexToolIT.MutationCountingRegionObserver.getMutationCount());
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -457,7 +472,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
             }
             IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -501,7 +515,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
-            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
@@ -566,9 +579,127 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Assert.assertFalse(it.isValidLastVerifyTime(10L));
             Assert.assertFalse(it.isValidLastVerifyTime(EnvironmentEdgeManager.currentTimeMillis() - 1000L));
             Assert.assertTrue(it.isValidLastVerifyTime(scn));
-
-            IndexToolIT.dropIndexToolTables(conn);
         }
+    }
+
+    @Test
+    public void testDisableOutputLogging() throws Exception {
+        if (!mutable || useSnapshot) {
+            return;
+        }
+
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String stmString1 =
+                "CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                    + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // insert two rows
+            IndexToolIT.upsertRow(stmt1, 1);
+            IndexToolIT.upsertRow(stmt1, 2);
+            conn.commit();
+
+            //create ASYNC
+            String stmtString2 =
+                String.format(
+                    "CREATE INDEX %s ON %s (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
+                    indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+            conn.commit();
+
+            // run the index MR job as ONLY so the index doesn't get rebuilt. Should be 2 missing
+            //rows. We pass in --disable-logging BEFORE to silence the output logging to
+            // PHOENIX_INDEX_TOOL, since ONLY logs BEFORE the (non-existent in this case)
+            // rebuild
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.ONLY,
+                IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
+                indexTableFullName, 0);
+
+            //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
+            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+                IndexTool.IndexDisableLoggingType.AFTER,
+                IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
+                dataTableName, indexTableName,
+                indexTableFullName, 0);
+
+            deleteAllRows(conn,
+                TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+
+            //now check that disabling logging BEFORE creates only the AFTER logs on a BOTH run
+            //the index tool run fails validation at the end because we suppressed the BEFORE logs
+            //which prevented the rebuild from working properly, but that's ok for this test.
+            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+                IndexTool.IndexDisableLoggingType.BEFORE,
+                IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
+                dataTableName, indexTableName,
+                indexTableFullName, -1);
+
+            deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+
+            //now check that disabling logging BOTH creates no logs on a BOTH run
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
+                IndexTool.IndexDisableLoggingType.BOTH,
+                IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
+                dataTableName, indexTableName,
+                indexTableFullName, -1);
+
+        }
+    }
+
+    public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
+        IOException {
+        Scan scan = new Scan();
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
+            getAdmin();
+        HConnection hbaseConn = admin.getConnection();
+        HTableInterface table = hbaseConn.getTable(tableName);
+        try (ResultScanner scanner = table.getScanner(scan)) {
+            for (Result r : scanner) {
+                Delete del = new Delete(r.getRow());
+                table.delete(del);
+            }
+        }
+    }
+
+    private void assertDisableLogging(Connection conn, int expectedRows,
+                                      IndexTool.IndexVerifyType verifyType,
+                                      IndexTool.IndexDisableLoggingType disableLoggingType,
+                                      byte[] expectedPhase,
+                                      String schemaName, String dataTableName,
+                                      String indexTableName, String indexTableFullName,
+                                      int expectedStatus) throws Exception {
+        IndexTool tool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+            indexTableName,
+            null,
+            expectedStatus, verifyType,  "-et",
+            Long.toString(EnvironmentEdgeManager.currentTimeMillis()),"-dl", disableLoggingType.toString());
+        assertNotNull(tool);
+        assertNotNull(tool.getEndTime());
+        byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
+
+        IndexVerificationOutputRepository outputRepository =
+            new IndexVerificationOutputRepository(indexTableFullNameBytes, conn);
+        List<IndexVerificationOutputRow> rows =
+            outputRepository.getOutputRows(tool.getEndTime(),
+                indexTableFullNameBytes);
+        assertEquals(expectedRows, rows.size());
+        if (expectedRows > 0) {
+            assertArrayEquals(expectedPhase, rows.get(0).getPhaseValue());
+        }
+        TestUtil.dumpTable(conn,
+            TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
     }
 
     private void deleteOneRowFromResultTable(Connection conn,  Long scn, String indexTable)
