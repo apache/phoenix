@@ -19,8 +19,10 @@ package org.apache.phoenix.hbase.index.parallel;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.util.Pair;
 
 /**
  *
@@ -35,13 +37,14 @@ public interface TaskRunner extends Stoppable {
    * ignored) and interrupt any running tasks. It is up to the passed tasks to respect the interrupt
    * notification
    * @param tasks to run
-   * @return the result from each task
+   * @return Pair containing ordered List of results from each task and an ordered immutable list of
+   *         underlying futures which can be used for getting underlying exceptions
    * @throws ExecutionException if any of the tasks fails. Wraps the underyling failure, which can
-   *           be retrieved via {@link ExecutionException#getCause()}.
+   *             be retrieved via {@link ExecutionException#getCause()}.
    * @throws InterruptedException if the current thread is interrupted while waiting for the batch
-   *           to complete
+   *             to complete
    */
-  public <R> List<R> submit(TaskBatch<R> tasks) throws
+  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks) throws
       ExecutionException, InterruptedException;
 
   /**
@@ -49,12 +52,13 @@ public interface TaskRunner extends Stoppable {
    * waiting for results, we ignore it and only stop is {@link #stop(String)} has been called. On
    * return from the method, the interrupt status of the thread is restored.
    * @param tasks to run
-   * @return the result from each task
+   * @return Pair containing ordered List of results from each task and an ordered immutable list of
+   *         underlying futures which can be used for getting underlying exceptions
    * @throws EarlyExitFailure if there are still tasks to submit to the pool, but there is a stop
-   *           notification
+   *             notification
    * @throws ExecutionException if any of the tasks fails. Wraps the underyling failure, which can
-   *           be retrieved via {@link ExecutionException#getCause()}.
+   *             be retrieved via {@link ExecutionException#getCause()}.
    */
-  public <R> List<R> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
+  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
       ExecutionException;
 }
