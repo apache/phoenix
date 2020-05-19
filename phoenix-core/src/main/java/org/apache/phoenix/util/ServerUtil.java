@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -448,6 +449,16 @@ public class ServerUtil {
         clonedConf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 1);
         return clonedConf;
 
+    }
+
+    public static <T> Throwable getExceptionFromFailedFuture(Future<T> f) {
+        Throwable t = null;
+        try {
+            f.get();
+        } catch (Exception e) {
+            t = e;
+        }
+        return t;
     }
 
 }

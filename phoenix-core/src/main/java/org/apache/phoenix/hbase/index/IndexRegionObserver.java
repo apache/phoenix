@@ -1059,7 +1059,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           removePendingRows(context);
           context.rowLocks.clear();
           if (context.rebuild) {
-              throw new IOException(String.format("%s for rebuild", e.getMessage()));
+              throw new IOException(String.format("%s for rebuild", e.getMessage()), e);
           } else {
               rethrowIndexingException(e);
           }

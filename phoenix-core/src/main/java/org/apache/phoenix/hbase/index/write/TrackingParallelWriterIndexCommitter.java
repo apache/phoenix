@@ -18,6 +18,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
@@ -25,6 +26,7 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
@@ -46,7 +48,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Multimap;
-
 import static org.apache.phoenix.util.ServerUtil.wrapInDoNotRetryIOException;
 
 /**
@@ -214,10 +215,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
             });
         }
 
-        List<Boolean> results = null;
+        Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
         try {
             LOGGER.debug("Waiting on index update tasks to complete...");
-            results = this.pool.submitUninterruptible(tasks);
+            resultsAndFutures = this.pool.submitUninterruptible(tasks);
         } catch (ExecutionException e) {
             throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
         } catch (EarlyExitFailure e) {
@@ -227,30 +228,56 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
         // track the failures. We only ever access this on return from our calls, so no extra
         // synchronization is needed. We could update all the failures as we find them, but that add a
         // lot of locking overhead, and just doing the copy later is about as efficient.
-        List<HTableInterfaceReference> failures = new ArrayList<HTableInterfaceReference>();
+        List<HTableInterfaceReference> failedTables = new ArrayList<HTableInterfaceReference>();
+        List<Future<Boolean>> failedFutures = new ArrayList<>();
         int index = 0;
-        for (Boolean result : results) {
+        for (Boolean result : resultsAndFutures.getFirst()) {
             // there was a failure
             if (result == null) {
                 // we know which table failed by the index of the result
-                failures.add(tables.get(index));
+                failedTables.add(tables.get(index));
+                failedFutures.add(resultsAndFutures.getSecond().get(index));
             }
             index++;
         }
 
         // if any of the tasks failed, then we need to propagate the failure
-        if (failures.size() > 0) {
+        if (failedTables.size() > 0) {
+            Throwable cause = logFailedTasksAndGetCause(failedFutures, failedTables);
             // make the list unmodifiable to avoid any more synchronization concerns
-            MultiIndexWriteFailureException exception = new MultiIndexWriteFailureException(Collections.unmodifiableList(failures),
+            MultiIndexWriteFailureException exception = null;
+            // DisableIndexOnFailure flag is used by the old design. Setting the cause in MIWFE
+            // does not work for old design, so only do this for new design
+            if (disableIndexOnFailure) {
+                exception = new MultiIndexWriteFailureException(Collections.unmodifiableList(failedTables),
                     disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
-            if (disableIndexOnFailure)
                 throw exception;
-            else {
+            } else {
+                exception = new MultiIndexWriteFailureException(Collections.unmodifiableList(failedTables),
+                    disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env), cause);
                 throw wrapInDoNotRetryIOException("At least one index write failed after retries", exception,
                         EnvironmentEdgeManager.currentTimeMillis());
             }
         }
         return;
+    }
+
+    private Throwable logFailedTasksAndGetCause(List<Future<Boolean>> failedFutures,
+            List<HTableInterfaceReference> failedTables) {
+        int i = 0;
+        Throwable t = null;
+        for (Future<Boolean> future : failedFutures) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOGGER.warn("Index Write failed for table " + failedTables.get(i), e);
+                if (t == null) {
+                    t = e;
+                }
+            }
+            i++;
+        }
+        return t;
     }
 
     @Override
