@@ -301,4 +301,15 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                 Long.parseLong(PhoenixConfigurationUtil.getCurrentScnValue(configuration)));
 
     }
+
+    @Test
+    public void testLastVerifyTimeConfig() {
+        final Configuration configuration = new Configuration();
+        Long lastVerifyTime = 2L;
+
+        PhoenixConfigurationUtil.setIndexToolLastVerifyTime(configuration, lastVerifyTime);
+        Assert.assertEquals(lastVerifyTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getIndexToolLastVerifyTime(configuration)));
+
+    }
 }

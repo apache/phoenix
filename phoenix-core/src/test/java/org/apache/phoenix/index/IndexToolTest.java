@@ -61,7 +61,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_timeRangeNotNull() {
+    public void testParseOptions_timeRange_timeRangeNotNull() throws Exception {
         Long startTime = 10L;
         Long endTime = 15L;
         String [] args =
@@ -75,7 +75,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_null() {
+    public void testParseOptions_timeRange_null() throws Exception {
         String [] args =
                 IndexToolIT.getArgValues(true, true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE);
@@ -86,7 +86,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_startTimeNotNull() {
+    public void testParseOptions_timeRange_startTimeNotNull() throws Exception {
         Long startTime = 10L;
         String [] args =
                 IndexToolIT.getArgValues(true, true, schema,
@@ -99,7 +99,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_endTimeNotNull() {
+    public void testParseOptions_timeRange_endTimeNotNull() throws Exception {
         Long endTime = 15L;
         String [] args =
                 IndexToolIT.getArgValues(true, true, schema,
@@ -112,7 +112,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_startTimeNullEndTimeInFuture() {
+    public void testParseOptions_timeRange_startTimeNullEndTimeInFuture() throws Exception {
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
                 IndexToolIT.getArgValues(true, true, schema,
@@ -125,7 +125,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_endTimeNullStartTimeInFuture() {
+    public void testParseOptions_timeRange_endTimeNullStartTimeInFuture() throws Exception {
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
                 IndexToolIT.getArgValues(true, true, schema,
@@ -138,7 +138,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test(timeout = 10000 /* 10 secs */)
-    public void testParseOptions_timeRange_startTimeInFuture() {
+    public void testParseOptions_timeRange_startTimeInFuture() throws Exception {
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 200000;
         String [] args =
@@ -152,7 +152,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test(timeout = 10000 /* 10 secs */)
-    public void testParseOptions_timeRange_endTimeInFuture() {
+    public void testParseOptions_timeRange_endTimeInFuture() throws Exception {
         Long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
@@ -166,7 +166,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_startTimeEqEndTime() {
+    public void testParseOptions_timeRange_startTimeEqEndTime() throws Exception {
         Long startTime = 10L;
         Long endTime = 10L;
         String [] args =
@@ -180,7 +180,7 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testParseOptions_timeRange_startTimeGtEndTime() {
+    public void testParseOptions_timeRange_startTimeGtEndTime() throws Exception {
         Long startTime = 10L;
         Long endTime = 1L;
         String [] args =
@@ -198,6 +198,31 @@ public class IndexToolTest extends BaseTest {
         when(pDataTable.isTransactional()).thenReturn(true);
         exceptionRule.expect(RuntimeException.class);
         exceptionRule.expectMessage(FEATURE_NOT_APPLICABLE);
-        IndexTool.checkTimeRangeFeature(1L, 3L, pDataTable, !localIndex);
+        IndexTool.checkIfFeatureApplicable(1L, 3L, null, pDataTable, !localIndex);
+    }
+
+    @Test
+    public void testIncrcementalVerifyOption() throws Exception {
+        IndexTool mockTool = Mockito.mock(IndexTool.class);
+        when(mockTool.getLastVerifyTime()).thenCallRealMethod();
+        Long lastVerifyTime = 10L;
+        String [] args =
+                IndexToolIT.getArgValues(true, true, schema,
+                        dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
+                        lastVerifyTime);
+        when(mockTool.parseOptions(args)).thenCallRealMethod();
+
+        CommandLine cmdLine = mockTool.parseOptions(args);
+
+        when(mockTool.populateIndexToolAttributes(cmdLine)).thenCallRealMethod();
+        when(mockTool.isValidLastVerifyTime(lastVerifyTime)).thenReturn(true);
+
+        mockTool.populateIndexToolAttributes(cmdLine);
+        Assert.assertEquals(lastVerifyTime, mockTool.getLastVerifyTime());
+
+        when(pDataTable.isTransactional()).thenReturn(true);
+        exceptionRule.expect(RuntimeException.class);
+        exceptionRule.expectMessage(FEATURE_NOT_APPLICABLE);
+        IndexTool.checkIfFeatureApplicable(null, null, lastVerifyTime, pDataTable, !localIndex);
     }
 }

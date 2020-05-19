@@ -97,7 +97,7 @@ public class IndexUpgradeToolTest {
     }
 
     @Test
-    public void testIfOptionsArePassedToIndexTool() {
+    public void testIfOptionsArePassedToIndexTool() throws Exception {
         if (!upgrade) {
             return;
         }
@@ -126,7 +126,7 @@ public class IndexUpgradeToolTest {
     }
 
     @Test
-    public void testMalformedSpacingOptionsArePassedToIndexTool() {
+    public void testMalformedSpacingOptionsArePassedToIndexTool() throws Exception {
         if (!upgrade) {
             return;
         }
@@ -152,7 +152,7 @@ public class IndexUpgradeToolTest {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testBadIndexToolOptions() {
+    public void testBadIndexToolOptions() throws Exception {
         String [] indexToolOpts = {"-v" + DUMMY_VERIFY_VALUE};
         String indexToolarg = String.join(" ", indexToolOpts);
         String [] args = {"-o", UPGRADE_OP, "-tb", INPUT_LIST, "-rb", "-tool", indexToolarg };

@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -36,6 +37,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -43,19 +45,33 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
+import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_EXECUTED;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_SKIPPED;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT;
@@ -70,6 +86,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.CURRENT_SCN_VALUE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -81,6 +98,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
     private boolean directApi = true;
     private boolean useSnapshot = false;
     private boolean mutable;
+    @Rule
+    public ExpectedException exceptionRule = ExpectedException.none();
 
     public IndexToolForNonTxGlobalIndexIT(boolean mutable) {
         StringBuilder optionBuilder = new StringBuilder();
@@ -483,6 +502,84 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     null, 0, IndexTool.IndexVerifyType.ONLY);
             IndexToolIT.dropIndexToolTables(conn);
         }
+    }
+
+    @Test
+    public void testIndexToolForIncrementalRebuild() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) "+tableDDLOptions);
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE)", indexTableName, dataTableFullName));
+
+            conn.createStatement().execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
+            conn.createStatement().execute("upsert into " + dataTableFullName + " values (2, 'Phoenix1', 'B')");
+            conn.commit();
+
+            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER);
+            Long scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, RUN_STATUS_EXECUTED);
+
+
+            exceptionRule.expect(RuntimeException.class);
+            exceptionRule.expectMessage(RETRY_VERIFY_NOT_APPLICABLE);
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", String.valueOf(10L));
+
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
+            scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 6, RUN_STATUS_SKIPPED);
+
+            conn.createStatement().execute( "DELETE FROM "+indexTableFullName);
+            conn.commit();
+            TestUtil.doMajorCompaction(conn, indexTableFullName);
+
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
+            scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 9, RUN_STATUS_SKIPPED);
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + indexTableFullName);
+            Assert.assertFalse(rs.next());
+
+            //testing the dependent method
+            Assert.assertFalse(it.isValidLastVerifyTime(10L));
+            Assert.assertFalse(it.isValidLastVerifyTime(EnvironmentEdgeManager.currentTimeMillis() - 1000L));
+            Assert.assertTrue(it.isValidLastVerifyTime(scn));
+        }
+    }
+
+    private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable, int totalRows, String expectedStatus) throws SQLException, IOException {
+        Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                .getTable(RESULT_TABLE_NAME_BYTES);
+        Assert.assertEquals(totalRows, TestUtil.getRowCount(hIndexToolTable, false));
+        List<String> output = new ArrayList<>();
+        Scan s = new Scan();
+        s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", scn, ROW_KEY_SEPARATOR, indexTable)));
+        ResultScanner rs = hIndexToolTable.getScanner(s);
+        int count =0;
+        for(Result r : rs) {
+            Assert.assertTrue(r != null);
+            List<Cell> cells = r.getColumnCells(RESULT_TABLE_COLUMN_FAMILY, INDEX_TOOL_RUN_STATUS_BYTES);
+            Assert.assertEquals(cells.size(), 1);
+            Assert.assertTrue(Bytes.toString(cells.get(0).getRow()).startsWith(String.valueOf(scn)));
+            output.add(Bytes.toString(cells.get(0).getValue()));
+            count++;
+        }
+        //for each region
+        Assert.assertEquals(count, 3);
+        Assert.assertEquals(expectedStatus, output.get(0));
+        Assert.assertEquals(expectedStatus, output.get(1));
+        Assert.assertEquals(expectedStatus, output.get(2));
+        return output;
     }
 
 }
