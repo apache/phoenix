@@ -39,7 +39,6 @@ import java.util.concurrent.Future;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -104,6 +103,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean useProto = true;
     private byte[] indexRowKey;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
+    private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
     private boolean verify = false;
     private Map<byte[], List<Mutation>> indexKeyToMutationMap;
     private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
@@ -152,11 +152,20 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (verifyType != IndexTool.IndexVerifyType.NONE) {
                 verify = true;
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+                byte[] disableLoggingValueBytes =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
+                if (disableLoggingValueBytes != null) {
+                    disableLoggingVerifyType =
+                        IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
+                }
                 verificationOutputRepository =
-                        new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                    new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                        , hTableFactory, disableLoggingVerifyType);
                 verificationResult = new IndexToolVerificationResult(scan);
+                        new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                            , hTableFactory, disableLoggingVerifyType);
                 verificationResultRepository =
-                        new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                    new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
                 indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
@@ -240,14 +249,20 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         innerScanner.close();
         if (verify) {
             try {
-                verificationResultRepository.logToIndexToolResultTable(verificationResult,
+                if (verificationResultRepository != null) {
+                    verificationResultRepository.logToIndexToolResultTable(verificationResult,
                         verifyType, region.getRegionInfo().getRegionName(), skipped);
+                }
             } finally {
                 this.pool.stop("IndexRebuildRegionScanner is closing");
                 hTableFactory.shutdown();
                 indexHTable.close();
-                verificationResultRepository.close();
-                verificationOutputRepository.close();
+                if (verificationResultRepository != null) {
+                    verificationResultRepository.close();
+                }
+                if (verificationOutputRepository != null) {
+                    verificationOutputRepository.close();
+                }
             }
         }
     }

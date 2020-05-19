@@ -156,6 +156,42 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
+    public enum IndexDisableLoggingType {
+        NONE("NONE"),
+        BEFORE("BEFORE"),
+        AFTER("AFTER"),
+        BOTH("BOTH");
+
+        private String value;
+        private byte[] valueBytes;
+
+        IndexDisableLoggingType(String value) {
+            this.value = value;
+            this.valueBytes = PVarchar.INSTANCE.toBytes(value);
+        }
+
+        public String getValue() {
+            return this.value;
+        }
+
+        public byte[] toBytes() {
+            return this.valueBytes;
+        }
+
+        public static IndexDisableLoggingType fromValue(String value) {
+            for (IndexDisableLoggingType disableLoggingType: IndexDisableLoggingType.values()) {
+                if (value.equals(disableLoggingType.getValue())) {
+                    return disableLoggingType;
+                }
+            }
+            throw new IllegalStateException("Invalid value: "+ value + " for " + IndexDisableLoggingType.class);
+        }
+
+        public static IndexDisableLoggingType fromValue(byte[] value) {
+            return fromValue(Bytes.toString(value));
+        }
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
     private String schemaName;
@@ -163,6 +199,7 @@ public class IndexTool extends Configured implements Tool {
     private String indexTable;
     private boolean isPartialBuild, isForeground;
     private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
+    private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
     private String qDataTable;
     private String qIndexTable;
     private boolean useSnapshot;
@@ -243,6 +280,11 @@ public class IndexTool extends Configured implements Tool {
     private static final Option RETRY_VERIFY_OPTION = new Option("rv", "retry-verify",
             true, "Max scan ts of the last rebuild/verify that needs to be retried incrementally");
 
+    private static final Option DISABLE_LOGGING_OPTION = new Option("dl",
+        "disable-logging", true
+        , "Disable logging of failed verification rows for BEFORE, " +
+        "AFTER, or BOTH verify jobs");
+
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
     public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
@@ -280,6 +322,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(START_TIME_OPTION);
         options.addOption(END_TIME_OPTION);
         options.addOption(RETRY_VERIFY_OPTION);
+        options.addOption(DISABLE_LOGGING_OPTION);
         return options;
     }
 
@@ -334,7 +377,50 @@ public class IndexTool extends Configured implements Tool {
         if (splitIndex && cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt())) {
             throw new IllegalStateException("Cannot split index for a partial rebuild, as the index table is dropped");
         }
+        if (loggingDisabledMismatchesVerifyOption(cmdLine)){
+            throw new IllegalStateException("Can't disable index verification logging when no " +
+                "index verification or the wrong kind of index verification has been requested. " +
+                "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] and " +
+                "DisableLoggingType: ["
+                + cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()) + "]");
+        }
         return cmdLine;
+    }
+
+    private boolean loggingDisabledMismatchesVerifyOption(CommandLine cmdLine) {
+        boolean loggingDisabled = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
+        if (!loggingDisabled) {
+            return false;
+        }
+        boolean hasVerifyOption =
+            cmdLine.hasOption(VERIFY_OPTION.getOpt());
+        if (!hasVerifyOption) {
+            return true;
+        }
+        String loggingDisableValue = cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt());
+        String verifyValue = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
+        IndexDisableLoggingType loggingDisableType = IndexDisableLoggingType.fromValue(loggingDisableValue);
+        if (loggingDisableType != IndexDisableLoggingType.BEFORE &&
+            loggingDisableType != IndexDisableLoggingType.AFTER &&
+        loggingDisableType != IndexDisableLoggingType.BOTH) {
+            return true;
+        }
+        IndexVerifyType verifyType = IndexVerifyType.fromValue(verifyValue);
+        //error if we're trying to disable logging when we're not doing any verification
+        if (verifyType.equals(IndexVerifyType.NONE)){
+            return true;
+        }
+        //error if we're disabling logging after rebuild but we're not verifying after rebuild
+        if ((verifyType.equals(IndexVerifyType.BEFORE) || verifyType.equals(IndexVerifyType.ONLY))
+            && loggingDisableType.equals(IndexDisableLoggingType.AFTER)) {
+            return true;
+        }
+        //error if we're disabling logging before rebuild but we're not verifying before rebuild
+        if ((verifyType.equals(IndexVerifyType.AFTER))
+            && loggingDisableType.equals(IndexDisableLoggingType.BEFORE)) {
+            return true;
+        }
+        return false;
     }
 
     private void printHelpAndExit(String errorMessage, Options options) {
@@ -355,6 +441,10 @@ public class IndexTool extends Configured implements Tool {
     public Long getEndTime() { return endTime; }
 
     public Long getLastVerifyTime() { return lastVerifyTime; }
+
+    public IndexTool.IndexDisableLoggingType getDisableLoggingType() {
+        return disableLoggingType;
+    }
 
     class JobFactory {
         Connection connection;
@@ -607,6 +697,7 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
             }
             PhoenixConfigurationUtil.setIndexVerifyType(configuration, indexVerifyType);
+            PhoenixConfigurationUtil.setDisableLoggingVerifyType(configuration, disableLoggingType);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
@@ -758,6 +849,7 @@ public class IndexTool extends Configured implements Tool {
         boolean useEndTime = cmdLine.hasOption(END_TIME_OPTION.getOpt());
         boolean retryVerify = cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
+        boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
 
         if (useTenantId) {
             tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -778,6 +870,11 @@ public class IndexTool extends Configured implements Tool {
         if (verify) {
             String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
             indexVerifyType = IndexVerifyType.fromValue(value);
+            if (disableLogging) {
+                disableLoggingType =
+                    IndexDisableLoggingType.fromValue(
+                        cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()));
+            }
         }
         schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
         dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
