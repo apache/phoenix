@@ -841,6 +841,11 @@
         <artifactId>hbase-shaded-miscellaneous</artifactId>
         <version>${hbase.thirdparty.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hbase.thirdparty</groupId>
+        <artifactId>hbase-shaded-protobuf</artifactId>
+        <version>${hbase.thirdparty.version}</version>
+      </dependency>
 
       <!-- HBase test dependencies -->
       <dependency>
