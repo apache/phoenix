@@ -58,6 +58,7 @@ import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -78,6 +79,8 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             final RegionCoprocessorEnvironment env) throws IOException {
         super(innerScanner, region, scan, env);
         indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        verificationResultRepository =
+                new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
     }
 
     @Override

@@ -130,8 +130,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testValidTimeRange() throws Exception {
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(1),
-                "--endtime", myClock.getRelativeTimeAsString(9)};
+                "--start-time", myClock.getRelativeTimeAsString(1),
+                "--end-time", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // all rows should be rebuilt
         Assert.assertEquals(5, countRowsInIndex());
@@ -141,8 +141,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(6),
-                "--endtime", myClock.getRelativeTimeAsString(9)};
+                "--start-time", myClock.getRelativeTimeAsString(6),
+                "--end-time", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // only last 3 rows should be rebuilt
         Assert.assertEquals(3, countRowsInIndex());
@@ -151,8 +151,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testValidTimeRange_endTimeInBetween() throws Exception {
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(1),
-                "--endtime", myClock.getRelativeTimeAsString(6)};
+                "--start-time", myClock.getRelativeTimeAsString(1),
+                "--end-time", myClock.getRelativeTimeAsString(6)};
         runIndexTool(args, 0);
         // only first 2 should be rebuilt
         Assert.assertEquals(2, countRowsInIndex());
@@ -171,7 +171,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     public void testValidTimeRange_onlyStartTimePassed() throws Exception {
         //starttime passed of last upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(8)};
+                "--start-time", myClock.getRelativeTimeAsString(8)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -180,7 +180,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     public void testValidTimeRange_onlyEndTimePassed() throws Exception {
         //end time passed as time of second upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--endtime", myClock.getRelativeTimeAsString(5)};
+                "--end-time", myClock.getRelativeTimeAsString(5)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
