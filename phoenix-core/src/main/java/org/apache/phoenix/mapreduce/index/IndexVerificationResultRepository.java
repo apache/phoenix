@@ -18,17 +18,18 @@
 package org.apache.phoenix.mapreduce.index;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
@@ -36,7 +37,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
@@ -108,14 +108,16 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     public void createResultTable(Connection connection) throws IOException, SQLException {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
         Admin admin = queryServices.getAdmin();
-
-        if (!admin.tableExists(TableName.valueOf(RESULT_TABLE_NAME))) {
-            HTableDescriptor tableDescriptor = new
-                HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
-            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
-            tableDescriptor.addFamily(columnDescriptor);
+        TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
+        if (!admin.tableExists(resultTableName)) {
+            ColumnFamilyDescriptor columnDescriptor =
+                ColumnFamilyDescriptorBuilder.newBuilder(RESULT_TABLE_COLUMN_FAMILY).
+                    setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL).build();
+            TableDescriptor tableDescriptor =
+                TableDescriptorBuilder.newBuilder(resultTableName).
+                    setColumnFamily(columnDescriptor).build();
             admin.createTable(tableDescriptor);
+            resultHTable = admin.getConnection().getTable(resultTableName);
         }
     }
     private static byte[] generateResultTableRowKey(long ts, byte[] indexTableName,  byte [] regionName,

@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -24,31 +29,41 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.DEFAULT_LOG_TTL;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_AFTER_VALUE;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_BEFORE_VALUE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.when;
 
 public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static void setupClass() throws Exception {
-        Map<String, String> props = Collections.emptyMap();
+        Map<String, String> props = new HashMap<>();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, "100000000");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -92,6 +107,98 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
             verifyOutputRow(outputRepository, scanMaxTs+1, indexNameBytes, secondExpectedRow);
         }
 
+    }
+
+    @Test
+    public void testTTLOnOutputTable() throws SQLException, IOException {
+        String mockString = "mock_value";
+        byte[] mockStringBytes = Bytes.toBytes(mockString);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            IndexVerificationOutputRepository
+                    outputRepository =
+                    new IndexVerificationOutputRepository(mockStringBytes, conn);
+            outputRepository.createOutputTable(conn);
+            ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
+            customClock.setValue(1);
+            EnvironmentEdgeManager.injectEdge(customClock);
+            TestUtil.assertTableHasTtl(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+            outputRepository.logToIndexToolOutputTable(mockStringBytes, mockStringBytes,
+                    1, 2, mockString, mockStringBytes, mockStringBytes,
+                    EnvironmentEdgeManager.currentTimeMillis(), mockStringBytes, true);
+            Table hTable =
+                conn.unwrap(PhoenixConnection.class).getQueryServices().
+                    getTable(OUTPUT_TABLE_NAME_BYTES);
+            Assert.assertEquals(1, TestUtil.getRowCount(hTable, false));
+
+            customClock.incrementValue(1000*(DEFAULT_LOG_TTL+5));
+            EnvironmentEdgeManager.injectEdge(customClock);
+            int count = TestUtil.getRowCount(hTable, false);
+
+            Assert.assertEquals(0, count);
+        }
+    }
+
+    @Test
+    public void testDisableLoggingBefore() throws SQLException, IOException {
+        IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.BEFORE;
+        boolean expectedBefore = false;
+        boolean expectedAfter = true;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+    }
+
+    @Test
+    public void testDisableLoggingAfter() throws SQLException, IOException {
+        IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.AFTER;
+        boolean expectedBefore = true;
+        boolean expectedAfter = false;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+    }
+
+    @Test
+    public void testDisableLoggingBoth() throws SQLException, IOException {
+        IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.BOTH;
+        boolean expectedBefore = false;
+        boolean expectedAfter = false;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+    }
+
+    @Test
+    public void testDisableLoggingNone() throws SQLException, IOException {
+        IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
+        boolean expectedBefore = true;
+        boolean expectedAfter = true;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+    }
+
+    public void verifyDisableLogging(IndexTool.IndexDisableLoggingType disableLoggingVerifyType, boolean expectedBefore, boolean expectedAfter) throws SQLException, IOException {
+        Table mockOutputTable = Mockito.mock(Table.class);
+        Table mockIndexTable = Mockito.mock(Table.class);
+        when(mockIndexTable.getName()).thenReturn(TableName.valueOf("testDisableLoggingIndexName"));
+        IndexVerificationOutputRepository outputRepository =
+            new IndexVerificationOutputRepository(mockOutputTable,
+                mockIndexTable, disableLoggingVerifyType);
+        byte[] dataRowKey = Bytes.toBytes("dataRowKey");
+        byte[] indexRowKey = Bytes.toBytes("indexRowKey");
+        long dataRowTs = EnvironmentEdgeManager.currentTimeMillis();
+        long indexRowTs = EnvironmentEdgeManager.currentTimeMillis();
+        String errorMsg = "";
+        byte[] expectedValue = Bytes.toBytes("expectedValue");
+        byte[] actualValue = Bytes.toBytes("actualValue");
+        long scanMaxTs = EnvironmentEdgeManager.currentTimeMillis();
+        byte[] tableName = Bytes.toBytes("testDisableLoggingTableName");
+
+        outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs
+            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, true);
+        outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs
+            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, false);
+        int expectedRowsLogged = 0;
+        if (expectedBefore && expectedAfter) {
+            expectedRowsLogged = 2;
+        } else if (expectedBefore || expectedAfter) {
+            expectedRowsLogged = 1;
+        }
+        Mockito.verify(mockOutputTable, Mockito.times(expectedRowsLogged)).
+            put(Mockito.any(Put.class));
     }
 
     public void verifyOutputRow(IndexVerificationOutputRepository outputRepository, long scanMaxTs,

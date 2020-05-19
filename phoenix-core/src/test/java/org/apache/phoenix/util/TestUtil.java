@@ -49,15 +49,21 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 
 import org.apache.hadoop.hbase.client.Get;
@@ -90,6 +96,7 @@ import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
@@ -140,6 +147,7 @@ import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -911,6 +919,47 @@ public class TestUtil {
         return rows;
     }
 
+    public static CellCount getCellCount(Table table, boolean isRaw) throws IOException {
+        Scan s = new Scan();
+        s.setRaw(isRaw);;
+        s.setMaxVersions();
+
+        CellCount cellCount = new CellCount();
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                    cellCount.addCell(Bytes.toString(CellUtil.cloneRow(current)));
+                }
+            }
+        }
+        return cellCount;
+    }
+
+    static class CellCount {
+        private Map<String, Integer> rowCountMap = new HashMap<String, Integer>();
+
+        void addCell(String key){
+            if (rowCountMap.containsKey(key)){
+                rowCountMap.put(key, rowCountMap.get(key) +1);
+            } else {
+                rowCountMap.put(key, 1);
+            }
+        }
+
+        int getCellCount(String key){
+            if (rowCountMap.containsKey(key)){
+                return rowCountMap.get(key);
+            } else {
+                return 0;
+            }
+        }
+    }
+
+
     public static void dumpIndexStatus(Connection conn, String indexName) throws IOException, SQLException {
         try (Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) { 
             System.out.println("************ dumping index status for " + indexName + " **************");
@@ -1241,4 +1290,84 @@ public class TestUtil {
     public static void assertSelectStatement(FilterableStatement selectStatement , String sql) {
         assertTrue(selectStatement.toString().trim().equals(sql));
     }
+
+    public static void assertSqlExceptionCode(SQLExceptionCode code, SQLException se) {
+        assertEquals(code.getErrorCode(), se.getErrorCode());
+        assertTrue("Wrong error message", se.getMessage().contains(code.getMessage()));
+        assertEquals(code.getSQLState(), se.getSQLState());
+    }
+
+    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl)
+        throws SQLException, IOException {
+        ColumnFamilyDescriptor cd = getColumnDescriptor(conn, tableName);
+        Assert.assertEquals(ttl, cd.getTimeToLive());
+    }
+
+    public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)
+        throws SQLException, IOException {
+        ColumnFamilyDescriptor cd = getColumnDescriptor(conn, tableName);
+        Assert.assertEquals(versions, cd.getMaxVersions());
+    }
+
+    public static ColumnFamilyDescriptor getColumnDescriptor(Connection conn, TableName tableName)
+        throws SQLException, IOException {
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        TableDescriptor td = admin.getDescriptor(tableName);
+        return td.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+    }
+
+    public static void assertRawRowCount(Connection conn, TableName table, int expectedRowCount)
+        throws SQLException, IOException {
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        int count = TestUtil.getRawRowCount(cqs.getTable(table.getName()));
+        assertEquals(expectedRowCount, count);
+    }
+
+    public static void assertRawCellCount(Connection conn, TableName tableName,
+                                          byte[] row, int expectedCellCount)
+        throws SQLException, IOException{
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Table table = cqs.getTable(tableName.getName());
+        CellCount cellCount = getCellCount(table, true);
+        int count = cellCount.getCellCount(Bytes.toString(row));
+        assertEquals(expectedCellCount, count);
+    }
+
+    public static void assertRowExistsAtSCN(String url, String sql, long scn, boolean shouldExist)
+        throws SQLException {
+        boolean rowExists = false;
+        Properties props = new Properties();
+        ResultSet rs;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
+        try (Connection conn = DriverManager.getConnection(url, props)){
+            rs = conn.createStatement().executeQuery(sql);
+            rowExists = rs.next();
+            if (shouldExist){
+                Assert.assertTrue("Row was not found at time " + scn +
+                        " when it should have been",
+                    rowExists);
+            } else {
+                Assert.assertFalse("Row was found at time " + scn +
+                    " when it should not have been", rowExists);
+            }
+        }
+
+    }
+
+    public static void assertRowHasExpectedValueAtSCN(String url, String sql,
+                                                      long scn, String value) throws SQLException {
+        Properties props = new Properties();
+        ResultSet rs;
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
+        try (Connection conn = DriverManager.getConnection(url, props)){
+            rs = conn.createStatement().executeQuery(sql);
+            Assert.assertTrue("Value " + value + " does not exist at scn " + scn, rs.next());
+            Assert.assertEquals(value, rs.getString(1));
+        }
+
+    }
+
+
+
+
 }

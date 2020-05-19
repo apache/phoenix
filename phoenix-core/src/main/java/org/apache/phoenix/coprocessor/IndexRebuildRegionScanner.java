@@ -39,7 +39,6 @@ import java.util.concurrent.Future;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -59,7 +58,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
@@ -101,6 +100,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean useProto = true;
     private byte[] indexRowKey;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
+    private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
     private boolean verify = false;
     private Map<byte[], List<Mutation>> indexKeyToMutationMap;
     private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
@@ -150,13 +150,18 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (verifyType != IndexTool.IndexVerifyType.NONE) {
                 verify = true;
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-                verificationResultRepository =
-                        new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                byte[] disableLoggingValueBytes =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
+                if (disableLoggingValueBytes != null) {
+                    disableLoggingVerifyType =
+                        IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
+                }
                 verificationOutputRepository =
-                        new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                    new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                        , hTableFactory, disableLoggingVerifyType);
                 verificationResult = new IndexToolVerificationResult(scan);
                 verificationResultRepository =
-                        new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                    new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
                 indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
@@ -238,13 +243,20 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         innerScanner.close();
         if (verify) {
             try {
-                verificationResultRepository.logToIndexToolResultTable(verificationResult,
+                if (verificationResultRepository != null) {
+                    verificationResultRepository.logToIndexToolResultTable(verificationResult,
                         verifyType, region.getRegionInfo().getRegionName(), skipped);
+                }
             } finally {
                 this.pool.stop("IndexRebuildRegionScanner is closing");
+                hTableFactory.shutdown();
                 indexHTable.close();
-                verificationResultRepository.close();
-                verificationOutputRepository.close();
+                if (verificationResultRepository != null) {
+                    verificationResultRepository.close();
+                }
+                if (verificationOutputRepository != null) {
+                    verificationOutputRepository.close();
+                }
             }
         }
     }
@@ -297,17 +309,17 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-                                          String errorMsg) throws IOException {
+            String errorMsg) throws IOException {
         logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs, errorMsg, null, null);
     }
 
     @VisibleForTesting
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-                                           String errorMsg, byte[] expectedVaue, byte[] actualValue)
-        throws IOException {
+            String errorMsg, byte[] expectedVaue, byte[] actualValue)
+            throws IOException {
         verificationOutputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs,
                 errorMsg, expectedVaue, actualValue, scan.getTimeRange().getMax(),
-            region.getRegionInfo().getTable().getName(), isBeforeRebuilt);
+                region.getRegionInfo().getTable().getName(), isBeforeRebuilt);
     }
 
     private static Cell getCell(Mutation m, byte[] family, byte[] qualifier) {
@@ -605,7 +617,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             repairActualMutationList(actualMutationList, expectedMutationList);
         }
         cleanUpActualMutationList(actualMutationList);
-        long currentTime = EnvironmentEdgeManager.currentTime();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         int actualIndex = 0;
         int expectedIndex = 0;
         int matchingCount = 0;
@@ -735,7 +747,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         // TODO: metrics for expired rows
         if (!keys.isEmpty()) {
             Iterator<KeyRange> itr = keys.iterator();
-            long currentTime = EnvironmentEdgeManager.currentTime();
+            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
             while(itr.hasNext()) {
                 KeyRange keyRange = itr.next();
                 byte[] key = keyRange.getLowerRange();
