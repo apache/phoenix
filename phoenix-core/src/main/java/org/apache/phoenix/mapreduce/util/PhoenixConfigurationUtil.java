@@ -148,6 +148,9 @@ public final class PhoenixConfigurationUtil {
 
     public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
 
+    public static final String DISABLE_LOGGING_TYPE = "phoenix.mr.index" +
+        ".IndexDisableLoggingType";
+
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
 
@@ -592,6 +595,12 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
     }
 
+    public static void setDisableLoggingVerifyType(Configuration configuration,
+                                                   IndexTool.IndexDisableLoggingType disableLoggingType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(DISABLE_LOGGING_TYPE, disableLoggingType.getValue());
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -720,6 +729,12 @@ public final class PhoenixConfigurationUtil {
     public static IndexTool.IndexVerifyType getIndexVerifyType(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
+        return IndexTool.IndexVerifyType.fromValue(value);
+    }
+
+    public static IndexTool.IndexVerifyType getDisableLoggingVerifyType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String value = configuration.get(DISABLE_LOGGING_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
         return IndexTool.IndexVerifyType.fromValue(value);
     }
 

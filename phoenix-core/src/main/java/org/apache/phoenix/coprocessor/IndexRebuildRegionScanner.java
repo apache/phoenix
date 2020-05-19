@@ -100,6 +100,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean useProto = true;
     private byte[] indexRowKey;
     private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
+    private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
     private boolean verify = false;
     private Map<byte[], List<Mutation>> indexKeyToMutationMap;
     private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
@@ -146,8 +147,15 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (verifyType != IndexTool.IndexVerifyType.NONE) {
                 verify = true;
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+                byte[] disableLoggingValueBytes =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
+                if (disableLoggingValueBytes != null) {
+                    disableLoggingVerifyType =
+                        IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
+                }
                 verificationOutputRepository =
-                        new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                        new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                            , hTableFactory, disableLoggingVerifyType);
                 indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(

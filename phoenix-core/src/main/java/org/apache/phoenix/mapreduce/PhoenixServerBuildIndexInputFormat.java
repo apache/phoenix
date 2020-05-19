@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getCurrentScnValue;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getDisableLoggingVerifyType;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
@@ -102,6 +103,8 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 scan.setTimeRange(startTime, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE,
+                    getDisableLoggingVerifyType(configuration).toBytes());
             } catch (IOException e) {
                 throw new SQLException(e);
             }

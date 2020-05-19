@@ -34,6 +34,7 @@ import org.mockito.MockitoAnnotations;
 
 import static org.apache.phoenix.mapreduce.index.IndexTool.FEATURE_NOT_APPLICABLE;
 import static org.apache.phoenix.mapreduce.index.IndexTool.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
 public class IndexToolTest extends BaseTest {
@@ -70,8 +71,8 @@ public class IndexToolTest extends BaseTest {
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
-        Assert.assertEquals(startTime, it.getStartTime());
-        Assert.assertEquals(endTime, it.getEndTime());
+        assertEquals(startTime, it.getStartTime());
+        assertEquals(endTime, it.getEndTime());
     }
 
     @Test
@@ -94,8 +95,8 @@ public class IndexToolTest extends BaseTest {
                         startTime , null);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
-        Assert.assertEquals(startTime, it.getStartTime());
-        Assert.assertEquals(null, it.getEndTime());
+        assertEquals(startTime, it.getStartTime());
+        assertEquals(null, it.getEndTime());
     }
 
     @Test
@@ -107,8 +108,8 @@ public class IndexToolTest extends BaseTest {
                         null , endTime);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
-        Assert.assertEquals(null, it.getStartTime());
-        Assert.assertEquals(endTime, it.getEndTime());
+        assertEquals(null, it.getStartTime());
+        assertEquals(endTime, it.getEndTime());
     }
 
     @Test
@@ -199,5 +200,88 @@ public class IndexToolTest extends BaseTest {
         exceptionRule.expect(RuntimeException.class);
         exceptionRule.expectMessage(FEATURE_NOT_APPLICABLE);
         IndexTool.checkTimeRangeFeature(1L, 3L, pDataTable, !localIndex);
+    }
+
+    @Test
+    public void testCheckVerifyAndDisableLogging_defaultsNone(){
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String [] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
+                startTime , endTime);
+        CommandLine cmdLine = it.parseOptions(args);
+        it.populateIndexToolAttributes(cmdLine);
+        assertEquals(IndexTool.IndexDisableLoggingType.NONE, it.getDisableLoggingType());
+    }
+
+    @Test
+    public void testDisableLogging_allowsNone(){
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.NONE, IndexTool.IndexVerifyType.NONE);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.NONE, IndexTool.IndexVerifyType.ONLY);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.NONE, IndexTool.IndexVerifyType.BEFORE);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.NONE, IndexTool.IndexVerifyType.AFTER);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.NONE, IndexTool.IndexVerifyType.BOTH);
+    }
+
+    @Test
+    public void testDisableLogging_allowsBefore(){
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.BEFORE, IndexTool.IndexVerifyType.BEFORE);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.BEFORE, IndexTool.IndexVerifyType.ONLY);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.BEFORE, IndexTool.IndexVerifyType.BOTH);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BEFORE,
+            IndexTool.IndexVerifyType.AFTER);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BEFORE,
+            IndexTool.IndexVerifyType.NONE);
+    }
+
+    @Test
+    public void testDisableLogging_allowsAfter(){
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.AFTER, IndexTool.IndexVerifyType.BOTH);
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.AFTER, IndexTool.IndexVerifyType.AFTER);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.AFTER,
+            IndexTool.IndexVerifyType.NONE);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.AFTER,
+            IndexTool.IndexVerifyType.BEFORE);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BOTH,
+            IndexTool.IndexVerifyType.ONLY);
+    }
+
+    @Test
+    public void testCheckVerifyAndDisableLogging_allowsBoth(){
+        verifyDisableLogging(IndexTool.IndexDisableLoggingType.BOTH, IndexTool.IndexVerifyType.BOTH);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BOTH,
+            IndexTool.IndexVerifyType.NONE);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BOTH,
+            IndexTool.IndexVerifyType.ONLY);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BOTH,
+            IndexTool.IndexVerifyType.BEFORE);
+        verifyDisableLoggingException(IndexTool.IndexDisableLoggingType.BOTH,
+            IndexTool.IndexVerifyType.AFTER);
+    }
+
+    public void verifyDisableLogging(IndexTool.IndexDisableLoggingType disableType,
+                                     IndexTool.IndexVerifyType verifyType) {
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String[] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, verifyType,
+                startTime, endTime, disableType);
+        CommandLine cmdLine = it.parseOptions(args);
+        it.populateIndexToolAttributes(cmdLine);
+        assertEquals(disableType, it.getDisableLoggingType());
+    }
+
+    public void verifyDisableLoggingException(IndexTool.IndexDisableLoggingType disableType,
+                                     IndexTool.IndexVerifyType verifyType) {
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String[] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, verifyType,
+                startTime, endTime, disableType);
+        exceptionRule.expect(IllegalStateException.class);
+        CommandLine cmdLine = it.parseOptions(args);
     }
 }
