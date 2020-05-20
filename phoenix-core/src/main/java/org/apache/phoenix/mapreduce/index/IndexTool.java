@@ -791,12 +791,12 @@ public class IndexTool extends Configured implements Tool {
         return 0;
     }
 
-    private void validateLastVerifyTime() throws Exception {
+    public int validateLastVerifyTime() throws Exception {
         Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         if (lastVerifyTime.compareTo(currentTime) > 0 || lastVerifyTime == 0L || !isValidLastVerifyTime(lastVerifyTime)) {
             throw new RuntimeException(RETRY_VERIFY_NOT_APPLICABLE);
         }
-
+        return 0;
     }
 
     public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
