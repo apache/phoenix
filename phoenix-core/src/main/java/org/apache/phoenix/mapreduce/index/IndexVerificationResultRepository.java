@@ -272,7 +272,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
             throws IOException {
         IndexToolVerificationResult verificationResult = null;
         Result result = htable.get(new Get(oldRowKey));
-        if(result != null) {
+        if(!result.isEmpty()) {
             byte[][] rowKeyParts = ByteUtil.splitArrayBySeparator(result.getRow(), ROW_KEY_SEPARATOR_BYTE[0]);
             verificationResult = new IndexToolVerificationResult(scan);
             verificationResult.setStartRow(rowKeyParts[3]);

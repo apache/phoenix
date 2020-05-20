@@ -34,6 +34,8 @@ import org.mockito.MockitoAnnotations;
 
 import static org.apache.phoenix.mapreduce.index.IndexTool.FEATURE_NOT_APPLICABLE;
 import static org.apache.phoenix.mapreduce.index.IndexTool.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
+import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class IndexToolTest extends BaseTest {
@@ -224,5 +226,27 @@ public class IndexToolTest extends BaseTest {
         exceptionRule.expect(RuntimeException.class);
         exceptionRule.expectMessage(FEATURE_NOT_APPLICABLE);
         IndexTool.checkIfFeatureApplicable(null, null, lastVerifyTime, pDataTable, !localIndex);
+    }
+
+    @Test
+    public void testIncrcementalVerifyOption_notApplicable() throws Exception {
+        IndexTool mockTool = Mockito.mock(IndexTool.class);
+        when(mockTool.getLastVerifyTime()).thenCallRealMethod();
+        Long lastVerifyTime = 10L;
+        String [] args =
+                IndexToolIT.getArgValues(true, true, schema,
+                        dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
+                        lastVerifyTime);
+        when(mockTool.parseOptions(args)).thenCallRealMethod();
+
+        CommandLine cmdLine = mockTool.parseOptions(args);
+
+        when(mockTool.populateIndexToolAttributes(cmdLine)).thenCallRealMethod();
+        when(mockTool.validateLastVerifyTime()).thenCallRealMethod();
+        when(mockTool.isValidLastVerifyTime(lastVerifyTime)).thenReturn(false);
+
+        exceptionRule.expect(RuntimeException.class);
+        exceptionRule.expectMessage(RETRY_VERIFY_NOT_APPLICABLE);
+        mockTool.populateIndexToolAttributes(cmdLine);
     }
 }

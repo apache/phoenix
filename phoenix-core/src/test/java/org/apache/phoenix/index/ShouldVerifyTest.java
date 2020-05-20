@@ -35,6 +35,7 @@ import org.mockito.MockitoAnnotations;
 import java.io.IOException;
 
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 public class ShouldVerifyTest {
@@ -54,13 +55,13 @@ public class ShouldVerifyTest {
         when(im.getIndexTableName()).thenReturn(Bytes.toBytes("indexName"));
         when(scanner.shouldVerify(any(IndexTool.IndexVerifyType.class), Matchers.<byte[]>any(), any(Scan.class),
                 any(Region.class), any(IndexMaintainer.class),
-                any(IndexVerificationResultRepository.class))).thenCallRealMethod();
+                any(IndexVerificationResultRepository.class), anyBoolean())).thenCallRealMethod();
     }
 
     @Test
     public void testShouldVerify_repair_true() throws IOException {
         indexRowKey = new byte[5];
-        Assert.assertTrue(scanner.shouldVerify(IndexTool.IndexVerifyType.ONLY, indexRowKey, scan, region, im, resultRepository));
+        Assert.assertTrue(scanner.shouldVerify(IndexTool.IndexVerifyType.ONLY, indexRowKey, scan, region, im, resultRepository, false));
     }
 
     @Test
@@ -71,9 +72,9 @@ public class ShouldVerifyTest {
     }
 
     private void assertShouldVerify(boolean assertion) throws IOException {
-        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.NONE, indexRowKey, scan, region, im, resultRepository));
-        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.BEFORE, indexRowKey, scan, region, im, resultRepository));
-        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.AFTER, indexRowKey, scan, region, im, resultRepository));
+        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.NONE, indexRowKey, scan, region, im, resultRepository, false));
+        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.BEFORE, indexRowKey, scan, region, im, resultRepository, false));
+        Assert.assertEquals(assertion, scanner.shouldVerify(IndexTool.IndexVerifyType.AFTER, indexRowKey, scan, region, im, resultRepository, false));
     }
 
     @Test

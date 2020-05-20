@@ -101,7 +101,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         this.scan = scan;
         this.innerScanner = innerScanner;
         this.region = region;
-        verificationResult = new IndexToolVerificationResult(scan);
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = ServerUtil.getDelegateHTableFactory(env, ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));

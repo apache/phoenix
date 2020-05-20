@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -512,6 +513,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        List<String> expectedStatus = new ArrayList<>();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
                     + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) "+tableDDLOptions);
@@ -525,27 +527,37 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             Long scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
-            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, RUN_STATUS_EXECUTED);
 
+            expectedStatus.add(RUN_STATUS_EXECUTED);
+            expectedStatus.add(RUN_STATUS_EXECUTED);
+            expectedStatus.add(RUN_STATUS_EXECUTED);
 
-            exceptionRule.expect(RuntimeException.class);
-            exceptionRule.expectMessage(RETRY_VERIFY_NOT_APPLICABLE);
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", String.valueOf(10L));
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, expectedStatus);
+
+            deleteOneRowFromResultTable(conn, scn, indexTableFullName);
 
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
             scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
-            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 6, RUN_STATUS_SKIPPED);
+
+            expectedStatus.set(0, RUN_STATUS_EXECUTED);
+            expectedStatus.set(1, RUN_STATUS_SKIPPED);
+            expectedStatus.set(2, RUN_STATUS_SKIPPED);
+
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 5, expectedStatus);
 
             conn.createStatement().execute( "DELETE FROM "+indexTableFullName);
             conn.commit();
             TestUtil.doMajorCompaction(conn, indexTableFullName);
 
+            expectedStatus.set(0, RUN_STATUS_SKIPPED);
+            expectedStatus.set(1, RUN_STATUS_SKIPPED);
+            expectedStatus.set(2, RUN_STATUS_SKIPPED);
+
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
             scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
-            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 9, RUN_STATUS_SKIPPED);
+            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 8, expectedStatus);
 
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + indexTableFullName);
             Assert.assertFalse(rs.next());
@@ -554,10 +566,22 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Assert.assertFalse(it.isValidLastVerifyTime(10L));
             Assert.assertFalse(it.isValidLastVerifyTime(EnvironmentEdgeManager.currentTimeMillis() - 1000L));
             Assert.assertTrue(it.isValidLastVerifyTime(scn));
+
+            IndexToolIT.dropIndexToolTables(conn);
         }
     }
 
-    private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable, int totalRows, String expectedStatus) throws SQLException, IOException {
+    private void deleteOneRowFromResultTable(Connection conn,  Long scn, String indexTable)
+            throws SQLException, IOException {
+        Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                .getTable(RESULT_TABLE_NAME_BYTES);
+        Scan s = new Scan();
+        s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", scn, ROW_KEY_SEPARATOR, indexTable)));
+        ResultScanner rs = hIndexToolTable.getScanner(s);
+        hIndexToolTable.delete(new Delete(rs.next().getRow()));
+    }
+
+    private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable, int totalRows, List<String> expectedStatus) throws SQLException, IOException {
         Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getTable(RESULT_TABLE_NAME_BYTES);
         Assert.assertEquals(totalRows, TestUtil.getRowCount(hIndexToolTable, false));
@@ -575,10 +599,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             count++;
         }
         //for each region
-        Assert.assertEquals(count, 3);
-        Assert.assertEquals(expectedStatus, output.get(0));
-        Assert.assertEquals(expectedStatus, output.get(1));
-        Assert.assertEquals(expectedStatus, output.get(2));
+        Assert.assertEquals(3, count);
+        for(int i=0; i< count; i++) {
+            Assert.assertEquals(expectedStatus.get(i), output.get(i));
+        }
         return output;
     }
 
