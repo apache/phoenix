@@ -70,7 +70,17 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     public final static byte[] BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT);
     public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT = "BeforeRebuildInvalidIndexRowCount";
     public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT);
-    public static String AFTER_REBUILD_VALID_INDEX_ROW_COUNT = "AfterValidExpiredIndexRowCount";
+    public final static String BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT =
+            "BeforeRebuildUnverifiedIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT);
+    public final static String BEFORE_REBUILD_OLD_INDEX_ROW_COUNT =
+            "BeforeRebuildOldIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_OLD_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT);
+    public final static String BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT =
+            "BeforeRebuildUnknownIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT);
+    public final static String AFTER_REBUILD_VALID_INDEX_ROW_COUNT =
+        "AfterValidExpiredIndexRowCount";
     public final static byte[] AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_VALID_INDEX_ROW_COUNT);
     public static String AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT = "AfterRebuildExpiredIndexRowCount";
     public final static byte[] AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT);
@@ -181,6 +191,12 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 Bytes.toBytes(Long.toString(verificationResult.getBeforeIndexHasExtraCellsCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getBeforeIndexHasMissingCellsCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT_BYTES,
+                    Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildUnverifiedIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_OLD_INDEX_ROW_COUNT_BYTES,
+                    Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildOldIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES,
+                    Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildUnknownIndexRowCount())));
         }
         if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.BOTH) {
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES,

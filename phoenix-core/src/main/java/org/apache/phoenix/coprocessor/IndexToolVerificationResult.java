@@ -32,6 +32,9 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationResultReposito
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.REBUILT_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
@@ -111,6 +114,9 @@ public class IndexToolVerificationResult {
         private long invalidIndexRowCount = 0;
         private long indexHasExtraCellsCount = 0;
         private long indexHasMissingCellsCount = 0;
+        private long unverifiedIndexRowCount = 0;
+        private long oldIndexRowCount = 0;
+        private long unknownIndexRowCount = 0;
 
         public void add(PhaseResult phaseResult) {
             setValidIndexRowCount(getValidIndexRowCount() + phaseResult.getValidIndexRowCount());
@@ -119,6 +125,9 @@ public class IndexToolVerificationResult {
             setInvalidIndexRowCount(getInvalidIndexRowCount() + phaseResult.getInvalidIndexRowCount());
             setIndexHasExtraCellsCount(getIndexHasExtraCellsCount() + phaseResult.getIndexHasExtraCellsCount());
             setIndexHasMissingCellsCount(getIndexHasMissingCellsCount() + phaseResult.getIndexHasMissingCellsCount());
+            setUnverifiedIndexRowCount(getUnverifiedIndexRowCount() + phaseResult.getUnverifiedIndexRowCount());
+            setUnknownIndexRowCount(getUnknownIndexRowCount() + phaseResult.getUnknownIndexRowCount());
+            setOldIndexRowCount(getOldIndexRowCount() + phaseResult.getOldIndexRowCount());
         }
 
         public PhaseResult(){}
@@ -179,7 +188,10 @@ public class IndexToolVerificationResult {
             result = 31 * result + getInvalidIndexRowCount();
             result = 31 * result + getIndexHasMissingCellsCount();
             result = 31 * result + getIndexHasExtraCellsCount();
-            return (int)result;
+            result = 31 * result + getUnverifiedIndexRowCount();
+            result = 31 * result + getOldIndexRowCount();
+            result = 31 * result + getUnknownIndexRowCount();
+            return (int) result;
         }
 
         public long getValidIndexRowCount() {
@@ -225,6 +237,30 @@ public class IndexToolVerificationResult {
         public void setIndexHasMissingCellsCount(long indexHasMissingCellsCount) {
             this.indexHasMissingCellsCount = indexHasMissingCellsCount;
         }
+
+        public long getUnverifiedIndexRowCount() {
+            return unverifiedIndexRowCount;
+        }
+
+        public void setUnverifiedIndexRowCount(long unverifiedIndexRowCount) {
+            this.unverifiedIndexRowCount = unverifiedIndexRowCount;
+        }
+
+        public long getOldIndexRowCount() {
+            return oldIndexRowCount;
+        }
+
+        public void setOldIndexRowCount(long oldIndexRowCount) {
+            this.oldIndexRowCount = oldIndexRowCount;
+        }
+
+        public long getUnknownIndexRowCount() {
+            return unknownIndexRowCount;
+        }
+
+        public void setUnknownIndexRowCount(long unknownIndexRowCount) {
+            this.unknownIndexRowCount = unknownIndexRowCount;
+        }
     }
 
     private long scannedDataRowCount = 0;
@@ -265,6 +301,20 @@ public class IndexToolVerificationResult {
     public long getBeforeRebuildInvalidIndexRowCount() {
         return getBefore().getInvalidIndexRowCount();
     }
+
+
+    public long getBeforeRebuildUnverifiedIndexRowCount() {
+        return getBefore().getUnverifiedIndexRowCount();
+    }
+
+    public long getBeforeRebuildOldIndexRowCount() {
+        return getBefore().getOldIndexRowCount();
+    }
+
+    public long getBeforeRebuildUnknownIndexRowCount() {
+        return getBefore().getUnknownIndexRowCount();
+    }
+
 
     public long getBeforeRebuildMissingIndexRowCount() {
         return getBefore().getMissingIndexRowCount();
@@ -326,6 +376,18 @@ public class IndexToolVerificationResult {
         before.indexHasExtraCellsCount += count;
     }
 
+    public void addBeforeUnverifiedIndexRowCount(long count) {
+        getBefore().setUnverifiedIndexRowCount(getBefore().getUnverifiedIndexRowCount() + count);
+    }
+
+    public void addBeforeOldIndexRowCount(long count) {
+        getBefore().setOldIndexRowCount(getBefore().getOldIndexRowCount() + count);
+    }
+
+    public void addBeforeUnknownIndexRowCount(long count) {
+        getBefore().setUnknownIndexRowCount(getBefore().getUnknownIndexRowCount() + count);
+    }
+
     private void addAfterRebuildValidIndexRowCount(long count) {
         getAfter().setValidIndexRowCount(getAfter().getValidIndexRowCount() + count);
     }
@@ -382,6 +444,12 @@ public class IndexToolVerificationResult {
             addBeforeIndexHasExtraCellsCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES)) {
             addBeforeIndexHasMissingCellsCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeUnverifiedIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_OLD_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeOldIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES)) {
+            addBeforeUnknownIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES)) {
             addAfterRebuildValidIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES)) {

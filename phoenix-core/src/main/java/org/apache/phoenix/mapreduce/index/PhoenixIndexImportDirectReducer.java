@@ -81,6 +81,12 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getBeforeIndexHasExtraCellsCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
                         setValue(verificationResult.getBeforeIndexHasMissingCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildUnverifiedIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildOldIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildUnknownIndexRowCount());
             }
             if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT).
