@@ -140,6 +140,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         private long pageSize = Long.MAX_VALUE;
         private boolean restartScanDueToPageFilterRemoval = false;
         private boolean hasMore;
+        private String indexName;
+
         public GlobalIndexScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
                                   RegionScanner scanner,
@@ -157,10 +159,11 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                     QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
             minTimestamp = scan.getTimeRange().getMin();
             maxTimestamp = scan.getTimeRange().getMax();
-            byte[] indexTableName = region.getRegionInfo().getTable().getName();
+            byte[] indexTableNameBytes = region.getRegionInfo().getTable().getName();
+            this.indexName = Bytes.toString(indexTableNameBytes);
             byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
             List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
-            indexMaintainer = getIndexMaintainer(maintainers, indexTableName);
+            indexMaintainer = getIndexMaintainer(maintainers, indexTableNameBytes);
             if (indexMaintainer == null) {
                 throw new DoNotRetryIOException(
                         "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
@@ -548,7 +551,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
          * @throws IOException
          */
         private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
-            metricsSource.incrementIndexInspections();
+            metricsSource.incrementIndexInspections(indexName);
             Cell cell = cellList.get(0);
             if (verifyRowAndRemoveEmptyColumn(cellList)) {
                 return true;
@@ -561,11 +564,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
 
                 try {
                     repairIndexRows(rowKey, ts, cellList);
-                    metricsSource.incrementIndexRepairs();
-                    metricsSource.updateIndexRepairTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    metricsSource.incrementIndexRepairs(indexName);
+                    metricsSource.updateIndexRepairTime(indexName,
+                        EnvironmentEdgeManager.currentTimeMillis() - repairStart);
                 } catch (IOException e) {
-                    metricsSource.incrementIndexRepairFailures();
-                    metricsSource.updateIndexRepairFailureTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    metricsSource.incrementIndexRepairFailures(indexName);
+                    metricsSource.updateIndexRepairFailureTime(indexName,
+                        EnvironmentEdgeManager.currentTimeMillis() - repairStart);
                     throw e;
                 }
 

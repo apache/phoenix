@@ -211,6 +211,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
   private long slowIndexPrepareThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
+  private String dataTableName;
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
 
@@ -248,6 +249,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
           this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
           setSlowThresholds(e.getConfiguration());
+          this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
       } catch (NoSuchMethodError ex) {
           disabled = true;
           super.start(e);
@@ -327,9 +329,9 @@ public class IndexRegionObserver extends BaseRegionObserver {
               if (LOG.isDebugEnabled()) {
                   LOG.debug(getCallTooSlowMessage("preIncrementAfterRowLock", duration, slowPreIncrementThreshold));
               }
-              metricSource.incrementSlowDuplicateKeyCheckCalls();
+              metricSource.incrementSlowDuplicateKeyCheckCalls(dataTableName);
           }
-          metricSource.updateDuplicateKeyCheckTime(duration);
+          metricSource.updateDuplicateKeyCheckTime(dataTableName, duration);
       }
   }
 
@@ -889,7 +891,8 @@ public class IndexRegionObserver extends BaseRegionObserver {
             // early exit if it turns out we don't have any edits
             long start = EnvironmentEdgeManager.currentTimeMillis();
             preparePreIndexMutations(context, now, indexMetaData);
-            metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+            metricSource.updateIndexPrepareTime(dataTableName,
+                EnvironmentEdgeManager.currentTimeMillis() - start);
             // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
             // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
             // can be prepared in less than one millisecond
@@ -960,11 +963,13 @@ public class IndexRegionObserver extends BaseRegionObserver {
               throw new DoNotRetryIOException("Simulating the last (i.e., post) index table write failure");
           }
           doIndexWritesWithExceptions(context, true);
-          metricSource.updatePostIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.updatePostIndexUpdateTime(dataTableName,
+              EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
       } catch (Throwable e) {
-          metricSource.updatePostIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
-          metricSource.incrementPostIndexUpdateFailures();
+          metricSource.updatePostIndexUpdateFailureTime(dataTableName,
+              EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.incrementPostIndexUpdateFailures(dataTableName);
           // Ignore the failures in the third write phase
       }
   }
@@ -1014,11 +1019,13 @@ public class IndexRegionObserver extends BaseRegionObserver {
               throw new DoNotRetryIOException("Simulating the first (i.e., pre) index table write failure");
           }
           doIndexWritesWithExceptions(context, false);
-          metricSource.updatePreIndexUpdateTime(EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.updatePreIndexUpdateTime(dataTableName,
+              EnvironmentEdgeManager.currentTimeMillis() - start);
           return;
       } catch (Throwable e) {
-          metricSource.updatePreIndexUpdateFailureTime(EnvironmentEdgeManager.currentTimeMillis() - start);
-          metricSource.incrementPreIndexUpdateFailures();
+          metricSource.updatePreIndexUpdateFailureTime(dataTableName,
+              EnvironmentEdgeManager.currentTimeMillis() - start);
+          metricSource.incrementPreIndexUpdateFailures(dataTableName);
           // Remove all locks as they are already unlocked. There is no need to unlock them again later when
           // postBatchMutateIndispensably() is called
           removePendingRows(context);
