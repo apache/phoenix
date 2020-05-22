@@ -184,6 +184,7 @@ public class Indexer extends BaseRegionObserver {
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
+  private String dataTableName;
   
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -224,7 +225,7 @@ public class Indexer extends BaseRegionObserver {
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
         setSlowThresholds(e.getConfiguration());
-
+        this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
           // here
@@ -328,9 +329,9 @@ public class Indexer extends BaseRegionObserver {
                   LOGGER.debug(getCallTooSlowMessage("preIncrementAfterRowLock",
                           duration, slowPreIncrementThreshold));
               }
-              metricSource.incrementSlowDuplicateKeyCheckCalls();
+              metricSource.incrementSlowDuplicateKeyCheckCalls(dataTableName);
           }
-          metricSource.updateDuplicateKeyCheckTime(duration);
+          metricSource.updateDuplicateKeyCheckTime(dataTableName, duration);
       }
   }
 
@@ -354,9 +355,9 @@ public class Indexer extends BaseRegionObserver {
                   LOGGER.debug(getCallTooSlowMessage("preBatchMutate",
                           duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
       }
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
@@ -509,9 +510,9 @@ public class Indexer extends BaseRegionObserver {
                   LOGGER.debug(getCallTooSlowMessage(
                           "indexPrepare", duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
           byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
@@ -584,9 +585,9 @@ public class Indexer extends BaseRegionObserver {
                    LOGGER.debug(getCallTooSlowMessage("postBatchMutateIndispensably",
                            duration, slowIndexWriteThreshold));
                }
-               metricSource.incrementNumSlowIndexWriteCalls();
+               metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
            }
-           metricSource.updateIndexWriteTime(duration);
+           metricSource.updateIndexWriteTime(dataTableName, duration);
        }
   }
 
@@ -625,9 +626,9 @@ public class Indexer extends BaseRegionObserver {
                   LOGGER.debug(getCallTooSlowMessage("indexWrite",
                           duration, slowIndexWriteThreshold));
               }
-              metricSource.incrementNumSlowIndexWriteCalls();
+              metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
           }
-          metricSource.updateIndexWriteTime(duration);
+          metricSource.updateIndexWriteTime(dataTableName, duration);
       }
   }
 
@@ -683,9 +684,9 @@ public class Indexer extends BaseRegionObserver {
              if (LOGGER.isDebugEnabled()) {
                  LOGGER.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
              }
-             metricSource.incrementNumSlowPostOpenCalls();
+             metricSource.incrementNumSlowPostOpenCalls(dataTableName);
          }
-         metricSource.updatePostOpenTime(duration);
+         metricSource.updatePostOpenTime(dataTableName, duration);
     }
   }
 
@@ -718,9 +719,9 @@ public class Indexer extends BaseRegionObserver {
                   LOGGER.debug(getCallTooSlowMessage("preWALRestore",
                           duration, slowPreWALRestoreThreshold));
               }
-              metricSource.incrementNumSlowPreWALRestoreCalls();
+              metricSource.incrementNumSlowPreWALRestoreCalls(dataTableName);
           }
-          metricSource.updatePreWALRestoreTime(duration);
+          metricSource.updatePreWALRestoreTime(dataTableName, duration);
       }
   }
 
