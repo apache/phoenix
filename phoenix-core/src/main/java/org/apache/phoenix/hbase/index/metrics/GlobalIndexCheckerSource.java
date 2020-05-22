@@ -46,30 +46,33 @@ public interface GlobalIndexCheckerSource extends BaseSource {
 
     /**
      * Increments the number of index rows inspected for verified status
+     * @param indexName Name of the index
      */
-    public void incrementIndexInspections();
+    public void incrementIndexInspections(String indexName);
 
     /**
      * Increments the number of index repairs
+     * @param indexName Name of the index
      */
-    void incrementIndexRepairs();
+    void incrementIndexRepairs(String indexName);
 
     /**
      * Increments the number of index repair failures
+     * @param indexName Name of the index
      */
-    void incrementIndexRepairFailures();
+    void incrementIndexRepairFailures(String indexName);
 
     /**
      * Updates the index repair time histogram
-     *
+     * @param indexName Name of the index
      * @param t time taken in milliseconds
      */
-    void updateIndexRepairTime(long t);
+    void updateIndexRepairTime(String indexName, long t);
 
     /**
      * Updates the index repair failure time histogram
-     *
+     * @param indexName Name of the index
      * @param t time taken in milliseconds
      */
-    void updateIndexRepairFailureTime(long t);
+    void updateIndexRepairFailureTime(String indexName, long t);
 }

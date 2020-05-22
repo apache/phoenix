@@ -85,102 +85,138 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
     }
 
     @Override
-    public void updateIndexPrepareTime(long t) {
+    public void updateIndexPrepareTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(INDEX_PREPARE_TIME, dataTableName, t);
         indexPrepareTimeHisto.add(t);
     }
 
     @Override
-    public void updateIndexWriteTime(long t) {
+    public void updateIndexWriteTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(INDEX_WRITE_TIME, dataTableName, t);
         indexWriteTimeHisto.add(t);
     }
 
     @Override
-    public void updatePreWALRestoreTime(long t) {
+    public void updatePreWALRestoreTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(PRE_WAL_RESTORE_TIME, dataTableName, t);
         preWALRestoreTimeHisto.add(t);
     }
 
     @Override
-    public void updatePostPutTime(long t) {
+    public void updatePostPutTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(POST_PUT_TIME, dataTableName, t);
         postPutTimeHisto.add(t);
     }
 
     @Override
-    public void updatePostDeleteTime(long t) {
+    public void updatePostDeleteTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(POST_DELETE_TIME, dataTableName, t);
         postDeleteTimeHisto.add(t);
     }
 
     @Override
-    public void updatePostOpenTime(long t) {
+    public void updatePostOpenTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(POST_OPEN_TIME, dataTableName, t);
         postOpenTimeHisto.add(t);
     }
 
     @Override
-    public void incrementNumSlowIndexPrepareCalls() {
+    public void incrementNumSlowIndexPrepareCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_INDEX_PREPARE, dataTableName);
         slowIndexPrepareCalls.incr();
     }
 
     @Override
-    public void incrementNumSlowIndexWriteCalls() {
+    public void incrementNumSlowIndexWriteCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_INDEX_WRITE, dataTableName);
         slowIndexWriteCalls.incr();
     }
 
     @Override
-    public void incrementNumSlowPreWALRestoreCalls() {
+    public void incrementNumSlowPreWALRestoreCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_PRE_WAL_RESTORE, dataTableName);
         slowPreWALRestoreCalls.incr();
     }
 
     @Override
-    public void incrementNumSlowPostPutCalls() {
+    public void incrementNumSlowPostPutCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_POST_PUT, dataTableName);
         slowPostPutCalls.incr();
     }
 
     @Override
-    public void incrementNumSlowPostDeleteCalls() {
+    public void incrementNumSlowPostDeleteCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_POST_DELETE, dataTableName);
         slowPostDeleteCalls.incr();
     }
 
     @Override
-    public void incrementNumSlowPostOpenCalls() {
+    public void incrementNumSlowPostOpenCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_POST_OPEN, dataTableName);
         slowPostOpenCalls.incr();
     }
 
     @Override
-    public void updateDuplicateKeyCheckTime(long t) {
+    public void updateDuplicateKeyCheckTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(DUPLICATE_KEY_TIME, dataTableName, t);
         duplicateKeyTimeHisto.add(t);
     }
 
     @Override
-    public void incrementSlowDuplicateKeyCheckCalls() {
+    public void incrementSlowDuplicateKeyCheckCalls(String dataTableName) {
+        incrementTableSpecificCounter(SLOW_DUPLICATE_KEY, dataTableName);
         slowDuplicateKeyCalls.incr();
     }
 
     @Override
-    public void updatePreIndexUpdateTime(long t) {
+    public void updatePreIndexUpdateTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(PRE_INDEX_UPDATE_TIME, dataTableName, t);
         preIndexUpdateTimeHisto.add(t);
     }
 
     @Override
-    public void updatePostIndexUpdateTime(long t) {
+    public void updatePostIndexUpdateTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(POST_INDEX_UPDATE_TIME, dataTableName, t);
         postIndexUpdateTimeHisto.add(t);
     }
 
     @Override
-    public void updatePreIndexUpdateFailureTime(long t) {
+    public void updatePreIndexUpdateFailureTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(PRE_INDEX_UPDATE_FAILURE_TIME, dataTableName, t);
         preIndexUpdateFailureTimeHisto.add(t);
     }
 
     @Override
-    public void updatePostIndexUpdateFailureTime(long t) {
+    public void updatePostIndexUpdateFailureTime(String dataTableName, long t) {
+        incrementTableSpecificHistogram(POST_INDEX_UPDATE_FAILURE_TIME, dataTableName, t);
         postIndexUpdateFailureTimeHisto.add(t);
     }
 
     @Override
-    public void incrementPreIndexUpdateFailures() {
+    public void incrementPreIndexUpdateFailures(String dataTableName) {
+        incrementTableSpecificCounter(PRE_INDEX_UPDATE_FAILURE, dataTableName);
         preIndexUpdateFailures.incr();
     }
 
     @Override
-    public void incrementPostIndexUpdateFailures() {
+    public void incrementPostIndexUpdateFailures(String dataTableName) {
+        incrementTableSpecificCounter(POST_INDEX_UPDATE_FAILURE, dataTableName);
         postIndexUpdateFailures.incr();
+    }
+
+    private void incrementTableSpecificCounter(String baseCounterName, String tableName) {
+        MutableFastCounter indexSpecificCounter =
+            getMetricsRegistry().getCounter(getCounterName(baseCounterName, tableName), 0);
+        indexSpecificCounter.incr();
+    }
+
+    private void incrementTableSpecificHistogram(String baseCounterName, String tableName, long t) {
+        MetricHistogram tableSpecificHistogram =
+            getMetricsRegistry().getHistogram(getCounterName(baseCounterName, tableName));
+        tableSpecificHistogram.add(t);
+    }
+
+    private String getCounterName(String baseCounterName, String tableName) {
+        return baseCounterName + "." + tableName;
     }
 }
