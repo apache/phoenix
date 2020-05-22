@@ -434,6 +434,24 @@ public class InListIT extends ParallelStatsDisabledIT {
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
     }
 
+    @Test public void testOverlappingRVCWithMiddleColumn() throws Exception {
+        String whereClause =
+            "WHERE pk2=3 and (pk1, pk2, pk3, pk4) IN ((2, 3, 6, 6), (2, 3, 4, 5)) ";
+        List<String> expecteds = singletonList("row2");
+
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause,
+            expecteds);
+    }
+
+    @Test public void testOverlappingRVCWithMultipleMiddleColumn() throws Exception {
+        String whereClause =
+            "WHERE (pk2,pk3) in ((3,4)) and (pk1, pk2, pk3, pk4) IN ((2, 3, 6, 6), (2, 3, 4, 5)) ";
+        List<String> expecteds = singletonList("row2");
+
+        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause,
+            expecteds);
+    }
+
     @Test
     public void testOverlappingRVCAndRVCPartiallyQualifiedBegin() throws Exception {
         String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND (pk2, pk3) IN ((3, 4), (3, 6))";
