@@ -81,124 +81,133 @@ public interface MetricsIndexerSource extends BaseSource {
 
   /**
    * Updates the index preparation time histogram (preBatchMutate).
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updateIndexPrepareTime(long t);
+  void updateIndexPrepareTime(String dataTableName, long t);
 
   /**
+   * @param dataTableName  Physical data table name
    * Increments the number of slow calls prepare an index write.
    */
-  void incrementNumSlowIndexPrepareCalls();
+  void incrementNumSlowIndexPrepareCalls(String dataTableName);
 
   /**
    * Updates the index write time histogram (postBatchMutate).
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updateIndexWriteTime(long t);
+  void updateIndexWriteTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow calls to write to the index.
+   * @param dataTableName  Physical data table name
    */
-  void incrementNumSlowIndexWriteCalls();
+  void incrementNumSlowIndexWriteCalls(String dataTableName);
 
   /**
    * Updates the preWALRestore time histogram.
-   *
+   * @param dataTableName Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePreWALRestoreTime(long t);
+  void updatePreWALRestoreTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow preWALRestore calls.
+   * @param dataTableName Physical data table name
    */
-  void incrementNumSlowPreWALRestoreCalls();
+  void incrementNumSlowPreWALRestoreCalls(String dataTableName);
 
   /**
    * Updates the postPut time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePostPutTime(long t);
+  void updatePostPutTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow postPut calls.
+   * @param dataTableName  Physical data table name
    */
-  void incrementNumSlowPostPutCalls();
+  void incrementNumSlowPostPutCalls(String dataTableName);
 
   /**
    * Updates the postDelete time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePostDeleteTime(long t);
+  void updatePostDeleteTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow postDelete calls.
+   * @param dataTableName  Physical data table name
    */
-  void incrementNumSlowPostDeleteCalls();
+  void incrementNumSlowPostDeleteCalls(String dataTableName);
 
   /**
    * Updates the postOpen time histogram.
-   *
+   * @param dataTableName Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePostOpenTime(long t);
+  void updatePostOpenTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow postOpen calls.
+   * @param dataTableName Physical data table name
    */
-  void incrementNumSlowPostOpenCalls();
+  void incrementNumSlowPostOpenCalls(String dataTableName);
 
   /**
    * Updates the preIncrementAfterRowLock time histogram.
-   *
+   * @param dataTableName Physical data table name
    * @param t time taken in milliseconds
    */
-  void updateDuplicateKeyCheckTime(long t);
+  void updateDuplicateKeyCheckTime(String dataTableName, long t);
 
   /**
    * Increments the number of slow preIncrementAfteRowLock calls.
+   * @param dataTableName Phyiscal data table name
    */
-  void incrementSlowDuplicateKeyCheckCalls();
+  void incrementSlowDuplicateKeyCheckCalls(String dataTableName);
 
   // Below metrics are introduced by IndexRegionObserver coprocessor
   /**
    * Updates the pre index update time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePreIndexUpdateTime(long t);
+  void updatePreIndexUpdateTime(String dataTableName, long t);
 
   /**
    * Updates the post index update time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePostIndexUpdateTime(long t);
+  void updatePostIndexUpdateTime(String dataTableName, long t);
 
   /**
    * Updates the pre index update failure time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePreIndexUpdateFailureTime(long t);
+  void updatePreIndexUpdateFailureTime(String dataTableName, long t);
 
   /**
    * Updates the post index update failure time histogram.
-   *
+   * @param dataTableName  Physical data table name
    * @param t time taken in milliseconds
    */
-  void updatePostIndexUpdateFailureTime(long t);
+  void updatePostIndexUpdateFailureTime(String dataTableName, long t);
 
   /**
    * Increments the number of pre index update failures.
+   * @param dataTableName  Physical data table name
    */
-  void incrementPreIndexUpdateFailures();
+  void incrementPreIndexUpdateFailures(String dataTableName);
 
   /**
    * Increments the number of post index update failures.
+   * @param dataTableName  Physical data table name
    */
-  void incrementPostIndexUpdateFailures();
+  void incrementPostIndexUpdateFailures(String dataTableName);
 }
