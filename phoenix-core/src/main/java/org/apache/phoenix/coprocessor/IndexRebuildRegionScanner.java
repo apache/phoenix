@@ -996,6 +996,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     private void verifyAndOrRebuildIndex() throws IOException {
+        isBeforeRebuilt = true;
         IndexToolVerificationResult nextVerificationResult = new IndexToolVerificationResult(scan);
         nextVerificationResult.setScannedDataRowCount(dataKeyToMutationMap.size());
         if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.NONE) {
