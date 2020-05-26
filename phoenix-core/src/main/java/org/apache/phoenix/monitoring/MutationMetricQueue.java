@@ -21,6 +21,7 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZ
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -70,6 +71,7 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getMutationsSizeBytes().getMetricType(), metric.getMutationsSizeBytes().getValue());
             publishedMetricsForTable.put(metric.getCommitTimeForMutations().getMetricType(), metric.getCommitTimeForMutations().getValue());
             publishedMetricsForTable.put(metric.getNumFailedMutations().getMetricType(), metric.getNumFailedMutations().getValue());
+            publishedMetricsForTable.put(metric.getNumOfIndexCommitFailedMutations().getMetricType(), metric.getNumOfIndexCommitFailedMutations().getValue());
         }
         return publishedMetrics;
     }
@@ -86,11 +88,15 @@ public class MutationMetricQueue {
         private final CombinableMetric mutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
         private final CombinableMetric totalCommitTimeForMutations = new CombinableMetricImpl(MUTATION_COMMIT_TIME);
         private final CombinableMetric numFailedMutations = new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
+        private final CombinableMetric numOfIndexCommitFailMutations = new CombinableMetricImpl(
+                INDEX_COMMIT_FAILURE_SIZE);
 
-        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations) {            this.numMutations.change(numMutations);
+        public MutationMetric(long numMutations, long mutationsSizeBytes, long commitTimeForMutations, long numFailedMutations, long numOfPhase3Failed) {
+            this.numMutations.change(numMutations);
             this.mutationsSizeBytes.change(mutationsSizeBytes);
             this.totalCommitTimeForMutations.change(commitTimeForMutations);
             this.numFailedMutations.change(numFailedMutations);
+            this.numOfIndexCommitFailMutations.change(numOfPhase3Failed);
         }
 
         public CombinableMetric getCommitTimeForMutations() {
@@ -109,11 +115,16 @@ public class MutationMetricQueue {
             return numFailedMutations;
         }
 
+        public CombinableMetric getNumOfIndexCommitFailedMutations() {
+            return numOfIndexCommitFailMutations;
+        }
+
         public void combineMetric(MutationMetric other) {
             this.numMutations.combine(other.numMutations);
             this.mutationsSizeBytes.combine(other.mutationsSizeBytes);
             this.totalCommitTimeForMutations.combine(other.totalCommitTimeForMutations);
             this.numFailedMutations.combine(other.numFailedMutations);
+            this.numOfIndexCommitFailMutations.combine(other.numOfIndexCommitFailMutations);
         }
 
     }

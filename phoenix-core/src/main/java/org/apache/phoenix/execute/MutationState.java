@@ -22,6 +22,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
@@ -987,25 +988,23 @@ public class MutationState implements SQLCloseable {
                     verifiedOrDeletedIndexMutations);
 
             // Phase 1: Send index mutations with the empty column value = "unverified"
-            sendMutations(unverifiedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr);
+            sendMutations(unverifiedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, false);
 
             // Phase 2: Send data table and other indexes
-            sendMutations(physicalTableMutationMap.entrySet().iterator(), span, indexMetaDataPtr);
+            sendMutations(physicalTableMutationMap.entrySet().iterator(), span, indexMetaDataPtr, false);
 
             // Phase 3: Send put index mutations with the empty column value = "verified" and/or delete index mutations
             try {
-                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr);
+                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, true);
             } catch (SQLException ex) {
-                // TODO: add a metric here
                 LOGGER.warn(
-                        "Ignoring exception that happened during setting index verified value to verified=TRUE "
-                                + verifiedOrDeletedIndexMutations.toString(),
+                        "Ignoring exception that happened during setting index verified value to verified=TRUE ",
                         ex);
             }
         }
     }
 
-    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, Span span, ImmutableBytesWritable indexMetaDataPtr)
+    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, Span span, ImmutableBytesWritable indexMetaDataPtr, boolean isVerifiedPhase)
             throws SQLException {
         while (mutationsIterator.hasNext()) {
             Entry<TableInfo, List<Mutation>> pair = mutationsIterator.next();
@@ -1025,6 +1024,7 @@ public class MutationState implements SQLCloseable {
             long mutationSizeBytes = 0;
             long mutationCommitTime = 0;
             long numFailedMutations = 0;
+            long numFailedPhase3Mutations = 0;
 
             long startTime = 0;
             boolean shouldRetryIndexedMutation = false;
@@ -1196,9 +1196,13 @@ public class MutationState implements SQLCloseable {
                     sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
                     numFailedMutations = uncommittedStatementIndexes.length;
                     GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
+                    if (isVerifiedPhase) {
+                        numFailedPhase3Mutations = numFailedMutations;
+                        GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
+                    }
                 } finally {
                     MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes,
-                            mutationCommitTime, numFailedMutations);
+                            mutationCommitTime, numFailedMutations, numFailedPhase3Mutations);
                     mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
                     try {
                         if (cache != null) cache.close();
