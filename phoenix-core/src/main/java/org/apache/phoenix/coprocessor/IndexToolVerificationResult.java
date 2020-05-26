@@ -19,65 +19,122 @@ package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 
-import java.io.IOException;
-import java.util.Arrays;
-
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.REBUILT_INDEX_ROW_COUNT_BYTES;
-import static org.apache.phoenix.mapreduce.index.IndexTool.RESULT_TABLE_COLUMN_FAMILY;
-import static org.apache.phoenix.mapreduce.index.IndexTool.SCANNED_DATA_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.REBUILT_INDEX_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.SCANNED_DATA_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES;
 
 public class IndexToolVerificationResult {
+
+    public void setScannedDataRowCount(long scannedDataRowCount) {
+        this.scannedDataRowCount = scannedDataRowCount;
+    }
+
+    public void setRebuiltIndexRowCount(long rebuiltIndexRowCount) {
+        this.rebuiltIndexRowCount = rebuiltIndexRowCount;
+    }
+
+    public PhaseResult getBefore() {
+        return before;
+    }
+
+    public void setBefore(PhaseResult before) {
+        this.before = before;
+    }
+
+    public PhaseResult getAfter() {
+        return after;
+    }
+
+    public void setAfter(PhaseResult after) {
+        this.after = after;
+    }
+
+    public byte[] getStartRow() {
+        return startRow;
+    }
+
+    public byte[] getStopRow() {
+        return stopRow;
+    }
+
+    public long getScanMaxTs() {
+        return scanMaxTs;
+    }
+
+    public IndexToolVerificationResult(long scanMaxTs) {
+        this.scanMaxTs = scanMaxTs;
+    }
+
+    public IndexToolVerificationResult(byte[] startRow, byte[] stopRow, long scanMaxTs){
+        this.setStartRow(startRow);
+        this.setStopRow(stopRow);
+        this.scanMaxTs = scanMaxTs;
+    }
+
+    public IndexToolVerificationResult(Scan scan){
+        this.setStartRow(scan.getStartRow());
+        this.setStopRow(scan.getStopRow());
+        this.scanMaxTs = scan.getTimeRange().getMax();
+    }
+
+    public byte[] getRegion() {
+        return region;
+    }
+
+    public void setStartRow(byte[] startRow) {
+        this.startRow = startRow;
+    }
+
+    public void setStopRow(byte[] stopRow) {
+        this.stopRow = stopRow;
+    }
+
     public static class PhaseResult {
-        long validIndexRowCount = 0;
-        long expiredIndexRowCount = 0;
-        long missingIndexRowCount = 0;
-        long invalidIndexRowCount = 0;
-        long indexHasExtraCellsCount = 0;
-        long indexHasMissingCellsCount = 0;
+        private long validIndexRowCount = 0;
+        private long expiredIndexRowCount = 0;
+        private long missingIndexRowCount = 0;
+        private long invalidIndexRowCount = 0;
+        private long indexHasExtraCellsCount = 0;
+        private long indexHasMissingCellsCount = 0;
 
         public void add(PhaseResult phaseResult) {
-            validIndexRowCount += phaseResult.validIndexRowCount;
-            expiredIndexRowCount += phaseResult.expiredIndexRowCount;
-            missingIndexRowCount += phaseResult.missingIndexRowCount;
-            invalidIndexRowCount += phaseResult.invalidIndexRowCount;
-            indexHasExtraCellsCount += phaseResult.indexHasExtraCellsCount;
-            indexHasMissingCellsCount += phaseResult.indexHasMissingCellsCount;
+            setValidIndexRowCount(getValidIndexRowCount() + phaseResult.getValidIndexRowCount());
+            setExpiredIndexRowCount(getExpiredIndexRowCount() + phaseResult.getExpiredIndexRowCount());
+            setMissingIndexRowCount(getMissingIndexRowCount() + phaseResult.getMissingIndexRowCount());
+            setInvalidIndexRowCount(getInvalidIndexRowCount() + phaseResult.getInvalidIndexRowCount());
+            setIndexHasExtraCellsCount(getIndexHasExtraCellsCount() + phaseResult.getIndexHasExtraCellsCount());
+            setIndexHasMissingCellsCount(getIndexHasMissingCellsCount() + phaseResult.getIndexHasMissingCellsCount());
         }
 
         public PhaseResult(){}
 
         public PhaseResult(long validIndexRowCount, long expiredIndexRowCount,
                 long missingIndexRowCount, long invalidIndexRowCount, long indexHasExtraCellsCount, long indexHasMissingCellsCount) {
-            this.validIndexRowCount = validIndexRowCount;
-            this.expiredIndexRowCount = expiredIndexRowCount;
-            this.missingIndexRowCount = missingIndexRowCount;
-            this.invalidIndexRowCount = invalidIndexRowCount;
-            this.indexHasExtraCellsCount = indexHasExtraCellsCount;
-            this.indexHasMissingCellsCount = indexHasMissingCellsCount;
+            this.setValidIndexRowCount(validIndexRowCount);
+            this.setExpiredIndexRowCount(expiredIndexRowCount);
+            this.setMissingIndexRowCount(missingIndexRowCount);
+            this.setInvalidIndexRowCount(invalidIndexRowCount);
+            this.setIndexHasExtraCellsCount(indexHasExtraCellsCount);
+            this.setIndexHasMissingCellsCount(indexHasMissingCellsCount);
         }
 
         public long getTotalCount() {
-            return validIndexRowCount + expiredIndexRowCount + missingIndexRowCount + invalidIndexRowCount;
+            return getValidIndexRowCount() + getExpiredIndexRowCount() + getMissingIndexRowCount() + getInvalidIndexRowCount();
         }
 
         public long getIndexHasExtraCellsCount() {
@@ -87,12 +144,12 @@ public class IndexToolVerificationResult {
         @Override
         public String toString() {
             return "PhaseResult{" +
-                    "validIndexRowCount=" + validIndexRowCount +
-                    ", expiredIndexRowCount=" + expiredIndexRowCount +
-                    ", missingIndexRowCount=" + missingIndexRowCount +
-                    ", invalidIndexRowCount=" + invalidIndexRowCount +
-                    ", extraCellsOnIndexCount=" + indexHasExtraCellsCount +
-                    ", missingCellsOnIndexCount=" + indexHasMissingCellsCount +
+                    "validIndexRowCount=" + getValidIndexRowCount() +
+                    ", expiredIndexRowCount=" + getExpiredIndexRowCount() +
+                    ", missingIndexRowCount=" + getMissingIndexRowCount() +
+                    ", invalidIndexRowCount=" + getInvalidIndexRowCount() +
+                    ", extraCellsOnIndexCount=" + getIndexHasExtraCellsCount() +
+                    ", missingCellsOnIndexCount=" + getIndexHasMissingCellsCount() +
                     '}';
         }
 
@@ -105,39 +162,87 @@ public class IndexToolVerificationResult {
                 return false;
             }
             PhaseResult pr = (PhaseResult) o;
-            return this.expiredIndexRowCount == pr.expiredIndexRowCount
-                    && this.validIndexRowCount == pr.validIndexRowCount
-                    && this.invalidIndexRowCount == pr.invalidIndexRowCount
-                    && this.missingIndexRowCount == pr.missingIndexRowCount
-                    && this.indexHasMissingCellsCount == pr.indexHasMissingCellsCount
-                    && this.indexHasExtraCellsCount == pr.indexHasExtraCellsCount;
+            return this.getExpiredIndexRowCount() == pr.getExpiredIndexRowCount()
+                    && this.getValidIndexRowCount() == pr.getValidIndexRowCount()
+                    && this.getInvalidIndexRowCount() == pr.getInvalidIndexRowCount()
+                    && this.getMissingIndexRowCount() == pr.getMissingIndexRowCount()
+                    && this.getIndexHasMissingCellsCount() == pr.getIndexHasMissingCellsCount()
+                    && this.getIndexHasExtraCellsCount() == pr.getIndexHasExtraCellsCount();
         }
 
         @Override
         public int hashCode() {
             long result = 17;
-            result = 31 * result + expiredIndexRowCount;
-            result = 31 * result + validIndexRowCount;
-            result = 31 * result + missingIndexRowCount;
-            result = 31 * result + invalidIndexRowCount;
-            result = 31 * result + indexHasMissingCellsCount;
-            result = 31 * result + indexHasExtraCellsCount;
+            result = 31 * result + getExpiredIndexRowCount();
+            result = 31 * result + getValidIndexRowCount();
+            result = 31 * result + getMissingIndexRowCount();
+            result = 31 * result + getInvalidIndexRowCount();
+            result = 31 * result + getIndexHasMissingCellsCount();
+            result = 31 * result + getIndexHasExtraCellsCount();
             return (int)result;
+        }
+
+        public long getValidIndexRowCount() {
+            return validIndexRowCount;
+        }
+
+        public void setValidIndexRowCount(long validIndexRowCount) {
+            this.validIndexRowCount = validIndexRowCount;
+        }
+
+        public long getExpiredIndexRowCount() {
+            return expiredIndexRowCount;
+        }
+
+        public void setExpiredIndexRowCount(long expiredIndexRowCount) {
+            this.expiredIndexRowCount = expiredIndexRowCount;
+        }
+
+        public long getMissingIndexRowCount() {
+            return missingIndexRowCount;
+        }
+
+        public void setMissingIndexRowCount(long missingIndexRowCount) {
+            this.missingIndexRowCount = missingIndexRowCount;
+        }
+
+        public long getInvalidIndexRowCount() {
+            return invalidIndexRowCount;
+        }
+
+        public void setInvalidIndexRowCount(long invalidIndexRowCount) {
+            this.invalidIndexRowCount = invalidIndexRowCount;
+        }
+
+        public void setIndexHasExtraCellsCount(long indexHasExtraCellsCount) {
+            this.indexHasExtraCellsCount = indexHasExtraCellsCount;
+        }
+
+        public long getIndexHasMissingCellsCount() {
+            return indexHasMissingCellsCount;
+        }
+
+        public void setIndexHasMissingCellsCount(long indexHasMissingCellsCount) {
+            this.indexHasMissingCellsCount = indexHasMissingCellsCount;
         }
     }
 
-    long scannedDataRowCount = 0;
-    long rebuiltIndexRowCount = 0;
-    PhaseResult before = new PhaseResult();
-    PhaseResult after = new PhaseResult();
+    private long scannedDataRowCount = 0;
+    private long rebuiltIndexRowCount = 0;
+    private byte[] startRow;
+    private byte[] stopRow;
+    private long scanMaxTs;
+    private byte[] region;
+    private PhaseResult before = new PhaseResult();
+    private PhaseResult after = new PhaseResult();
 
     @Override
     public String toString() {
         return "VerificationResult{" +
-                "scannedDataRowCount=" + scannedDataRowCount +
-                ", rebuiltIndexRowCount=" + rebuiltIndexRowCount +
-                ", before=" + before +
-                ", after=" + after +
+                "scannedDataRowCount=" + getScannedDataRowCount() +
+                ", rebuiltIndexRowCount=" + getRebuiltIndexRowCount() +
+                ", before=" + getBefore() +
+                ", after=" + getAfter() +
                 '}';
     }
 
@@ -150,19 +255,19 @@ public class IndexToolVerificationResult {
     }
 
     public long getBeforeRebuildValidIndexRowCount() {
-        return before.validIndexRowCount;
+        return getBefore().getValidIndexRowCount();
     }
 
     public long getBeforeRebuildExpiredIndexRowCount() {
-        return before.expiredIndexRowCount;
+        return getBefore().getExpiredIndexRowCount();
     }
 
     public long getBeforeRebuildInvalidIndexRowCount() {
-        return before.invalidIndexRowCount;
+        return getBefore().getInvalidIndexRowCount();
     }
 
     public long getBeforeRebuildMissingIndexRowCount() {
-        return before.missingIndexRowCount;
+        return getBefore().getMissingIndexRowCount();
     }
 
     public long getBeforeIndexHasMissingCellsCount() {return before.indexHasMissingCellsCount; }
@@ -170,19 +275,19 @@ public class IndexToolVerificationResult {
     public long getBeforeIndexHasExtraCellsCount() {return before.indexHasExtraCellsCount; }
 
     public long getAfterRebuildValidIndexRowCount() {
-        return after.validIndexRowCount;
+        return getAfter().getValidIndexRowCount();
     }
 
     public long getAfterRebuildExpiredIndexRowCount() {
-        return after.expiredIndexRowCount;
+        return getAfter().getExpiredIndexRowCount();
     }
 
     public long getAfterRebuildInvalidIndexRowCount() {
-        return after.invalidIndexRowCount;
+        return getAfter().getInvalidIndexRowCount();
     }
 
     public long getAfterRebuildMissingIndexRowCount() {
-        return after.missingIndexRowCount;
+        return getAfter().getMissingIndexRowCount();
     }
 
     public long getAfterIndexHasMissingCellsCount() { return after.indexHasMissingCellsCount; }
@@ -190,27 +295,27 @@ public class IndexToolVerificationResult {
     public long getAfterIndexHasExtraCellsCount() { return after.indexHasExtraCellsCount; }
 
     private void addScannedDataRowCount(long count) {
-        this.scannedDataRowCount += count;
+        this.setScannedDataRowCount(this.getScannedDataRowCount() + count);
     }
 
     private void addRebuiltIndexRowCount(long count) {
-        this.rebuiltIndexRowCount += count;
+        this.setRebuiltIndexRowCount(this.getRebuiltIndexRowCount() + count);
     }
 
     private void addBeforeRebuildValidIndexRowCount(long count) {
-        before.validIndexRowCount += count;
+        getBefore().setValidIndexRowCount(getBefore().getValidIndexRowCount() + count);
     }
 
     private void addBeforeRebuildExpiredIndexRowCount(long count) {
-        before.expiredIndexRowCount += count;
+        getBefore().setExpiredIndexRowCount(getBefore().getExpiredIndexRowCount() + count);
     }
 
     private void addBeforeRebuildMissingIndexRowCount(long count) {
-        before.missingIndexRowCount += count;
+        getBefore().setMissingIndexRowCount(getBefore().getMissingIndexRowCount() + count);
     }
 
     private void addBeforeRebuildInvalidIndexRowCount(long count) {
-        before.invalidIndexRowCount += count;
+        getBefore().setInvalidIndexRowCount(getBefore().getInvalidIndexRowCount() + count);
     }
 
     public void addBeforeIndexHasMissingCellsCount(long count) {
@@ -222,19 +327,19 @@ public class IndexToolVerificationResult {
     }
 
     private void addAfterRebuildValidIndexRowCount(long count) {
-        after.validIndexRowCount += count;
+        getAfter().setValidIndexRowCount(getAfter().getValidIndexRowCount() + count);
     }
 
     private void addAfterRebuildExpiredIndexRowCount(long count) {
-        after.expiredIndexRowCount += count;
+        getAfter().setExpiredIndexRowCount(getAfter().getExpiredIndexRowCount() + count);
     }
 
     private void addAfterRebuildMissingIndexRowCount(long count) {
-        after.missingIndexRowCount += count;
+        getAfter().setMissingIndexRowCount(getAfter().getMissingIndexRowCount() + count);
     }
 
     private void addAfterRebuildInvalidIndexRowCount(long count) {
-        after.invalidIndexRowCount += count;
+        getAfter().setInvalidIndexRowCount(getAfter().getInvalidIndexRowCount() + count);
     }
 
     public void addAfterIndexHasMissingCellsCount(long count) {
@@ -259,7 +364,7 @@ public class IndexToolVerificationResult {
                 cell.getValueOffset(), cell.getValueLength()));
     }
 
-    private void update(Cell cell) {
+    public void update(Cell cell) {
         if (CellUtil
                 .matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, SCANNED_DATA_ROW_COUNT_BYTES)) {
             addScannedDataRowCount(getValue(cell));
@@ -292,57 +397,17 @@ public class IndexToolVerificationResult {
         }
     }
 
-    public static byte[] calculateTheClosestNextRowKeyForPrefix(byte[] rowKeyPrefix) {
-        // Essentially we are treating it like an 'unsigned very very long' and doing +1 manually.
-        // Search for the place where the trailing 0xFFs start
-        int offset = rowKeyPrefix.length;
-        while (offset > 0) {
-            if (rowKeyPrefix[offset - 1] != (byte) 0xFF) {
-                break;
-            }
-            offset--;
-        }
-        if (offset == 0) {
-            // We got an 0xFFFF... (only FFs) stopRow value which is
-            // the last possible prefix before the end of the table.
-            // So set it to stop at the 'end of the table'
-            return HConstants.EMPTY_END_ROW;
-        }
-        // Copy the right length of the original
-        byte[] newStopRow = Arrays.copyOfRange(rowKeyPrefix, 0, offset);
-        // And increment the last one
-        newStopRow[newStopRow.length - 1]++;
-        return newStopRow;
-    }
-
-    public static IndexToolVerificationResult getVerificationResult(Table hTable, long ts)
-            throws IOException {
-        IndexToolVerificationResult verificationResult = new IndexToolVerificationResult();
-        byte[] startRowKey = Bytes.toBytes(Long.toString(ts));
-        byte[] stopRowKey = calculateTheClosestNextRowKeyForPrefix(startRowKey);
-        Scan scan = new Scan();
-        scan.setStartRow(startRowKey);
-        scan.setStopRow(stopRowKey);
-        ResultScanner scanner = hTable.getScanner(scan);
-        for (Result result = scanner.next(); result != null; result = scanner.next()) {
-            for (Cell cell : result.rawCells()) {
-                verificationResult.update(cell);
-            }
-        }
-        return verificationResult;
-    }
-
     public boolean isVerificationFailed() {
-        if (after.invalidIndexRowCount + after.missingIndexRowCount > 0) {
+        if (getAfter().getInvalidIndexRowCount() + getAfter().getMissingIndexRowCount() > 0) {
             return true;
         }
         return false;
     }
 
     public void add(IndexToolVerificationResult verificationResult) {
-        scannedDataRowCount += verificationResult.scannedDataRowCount;
-        rebuiltIndexRowCount += verificationResult.rebuiltIndexRowCount;
-        before.add(verificationResult.before);
-        after.add(verificationResult.after);
+        setScannedDataRowCount(getScannedDataRowCount() + verificationResult.getScannedDataRowCount());
+        setRebuiltIndexRowCount(getRebuiltIndexRowCount() + verificationResult.getRebuiltIndexRowCount());
+        getBefore().add(verificationResult.getBefore());
+        getAfter().add(verificationResult.getAfter());
     }
 }
