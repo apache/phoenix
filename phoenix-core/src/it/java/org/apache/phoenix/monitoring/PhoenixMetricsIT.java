@@ -19,6 +19,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
@@ -124,6 +125,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(0, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
         assertEquals(0, GLOBAL_MUTATION_BYTES.getMetric().getValue());
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.getMetric().getValue());
 
         assertTrue(GLOBAL_SCAN_BYTES.getMetric().getValue() > 0);
         assertTrue(GLOBAL_QUERY_TIME.getMetric().getValue() > 0);
@@ -153,6 +155,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getValue());
         assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getValue());
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.getMetric().getValue());
 
         assertTrue(verifyMetricsFromSink());
     }
@@ -183,6 +186,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(0, GLOBAL_FAILED_QUERY_COUNTER.getMetric().getValue());
         assertEquals(0, GLOBAL_SPOOL_FILE_COUNTER.getMetric().getValue());
         assertEquals(0, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
+        assertEquals(0, GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.getMetric().getValue());
 
         assertTrue(GLOBAL_HBASE_COUNT_RPC_CALLS.getMetric().getValue() > 0);
         assertTrue(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS.getMetric().getValue() > 0);
@@ -334,7 +338,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been four metrics", 4, p.size());
+            assertEquals("There should have been five metrics", 5, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;

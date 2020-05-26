@@ -19,7 +19,6 @@ package org.apache.phoenix.monitoring;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
@@ -109,7 +108,7 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             String t = entry.getKey();
             assertEquals("Table name didn't match for mutation metrics", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been four metrics", 4, p.size());
+            assertEquals("There should have been five metrics", 5, p.size());
             for (Map.Entry<MetricType, Long> metric : p.entrySet()) {
                 MetricType metricType = metric.getKey();
                 long metricValue = metric.getValue();
@@ -121,6 +120,8 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     assertTrue("Mutation bytes size should be greater than zero", metricValue > 0);
                 } else if (metricType.equals(MetricType.MUTATION_BATCH_FAILED_SIZE)) {
                     assertEquals("Zero failed mutations expected", 0, metricValue);
+                } else if (metricType.equals(MetricType.INDEX_COMMIT_FAILURE_SIZE)) {
+                    assertEquals("Zero failed phase 3 mutations expected", 0, metricValue);
                 }
             }
         }
