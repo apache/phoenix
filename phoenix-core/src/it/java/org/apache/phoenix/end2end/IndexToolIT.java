@@ -43,6 +43,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
+import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
@@ -374,10 +376,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
     private void dropIndexToolTables(Connection conn) throws Exception {
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+        TableName indexToolOutputTable =
+            TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
         admin.disableTable(indexToolOutputTable);
         admin.deleteTable(indexToolOutputTable);
-        TableName indexToolResultTable = TableName.valueOf(IndexTool.RESULT_TABLE_NAME_BYTES);
+        TableName indexToolResultTable = TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
         admin.disableTable(indexToolResultTable);
         admin.deleteTable(indexToolResultTable);
     }
@@ -487,12 +490,13 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
         // This method verifies the common prefix, i.e., "timestamp | index table name | ", since the rest of the
         // fields may include the separator key
-        int offset = Bytes.indexOf(rowKey, IndexRebuildRegionScanner.ROW_KEY_SEPARATOR_BYTE);
+        int offset = Bytes.indexOf(rowKey, IndexVerificationResultRepository.ROW_KEY_SEPARATOR_BYTE);
         offset++;
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
         assertEquals(Bytes.compareTo(rowKey, offset, indexTableFullNameBytes.length, indexTableFullNameBytes, 0,
                 indexTableFullNameBytes.length), 0);
-        assertEquals(rowKey[offset + indexTableFullNameBytes.length], IndexRebuildRegionScanner.ROW_KEY_SEPARATOR_BYTE[0]);
+        assertEquals(rowKey[offset + indexTableFullNameBytes.length],
+            IndexVerificationResultRepository.ROW_KEY_SEPARATOR_BYTE[0]);
     }
 
     private Cell getErrorMessageFromIndexToolOutputTable(Connection conn, String dataTableFullName, String indexTableFullName)
@@ -500,7 +504,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
         byte[] dataTableFullNameBytes = Bytes.toBytes(dataTableFullName);
         Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .getTable(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+                .getTable(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
         Scan scan = new Scan();
         ResultScanner scanner = hIndexTable.getScanner(scan);
         boolean dataTableNameCheck = false;
@@ -509,28 +513,30 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         for (Result result = scanner.next(); result != null; result = scanner.next()) {
             for (Cell cell : result.rawCells()) {
                 assertTrue(Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                        IndexTool.OUTPUT_TABLE_COLUMN_FAMILY, 0,
-                        IndexTool.OUTPUT_TABLE_COLUMN_FAMILY.length) == 0);
+                    IndexVerificationOutputRepository.OUTPUT_TABLE_COLUMN_FAMILY, 0,
+                    IndexVerificationOutputRepository.OUTPUT_TABLE_COLUMN_FAMILY.length) == 0);
                 if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        IndexTool.DATA_TABLE_NAME_BYTES, 0, IndexTool.DATA_TABLE_NAME_BYTES.length) == 0) {
+                    IndexVerificationOutputRepository.DATA_TABLE_NAME_BYTES, 0, IndexVerificationOutputRepository.DATA_TABLE_NAME_BYTES.length) == 0) {
                     dataTableNameCheck = true;
                     assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                             dataTableFullNameBytes, 0, dataTableFullNameBytes.length) == 0);
                 } else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        IndexTool.INDEX_TABLE_NAME_BYTES, 0, IndexTool.INDEX_TABLE_NAME_BYTES.length) == 0) {
+                    IndexVerificationOutputRepository.INDEX_TABLE_NAME_BYTES, 0, IndexVerificationOutputRepository.INDEX_TABLE_NAME_BYTES.length) == 0) {
                     indexTableNameCheck = true;
                     assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                             indexTableFullNameBytes, 0, indexTableFullNameBytes.length) == 0);
                 } else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        IndexTool.ERROR_MESSAGE_BYTES, 0, IndexTool.ERROR_MESSAGE_BYTES.length) == 0) {
+                    IndexVerificationOutputRepository.ERROR_MESSAGE_BYTES, 0, IndexVerificationOutputRepository.ERROR_MESSAGE_BYTES.length) == 0) {
                     errorMessageCell = cell;
                 }
             }
         }
-        assertTrue(dataTableNameCheck && indexTableNameCheck && errorMessageCell != null);
+        assertTrue( "DataTableNameCheck was false", dataTableNameCheck);
+        assertTrue("IndexTableNameCheck was false", indexTableNameCheck);
+        assertTrue("Error message cell was null", errorMessageCell != null);
         verifyIndexTableRowKey(CellUtil.cloneRow(errorMessageCell), indexTableFullName);
         hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .getTable(IndexTool.RESULT_TABLE_NAME_BYTES);
+                .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
         scan = new Scan();
         scanner = hIndexTable.getScanner(scan);
         Result result = scanner.next();
@@ -709,7 +715,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             Thread.sleep(1000);
             future.get(40, TimeUnit.SECONDS);
 
-            TableName indexToolOutputTable = TableName.valueOf(IndexTool.OUTPUT_TABLE_NAME_BYTES);
+            TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
             admin.disableTable(indexToolOutputTable);
             admin.deleteTable(indexToolOutputTable);
             // Run the index tool using the only-verify option, verify it gives no mismatch
