@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -275,7 +276,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private void initializeGlobalMockitoSetup() throws IOException {
         //setup
-        when(rebuildScanner.getIndexRowKey(put)).thenCallRealMethod();
+        when(GlobalIndexRegionScanner.getIndexRowKey(indexMaintainer, put)).thenCallRealMethod();
         when(rebuildScanner.prepareIndexMutations(put, delete)).thenCallRealMethod();
         when(rebuildScanner.verifySingleIndexRow(Matchers.<Result>any(),
                 Matchers.<IndexToolVerificationResult.PhaseResult>any())).thenCallRealMethod();

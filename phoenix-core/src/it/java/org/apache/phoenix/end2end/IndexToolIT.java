@@ -189,7 +189,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         return TestUtil.filterTxParamData(list,0);
     }
 
-    private void setEveryNthRowWithNull(int nrows, int nthRowNull, PreparedStatement stmt) throws Exception {
+    protected static void setEveryNthRowWithNull(int nrows, int nthRowNull, PreparedStatement stmt) throws Exception {
         for (int i = 1; i <= nrows; i++) {
             stmt.setInt(1, i);
             stmt.setInt(2, i + 1);
@@ -199,68 +199,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                 stmt.setNull(3, Types.INTEGER);
             }
             stmt.execute();
-        }
-    }
-
-    @Test
-    public void testWithSetNull() throws Exception {
-        // This test is for building non-transactional mutable global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId || !mutable) {
-            return;
-        }
-        // This tests the cases where a column having a null value is overwritten with a not null value and vice versa;
-        // and after that the index table is still rebuilt correctly
-        final int NROWS = 2 * 3 * 5 * 7;
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) "
-                    + tableDDLOptions);
-            String upsertStmt = "UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)";
-            PreparedStatement stmt = conn.prepareStatement(upsertStmt);
-            setEveryNthRowWithNull(NROWS, 2, stmt);
-            conn.commit();
-            setEveryNthRowWithNull(NROWS, 3, stmt);
-            conn.commit();
-            conn.createStatement().execute(String.format(
-                    "CREATE %s INDEX %s ON %s (VAL1) INCLUDE (VAL2) ASYNC ",
-                    (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName));
-            // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            setEveryNthRowWithNull(NROWS, 5, stmt);
-            conn.commit();
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            setEveryNthRowWithNull(NROWS, 7, stmt);
-            conn.commit();
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,
-                    0, IndexTool.IndexVerifyType.ONLY, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).getValue());
-            dropIndexToolTables(conn);
         }
     }
 
@@ -374,7 +312,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    private void dropIndexToolTables(Connection conn) throws Exception {
+    protected static void dropIndexToolTables(Connection conn) throws Exception {
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         TableName indexToolOutputTable =
             TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
@@ -383,86 +321,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         TableName indexToolResultTable = TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
         admin.disableTable(indexToolResultTable);
         admin.deleteTable(indexToolResultTable);
-    }
-
-    @Test
-    public void testBuildSecondaryIndexAndScrutinize() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String stmString1 =
-                    "CREATE TABLE " + dataTableFullName
-                            + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                            + tableDDLOptions;
-            conn.createStatement().execute(stmString1);
-            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
-            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
-
-            // Insert NROWS rows
-            final int NROWS = 1000;
-            for (int i = 0; i < NROWS; i++) {
-                upsertRow(stmt1, i);
-            }
-            conn.commit();
-            String stmtString2 =
-                    String.format(
-                            "CREATE %s INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC ",
-                            (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
-            conn.createStatement().execute(stmtString2);
-
-            // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-
-            // Add more rows and make sure that these rows will be visible to IndexTool
-            for (int i = NROWS; i < 2 * NROWS; i++) {
-                upsertRow(stmt1, i);
-            }
-            conn.commit();
-            indexTool = runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
-            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).getValue());
-            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(2 * NROWS, actualRowCount);
-            dropIndexToolTables(conn);
-        }
     }
 
     public static class MutationCountingRegionObserver extends SimpleRegionObserver {
@@ -483,7 +341,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    private void verifyIndexTableRowKey(byte[] rowKey, String indexTableFullName) {
+    private static void verifyIndexTableRowKey(byte[] rowKey, String indexTableFullName) {
         // The row key for the output table : timestamp | index table name | data row key
         // The row key for the result table : timestamp | index table name | datable table region name |
         //                                    scan start row | scan stop row
@@ -499,7 +357,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             IndexVerificationResultRepository.ROW_KEY_SEPARATOR_BYTE[0]);
     }
 
-    private Cell getErrorMessageFromIndexToolOutputTable(Connection conn, String dataTableFullName, String indexTableFullName)
+    public static Cell getErrorMessageFromIndexToolOutputTable(Connection conn, String dataTableFullName, String indexTableFullName)
             throws Exception {
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
         byte[] dataTableFullNameBytes = Bytes.toBytes(dataTableFullName);
@@ -543,192 +401,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         assert(result != null);
         verifyIndexTableRowKey(CellUtil.cloneRow(result.rawCells()[0]), indexTableFullName);
         return errorMessageCell;
-    }
-
-    @Test
-    public void testIndexToolVerifyBeforeAndBothOptions() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String schemaName = generateUniqueName();
-            String dataTableName = generateUniqueName();
-            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-            String indexTableName = generateUniqueName();
-            String viewName = generateUniqueName();
-            String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                    + tableDDLOptions);
-            conn.commit();
-            conn.createStatement().execute("CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName);
-            conn.commit();
-            // Insert a row
-            conn.createStatement().execute("upsert into " + viewFullName + " values (1, 'Phoenix', 12345)");
-            conn.commit();
-            conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
-            TestUtil.addCoprocessor(conn, "_IDX_" + dataTableFullName, MutationCountingRegionObserver.class);
-            // Run the index MR job and verify that the index table rebuild succeeds
-            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.AFTER);
-            assertEquals(1, MutationCountingRegionObserver.getMutationCount());
-            MutationCountingRegionObserver.setMutationCount(0);
-            // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should not
-            // write any index rows
-            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.BEFORE);
-            assertEquals(0, MutationCountingRegionObserver.getMutationCount());
-            // The "-v BOTH" option should not write any index rows either
-            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.BOTH);
-            assertEquals(0, MutationCountingRegionObserver.getMutationCount());
-            dropIndexToolTables(conn);
-        }
-    }
-
-    @Test
-    public void testIndexToolVerifyAfterOption() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String schemaName = generateUniqueName();
-            String dataTableName = generateUniqueName();
-            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-            String indexTableName = generateUniqueName();
-            String viewName = generateUniqueName();
-            String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                    + tableDDLOptions);
-            conn.commit();
-            conn.createStatement().execute("CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName);
-            conn.commit();
-            // Insert a row
-            conn.createStatement().execute("upsert into " + viewFullName + " values (1, 'Phoenix', 12345)");
-            conn.commit();
-            // Configure IndexRegionObserver to fail the first write phase. This should not
-            // lead to any change on index and thus the index verify during index rebuild should fail
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
-            conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
-            // Run the index MR job and verify that the index table rebuild fails
-            runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, -1, IndexTool.IndexVerifyType.AFTER);
-            // The index tool output table should report that there is a missing index row
-            Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
-            dropIndexToolTables(conn);
-        }
-    }
-
-    @Test
-    public void testIndexToolOnlyVerifyOption() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) COLUMN_ENCODED_BYTES=0");
-            // Insert a row
-            conn.createStatement().execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
-            conn.commit();
-            conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC", indexTableName, dataTableFullName));
-            // Run the index MR job to only verify that each data table row has a corresponding index row
-            // IndexTool will go through each data table row and record the mismatches in the output table
-            // called PHOENIX_INDEX_TOOL
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.ONLY);
-            Cell cell = getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                    expectedValueBytes, 0, expectedValueBytes.length) == 0);
-            // Delete the output table for the next test
-            dropIndexToolTables(conn);
-            // Run the index tool to populate the index while verifying rows
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.AFTER);
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, 0, IndexTool.IndexVerifyType.ONLY);
-            dropIndexToolTables(conn);
-        }
-    }
-
-    @Test
-    public void testIndexToolVerifyWithExpiredIndexRows() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) COLUMN_ENCODED_BYTES=0");
-            // Insert a row
-            conn.createStatement()
-                    .execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
-            conn.commit();
-            conn.createStatement()
-                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC",
-                        indexTableName, dataTableFullName));
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
-                IndexTool.IndexVerifyType.ONLY);
-            Cell cell =
-                    getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
-                        indexTableFullName);
-            byte[] expectedValueBytes = Bytes.toBytes("Missing index row");
-            assertTrue(Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(),
-                cell.getValueLength(), expectedValueBytes, 0, expectedValueBytes.length) == 0);
-
-            // Run the index tool to populate the index while verifying rows
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
-                IndexTool.IndexVerifyType.AFTER);
-
-            // Set ttl of index table ridiculously low so that all data is expired
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            TableName indexTable = TableName.valueOf(indexTableFullName);
-            ColumnFamilyDescriptor desc = admin.getDescriptor(indexTable).getColumnFamilies()[0];
-            ColumnFamilyDescriptorBuilder builder =
-                    ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1);
-            Future<Void> future = admin.modifyColumnFamilyAsync(indexTable, builder.build());
-            Thread.sleep(1000);
-            future.get(40, TimeUnit.SECONDS);
-
-            TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
-            admin.disableTable(indexToolOutputTable);
-            admin.deleteTable(indexToolOutputTable);
-            // Run the index tool using the only-verify option, verify it gives no mismatch
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
-                IndexTool.IndexVerifyType.ONLY);
-            Scan scan = new Scan();
-            Table hIndexToolTable =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices()
-                            .getTable(indexToolOutputTable.getName());
-            Result r = hIndexToolTable.getScanner(scan).next();
-            assertTrue(r == null);
-            dropIndexToolTables(conn);
-        }
     }
 
     @Test
@@ -816,59 +488,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    @Test
-    public void testSecondaryGlobalIndexFailure() throws Exception {
-        // This test is for building non-transactional global indexes with direct api
-        if (localIndex || transactional || !directApi || useSnapshot || useTenantId) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String stmString1 =
-                    "CREATE TABLE " + dataTableFullName
-                            + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                            + tableDDLOptions;
-            conn.createStatement().execute(stmString1);
-            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
-            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
-
-            // Insert two rows
-            upsertRow(stmt1, 1);
-            upsertRow(stmt1, 2);
-            conn.commit();
-
-            String stmtString2 =
-                    String.format(
-                            "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
-                            (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
-            conn.createStatement().execute(stmtString2);
-
-            // Run the index MR job.
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName);
-
-            String qIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
-
-            // Verify that the index table is in the ACTIVE state
-            assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, qIndexTableName));
-
-            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            Admin admin = queryServices.getAdmin();
-            TableName tableName = TableName.valueOf(qIndexTableName);
-            admin.disableTable(tableName);
-
-            // Run the index MR job and it should fail (return -1)
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-                    null, -1, new String[0]);
-
-            // Verify that the index table should be still in the ACTIVE state
-            assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, qIndexTableName));
-        }
-    }
-    
     @Test
     public void testSaltedVariableLengthPK() throws Exception {
         if (!mutable) return;
