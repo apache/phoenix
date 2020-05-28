@@ -381,52 +381,6 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
     }
 
-    @Test
-    public void testRollbackAfterFailure() throws Exception {
-        validate(true);
-        if (upgrade) {
-            iut.setFailUpgradeTask(true);
-        } else {
-            iut.setFailDowngradeTask(true);
-        }
-        iut.prepareToolSetup();
-        int status = iut.executeTool();
-        Assert.assertEquals(-1, status);
-        //should have rolled back and be in the same status we started with
-        validate(true);
-    }
-
-    @Test
-    public void testTableReenableAfterDoubleFailure() throws Exception {
-        validate(true);
-        //this will force the upgrade/downgrade to fail, and then the rollback to fail too
-        //we want to make sure that even then, we'll try to re-enable the HBase tables
-        iut.setFailUpgradeTask(true);
-        iut.setFailDowngradeTask(true);
-        iut.prepareToolSetup();
-        try {
-            iut.executeTool();
-        } catch (RuntimeException e) {
-            //double failures throw an exception so that the tool stops immediately
-            validateTablesEnabled(INPUT_LIST);
-            return;
-        }
-        Assert.fail("Should have thrown an exception!");
-    }
-
-    private void validateTablesEnabled(String inputList) throws IOException, SQLException {
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        String[] tableNames = inputList.split(",");
-        Assert.assertNotNull(tableNames);
-        Assert.assertTrue(tableNames.length > 0);
-        for (String tableName : tableNames) {
-            String physicalTableName =
-                SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName), isNamespaceEnabled).getString();
-            Assert.assertTrue(admin.isTableEnabled(TableName.valueOf(physicalTableName)));
-        }
-    }
-
     @After
     public void cleanup() throws IOException, SQLException {
         if (conn == null) {

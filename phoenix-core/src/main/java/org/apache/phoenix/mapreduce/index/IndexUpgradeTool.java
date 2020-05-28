@@ -26,8 +26,6 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
@@ -62,8 +60,6 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.logging.Logger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.SchemaUtil;
@@ -135,10 +131,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private String indexToolOpts;
 
     private boolean test = false;
-    private boolean isWaitComplete = false;
-    private boolean failUpgradeTask = false;
-    private boolean failDowngradeTask = false;
-    private boolean hasFailure = false;
 
     public void setDryRun(boolean dryRun) {
         this.dryRun = dryRun;
@@ -178,15 +170,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     public String getIndexToolOpts() { return this.indexToolOpts; }
 
-    @VisibleForTesting
-    public void setFailUpgradeTask(boolean failInitialTask) {
-        this.failUpgradeTask = failInitialTask;
-    }
-
-    public void setFailDowngradeTask(boolean failRollbackTask) {
-        this.failDowngradeTask = failRollbackTask;
-    }
-
     public IndexUpgradeTool(String mode, String tables, String inputFile,
             String outputFile, boolean dryRun, IndexTool indexTool, boolean rebuild) {
         this.operation = mode;
@@ -212,12 +195,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         initializeTool(cmdLine);
         prepareToolSetup();
         executeTool();
-        if (hasFailure) {
-            return -1;
-        } else {
-            return 0;
-        }
-
+        return 0;
     }
 
     /**
@@ -231,7 +209,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -343,7 +321,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 LOGGER.info("This is the beginning of the tool with dry run.");
             }
         } catch (IOException e) {
-            LOGGER.severe("Something went wrong " + e);
+            LOGGER.severe("Something went wrong "+e);
             System.exit(-1);
         }
     }
@@ -420,20 +398,15 @@ public class IndexUpgradeTool extends Configured implements Tool {
         executeToolForMutableTables(conn, queryServices, conf, mutableList);
         enableImmutableTables(queryServices, immutableList, startWaitTime);
         rebuildIndexes(conn, conf, immutableList);
-        if (hasFailure) {
-            return -1;
-        } else {
-            return 0;
-        }
+        return 0;
     }
 
     private long executeToolForImmutableTables(ConnectionQueryServices queryServices,
-            List<String> immutableList) {
+            ArrayList<String> immutableList) {
         if (immutableList.isEmpty()) {
             return 0;
         }
         LOGGER.info("Started " + operation + " for immutable tables");
-        List<String> failedTables = new ArrayList<String>();
         for (String dataTableFullName : immutableList) {
             try (Admin admin = queryServices.getAdmin()) {
                 HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
@@ -441,13 +414,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
                         + " (immutable)");
                 disableTable(admin, dataTableFullName, indexes);
                 modifyTable(admin, dataTableFullName, indexes);
-            } catch (Throwable e) {
+            } catch (IOException | SQLException e) {
                 LOGGER.severe("Something went wrong while disabling "
                         + "or modifying immutable table " + e);
-                handleFailure(queryServices, dataTableFullName, immutableList, failedTables);
+                handleFailure(queryServices, dataTableFullName, immutableList);
             }
         }
-        immutableList.removeAll(failedTables);
         long startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
         return startWaitTime;
     }
@@ -460,7 +432,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
             return;
         }
         LOGGER.info("Started " + operation + " for mutable tables");
-        List<String> failedTables = new ArrayList<>();
         for (String dataTableFullName : mutableTables) {
             try (Admin admin = queryServices.getAdmin()) {
                 HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
@@ -469,22 +440,19 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 modifyTable(admin, dataTableFullName, indexes);
                 enableTable(admin, dataTableFullName, indexes);
                 LOGGER.info("Completed " + operation + " of " + dataTableFullName);
-            } catch (Throwable e) {
+            } catch (IOException | SQLException e) {
                 LOGGER.severe("Something went wrong while executing "
-                    + operation + " steps for "+ dataTableFullName + " " + e);
-                handleFailure(queryServices, dataTableFullName, mutableTables, failedTables);
+                        + operation + " steps for "+ dataTableFullName + " " + e);
+                handleFailure(queryServices, dataTableFullName, mutableTables);
             }
         }
-        mutableTables.removeAll(failedTables);
         // Opportunistically kick-off index rebuilds after upgrade operation
         rebuildIndexes(conn, conf, mutableTables);
     }
 
     private void handleFailure(ConnectionQueryServices queryServices,
             String dataTableFullName,
-            List<String> tableList,
-            List<String> failedTables) {
-        hasFailure = true;
+            ArrayList<String> tableList) {
         LOGGER.info("Performing error handling to revert the steps taken during " + operation);
         HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
         try (Admin admin = queryServices.getAdmin()) {
@@ -495,21 +463,14 @@ public class IndexUpgradeTool extends Configured implements Tool {
             upgrade = !upgrade;
 
             tablesAndIndexes.remove(dataTableFullName); //removing from the map
-            failedTables.add(dataTableFullName); //everything in failed tables will later be
-            // removed from the list
+            tableList.remove(dataTableFullName); //removing from the list
 
             LOGGER.severe(dataTableFullName+" has been removed from the list as tool failed"
                     + " to perform "+operation);
-        } catch (Throwable e) {
+        } catch (IOException | SQLException e) {
             LOGGER.severe("Revert of the "+operation +" failed in error handling, "
-                    + "re-enabling tables and then throwing runtime exception");
+                    + "throwing runtime exception");
             LOGGER.severe("Confirm the state for "+getSubListString(tableList, dataTableFullName));
-            try {
-                enableTable(queryServices.getAdmin(), dataTableFullName, indexes);
-            } catch (Exception ex) {
-                throw new RuntimeException("Error re-enabling tables after rollback failure. " +
-                    "Original exception that caused the rollback: [" + e.toString() + " " + "]", ex);
-            }
             throw new RuntimeException(e);
         }
     }
@@ -553,9 +514,9 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
-    private String getSubListString(List<String> tableList, String dataTableFullName) {
-        return StringUtils.join(tableList.subList(tableList.indexOf(dataTableFullName),
-                tableList.size()), ",");
+    private String getSubListString(ArrayList<String> tableList, String dataTableFullName) {
+        return StringUtils.join(",", tableList.subList(tableList.indexOf(dataTableFullName),
+                tableList.size()));
     }
 
     private long getWaitMoreTime(long startWaitTime) {
@@ -565,6 +526,17 @@ public class IndexUpgradeTool extends Configured implements Tool {
             return 0; //no wait
         }
         return (((waitTime) * 60000) - Math.abs(endWaitTime-startWaitTime));
+    }
+
+    private void modifyTable(Admin admin, String dataTableFullName, HashSet<String> indexes)
+            throws IOException {
+        if (upgrade) {
+            modifyIndexTable(admin, indexes);
+            modifyDataTable(admin, dataTableFullName);
+        } else {
+            modifyDataTable(admin, dataTableFullName);
+            modifyIndexTable(admin, indexes);
+        }
     }
 
     private void disableTable(Admin admin, String dataTable, HashSet<String>indexes)
@@ -589,24 +561,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
-    private void modifyTable(Admin admin, String dataTableFullName, HashSet<String> indexes)
-            throws IOException {
-        if (upgrade) {
-            modifyIndexTable(admin, indexes);
-            modifyDataTable(admin, dataTableFullName);
-            if (test && failUpgradeTask) {
-                throw new RuntimeException("Test requested upgrade failure");
-            }
-        } else {
-            modifyDataTable(admin, dataTableFullName);
-            modifyIndexTable(admin, indexes);
-            if (test && failDowngradeTask) {
-                throw new RuntimeException("Test requested downgrade failure");
-            }
-        }
-    }
-
-    private void enableTable(Admin admin, String dataTable, Set<String>indexes)
+    private void enableTable(Admin admin, String dataTable, HashSet<String>indexes)
             throws IOException {
         if (!admin.isTableEnabled(TableName.valueOf(dataTable))) {
             if (!dryRun) {
@@ -640,8 +595,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     private void rebuildIndexes(Connection conn, Configuration conf, String dataTableFullName) {
         try {
-            HashMap<String, IndexInfo>
-                    rebuildMap = prepareToRebuildIndexes(conn, dataTableFullName);
+            HashMap<String, IndexInfo> rebuildMap = prepareToRebuildIndexes(conn, dataTableFullName);
 
             //for rebuilding indexes in case of upgrade and if there are indexes on the table/view.
             if (rebuildMap.isEmpty()) {
@@ -837,6 +791,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             String viewSql = getViewSql(tableName, schemaName);
 
             ResultSet rs = conn.createStatement().executeQuery(viewSql);
+
             while (rs.next()) {
                 String viewFullName = rs.getString(1);
                 String viewName = SchemaUtil.getTableNameFromFullName(viewFullName);
