@@ -238,6 +238,16 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public List<IndexVerificationOutputRow> getOutputRows(long ts, byte[] indexName)
         throws IOException {
         Iterator<IndexVerificationOutputRow> iter = getOutputRowIterator(ts, indexName);
+        return getIndexVerificationOutputRows(iter);
+    }
+
+    @VisibleForTesting
+    public List<IndexVerificationOutputRow> getAllOutputRows() throws IOException {
+        Iterator<IndexVerificationOutputRow> iter = getOutputRowIteratorForAllRows();
+        return getIndexVerificationOutputRows(iter);
+    }
+
+    private List<IndexVerificationOutputRow> getIndexVerificationOutputRows(Iterator<IndexVerificationOutputRow> iter) {
         List<IndexVerificationOutputRow> outputRowList = new ArrayList<IndexVerificationOutputRow>();
         while (iter.hasNext()){
             outputRowList.add(iter.next());
@@ -251,6 +261,14 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         byte[] partialKey = generatePartialOutputTableRowKey(ts, indexName);
         scan.setStartRow(partialKey);
         scan.setStopRow(ByteUtil.calculateTheClosestNextRowKeyForPrefix(partialKey));
+        ResultScanner scanner = outputTable.getScanner(scan);
+        return new IndexVerificationOutputRowIterator(scanner.iterator());
+    }
+
+    @VisibleForTesting
+    public Iterator<IndexVerificationOutputRow> getOutputRowIteratorForAllRows()
+        throws IOException {
+        Scan scan = new Scan();
         ResultScanner scanner = outputTable.getScanner(scan);
         return new IndexVerificationOutputRowIterator(scanner.iterator());
     }
