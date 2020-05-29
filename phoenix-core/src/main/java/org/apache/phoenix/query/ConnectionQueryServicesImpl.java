@@ -1307,131 +1307,136 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            try {
-                existingDesc = admin.getDescriptor(TableName.valueOf(physicalTableName));
-            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                tableExist = false;
-                if (tableType == PTableType.VIEW) {
-                    String fullTableName = Bytes.toString(physicalTableName);
-                    throw new ReadOnlyTableException(
-                            "An HBase table for a VIEW must already exist",
-                            SchemaUtil.getSchemaNameFromFullName(fullTableName),
-                            SchemaUtil.getTableNameFromFullName(fullTableName));
-                }
-            }
-
-            TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
-                    splits, isNamespaceMapped);
-
-            if (!tableExist) {
-                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
-                    // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
-                    throw new UpgradeRequiredException();
-                }
-                if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
-                        PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-                    newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
-                }
+            // If DoNotUpgrade config is set only check namespace mapping and
+            // Client-server compatibility
+            if (!isDoNotUpgradePropSet) {
                 try {
-                    if (splits == null) {
-                        admin.createTable(newDesc.build());
-                    } else {
-                        admin.createTable(newDesc.build(), splits);
+                    existingDesc = admin.getDescriptor(TableName.valueOf(physicalTableName));
+                } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+                    tableExist = false;
+                    if (tableType == PTableType.VIEW) {
+                        String fullTableName = Bytes.toString(physicalTableName);
+                        throw new ReadOnlyTableException(
+                                "An HBase table for a VIEW must already exist",
+                                SchemaUtil.getSchemaNameFromFullName(fullTableName),
+                                SchemaUtil.getTableNameFromFullName(fullTableName));
                     }
-                } catch (TableExistsException e) {
-                    // We can ignore this, as it just means that another client beat us
-                    // to creating the HBase metadata.
+                }
+
+                TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
+                        splits, isNamespaceMapped);
+
+                if (!tableExist) {
+                    if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && !isAutoUpgradeEnabled) {
+                        // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
+                        throw new UpgradeRequiredException();
+                    }
+                    if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
+                            PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                        newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
+                    }
+                    try {
+                        if (splits == null) {
+                            admin.createTable(newDesc.build());
+                        } else {
+                            admin.createTable(newDesc.build(), splits);
+                        }
+                    } catch (TableExistsException e) {
+                        // We can ignore this, as it just means that another client beat us
+                        // to creating the HBase metadata.
+                        if (isMetaTable && !isUpgradeRequired()) {
+                            checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                        }
+                        return null;
+                    }
                     if (isMetaTable && !isUpgradeRequired()) {
-                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                        try {
+                            checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES,
+                                    this.getProps()).getName());
+                        } catch (SQLException possibleCompatException) {
+                            if (possibleCompatException.getErrorCode() ==
+                                    SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
+                                try {
+                                    // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG, we should drop it
+                                    admin.disableTable(TableName.valueOf(physicalTableName));
+                                    admin.deleteTable(TableName.valueOf(physicalTableName));
+                                } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
+                                    // Ignore this since it just means that another client with a similar set of
+                                    // incompatible configs and conditions beat us to dropping the SYSCAT HBase table
+                                }
+                                if (createdNamespace &&
+                                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.getProps())) {
+                                    // We should drop the SYSTEM namespace which we just created, since
+                                    // server-side namespace mapping is disabled
+                                    ensureNamespaceDropped(QueryConstants.SYSTEM_SCHEMA_NAME);
+                                }
+                            }
+                            // rethrow the SQLException
+                            throw possibleCompatException;
+                        }
+
                     }
                     return null;
-                }
-                if (isMetaTable && !isUpgradeRequired()) {
-                    try {
-                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES,
-                                this.getProps()).getName());
-                    } catch (SQLException possibleCompatException) {
-                        if (possibleCompatException.getErrorCode() ==
-                                SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
-                            try {
-                                // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG, we should drop it
-                                admin.disableTable(TableName.valueOf(physicalTableName));
-                                admin.deleteTable(TableName.valueOf(physicalTableName));
-                            } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
-                                // Ignore this since it just means that another client with a similar set of
-                                // incompatible configs and conditions beat us to dropping the SYSCAT HBase table
-                            }
-                            if (createdNamespace &&
-                                    SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.getProps())) {
-                                // We should drop the SYSTEM namespace which we just created, since
-                                // server-side namespace mapping is disabled
-                                ensureNamespaceDropped(QueryConstants.SYSTEM_SCHEMA_NAME);
-                            }
-                        }
-                        // rethrow the SQLException
-                        throw possibleCompatException;
-                    }
-
-                }
-                return null;
-            } else {
-                if (isMetaTable && !isUpgradeRequired()) {
-                    checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                 } else {
-                    for(Pair<byte[],Map<String,Object>> family: families) {
-                        if ((Bytes.toString(family.getFirst())
-                                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX))) {
-                            newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
-                            break;
+                    if (isMetaTable && !isUpgradeRequired()) {
+                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                    } else {
+                        for (Pair<byte[], Map<String, Object>> family : families) {
+                            if ((Bytes.toString(family.getFirst())
+                                    .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX))) {
+                                newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
+                                break;
+                            }
                         }
                     }
-                }
 
-                if (!modifyExistingMetaData) {
-                    return existingDesc; // Caller already knows that no metadata was changed
-                }
-                TransactionFactory.Provider provider = getTransactionProvider(props);
-                boolean willBeTx = provider != null;
-                // If mapping an existing table as transactional, set property so that existing
-                // data is correctly read.
-                if (willBeTx) {
-                    if (!equalTxCoprocessor(provider, existingDesc, newDesc.build())) {
-                        // Cannot switch between different providers
+                    if (!modifyExistingMetaData) {
+                        return existingDesc; // Caller already knows that no metadata was changed
+                    }
+                    TransactionFactory.Provider provider = getTransactionProvider(props);
+                    boolean willBeTx = provider != null;
+                    // If mapping an existing table as transactional, set property so that existing
+                    // data is correctly read.
+                    if (willBeTx) {
+                        if (!equalTxCoprocessor(provider, existingDesc, newDesc.build())) {
+                            // Cannot switch between different providers
+                            if (hasTxCoprocessor(existingDesc)) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SWITCH_TXN_PROVIDERS)
+                                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                            }
+                            if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
+                                        .setMessage(provider.name())
+                                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                            }
+                            newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
+                        }
+                    } else {
+                        // If we think we're creating a non transactional table when it's already
+                        // transactional, don't allow.
                         if (hasTxCoprocessor(existingDesc)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SWITCH_TXN_PROVIDERS)
-                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
+                                    .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                                    .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
                         }
-                        if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
-                            .setMessage(provider.name())
-                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
-                        }
-                        newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
+                        newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
                     }
-                } else {
-                    // If we think we're creating a non transactional table when it's already
-                    // transactional, don't allow.
-                    if (hasTxCoprocessor(existingDesc)) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
-                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                    TableDescriptor result = newDesc.build();
+                    if (existingDesc.equals(result)) {
+                        return null; // Indicate that no metadata was changed
                     }
-                    newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
-                }
-                TableDescriptor result = newDesc.build();
-                if (existingDesc.equals(result)) {
-                    return null; // Indicate that no metadata was changed
-                }
 
-                // Do not call modifyTable for SYSTEM tables
-                if (tableType != PTableType.SYSTEM) {
-                    modifyTable(physicalTableName, newDesc.build(), true);
+                    // Do not call modifyTable for SYSTEM tables
+                    if (tableType != PTableType.SYSTEM) {
+                        modifyTable(physicalTableName, newDesc.build(), true);
+                    }
+                    return result;
                 }
-                return result;
+            } else {
+                checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
             }
-
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } catch (InterruptedException e) {
@@ -1496,19 +1501,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         long systemCatalogTimestamp = Long.MAX_VALUE;
         Table ht = null;
         try {
-            List<HRegionLocation> locations = this
-                    .getAllTableRegions(metaTable);
-            Set<HRegionLocation> serverMap = Sets.newHashSetWithExpectedSize(locations.size());
-            TreeMap<byte[], HRegionLocation> regionMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-            List<byte[]> regionKeys = Lists.newArrayListWithExpectedSize(locations.size());
-            for (HRegionLocation entry : locations) {
-                if (!serverMap.contains(entry)) {
-                    regionKeys.add(entry.getRegion().getStartKey());
-                    regionMap.put(entry.getRegion().getRegionName(), entry);
-                    serverMap.add(entry);
-                }
-            }
-
             ht = this.getTable(metaTable);
             final byte[] tablekey = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
             Map<byte[], GetVersionResponse> results;
@@ -1546,7 +1538,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 MetaDataUtil.ClientServerCompatibility compatibility = MetaDataUtil.areClientAndServerCompatible(serverJarVersion);
                 if (!compatibility.getIsCompatible()) {
                     if (compatibility.getErrorCode() == SQLExceptionCode.OUTDATED_JARS.getErrorCode()) {
-                        HRegionLocation name = regionMap.get(result.getKey());
                         errorMessage.append("Newer Phoenix clients can't communicate with older "
                                 + "Phoenix servers. Client version: "
                                 + MetaDataProtocol.CURRENT_CLIENT_VERSION
@@ -1554,9 +1545,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + getServerVersion(serverJarVersion)
                                 + " The following servers require an updated "
                                 + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
-                                + " to be put in the classpath of HBase: ");
-                        errorMessage.append(name);
-                        errorMessage.append(';');
+                                + " to be put in the classpath of HBase; ");
                     } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
                         errorMessage.append("Major version of client is less than that of the server. Client version: "
                                 + MetaDataProtocol.CURRENT_CLIENT_VERSION
@@ -3199,12 +3188,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     }
                                     return null;
                                 } catch (UpgradeRequiredException e) {
-                                    // This will occur in 3 cases:
-                                    // 1. SYSTEM.CATALOG does not exist and we don't want to allow the user to create it i.e.
-                                    //    !isAutoUpgradeEnabled or isDoNotUpgradePropSet is set
-                                    // 2. SYSTEM.CATALOG exists and its timestamp < MIN_SYSTEM_TABLE_TIMESTAMP
-                                    // 3. SYSTEM.CATALOG exists, but client and server-side namespace mapping is enabled so
-                                    //    we need to migrate SYSTEM tables to the SYSTEM namespace
+                                    // This will occur when SYSTEM.CATALOG exists, but client and
+                                    // server-side namespace mapping is enabled so
+                                    // we need to migrate SYSTEM tables to the SYSTEM namespace
                                     setUpgradeRequired();
                                 }
 

@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -59,6 +60,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -171,6 +173,7 @@ public class SystemCatalogCreationOnConnectionIT {
 
      // Conditions: isDoNotUpgradePropSet is true
      // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+     // UpgradeRequiredException is also not thrown even if it is first connection to server
     @Test
     public void testFirstConnectionDoNotUpgradePropSet() throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
@@ -179,12 +182,15 @@ public class SystemCatalogCreationOnConnectionIT {
         UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           new SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver(ReadOnlyProps.EMPTY_PROPS);
-
-        driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
+        try {
+            driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
+        } catch (Exception e) {
+            assertTrue(e.getCause() instanceof TableNotFoundException);
+        }
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
         assertEquals(0, hbaseTables.size());
-        assertEquals(1, countUpgradeAttempts);
+        assertEquals(0, countUpgradeAttempts);
     }
 
 
@@ -211,6 +217,9 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(1, actualSysCatUpgrades);
     }
 
+    // We should remove this test because we aren't testing SYSCAT timestamp anymore if
+    // "DoNotUpgrade" config is set to true
+    @Ignore
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will create all namespace
     // mapped SYSTEM tables i.e. SYSTEM:.*, the SYSTEM:CATALOG timestamp at creation is purposefully set to be <
     // MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP. The subsequent connection has client-side namespace mapping enabled
@@ -377,9 +386,12 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(Integer.parseInt(MODIFIED_MAX_VERSIONS), verifyModificationTableMetadata(driver, PHOENIX_SYSTEM_CATALOG));
     }
 
+    // This test case should be removed because we won't be creating any SYSCAT tables
+    // or even checking the existence of it if "DoNotUpgrade" config is set to true
     // Test the case when an end-user uses the vanilla PhoenixDriver to create a connection and a
     // requirement for upgrade is detected. In this case, the user should get a connection on which
     // they are only able to run "EXECUTE UPGRADE"
+    @Ignore
     @Test
     public void testExecuteUpgradeSameConnWithPhoenixDriver() throws Exception {
         // Register the vanilla PhoenixDriver
@@ -657,5 +669,31 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(0, countUpgradeAttempts);
         assertFalse(isSystemNamespaceCreated());
         return driver;
+    }
+
+    @Test
+    public void testDoNotUpgradePropSet() throws Exception {
+        String tableName = "HBASE_SYNTH_TEST";
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        Properties propsDoNotUpgradePropSet = new Properties();
+        // Create a dummy connection to make sure we have all system tables in place
+        Connection con1 = DriverManager.getConnection(getJdbcUrl(),propsDoNotUpgradePropSet);
+        String ddl = "CREATE TABLE "+ tableName +" (PK1 VARCHAR not null, PK2 VARCHAR not null, "
+                + "COL1 varchar, COL2 varchar " + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
+        con1.createStatement().execute(ddl);
+        con1.createStatement().execute("UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
+        con1.commit();
+        // Stop HMaster to check if we can create connection without active HMaster
+        testUtil.getMiniHBaseCluster().getMaster().stopMaster();
+        // Set doNotUpgradeProperty to true
+        UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
+        Connection con2 = DriverManager.getConnection(getJdbcUrl(),propsDoNotUpgradePropSet);
+        ResultSet rs = con2.createStatement().executeQuery("select * from " + tableName);
+        assertTrue(rs.next());
+        assertEquals("pk1", rs.getString(1));
+        assertEquals("pk2", rs.getString(2));
+        assertFalse(rs.next());
+        con1.close();
+        con2.close();
     }
 }
