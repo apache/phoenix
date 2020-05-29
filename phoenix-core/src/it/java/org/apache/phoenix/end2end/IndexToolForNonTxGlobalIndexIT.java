@@ -72,7 +72,6 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
-import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
@@ -631,6 +630,19 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
 
+            // disabling logging AFTER on an AFTER run should leave no output rows
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.AFTER,
+                IndexTool.IndexDisableLoggingType.AFTER, null, schemaName, dataTableName,
+                indexTableName,
+                indexTableFullName, 0);
+
+            //disabling logging BEFORE on a BEFORE run should leave no output rows
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BEFORE,
+                IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
+                indexTableFullName, 0);
+            //now clear out all the rebuilt index rows
+            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+
             //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
             assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.AFTER,
@@ -638,18 +650,18 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
 
+            //clear out both the output table and the index
             deleteAllRows(conn,
                 TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             deleteAllRows(conn, TableName.valueOf(indexTableFullName));
 
             //now check that disabling logging BEFORE creates only the AFTER logs on a BOTH run
-            //the index tool run fails validation at the end because we suppressed the BEFORE logs
-            //which prevented the rebuild from working properly, but that's ok for this test.
-            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+            //which in this case should be 0 since the rebuild succeeds and after-validation passes
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.BEFORE,
                 IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
                 dataTableName, indexTableName,
-                indexTableFullName, -1);
+                indexTableFullName, 0);
 
             deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             deleteAllRows(conn, TableName.valueOf(indexTableFullName));
@@ -659,13 +671,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 IndexTool.IndexDisableLoggingType.BOTH,
                 IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
                 dataTableName, indexTableName,
-                indexTableFullName, -1);
+                indexTableFullName, 0);
 
         }
     }
 
     public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
-        IOException {
+        IOException, InterruptedException {
         Scan scan = new Scan();
         HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
             getAdmin();
@@ -677,6 +689,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 table.delete(del);
             }
         }
+        getUtility().getHBaseAdmin().flush(tableName);
+        TestUtil.majorCompact(getUtility(), tableName);
     }
 
     private void assertDisableLogging(Connection conn, int expectedRows,
@@ -689,23 +703,23 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         IndexTool tool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
             indexTableName,
             null,
-            expectedStatus, verifyType,  "-et",
-            Long.toString(EnvironmentEdgeManager.currentTimeMillis()),"-dl", disableLoggingType.toString());
+            expectedStatus, verifyType, "-dl", disableLoggingType.toString());
         assertNotNull(tool);
-        assertNotNull(tool.getEndTime());
         byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
 
         IndexVerificationOutputRepository outputRepository =
             new IndexVerificationOutputRepository(indexTableFullNameBytes, conn);
         List<IndexVerificationOutputRow> rows =
-            outputRepository.getOutputRows(tool.getEndTime(),
-                indexTableFullNameBytes);
-        assertEquals(expectedRows, rows.size());
+            outputRepository.getAllOutputRows();
+        try {
+            assertEquals(expectedRows, rows.size());
+        } catch (AssertionError e) {
+            TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            throw e;
+        }
         if (expectedRows > 0) {
             assertArrayEquals(expectedPhase, rows.get(0).getPhaseValue());
         }
-        TestUtil.dumpTable(conn,
-            TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
     }
 
     private void deleteOneRowFromResultTable(Connection conn,  Long scn, String indexTable)
