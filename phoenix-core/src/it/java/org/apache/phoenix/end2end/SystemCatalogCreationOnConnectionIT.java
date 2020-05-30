@@ -64,6 +64,8 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+
+// Each test in this class needs its own minicluster.
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogCreationOnConnectionIT {
     private HBaseTestingUtility testUtil = null;
@@ -173,7 +175,6 @@ public class SystemCatalogCreationOnConnectionIT {
 
      // Conditions: isDoNotUpgradePropSet is true
      // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
-     // UpgradeRequiredException is also not thrown even if it is first connection to server
     @Test
     public void testFirstConnectionDoNotUpgradePropSet() throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
@@ -182,15 +183,11 @@ public class SystemCatalogCreationOnConnectionIT {
         UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
         SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver driver =
           new SystemCatalogCreationOnConnectionIT.PhoenixSysCatCreationTestingDriver(ReadOnlyProps.EMPTY_PROPS);
-        try {
-            driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
-        } catch (Exception e) {
-            assertTrue(e.getCause() instanceof TableNotFoundException);
-        }
+        driver.getConnectionQueryServices(getJdbcUrl(), propsDoNotUpgradePropSet);
         hbaseTables = getHBaseTables();
         assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) || hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
         assertEquals(0, hbaseTables.size());
-        assertEquals(0, countUpgradeAttempts);
+        assertEquals(1, countUpgradeAttempts);
     }
 
 
@@ -386,12 +383,9 @@ public class SystemCatalogCreationOnConnectionIT {
         assertEquals(Integer.parseInt(MODIFIED_MAX_VERSIONS), verifyModificationTableMetadata(driver, PHOENIX_SYSTEM_CATALOG));
     }
 
-    // This test case should be removed because we won't be creating any SYSCAT tables
-    // or even checking the existence of it if "DoNotUpgrade" config is set to true
     // Test the case when an end-user uses the vanilla PhoenixDriver to create a connection and a
     // requirement for upgrade is detected. In this case, the user should get a connection on which
     // they are only able to run "EXECUTE UPGRADE"
-    @Ignore
     @Test
     public void testExecuteUpgradeSameConnWithPhoenixDriver() throws Exception {
         // Register the vanilla PhoenixDriver
@@ -671,29 +665,33 @@ public class SystemCatalogCreationOnConnectionIT {
         return driver;
     }
 
+    // Conditions: doNotUpgrade config should be set and HMaster should be stopped
+    // Expected: Even if HMaster is stopped we should be able to get phoenix
+    // connection, knowing that all system tables exists already.
     @Test
     public void testDoNotUpgradePropSet() throws Exception {
         String tableName = "HBASE_SYNTH_TEST";
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         Properties propsDoNotUpgradePropSet = new Properties();
         // Create a dummy connection to make sure we have all system tables in place
-        Connection con1 = DriverManager.getConnection(getJdbcUrl(),propsDoNotUpgradePropSet);
-        String ddl = "CREATE TABLE "+ tableName +" (PK1 VARCHAR not null, PK2 VARCHAR not null, "
-                + "COL1 varchar, COL2 varchar " + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
-        con1.createStatement().execute(ddl);
-        con1.createStatement().execute("UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
-        con1.commit();
+        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
+            String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR not null, PK2 VARCHAR not null, "
+                    + "COL1 varchar, COL2 varchar " + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
+            con1.createStatement().execute(ddl);
+            con1.createStatement().execute(
+                    "UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
+            con1.commit();
+        }
         // Stop HMaster to check if we can create connection without active HMaster
         testUtil.getMiniHBaseCluster().getMaster().stopMaster();
         // Set doNotUpgradeProperty to true
         UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
-        Connection con2 = DriverManager.getConnection(getJdbcUrl(),propsDoNotUpgradePropSet);
-        ResultSet rs = con2.createStatement().executeQuery("select * from " + tableName);
-        assertTrue(rs.next());
-        assertEquals("pk1", rs.getString(1));
-        assertEquals("pk2", rs.getString(2));
-        assertFalse(rs.next());
-        con1.close();
-        con2.close();
+        try(Connection con2 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
+            ResultSet rs = con2.createStatement().executeQuery("select * from " + tableName);
+            assertTrue(rs.next());
+            assertEquals("pk1", rs.getString(1));
+            assertEquals("pk2", rs.getString(2));
+            assertFalse(rs.next());
+        }
     }
 }

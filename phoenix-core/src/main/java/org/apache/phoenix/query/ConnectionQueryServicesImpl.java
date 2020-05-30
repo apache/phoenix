@@ -1305,12 +1305,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                       .build().buildException();
                 }
-            }
-            // If DoNotUpgrade config is set only check namespace mapping and
-            // Client-server compatibility for system tables.
-            if(isDoNotUpgradePropSet && SchemaUtil.isSystemTable(physicalTableName)) {
-                checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
-                return null;
+                // If DoNotUpgrade config is set only check namespace mapping and
+                // Client-server compatibility for system tables.
+                if(isDoNotUpgradePropSet) {
+                    try {
+                        checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
+                    } catch (SQLException possibleCompatException) {
+                        if(possibleCompatException.getCause()
+                                instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                            throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
+                        }
+                        throw possibleCompatException;
+                    }
+                    return null;
+                }
             }
 
             try {
@@ -1326,16 +1334,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
-                    splits, isNamespaceMapped);
+            TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName,
+                    existingDesc, tableType, props, families, splits, isNamespaceMapped);
 
             if (!tableExist) {
-                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && !isAutoUpgradeEnabled) {
+                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired()
+                        && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
                     // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
                     throw new UpgradeRequiredException();
                 }
-                if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
-                        PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
+                        && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(newDesc.build()
+                        .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
                 try {
@@ -1348,19 +1358,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // We can ignore this, as it just means that another client beat us
                     // to creating the HBase metadata.
                     if (isMetaTable && !isUpgradeRequired()) {
-                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(
+                                SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                     }
                     return null;
                 }
                 if (isMetaTable && !isUpgradeRequired()) {
                     try {
-                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES,
-                                this.getProps()).getName());
+                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(
+                                SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                     } catch (SQLException possibleCompatException) {
-                        if (possibleCompatException.getErrorCode() ==
-                                SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
+                        if (possibleCompatException.getErrorCode() == SQLExceptionCode
+                                .INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
                             try {
-                                // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG, we should drop it
+                                // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG,
+                                // we should drop it
                                 admin.disableTable(TableName.valueOf(physicalTableName));
                                 admin.deleteTable(TableName.valueOf(physicalTableName));
                             } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
@@ -1543,7 +1555,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + MetaDataProtocol.CURRENT_CLIENT_VERSION
                                 + "; Server version: "
                                 + getServerVersion(serverJarVersion)
-                                + " The following servers require an updated "
+                                + "Servers require an updated "
                                 + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
                                 + " to be put in the classpath of HBase; ");
                     } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
@@ -3188,7 +3200,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     }
                                     return null;
                                 } catch (UpgradeRequiredException e) {
-                                    // This will occur when SYSTEM.CATALOG exists, but client and
+                                    // This will occur in 2 cases:
+                                    // 1. when SYSTEM.CATALOG doesn't exists
+                                    // 2. when SYSTEM.CATALOG exists, but client and
                                     // server-side namespace mapping is enabled so
                                     // we need to migrate SYSTEM tables to the SYSTEM namespace
                                     setUpgradeRequired();
