@@ -63,10 +63,8 @@ import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
-import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
@@ -94,7 +92,6 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
-import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.prepareIndexMutationsForRebuild;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 
 /**
@@ -140,12 +137,9 @@ public class IndexRegionObserver extends BaseRegionObserver {
       }
   }
 
-  private static boolean ignoreIndexRebuildForTesting  = false;
   private static boolean failPreIndexUpdatesForTesting = false;
   private static boolean failPostIndexUpdatesForTesting = false;
   private static boolean failDataTableUpdatesForTesting = false;
-
-  public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
 
   public static void setFailPreIndexUpdatesForTesting(boolean fail) { failPreIndexUpdatesForTesting = fail; }
 
@@ -169,7 +163,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
       private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
       private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
       private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
-      private boolean rebuild;
       // The current and next states of the data rows corresponding to the pending mutations
       private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
       // Data table pending mutations
@@ -509,8 +502,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
             if (!this.builder.isEnabled(m)) {
                 continue;
             }
-            // Unless we're replaying edits to rebuild the index, we update the time stamp
-            // of the data table to prevent overlapping time stamps (which prevents index
+            // We update the time stamp of the data table to prevent overlapping time stamps (which prevents index
             // inconsistencies as this case isn't handled correctly currently).
             setTimestamp(m, now);
             if (m instanceof Put) {
@@ -586,8 +578,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
         }
     }
     /**
-     * Retrieve the the last committed data row state. This method is called only for regular data mutations since for
-     * rebuild (i.e., index replay) mutations include all row versions.
+     * Retrieve the the last committed data row state.
      */
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
                                      BatchMutateContext context) throws IOException {
@@ -842,50 +833,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
         context.indexUpdates.clear();
     }
 
-    /**
-     * There are at most two rebuild mutation for every row, one put and one delete. They are listed in indexMutations
-     * next to each other such that put comes before delete by {@link IndexRebuildRegionScanner}. This method is called
-     * only for global indexes.
-     */
-    private void preBatchMutateWithExceptionsForRebuild(ObserverContext<RegionCoprocessorEnvironment> c,
-                                                        MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                                        BatchMutateContext context,
-                                                        IndexMaintainer indexMaintainer) throws Throwable {
-        Put put = null;
-        List <Mutation> indexMutations = new ArrayList<>();
-        for (int i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
-                continue;
-            }
-            Mutation m = miniBatchOp.getOperation(i);
-            if (!this.builder.isEnabled(m)) {
-                continue;
-            }
-            if (m instanceof Put) {
-                if (put != null) {
-                    indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, null));
-                }
-                put = (Put)m;
-            } else {
-                indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, (Delete)m));
-                put = null;
-            }
-            miniBatchOp.setOperationStatus(i, NOWRITE);
-        }
-        if (put != null) {
-            indexMutations.addAll(prepareIndexMutationsForRebuild(indexMaintainer, put, null));
-        }
-        HTableInterfaceReference hTableInterfaceReference =
-                new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
-        for (Mutation m : indexMutations) {
-            context.preIndexUpdates.put(hTableInterfaceReference, m);
-        }
-        doPre(c, context, miniBatchOp);
-        // For rebuild updates, no post index update is prepared. Just create an empty list.
-        context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
-    }
-
     public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
                                              MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
         ignoreAtomicOperations(miniBatchOp);
@@ -893,12 +840,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
         Mutation firstMutation = miniBatchOp.getOperation(0);
-        ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
-        context.rebuild = replayWrite != null;
-        if (context.rebuild) {
-            preBatchMutateWithExceptionsForRebuild(c, miniBatchOp, context, indexMetaData.getIndexMaintainers().get(0));
-            return;
-        }
+
         /*
          * Exclusively lock all rows so we get a consistent read
          * while determining the index updates
@@ -1040,9 +982,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
 
   private void doPre(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context,
                      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-      if (ignoreIndexRebuildForTesting && context.rebuild) {
-          return;
-      }
       long start = EnvironmentEdgeManager.currentTimeMillis();
       try {
           if (failPreIndexUpdatesForTesting) {
@@ -1058,11 +997,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           // postBatchMutateIndispensably() is called
           removePendingRows(context);
           context.rowLocks.clear();
-          if (context.rebuild) {
-              throw new IOException(String.format("%s for rebuild", e.getMessage()), e);
-          } else {
-              rethrowIndexingException(e);
-          }
+          rethrowIndexingException(e);
       }
       throw new RuntimeException(
               "Somehow didn't complete the index update, but didn't return succesfully either!");

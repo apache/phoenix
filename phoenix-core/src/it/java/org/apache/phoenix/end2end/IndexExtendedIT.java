@@ -36,6 +36,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -341,7 +342,7 @@ public class IndexExtendedIT extends BaseTest {
 
             // Configure IndexRegionObserver to fail the first write phase. This should not
             // lead to any change on index and thus index verify during index rebuild should fail
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             stmt.execute(String.format(
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC",
                     indexTableName, dataTableFullName));
@@ -353,7 +354,7 @@ public class IndexExtendedIT extends BaseTest {
             IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
                     indexTableName, null, -1, IndexTool.IndexVerifyType.AFTER);
 
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(false);
 
             // job failed, verify that the index table is still not in the ACTIVE state
             assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
