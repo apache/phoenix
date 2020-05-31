@@ -89,7 +89,7 @@ public class ServerBuildIndexCompiler {
 
     public MutationPlan compile(PTable index) throws SQLException {
         try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
-            String query = "SELECT count(*) FROM " + tableName;
+            String query = "SELECT /*+ NO_INDEX */ count(*) FROM " + tableName;
             this.plan = statement.compileQuery(query);
             TableRef tableRef = plan.getTableRef();
             Scan scan = plan.getContext().getScan();

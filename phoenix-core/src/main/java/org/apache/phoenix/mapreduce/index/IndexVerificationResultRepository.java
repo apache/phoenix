@@ -83,7 +83,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
             "BeforeRebuildUnknownIndexRowCount";
     public final static byte[] BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT);
     public final static String AFTER_REBUILD_VALID_INDEX_ROW_COUNT =
-        "AfterValidExpiredIndexRowCount";
+        "AfterRebuildValidIndexRowCount";
     public final static byte[] AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_VALID_INDEX_ROW_COUNT);
     public final static String AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT =
         "AfterRebuildExpiredIndexRowCount";

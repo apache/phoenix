@@ -465,7 +465,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.commit();
             // Configure IndexRegionObserver to fail the first write phase. This should not
             // lead to any change on index and thus the index verify during index rebuild should fail
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             conn.createStatement().execute(String.format(
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
             // Run the index MR job and verify that the index table rebuild fails
@@ -480,7 +480,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             } catch(Exception ex){
                 Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
             }
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(false);
         }
     }
 
@@ -659,11 +659,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             deleteAllRows(conn, TableName.valueOf(indexTableFullName));
 
-            //now check that disabling logging BEFORE creates only the AFTER logs on a BOTH run
-            //which in this case should be 0 since the rebuild succeeds and after-validation passes
-            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
-                IndexTool.IndexDisableLoggingType.BEFORE,
-                IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
+            //now check that disabling logging AFTER creates only the BEFORE logs on a BOTH run
+            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+                IndexTool.IndexDisableLoggingType.AFTER,
+                IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
 
@@ -673,7 +672,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             //now check that disabling logging BOTH creates no logs on a BOTH run
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.BOTH,
-                IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
+                IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
 

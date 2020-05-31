@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.CHECK_VERSION_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -96,6 +97,7 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -214,7 +216,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
-
+    private IndexWriter globalIndexRebuildWriter;
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
@@ -1074,9 +1076,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean oldCoproc = region.getTableDesc().hasCoprocessor(Indexer.class.getCanonicalName());
         byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
         IndexTool.IndexVerifyType verifyType = (valueBytes != null) ?
-                IndexTool.IndexVerifyType.fromValue(valueBytes):IndexTool.IndexVerifyType.NONE;
-        if(oldCoproc  && verifyType == IndexTool.IndexVerifyType.ONLY) {
-            return new IndexerRegionScanner(innerScanner, region, scan, env);
+                IndexTool.IndexVerifyType.fromValue(valueBytes) : IndexTool.IndexVerifyType.NONE;
+        if (oldCoproc  && verifyType == IndexTool.IndexVerifyType.ONLY) {
+            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
         }
         if (!scan.isRaw()) {
             Scan rawScan = new Scan(scan);
@@ -1098,9 +1100,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             innerScanner.close();
             RegionScanner scanner = region.getScanner(rawScan);
-            return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
+            if (oldCoproc) {
+                return new IndexerRegionScanner(scanner, region, scan, env, this);
+            } else {
+                return new IndexRebuildRegionScanner(scanner, region, scan, env);
+            }
         }
-        return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
+        if (oldCoproc) {
+            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
+        } else {
+            return new IndexRebuildRegionScanner(innerScanner, region, scan, env);
+        }
     }
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
