@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
+import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -37,12 +38,13 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowValueConstructorOffsetInternalErrorException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -251,11 +253,32 @@ public class RVCOffsetCompiler {
                     "RVC Offset must be a point lookup.");
         }
 
+
+        RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(columns.size());
+
+        for(PColumn column : columns) {
+            builder.addField(column, column.isNullable(), column.getSortOrder());
+        }
+
+        RowKeySchema rowKeySchema = builder.build();
+
+        //we make a ScanRange with 1 keyslots that cover the entire PK to reuse the code
+        KeyRange pointKeyRange = scanRanges.getScanRange();
+        KeyRange keyRange = KeyRange.getKeyRange(pointKeyRange.getLowerRange(), false, KeyRange.UNBOUND, true);
+        List<KeyRange> myRangeList = Lists.newArrayList(keyRange);
+        List<List<KeyRange>> slots = new ArrayList<>();
+        slots.add(myRangeList);
+        int[] slotSpan = new int[1];
+
+        //subtract 1 see ScanUtil.SINGLE_COLUMN_SLOT_SPAN is 0
+        slotSpan[0] = columns.size() - 1;
+        byte[] key = ScanUtil.getMinKey(rowKeySchema,slots,slotSpan);
+
         // Note the use of ByteUtil.nextKey() to generate exclusive offset
         CompiledOffset
                 compiledOffset =
                 new CompiledOffset(Optional.<Integer>absent(),
-                        Optional.of(ByteUtil.nextKey(scanRanges.getScanRange().getLowerRange())));
+                        Optional.of(key));
 
         return compiledOffset;
     }
