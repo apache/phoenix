@@ -103,6 +103,7 @@ import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
+import org.apache.phoenix.parse.AlterTableStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
@@ -377,12 +378,15 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
-    
-    protected int executeMutation(final CompilableStatement stmt) throws SQLException {
-      return executeMutation(stmt, true);
+
+    protected int executeMutation(final CompilableStatement stmt, final QueryLogger queryLogger)
+            throws SQLException {
+      return executeMutation(stmt, true, queryLogger);
     }
 
-    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError) throws SQLException {
+    private int executeMutation(final CompilableStatement stmt,
+            final boolean doRetryOnMetaNotFoundError,
+            final QueryLogger queryLogger) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -432,7 +436,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                                 +" data from server");
                                     if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()){
-                                        return executeMutation(stmt, false);
+                                        return executeMutation(stmt, false, queryLogger);
                                     }
                                 }
                                 throw e;
@@ -1831,10 +1835,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }
             }
         }
-        QueryLogger queryLogger = QueryLogger.getInstance(connection,isSystemTable);
-        QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
+
+        QueryLogger queryLogger = QueryLogger.createInstance(connection,isSystemTable,
+            isCriticalStatement(stmt));
+        QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(), 
                 connection.getQueryServices(), sql, getParameters());
+        if (isCriticalStatement(stmt)) {
+            queryLogger.sync(null, null);
+        }
         return queryLogger;
+    }
+
+    private boolean isCriticalStatement(CompilableStatement stmt) {
+      return (stmt instanceof DropTableStatement || stmt instanceof AlterTableStatement);
     }
     
     @Override
@@ -1861,7 +1874,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        int updateCount = executeMutation(stmt);
+        int updateCount = executeMutation(stmt, createQueryLogger(stmt,sql));
         flushIfNecessary();
         return updateCount;
     }
@@ -1880,7 +1893,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
                 .build().buildException();
             }
-            executeMutation(stmt);
+            executeMutation(stmt, createQueryLogger(stmt,sql));
             flushIfNecessary();
             return false;
         }

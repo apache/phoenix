@@ -252,7 +252,103 @@ public class QueryLoggerIT extends BaseUniqueNamesOwnClusterIT {
         assertFalse(rs.next());
         conn.close();
     }
-    
+
+    @Test
+    //DROP Table statement should be always logged.
+    public void testDropTableStatement() throws Exception{
+        String tableName = generateUniqueName();
+        createTableAndInsertValues(tableName, true);
+        Properties props= new Properties();
+        props.setProperty(QueryServices.LOG_LEVEL, LogLevel.INFO.name());
+        Connection conn = DriverManager.getConnection(getUrl(),props);
+        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.INFO);
+
+        String query = "SELECT * FROM " + tableName;
+        ResultSet rs = conn.createStatement().executeQuery(query);
+
+        String query2 = "DROP TABLE " + tableName;
+        conn.createStatement().execute(query2);
+        while (rs.next()) {
+            rs.getString(1);
+            rs.getString(2);
+        }
+        String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE
+            + "\"";
+        boolean foundQueryLog = false;
+
+        int retryCount = 0, maxRetryCount = 10;
+        int sleepTime = 1000;
+        while (retryCount++ < maxRetryCount) {
+            Thread.sleep(sleepTime);
+            try {
+                rs = conn.createStatement().executeQuery(logQuery);
+                while (rs.next()) {
+                    rs.getString(QUERY);
+                    if (rs.getString(QUERY).equals("DROP TABLE " + tableName)) {
+                        foundQueryLog = true;
+                        break;
+                    }
+                }
+                if(foundQueryLog) {
+                    break;
+                }
+            } catch (Exception e){
+            }
+
+        }
+        conn.close();
+        assertTrue(foundQueryLog);
+    }
+
+    @Test
+    //ALTER Table statement should be always logged.
+    public void testAlterTableStatement() throws Exception{
+        String tableName = generateUniqueName();
+        createTableAndInsertValues(tableName, true);
+        Properties props= new Properties();
+        props.setProperty(QueryServices.LOG_LEVEL, LogLevel.INFO.name());
+        Connection conn = DriverManager.getConnection(getUrl(),props);
+        assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.INFO);
+
+        String query = "SELECT * FROM " + tableName;
+        ResultSet rs = conn.createStatement().executeQuery(query);
+
+        String query2 = "ALTER TABLE " + tableName + " ADD abc char(10) VERSIONS=10";
+        conn.createStatement().execute(query2);
+        while (rs.next()) {
+            rs.getString(1);
+            rs.getString(2);
+        }
+        String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE
+            + "\"";
+        boolean foundQueryLog = false;
+
+        int retryCount = 0, maxRetryCount = 10;
+        int sleepTime = 1000;
+        while (retryCount++ < maxRetryCount) {
+            Thread.sleep(sleepTime);
+            try {
+                rs = conn.createStatement().executeQuery(logQuery);
+                while (rs.next()) {
+                    rs.getString(QUERY);
+                    if (rs.getString(QUERY).equals("ALTER TABLE " + tableName +
+                        " ADD abc char(10) VERSIONS=10")) {
+                        foundQueryLog = true;
+                        break;
+                    }
+                }
+                if(foundQueryLog) {
+                    break;
+                }
+            } catch (Exception e){
+            }
+
+        }
+        conn.close();
+        assertTrue(foundQueryLog);
+    }
+
+
 
     @Test
     public void testPreparedStatementWithTrace() throws Exception{
