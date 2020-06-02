@@ -18,6 +18,45 @@ package org.apache.phoenix.end2end;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.AuthUtil;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.LocalHBaseCluster;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
+import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.AccessControlUtil;
+import org.apache.hadoop.hbase.security.access.AccessController;
+import org.apache.hadoop.hbase.security.access.GetUserPermissionsRequest;
+import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.security.access.UserPermission;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Before;
+import org.junit.FixMethodOrder;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runners.MethodSorters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
@@ -29,44 +68,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
-
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.AuthUtil;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.LocalHBaseCluster;
-import org.apache.hadoop.hbase.NamespaceDescriptor;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.security.AccessDeniedException;
-import org.apache.hadoop.hbase.security.User;
-import org.apache.hadoop.hbase.security.access.AccessControlClient;
-import org.apache.hadoop.hbase.security.access.Permission;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Before;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.runners.MethodSorters;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -138,6 +151,10 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
+        initCluster(isNamespaceMapped, false);
+    }
+
+    static void initCluster(boolean isNamespaceMapped, boolean useCustomAccessController) throws Exception {
         if (null != testUtil) {
             testUtil.shutdownMiniCluster();
             testUtil = null;
@@ -146,7 +163,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         testUtil = new HBaseTestingUtility();
 
         Configuration config = testUtil.getConfiguration();
-        enablePhoenixHBaseAuthorization(config);
+        enablePhoenixHBaseAuthorization(config, useCustomAccessController);
         configureNamespacesOnServer(config, isNamespaceMapped);
         configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
@@ -186,17 +203,26 @@ public abstract class BasePermissionsIT extends BaseTest {
         view2TableName = tableName + "_V2";
     }
 
-    private static void enablePhoenixHBaseAuthorization(Configuration config) {
+    private static void enablePhoenixHBaseAuthorization(Configuration config,
+                                                        boolean useCustomAccessController) {
         config.set("hbase.superuser", SUPER_USER + "," + "superUser2");
         config.set("hbase.security.authorization", Boolean.TRUE.toString());
         config.set("hbase.security.exec.permission.checks", Boolean.TRUE.toString());
-        config.set("hbase.coprocessor.master.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-        config.set("hbase.coprocessor.region.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-        config.set("hbase.coprocessor.regionserver.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-
+        if(useCustomAccessController) {
+            config.set("hbase.coprocessor.master.classes",
+                    CustomAccessController.class.getName());
+            config.set("hbase.coprocessor.region.classes",
+                    CustomAccessController.class.getName());
+            config.set("hbase.coprocessor.regionserver.classes",
+                    CustomAccessController.class.getName());
+        } else {
+            config.set("hbase.coprocessor.master.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+            config.set("hbase.coprocessor.region.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+            config.set("hbase.coprocessor.regionserver.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+        }
         config.set(QueryServices.PHOENIX_ACLS_ENABLED,"true");
 
         config.set("hbase.regionserver.wal.codec", "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
@@ -1406,5 +1432,51 @@ public abstract class BasePermissionsIT extends BaseTest {
                 return null;
             }
         };
+    }
+
+    public static class  CustomAccessController extends AccessController {
+
+        org.apache.hadoop.hbase.client.Connection connection;
+        @Override
+        public void start(CoprocessorEnvironment env) throws IOException {
+            super.start(env);
+             connection = ConnectionFactory.createConnection(env.getConfiguration());
+        }
+
+        @Override
+        public void getUserPermissions(RpcController controller,
+                                       AccessControlProtos.GetUserPermissionsRequest request,
+                                       RpcCallback<AccessControlProtos.GetUserPermissionsResponse> done) {
+            AccessControlProtos.GetUserPermissionsResponse response = null;
+            try {
+                final String userName = request.hasUserName() ? request.getUserName().toStringUtf8() : null;
+                final String namespace =
+                        request.hasNamespaceName() ? request.getNamespaceName().toStringUtf8() : null;
+                final TableName table =
+                        request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
+                final byte[] cf =
+                        request.hasColumnFamily() ? request.getColumnFamily().toByteArray() : null;
+                final byte[] cq =
+                        request.hasColumnQualifier() ? request.getColumnQualifier().toByteArray() : null;
+                GetUserPermissionsRequest getUserPermissionsRequest = null;
+                if (request.getType() == AccessControlProtos.Permission.Type.Table) {
+                    getUserPermissionsRequest = GetUserPermissionsRequest.newBuilder(table).withFamily(cf)
+                            .withQualifier(cq).withUserName(userName).build();
+                } else if (request.getType() == AccessControlProtos.Permission.Type.Namespace) {
+                    getUserPermissionsRequest =
+                            GetUserPermissionsRequest.newBuilder(namespace).withUserName(userName).build();
+                } else {
+                    getUserPermissionsRequest =
+                            GetUserPermissionsRequest.newBuilder().withUserName(userName).build();
+                }
+                List<UserPermission> perms =
+                        connection.getAdmin().getUserPermissions(getUserPermissionsRequest);
+                response = AccessControlUtil.buildGetUserPermissionsResponse(perms);
+            } catch (IOException e) {
+                // pass exception back up
+                CoprocessorRpcUtils.setControllerException(controller, e);
+            }
+            done.run(response);
+        }
     }
 }

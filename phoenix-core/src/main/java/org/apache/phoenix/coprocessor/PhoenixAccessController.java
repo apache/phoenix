@@ -503,16 +503,16 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
          return userPermissions;
        }
 
-     //FIXME This seems to have no effect at all
      private void getUserDefinedPermissions(final TableName tableName,
              final List<UserPermission> userPermissions) throws IOException {
           User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
               @Override
               public List<UserPermission> run() throws Exception {
-                 //FIXME We are masking the parameter list that we are supposed to add to
-                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
-                 try (Connection connection =
+                  final RpcCall rpcContext = RpcUtil.getRpcContext();
+                  try (Connection connection =
                          ConnectionFactory.createConnection(((CoprocessorEnvironment) env).getConfiguration())) {
+                      // Setting RPC context as null so that user can be resetted
+                      RpcUtil.setRpcContext(null);
                       for (MasterObserver service : getAccessControllers()) {
                          if (service.getClass().getName().equals(
                              org.apache.hadoop.hbase.security.access.AccessController.class
@@ -530,6 +530,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                           throw (Error) e;
                       }
                       throw new Exception(e);
+                  } finally {
+                      // Setting RPC context back to original context of the RPC
+                      RpcUtil.setRpcContext(rpcContext);
                   }
                   return userPermissions;
               }
