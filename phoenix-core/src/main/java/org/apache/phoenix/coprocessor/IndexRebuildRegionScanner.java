@@ -1373,8 +1373,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     }
                 }
             }
-        } catch (IOException e) {
-            LOGGER.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
+        } catch (Throwable e) {
+            LOGGER.error("Exception in IndexRebuildRegionScanner for region "
+                    + region.getRegionInfo().getRegionNameAsString(), e);
             throw e;
         } finally {
             region.closeRegionOperation();
