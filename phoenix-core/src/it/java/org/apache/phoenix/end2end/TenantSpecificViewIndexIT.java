@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -339,6 +340,84 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             
             rs = viewConn.createStatement().executeQuery(query);
             assertEquals(String.format(expectedPlanFormat, "2012-10-21", "2016-01-01"), QueryUtil.getExplainPlan(rs));
+        }
+    }
+
+    @Test public void testCurrentTimeWithViewIndexes() throws Exception {
+
+        String baseName = generateUniqueName();
+        String baseTable = String.format("BT_%s", baseName);
+        String globalView = String.format("GV_%s", baseName);
+        String tenantView = String.format("TV_%s", baseName);
+        String viewIndex = String.format("IDX_%s", globalView);
+        String tenant = "00D0t000T000001";
+
+        String tenantConnectionUrl = String.format("%s;%s=%s", getUrl(), TENANT_ID_ATTRIB, tenant);
+        String BASE_TABLE_TEMPLATE =
+                "CREATE TABLE IF NOT EXISTS %s " + " (TENANT_ID CHAR(15) NOT NULL, "
+                        + " KP CHAR(3) NOT NULL, " + " COL1 VARCHAR,COL2 VARCHAR,COL3 VARCHAR "
+                        + " CONSTRAINT PK PRIMARY KEY (TENANT_ID, KP)) "
+                        + " MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 0";
+
+        String GLOBAL_VIEW_TEMPLATE =
+                "CREATE VIEW IF NOT EXISTS %s "
+                        + " (GID CHAR(15) NOT NULL, COL4 VARCHAR, COL5 VARCHAR, COL6 VARCHAR "
+                        + " CONSTRAINT pk PRIMARY KEY (GID)) "
+                        + " AS SELECT * FROM %s WHERE KP = 'A'";
+
+        String TENANT_VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s";
+
+        String INDEX_TEMPLATE = "CREATE INDEX IF NOT EXISTS %s ON %s(%s) INCLUDE (%s)";
+
+        try (Connection globalConn = DriverManager.getConnection(getUrl());
+                Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+
+            globalConn.createStatement().execute(String.format(BASE_TABLE_TEMPLATE, baseTable));
+            globalConn.createStatement()
+                    .execute(String.format(GLOBAL_VIEW_TEMPLATE, globalView, baseTable));
+            globalConn.createStatement()
+                    .execute(String.format(INDEX_TEMPLATE, viewIndex, globalView, "COL4", "COL6"));
+            tenantConnection.createStatement()
+                    .execute(String.format(TENANT_VIEW_TEMPLATE, tenantView, globalView));
+
+            try (Statement stmt = tenantConnection.createStatement()) {
+                stmt.execute(String.format("UPSERT INTO %s (GID,COL1,COL2,COL3,COL4,COL5,COL6) "
+                        + "VALUES('gv1', 'a1','b1','c1','d41','e51','f61')", tenantView));
+                tenantConnection.commit();
+            }
+        }
+
+        try (Connection readConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+            // SQL where index is selected
+            String
+                    planWithIndex =
+                    String.format(
+                            "SELECT to_number(current_time()) as t, col6 from %s where col4 = 'd41'",
+                            tenantView);
+
+            // SQL where index is not selected
+            String
+                    planNoIndex =
+                    String.format(
+                            "SELECT to_number(current_time()) as t, col6 from %s where col5 = 'e51'",
+                            tenantView);
+
+            try (Statement stmt = readConnection.createStatement()) {
+                ResultSet rs = stmt.executeQuery(planWithIndex);
+                rs.next();
+                long time = rs.getLong(1);
+                // current time returns proper time
+                assertTrue(time != -1);
+            }
+
+            try (Statement stmt = readConnection.createStatement()) {
+                ResultSet rs = stmt.executeQuery(planNoIndex);
+                rs.next();
+                long time = rs.getLong(1);
+                // current time returns proper time
+                assertTrue(time != -1);
+            }
+
         }
     }
 }
