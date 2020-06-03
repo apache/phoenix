@@ -631,7 +631,7 @@ public class MetaDataClient {
                     tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
                     table = tableRef.getTable();
                     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
-                            QueryConstants.UNSET_TIMESTAMP, table);
+                            tableRef.getResolvedTimeStamp(), table);
                 } catch (TableNotFoundException e) {
                     // reset the result as we looked up the parent view 
                     return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
