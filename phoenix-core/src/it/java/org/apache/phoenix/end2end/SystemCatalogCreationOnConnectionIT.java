@@ -674,8 +674,7 @@ public class SystemCatalogCreationOnConnectionIT {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         Properties propsDoNotUpgradePropSet = new Properties();
         // Create a dummy connection to make sure we have all system tables in place
-        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet))
-        {
+        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
             String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR not null, " +
                     "PK2 VARCHAR not null, COL1 varchar, COL2 varchar "
                     + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
@@ -683,18 +682,19 @@ public class SystemCatalogCreationOnConnectionIT {
             con1.createStatement().execute(
                     "UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
             con1.commit();
+            // Stop HMaster to check if we can create connection without active HMaster
+            testUtil.getMiniHBaseCluster().getMaster().stopMaster();
+            // Set doNotUpgradeProperty to true
+            UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
+            try (Connection con2 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
+                ResultSet rs = con2.createStatement().executeQuery("select * from " + tableName);
+                assertTrue(rs.next());
+                assertEquals("pk1", rs.getString(1));
+                assertEquals("pk2", rs.getString(2));
+                assertFalse(rs.next());
+            }
+        } finally {
+            testUtil.getMiniHBaseCluster().startMaster();
         }
-        // Stop HMaster to check if we can create connection without active HMaster
-        testUtil.getMiniHBaseCluster().getMaster().stopMaster();
-        // Set doNotUpgradeProperty to true
-        UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
-        try(Connection con2 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
-            ResultSet rs = con2.createStatement().executeQuery("select * from " + tableName);
-            assertTrue(rs.next());
-            assertEquals("pk1", rs.getString(1));
-            assertEquals("pk2", rs.getString(2));
-            assertFalse(rs.next());
-        }
-        testUtil.getMiniHBaseCluster().startMaster();
     }
 }
