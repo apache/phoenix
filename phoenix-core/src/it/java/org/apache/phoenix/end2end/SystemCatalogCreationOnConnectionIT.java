@@ -674,9 +674,11 @@ public class SystemCatalogCreationOnConnectionIT {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         Properties propsDoNotUpgradePropSet = new Properties();
         // Create a dummy connection to make sure we have all system tables in place
-        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet)) {
-            String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR not null, PK2 VARCHAR not null, "
-                    + "COL1 varchar, COL2 varchar " + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
+        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet))
+        {
+            String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR not null, " +
+                    "PK2 VARCHAR not null, COL1 varchar, COL2 varchar "
+                    + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
             con1.createStatement().execute(ddl);
             con1.createStatement().execute(
                     "UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
@@ -693,5 +695,6 @@ public class SystemCatalogCreationOnConnectionIT {
             assertEquals("pk2", rs.getString(2));
             assertFalse(rs.next());
         }
+        testUtil.getMiniHBaseCluster().startMaster();
     }
 }

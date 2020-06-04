@@ -1417,14 +1417,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // Cannot switch between different providers
                         if (hasTxCoprocessor(existingDesc)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SWITCH_TXN_PROVIDERS)
-                                    .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                                    .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName))
+                            .build().buildException();
                         }
                         if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALTER_NONTX_TO_TX)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_TABLE_FROM_NON_TXN_TO_TXNL)
-                                    .setMessage(provider.name())
-                                    .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                                    .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                            .setMessage(provider.name())
+                            .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                            .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName))
+                            .build().buildException();
                         }
                         newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
                     }
@@ -1433,8 +1435,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // transactional, don't allow.
                     if (hasTxCoprocessor(existingDesc)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
-                                .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                                .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName))
+                        .build().buildException();
                     }
                     newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
                 }
