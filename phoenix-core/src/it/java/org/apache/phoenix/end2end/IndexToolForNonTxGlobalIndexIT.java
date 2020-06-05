@@ -20,8 +20,10 @@ package org.apache.phoenix.end2end;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
@@ -30,6 +32,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
@@ -137,6 +140,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
+        serverProps.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Long.toString(3600));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
@@ -674,6 +678,186 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 indexTableFullName, 0);
 
         }
+    }
+
+    @Test
+    public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = generateUniqueName();
+        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
+        String view2Name = generateUniqueName();
+        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // Create Table and Views. Note the view is on a non leading PK data table column
+            String createTable =
+                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
+                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
+                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
+                            + "        KEY_PREFIX\n" + "    )\n"
+                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTable);
+            String createView1 =
+                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
+                            + " VIEW_COLA VARCHAR NOT NULL,\n"
+                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE KEY_PREFIX = 'aaa'";
+            conn.createStatement().execute(createView1);
+            String createView2 =
+                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
+                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
+                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE KEY_PREFIX = 'ccc'";
+            conn.createStatement().execute(createView2);
+
+            // We want to verify if deletes and set null result in expected rebuild of view index
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'A', 'G')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'C', 'I')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', 'J')");
+
+            conn.createStatement().execute("UPSERT INTO " + view2FullName
+                    + "(ORGANIZATION_ID, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'B', 'H')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + view1FullName
+                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', NULL)");
+            conn.commit();
+
+            String createViewIndex =
+                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
+                            + " (VIEW_COLB) ASYNC";
+            conn.createStatement().execute(createViewIndex);
+            conn.commit();
+            // Rebuild using index tool
+            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            ResultSet rs =
+                    conn.createStatement()
+                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+
+            Pair<Integer, Integer> putsAndDeletes =
+                    countPutsAndDeletes("_IDX_" + dataTableFullName);
+            assertEquals(4, (int) putsAndDeletes.getFirst());
+            assertEquals(2, (int) putsAndDeletes.getSecond());
+        }
+    }
+
+    @Test
+    public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = generateUniqueName();
+        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
+        String view2Name = generateUniqueName();
+        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // Create Table and Views. Note the view is on a non PK data table column
+            String createTable =
+                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
+                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
+                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
+                            + "        KEY_PREFIX\n" + "    )\n"
+                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTable);
+            String createView1 =
+                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
+                            + " VIEW_COLA VARCHAR NOT NULL,\n"
+                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE CREATED_BY = 'foo'";
+            conn.createStatement().execute(createView1);
+            String createView2 =
+                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
+                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
+                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE CREATED_BY = 'bar'";
+            conn.createStatement().execute(createView2);
+
+            // We want to verify if deletes and set null result in expected rebuild of view index
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'aaa', 'A', 'G')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ccc', 'C', 'I')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', 'J')");
+
+            conn.createStatement().execute("UPSERT INTO " + view2FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'bbb', 'B', 'H')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + view1FullName
+                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', NULL)");
+            conn.commit();
+
+            String createViewIndex =
+                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
+                            + " (VIEW_COLB) ASYNC";
+            conn.createStatement().execute(createViewIndex);
+            conn.commit();
+            // Rebuild using index tool
+            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            ResultSet rs =
+                    conn.createStatement()
+                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+
+            Pair<Integer, Integer> putsAndDeletes =
+                    countPutsAndDeletes("_IDX_" + dataTableFullName);
+            assertEquals(4, (int) putsAndDeletes.getFirst());
+            assertEquals(2, (int) putsAndDeletes.getSecond());
+        }
+    }
+
+    private Pair<Integer, Integer> countPutsAndDeletes(String tableName) throws Exception {
+        int numPuts = 0;
+        int numDeletes = 0;
+        try (org.apache.hadoop.hbase.client.Connection hcon =
+                ConnectionFactory.createConnection(config)) {
+            Table htable = hcon.getTable(TableName.valueOf(tableName));
+            Scan scan = new Scan();
+            scan.setRaw(true);
+            ResultScanner scanner = htable.getScanner(scan);
+
+            for (Result result = scanner.next(); result != null; result = scanner.next()) {
+                for (Cell cell : result.rawCells()) {
+                    if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                        numPuts++;
+                    } else if (KeyValue.Type
+                            .codeToType(cell.getTypeByte()) == KeyValue.Type.DeleteFamily) {
+                                numDeletes++;
+                            }
+                }
+            }
+        }
+        return new Pair<Integer, Integer>(numPuts, numDeletes);
     }
 
     public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
