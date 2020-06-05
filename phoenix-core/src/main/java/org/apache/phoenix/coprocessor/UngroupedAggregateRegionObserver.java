@@ -60,6 +60,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
@@ -87,6 +88,7 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -1081,7 +1083,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             rawScan.setRaw(true);
             rawScan.setMaxVersions();
             rawScan.getFamilyMap().clear();
-            rawScan.setFilter(null);
+            // For rebuilds we use count (*) as query for regular tables which ends up setting the FKOF on scan
+            // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
+            // For rebuilds we need all columns and all versions
+            if (scan.getFilter() instanceof FirstKeyOnlyFilter) {
+                rawScan.setFilter(null);
+            } else if (scan.getFilter() != null) {
+                // Override the filter so that we get all versions
+                rawScan.setFilter(new AllVersionsIndexRebuildFilter(scan.getFilter()));
+            }
             rawScan.setCacheBlocks(false);
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 rawScan.addFamily(family);
