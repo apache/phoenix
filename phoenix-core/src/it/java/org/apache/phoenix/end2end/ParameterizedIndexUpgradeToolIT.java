@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -32,11 +33,11 @@ import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,12 +57,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -88,12 +86,11 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             "TEST:MULTI_TENANT_TABLE"};
 
     private static final String [] TRANSACTIONAL_TABLE_LIST = {"TRANSACTIONAL_TABLE"};
-    private static final String INPUT_LIST = "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3,TEST.MULTI_TENANT_TABLE";
+    private static String INPUT_LIST = "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3,TEST.MULTI_TENANT_TABLE";
     private static final String INPUT_FILE = "/tmp/input_file_index_upgrade.csv";
 
     private static Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1),
             clientProps = Maps.newHashMapWithExpectedSize(1);
-
 
     private final boolean mutable;
     private final boolean upgrade;
@@ -135,16 +132,17 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class)
                 .getQueryServices();
         admin = queryServices.getAdmin();
-        iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-                null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
-                true, indexToolMock, rebuild);
-        iut.setConf(getUtility().getConfiguration());
-        iut.setTest(true);
         if (!mutable) {
             optionsBuilder.append(" IMMUTABLE_ROWS=true");
         }
         tableDDLOptions = optionsBuilder.toString();
         prepareSetup();
+        iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
+                null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+                true, indexToolMock, rebuild);
+        iut.setConf(getUtility().getConfiguration());
+        iut.setTest(true);
+
     }
 
     private void setClusterProperties() {
@@ -169,59 +167,144 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     private void prepareSetup() throws SQLException {
         //inputList is "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3";
+
+        String mockTableOne = "TEST." + generateUniqueName();
+        TABLE_LIST[0] = mockTableOne;
+        String mockTableTwo = "TEST1." + generateUniqueName();
+        TABLE_LIST[1] = mockTableTwo;
+        String mockTableThree = "TEST." + generateUniqueName();
+        TABLE_LIST[2] = mockTableThree;
+        String multiTenantTable = "TEST." + generateUniqueName();
+        TABLE_LIST[3] = multiTenantTable;
+        INPUT_LIST = StringUtils.join(TABLE_LIST, ",");
         if (isNamespaceEnabled) {
-            conn.createStatement().execute("CREATE SCHEMA TEST");
-            conn.createStatement().execute("CREATE SCHEMA TEST1");
+            TABLE_LIST_NAMESPACE[0] = mockTableOne.replace(".", ":");
+            TABLE_LIST_NAMESPACE[1] = mockTableTwo.replace(".", ":");
+            TABLE_LIST_NAMESPACE[2] = mockTableThree.replace(".", ":");
+            TABLE_LIST_NAMESPACE[3] = multiTenantTable.replace(".", ":");
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS TEST");
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS TEST1");
         }
-        conn.createStatement().execute("CREATE TABLE TEST.MOCK1 (id bigint NOT NULL "
+
+
+
+        conn.createStatement().execute("CREATE TABLE " + mockTableOne + " (id bigint NOT NULL "
                 + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
-        conn.createStatement().execute("CREATE TABLE TEST1.MOCK2 (id bigint NOT NULL "
+        conn.createStatement().execute("CREATE TABLE "+ mockTableTwo + " (id bigint NOT NULL "
                 + "PRIMARY KEY, name varchar, city varchar, phone bigint)" + tableDDLOptions);
-        conn.createStatement().execute("CREATE TABLE TEST.MOCK3 (id bigint NOT NULL "
+        conn.createStatement().execute("CREATE TABLE " + mockTableThree + " (id bigint NOT NULL "
                 + "PRIMARY KEY, name varchar, age bigint)" + tableDDLOptions);
         String
                 createTblStr =
-                "CREATE TABLE TEST.MULTI_TENANT_TABLE " + " (TENANT_ID VARCHAR(15) NOT NULL,ID INTEGER NOT NULL"
+                "CREATE TABLE " + multiTenantTable + " (TENANT_ID VARCHAR(15) NOT NULL,ID INTEGER NOT NULL"
                         + ", NAME VARCHAR, CONSTRAINT PK_1 PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";
         conn.createStatement().execute(createTblStr);
-        conn.createStatement().execute("CREATE TABLE TRANSACTIONAL_TABLE(id bigint NOT NULL "
+
+        String transactTable = generateUniqueName();
+        TRANSACTIONAL_TABLE_LIST[0] = transactTable;
+        conn.createStatement().execute("CREATE TABLE " + transactTable + " (id bigint NOT NULL "
                         + "PRIMARY KEY, a.name varchar, sal bigint, address varchar) "
                 + " TRANSACTIONAL=true "
                 + ((tableDDLOptions.trim().length() > 0) ? "," : "") + tableDDLOptions);
 
+        String mockOneViewOne = "TEST." + generateUniqueName();
+        String mockOneViewTwo = "TEST." + generateUniqueName();
+        String mockTwoViewOne = "TEST1." + generateUniqueName();
+        String transactView = generateUniqueName();
+
         //views
-        conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW (view_column varchar) "
-                + "AS SELECT * FROM TEST.MOCK1 WHERE a.name = 'a'");
-        conn.createStatement().execute("CREATE VIEW TEST.MOCK1_VIEW1 (view_column varchar,"
-                + " zip varchar) AS SELECT * FROM TEST.MOCK1 WHERE a.name = 'a'");
-        conn.createStatement().execute("CREATE VIEW TEST1.MOCK2_VIEW (view_column varchar,"
-                + " state varchar) AS SELECT * FROM TEST1.MOCK2 WHERE name = 'c'");
-        conn.createStatement().execute("CREATE VIEW TRANSACTIONAL_VIEW (view_column varchar,"
-                + " state varchar) AS SELECT * FROM TRANSACTIONAL_TABLE WHERE name = 'c'");
+        conn.createStatement().execute("CREATE VIEW " + mockOneViewOne + " (view_column varchar) "
+                + "AS SELECT * FROM " + mockTableOne + " WHERE a.name = 'a'");
+        conn.createStatement().execute("CREATE VIEW " + mockOneViewTwo + " (view_column varchar,"
+                + " zip varchar) AS SELECT * FROM " + mockTableOne + " WHERE a.name = 'a'");
+        conn.createStatement().execute("CREATE VIEW " + mockTwoViewOne + " (view_column varchar,"
+                + " state varchar) AS SELECT * FROM " + mockTableTwo + " WHERE name = 'c'");
+        conn.createStatement().execute("CREATE VIEW " + transactView + " (view_column varchar,"
+                + " state varchar) AS SELECT * FROM " + transactTable + " WHERE name = 'c'");
 
         //view-indexes
-        conn.createStatement().execute("CREATE INDEX MOCK1_INDEX1 ON TEST.MOCK1_VIEW1 " + "(view_column)");
-        conn.createStatement().execute("CREATE INDEX MOCK1_INDEX2 ON TEST.MOCK1_VIEW1 " + "(zip)");
-        conn.createStatement().execute("CREATE INDEX MOCK2_INDEX1 ON TEST1.MOCK2_VIEW " + "(state, city)");
-        conn.createStatement().execute("CREATE INDEX MOCK1_INDEX3 ON TEST.MOCK1_VIEW " + "(view_column)");
-        conn.createStatement().execute("CREATE INDEX TRANSACTIONAL_VIEW_INDEX ON TRANSACTIONAL_VIEW " + "(view_column)");
+        String indexOneMockOneViewOne = generateUniqueName();
+        String indexTwoMockOneViewTwo = generateUniqueName();
+        String indexOneMockTwoViewTwo = generateUniqueName();
+        String indexThreeMockOneViewOne = generateUniqueName();
+        String transactViewIndex = generateUniqueName();
+
+        INDEXES_LIST[6] = MetaDataUtil.getViewIndexPhysicalName(mockTableOne);
+        INDEXES_LIST[7] = MetaDataUtil.getViewIndexPhysicalName(mockTableTwo);
+        if (isNamespaceEnabled) {
+            INDEXES_LIST_NAMESPACE[6] =
+                MetaDataUtil.getViewIndexPhysicalName(TABLE_LIST_NAMESPACE[0]);
+            INDEXES_LIST_NAMESPACE[7] =
+                MetaDataUtil.getViewIndexPhysicalName(TABLE_LIST_NAMESPACE[1]);
+        }
+
+        conn.createStatement().execute("CREATE INDEX " + indexOneMockOneViewOne + " ON "
+            + mockOneViewOne + " (view_column)");
+        conn.createStatement().execute("CREATE INDEX " + indexTwoMockOneViewTwo + " ON "
+            + mockOneViewTwo + " (zip)");
+        conn.createStatement().execute("CREATE INDEX " + indexOneMockTwoViewTwo + " ON "
+            + mockTwoViewOne + " (state, city)");
+        conn.createStatement().execute("CREATE INDEX " + indexThreeMockOneViewOne
+            + " ON " + mockOneViewOne + " (view_column)");
+        conn.createStatement().execute("CREATE INDEX " + transactViewIndex + " ON " +
+            transactView + " (view_column)");
+
         //indexes
-        conn.createStatement().execute("CREATE INDEX INDEX1 ON TEST.MOCK1 (sal, a.name)");
-        conn.createStatement().execute("CREATE INDEX INDEX2 ON TEST.MOCK1 (a.name)");
-        conn.createStatement().execute("CREATE INDEX INDEX1 ON TEST1.MOCK2 (city)");
-        conn.createStatement().execute("CREATE INDEX INDEX2 ON TEST1.MOCK2 (phone)");
-        conn.createStatement().execute("CREATE INDEX INDEX3 ON TEST1.MOCK2 (name)");
-        conn.createStatement().execute("CREATE INDEX INDEX3 ON TEST.MOCK3 (age, name)");
-        conn.createStatement().execute("CREATE INDEX TRANSACTIONAL_INDEX ON TRANSACTIONAL_TABLE(sal)");
+        String indexOneMockOne = generateUniqueName();
+        String indexTwoMockOne = generateUniqueName();
+        String indexOneMockTwo = generateUniqueName();
+        String indexTwoMockTwo = generateUniqueName();
+        String indexThreeMockTwo = generateUniqueName();
+        String indexThreeMockThree = generateUniqueName();
+        String transactIndex = generateUniqueName();
+        TRANSACTIONAL_INDEXES_LIST[0] = transactIndex;
+        TRANSACTIONAL_INDEXES_LIST[1] = MetaDataUtil.getViewIndexPhysicalName(transactTable);
+
+        if (isNamespaceEnabled) {
+            INDEXES_LIST_NAMESPACE[0] = "TEST:" + indexOneMockOne;
+            INDEXES_LIST_NAMESPACE[1] = "TEST:" + indexTwoMockOne;
+            INDEXES_LIST_NAMESPACE[2] = "TEST1:" + indexOneMockTwo;
+            INDEXES_LIST_NAMESPACE[3] = "TEST1:" + indexTwoMockTwo;
+            INDEXES_LIST_NAMESPACE[4] = "TEST1:" + indexThreeMockTwo;
+            INDEXES_LIST_NAMESPACE[5] = "TEST:" + indexThreeMockThree;
+        } else {
+            INDEXES_LIST[0] = "TEST." + indexOneMockOne;
+            INDEXES_LIST[1] = "TEST." + indexTwoMockOne;
+            INDEXES_LIST[2] = "TEST1." + indexOneMockTwo;
+            INDEXES_LIST[3] = "TEST1." + indexTwoMockTwo;
+            INDEXES_LIST[4] = "TEST1." + indexThreeMockTwo;
+            INDEXES_LIST[5] = "TEST." + indexThreeMockThree;
+        }
+
+        conn.createStatement().execute("CREATE INDEX " + indexOneMockOne + " ON " + mockTableOne +
+                " (sal, a.name)");
+        conn.createStatement().execute("CREATE INDEX " + indexTwoMockOne + " ON " + mockTableOne
+            + " (a.name)");
+        conn.createStatement().execute("CREATE INDEX " + indexOneMockTwo + " ON " + mockTableTwo
+            + " (city)");
+        conn.createStatement().execute("CREATE INDEX " + indexTwoMockTwo + " ON " + mockTableTwo
+            + " (phone)");
+        conn.createStatement().execute("CREATE INDEX " + indexThreeMockTwo + " ON " +
+            "" + mockTableTwo + " (name)");
+        conn.createStatement().execute("CREATE INDEX " + indexThreeMockThree + " ON " +
+                mockTableThree + " (age, name)");
+        conn.createStatement().execute("CREATE INDEX " + transactIndex  + " ON " + transactTable +
+            " (sal)");
 
         // Tenant ones
+        String tenantView = "TEST." + generateUniqueName();
+        String tenantViewIndex = generateUniqueName();
         connTenant.createStatement().execute(
-                "CREATE VIEW TEST.TEST_TENANT_VIEW AS SELECT * FROM TEST.MULTI_TENANT_TABLE");
-        connTenant.createStatement().execute("CREATE INDEX MULTI_TENANT_INDEX ON TEST.TEST_TENANT_VIEW (NAME)");
+                "CREATE VIEW " + tenantView + " AS SELECT * FROM " + multiTenantTable);
+        connTenant.createStatement().execute("CREATE INDEX " + tenantViewIndex + " ON "
+            + tenantView + " (NAME)");
 
-        conn.createStatement().execute("ALTER INDEX MOCK1_INDEX2 ON TEST.MOCK1_VIEW1 DISABLE");
-        connTenant.createStatement().execute("ALTER INDEX MULTI_TENANT_INDEX ON TEST.TEST_TENANT_VIEW DISABLE");
-        conn.createStatement().execute("ALTER INDEX INDEX2 ON TEST.MOCK1 DISABLE");
+        conn.createStatement().execute("ALTER INDEX " + indexTwoMockOneViewTwo + " ON "
+            + mockOneViewOne + " DISABLE");
+        connTenant.createStatement().execute("ALTER INDEX " + tenantViewIndex + " ON " +
+            tenantView + " DISABLE");
+        conn.createStatement().execute("ALTER INDEX " + indexTwoMockOne + " ON " + mockTableOne +
+            " DISABLE");
     }
 
     private void validate(boolean pre) throws IOException {
@@ -428,57 +511,4 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         }
     }
 
-    @After
-    public void cleanup() throws IOException, SQLException {
-        if (conn == null) {
-            return;
-        }
-        //TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3
-        conn.createStatement().execute("DROP INDEX INDEX1 ON TEST.MOCK1");
-        conn.createStatement().execute("DROP INDEX INDEX2 ON TEST.MOCK1");
-        conn.createStatement().execute("DROP INDEX INDEX1 ON TEST1.MOCK2");
-        conn.createStatement().execute("DROP INDEX INDEX2 ON TEST1.MOCK2");
-        conn.createStatement().execute("DROP INDEX INDEX3 ON TEST1.MOCK2");
-        conn.createStatement().execute("DROP INDEX INDEX3 ON TEST.MOCK3");
-        connTenant.createStatement().execute("DROP INDEX MULTI_TENANT_INDEX ON TEST.TEST_TENANT_VIEW");
-        conn.createStatement().execute("DROP INDEX TRANSACTIONAL_INDEX ON TRANSACTIONAL_TABLE");
-
-        conn.createStatement().execute("DROP INDEX MOCK1_INDEX3 ON TEST.MOCK1_VIEW");
-        conn.createStatement().execute("DROP INDEX MOCK1_INDEX1 ON TEST.MOCK1_VIEW1");
-        conn.createStatement().execute("DROP INDEX MOCK1_INDEX2 ON TEST.MOCK1_VIEW1");
-        conn.createStatement().execute("DROP INDEX MOCK2_INDEX1 ON TEST1.MOCK2_VIEW");
-        conn.createStatement().execute("DROP INDEX TRANSACTIONAL_VIEW_INDEX ON TRANSACTIONAL_VIEW");
-
-        conn.createStatement().execute("DROP VIEW TEST.MOCK1_VIEW");
-        conn.createStatement().execute("DROP VIEW TEST.MOCK1_VIEW1");
-        conn.createStatement().execute("DROP VIEW TEST1.MOCK2_VIEW");
-        conn.createStatement().execute("DROP VIEW TRANSACTIONAL_VIEW");
-        connTenant.createStatement().execute("DROP VIEW TEST.TEST_TENANT_VIEW");
-
-        conn.createStatement().execute("DROP TABLE TEST.MOCK1");
-        conn.createStatement().execute("DROP TABLE TEST1.MOCK2");
-        conn.createStatement().execute("DROP TABLE TEST.MOCK3");
-        conn.createStatement().execute("DROP TABLE TEST.MULTI_TENANT_TABLE");
-
-        conn.createStatement().execute("DROP TABLE TRANSACTIONAL_TABLE");
-
-        if (isNamespaceEnabled) {
-            conn.createStatement().execute("DROP SCHEMA TEST");
-            conn.createStatement().execute("DROP SCHEMA TEST1");
-        }
-        conn.close();
-        connTenant.close();
-        assertTableNotExists("TEST.MOCK1");
-        assertTableNotExists("TEST1.MOCK2");
-        assertTableNotExists("TEST.MOCK3");
-        assertTableNotExists("TRANSACTIONAL_TABLE");
-        assertTableNotExists("TEST.MULTI_TENANT_TABLE");
-    }
-
-    private void assertTableNotExists(String table) throws IOException {
-        TableName tableName =
-            SchemaUtil.getPhysicalTableName(Bytes.toBytes(table), isNamespaceEnabled);
-        Assert.assertFalse("Table " + table + " exists when it shouldn't",
-            admin.tableExists(tableName));
-    }
 }
