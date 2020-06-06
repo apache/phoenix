@@ -3632,13 +3632,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 metaConnection,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                 MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 1,
-                PhoenixDatabaseMetaData.VIEW_TTL + " "
+                PhoenixDatabaseMetaData.PHOENIX_TTL + " "
                         + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(
                 metaConnection,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                 MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
-                PhoenixDatabaseMetaData.VIEW_TTL_HWM + " "
+                PhoenixDatabaseMetaData.PHOENIX_TTL_HWM + " "
                         + PInteger.INSTANCE.getSqlTypeName());
         }
         return metaConnection;

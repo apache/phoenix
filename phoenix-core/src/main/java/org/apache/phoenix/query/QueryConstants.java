@@ -198,8 +198,8 @@ public interface QueryConstants {
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
             VIEW_INDEX_ID + " BIGINT,\n" +
             VIEW_INDEX_ID_DATA_TYPE + " INTEGER,\n" +
-            VIEW_TTL + " BIGINT,\n" +
-            VIEW_TTL_HWM + " BIGINT,\n" +
+            PHOENIX_TTL + " BIGINT,\n" +
+            PHOENIX_TTL_HWM + " BIGINT,\n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

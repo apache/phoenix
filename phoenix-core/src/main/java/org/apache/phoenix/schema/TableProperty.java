@@ -24,7 +24,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.DEFAULT_COLUMN_FAMIL
 import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -241,9 +241,9 @@ public enum TableProperty {
         }
     },
 
-    VIEW_TTL(PhoenixDatabaseMetaData.VIEW_TTL, true, true, true) {
+    PHOENIX_TTL(PhoenixDatabaseMetaData.PHOENIX_TTL, true, true, true) {
         /**
-         * VIEW_TTL can take any values ranging between 0 < VIEW_TTL <= HConstants.LATEST_TIMESTAMP.
+         * PHOENIX_TTL can take any values ranging between 0 < PHOENIX_TTL <= HConstants.LATEST_TIMESTAMP.
          * special values :-
          * NONE or 0L => Not Defined.
          * FOREVER => HConstants.LATEST_TIMESTAMP
@@ -258,7 +258,7 @@ public enum TableProperty {
                 if ("FOREVER".equalsIgnoreCase(strValue)) {
                     return HConstants.LATEST_TIMESTAMP;
                 } else if ("NONE".equalsIgnoreCase(strValue)) {
-                    return VIEW_TTL_NOT_DEFINED;
+                    return PHOENIX_TTL_NOT_DEFINED;
                 }
             } else {
                 return value == null ? null : ((Number) value).longValue();
@@ -268,7 +268,7 @@ public enum TableProperty {
 
         @Override
         public Object getPTableValue(PTable table) {
-            return table.getViewTTL();
+            return table.getPhoenixTTL();
         }
     }
     ;

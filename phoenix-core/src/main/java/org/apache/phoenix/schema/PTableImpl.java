@@ -22,8 +22,8 @@ import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TTL_NOT_DEFINED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VIEW_TTL_HWM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 
 import java.io.IOException;
 import java.sql.DriverManager;
@@ -67,7 +67,6 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
@@ -112,7 +111,7 @@ public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
     private static final int VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS = 0;
     private static final int VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS = 1;
-    private static final int VIEW_MODIFIED_VIEW_TTL_BIT_SET_POS = 2;
+    private static final int VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS = 2;
 
     private IndexMaintainer indexMaintainer;
     private ImmutableBytesWritable indexMaintainersPtr;
@@ -171,8 +170,8 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
-    private final long viewTTL;
-    private final long viewTTLHighWaterMark;
+    private final long phoenixTTL;
+    private final long phoenixTTLHighWaterMark;
     private final BitSet viewModifiedPropSet;
 
     public static class Builder {
@@ -228,8 +227,8 @@ public class PTableImpl implements PTable {
         private QualifierEncodingScheme qualifierEncodingScheme;
         private EncodedCQCounter encodedCQCounter;
         private Boolean useStatsForParallelization;
-        private long viewTTL;
-        private long viewTTLHighWaterMark;
+        private long phoenixTTL;
+        private long phoenixTTLHighWaterMark;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -519,18 +518,18 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setViewTTL(long viewTTL) {
-            this.viewTTL = viewTTL;
+        public Builder setPhoenixTTL(long phoenixTTL) {
+            this.phoenixTTL = phoenixTTL;
             return this;
         }
 
-        public Builder setViewTTLHighWaterMark(long viewTTLHighWaterMark) {
-            this.viewTTLHighWaterMark = viewTTLHighWaterMark;
+        public Builder setPhoenixTTLHighWaterMark(long phoenixTTLHighWaterMark) {
+            this.phoenixTTLHighWaterMark = phoenixTTLHighWaterMark;
             return this;
         }
 
-        public Builder setViewModifiedViewTTL(boolean modified) {
-            this.viewModifiedPropSet.set(VIEW_MODIFIED_VIEW_TTL_BIT_SET_POS,
+        public Builder setViewModifiedPhoenixTTL(boolean modified) {
+            this.viewModifiedPropSet.set(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS,
                     modified);
             return this;
         }
@@ -805,8 +804,8 @@ public class PTableImpl implements PTable {
         this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
         this.encodedCQCounter = builder.encodedCQCounter;
         this.useStatsForParallelization = builder.useStatsForParallelization;
-        this.viewTTL = builder.viewTTL;
-        this.viewTTLHighWaterMark = builder.viewTTLHighWaterMark;
+        this.phoenixTTL = builder.phoenixTTL;
+        this.phoenixTTLHighWaterMark = builder.phoenixTTLHighWaterMark;
         this.viewModifiedPropSet = builder.viewModifiedPropSet;
     }
 
@@ -875,9 +874,9 @@ public class PTableImpl implements PTable {
                 .setViewModifiedUseStatsForParallelization(table
                         .hasViewModifiedUseStatsForParallelization())
                 .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency())
-                .setViewModifiedViewTTL(table.hasViewModifiedViewTTL())
-                .setViewTTL(table.getViewTTL())
-                .setViewTTLHighWaterMark(table.getViewTTLHighWaterMark());
+                .setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL())
+                .setPhoenixTTL(table.getPhoenixTTL())
+                .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
     }
 
     @Override
@@ -1694,27 +1693,27 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long viewTTL = VIEW_TTL_NOT_DEFINED;
-        if (table.hasViewTTL()) {
-            viewTTL = table.getViewTTL();
+        long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
+        if (table.hasPhoenixTTL()) {
+            phoenixTTL = table.getPhoenixTTL();
         }
-        long viewTTLHighWaterMark = MIN_VIEW_TTL_HWM;
-        if (table.hasViewTTLHighWaterMark()) {
-            viewTTLHighWaterMark = table.getViewTTLHighWaterMark();
+        long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
+        if (table.hasPhoenixTTLHighWaterMark()) {
+            phoenixTTLHighWaterMark = table.getPhoenixTTLHighWaterMark();
         }
 
         // for older clients just use the value of the properties that are set on the view
         boolean viewModifiedUpdateCacheFrequency = true;
         boolean viewModifiedUseStatsForParallelization = true;
-        boolean viewModifiedViewTTL = true;
+        boolean viewModifiedPhoenixTTL = true;
         if (table.hasViewModifiedUpdateCacheFrequency()) {
             viewModifiedUpdateCacheFrequency = table.getViewModifiedUpdateCacheFrequency();
         }
         if (table.hasViewModifiedUseStatsForParallelization()) {
             viewModifiedUseStatsForParallelization = table.getViewModifiedUseStatsForParallelization();
         }
-        if (table.hasViewModifiedViewTTL()) {
-            viewModifiedViewTTL = table.getViewModifiedViewTTL();
+        if (table.hasViewModifiedPhoenixTTL()) {
+            viewModifiedPhoenixTTL = table.getViewModifiedPhoenixTTL();
         }
         try {
             return new PTableImpl.Builder()
@@ -1746,8 +1745,8 @@ public class PTableImpl implements PTable {
                     .setBaseColumnCount(baseColumnCount)
                     .setEncodedCQCounter(encodedColumnQualifierCounter)
                     .setUseStatsForParallelization(useStatsForParallelization)
-                    .setViewTTL(viewTTL)
-                    .setViewTTLHighWaterMark(viewTTLHighWaterMark)
+                    .setPhoenixTTL(phoenixTTL)
+                    .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark)
                     .setExcludedColumns(ImmutableList.<PColumn>of())
                     .setTenantId(tenantId)
                     .setSchemaName(schemaName)
@@ -1764,7 +1763,7 @@ public class PTableImpl implements PTable {
                     .setColumns(columns)
                     .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
                     .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
-                    .setViewModifiedViewTTL(viewModifiedViewTTL)
+                    .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -1868,11 +1867,11 @@ public class PTableImpl implements PTable {
       if (table.useStatsForParallelization() != null) {
           builder.setUseStatsForParallelization(table.useStatsForParallelization());
       }
-      builder.setViewTTL(table.getViewTTL());
-      builder.setViewTTLHighWaterMark(table.getViewTTLHighWaterMark());
+      builder.setPhoenixTTL(table.getPhoenixTTL());
+      builder.setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
       builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
       builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
-      builder.setViewModifiedViewTTL(table.hasViewModifiedViewTTL());
+      builder.setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL());
       return builder.build();
     }
 
@@ -1969,13 +1968,13 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public long getViewTTL() {
-        return viewTTL;
+    public long getPhoenixTTL() {
+        return phoenixTTL;
     }
 
     @Override
-    public long getViewTTLHighWaterMark() {
-        return viewTTLHighWaterMark;
+    public long getPhoenixTTLHighWaterMark() {
+        return phoenixTTLHighWaterMark;
     }
 
     @Override public boolean hasViewModifiedUpdateCacheFrequency() {
@@ -1986,8 +1985,8 @@ public class PTableImpl implements PTable {
         return viewModifiedPropSet.get(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS);
     }
 
-    @Override public boolean hasViewModifiedViewTTL() {
-        return viewModifiedPropSet.get(VIEW_MODIFIED_VIEW_TTL_BIT_SET_POS);
+    @Override public boolean hasViewModifiedPhoenixTTL() {
+        return viewModifiedPropSet.get(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS);
     }
 
     private static final class KVColumnFamilyQualifier {
