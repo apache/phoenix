@@ -22,7 +22,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.IndexCoprocIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -73,20 +72,21 @@ import static org.mockito.Mockito.times;
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
-    private static final String [] INDEXES_LIST = {"TEST.INDEX1", "TEST.INDEX2", "TEST1.INDEX3",
-            "TEST1.INDEX2","TEST1.INDEX1","TEST.INDEX3", "_IDX_TEST.MOCK1", "_IDX_TEST1.MOCK2"};
-    private static final String [] INDEXES_LIST_NAMESPACE = {"TEST:INDEX1", "TEST:INDEX2"
-            , "TEST1:INDEX3", "TEST1:INDEX2","TEST1:INDEX1"
-            , "TEST:INDEX3", "TEST:_IDX_MOCK1", "TEST1:_IDX_MOCK2"};
-    private static final String [] TRANSACTIONAL_INDEXES_LIST = {"TRANSACTIONAL_INDEX",
-            "_IDX_TRANSACTIONAL_TABLE"};
+    private static final String [] INDEXES_LIST = new String[8];
+    private static final String [] INDEXES_LIST_NAMESPACE = new String[8];
+    private static final String [] INDEXES_LIST_SIMPLIFIED = new String[1];
+    private static final String [] INDEXES_LIST_NAMESPACE_SIMPLIFIED = new String[1];
 
-    private static final String [] TABLE_LIST = {"TEST.MOCK1","TEST1.MOCK2","TEST.MOCK3","TEST.MULTI_TENANT_TABLE"};
-    private static final String [] TABLE_LIST_NAMESPACE = {"TEST:MOCK1","TEST1:MOCK2","TEST:MOCK3",
-            "TEST:MULTI_TENANT_TABLE"};
+    private static final String [] TRANSACTIONAL_INDEXES_LIST = new String[2];
 
-    private static final String [] TRANSACTIONAL_TABLE_LIST = {"TRANSACTIONAL_TABLE"};
-    private static String INPUT_LIST = "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3,TEST.MULTI_TENANT_TABLE";
+    private static final String [] TABLE_LIST = new String[4];
+    private static final String [] TABLE_LIST_NAMESPACE = new String[4];
+    private static final String [] TABLE_LIST_SIMPLIFIED = new String[1];
+    private static final String [] TABLE_LIST_NAMESPACE_SIMPLIFIED = new String[1];
+
+    private static final String [] TRANSACTIONAL_TABLE_LIST = new String[1];
+
+    private static String INPUT_LIST = "";
     private static final String INPUT_FILE = "/tmp/input_file_index_upgrade.csv";
 
     private static Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1),
@@ -136,13 +136,6 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             optionsBuilder.append(" IMMUTABLE_ROWS=true");
         }
         tableDDLOptions = optionsBuilder.toString();
-        prepareSetup();
-        iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-                null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
-                true, indexToolMock, rebuild);
-        iut.setConf(getUtility().getConfiguration());
-        iut.setTest(true);
-
     }
 
     private void setClusterProperties() {
@@ -165,9 +158,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 Boolean.toString(!upgrade));
     }
 
-    private void prepareSetup() throws SQLException {
-        //inputList is "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3";
-
+    private void prepareFullSetup() throws SQLException {
+        clearOldTableNames();
         String mockTableOne = "TEST." + generateUniqueName();
         TABLE_LIST[0] = mockTableOne;
         String mockTableTwo = "TEST1." + generateUniqueName();
@@ -305,14 +297,75 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             tenantView + " DISABLE");
         conn.createStatement().execute("ALTER INDEX " + indexTwoMockOne + " ON " + mockTableOne +
             " DISABLE");
+        iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
+            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            true, indexToolMock, rebuild);
+        iut.setConf(getUtility().getConfiguration());
+        iut.setTest(true);
     }
 
-    private void validate(boolean pre) throws IOException {
-        String [] indexList = INDEXES_LIST;
-        String [] tableList = TABLE_LIST;
-        if(isNamespaceEnabled) {
-            indexList = INDEXES_LIST_NAMESPACE;
-            tableList = TABLE_LIST_NAMESPACE;
+    private void clearOldTableNames() {
+        Arrays.fill(TABLE_LIST, null);
+        Arrays.fill(TABLE_LIST_NAMESPACE, null);
+        Arrays.fill(TABLE_LIST_SIMPLIFIED, null);
+        Arrays.fill(TABLE_LIST_NAMESPACE_SIMPLIFIED, null);
+        Arrays.fill(INDEXES_LIST, null);
+        Arrays.fill(INDEXES_LIST_NAMESPACE, null);
+        Arrays.fill(INDEXES_LIST_SIMPLIFIED, null);
+        Arrays.fill(INDEXES_LIST_NAMESPACE_SIMPLIFIED, null);
+        Arrays.fill(TRANSACTIONAL_INDEXES_LIST, null);
+        Arrays.fill(TRANSACTIONAL_TABLE_LIST, null);
+    }
+    private void prepareSimplifiedSetup() throws SQLException {
+        clearOldTableNames();
+        String mockTableOne = "TEST." + generateUniqueName();
+        INPUT_LIST = mockTableOne;
+        if (isNamespaceEnabled) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS TEST");
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS TEST1");
+            TABLE_LIST_NAMESPACE_SIMPLIFIED[0] = mockTableOne.replace(".", ":");
+        } else {
+            TABLE_LIST_SIMPLIFIED[0] = mockTableOne;
+        }
+        conn.createStatement().execute("CREATE TABLE " + mockTableOne + " (id bigint NOT NULL "
+            + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
+        conn.commit();
+        String indexOneMockOne = generateUniqueName();
+        if (isNamespaceEnabled) {
+            INDEXES_LIST_NAMESPACE_SIMPLIFIED[0] = "TEST:" + indexOneMockOne;
+        } else {
+            INDEXES_LIST_SIMPLIFIED[0] = "TEST." + indexOneMockOne;
+        }
+
+        conn.createStatement().execute("CREATE INDEX " + indexOneMockOne + " ON " + mockTableOne +
+            " (sal, a.name)");
+        conn.commit();
+        iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
+            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            true, indexToolMock, rebuild);
+        iut.setConf(getUtility().getConfiguration());
+        iut.setTest(true);
+    }
+
+    private void validate(boolean pre, boolean isSimplified) throws IOException {
+        String [] indexList;
+        String [] tableList;
+        if (isSimplified) {
+            if (isNamespaceEnabled) {
+                indexList = INDEXES_LIST_NAMESPACE_SIMPLIFIED;
+                tableList = TABLE_LIST_NAMESPACE_SIMPLIFIED;
+            } else {
+                indexList = INDEXES_LIST_SIMPLIFIED;
+                tableList = TABLE_LIST_SIMPLIFIED;
+            }
+        } else {
+            if (isNamespaceEnabled) {
+                indexList = INDEXES_LIST_NAMESPACE;
+                tableList = TABLE_LIST_NAMESPACE;
+            } else {
+                indexList = INDEXES_LIST;
+                tableList = TABLE_LIST;
+            }
         }
         if (pre) {
             if (upgrade) {
@@ -333,33 +386,41 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             throws IOException {
         if (mutable) {
             for (String table : tableList) {
-                HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(table));
-                Assert.assertTrue("Can't find IndexRegionObserver for " + table,
-                    indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
-                Assert.assertFalse("Found Indexer on " + table,
+                if (table != null) {
+                    HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(table));
+                    Assert.assertTrue("Can't find IndexRegionObserver for " + table,
+                        indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
+                    Assert.assertFalse("Found Indexer on " + table,
                         indexDesc.hasCoprocessor(Indexer.class.getName()));
-                IndexCoprocIT.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
-                    IndexCoprocIT.INDEX_REGION_OBSERVER_CONFIG);
+                    IndexCoprocIT.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
+                        IndexCoprocIT.INDEX_REGION_OBSERVER_CONFIG);
+                }
             }
 
         }
         for (String index : indexList) {
-            HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(index));
-            Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
-                indexDesc.hasCoprocessor(GlobalIndexChecker.class.getName()));
-            IndexCoprocIT.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
-                IndexCoprocIT.GLOBAL_INDEX_CHECKER_CONFIG);
+            if (index != null) {
+                HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(index));
+                Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
+                    indexDesc.hasCoprocessor(GlobalIndexChecker.class.getName()));
+                IndexCoprocIT.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
+                    IndexCoprocIT.GLOBAL_INDEX_CHECKER_CONFIG);
+            }
         }
         // Transactional indexes should not have new coprocessors
         for (String index : TRANSACTIONAL_INDEXES_LIST) {
-            Assert.assertFalse("Found GlobalIndexChecker on transactional index " + index,
-                admin.getTableDescriptor(TableName.valueOf(index))
-                    .hasCoprocessor(GlobalIndexChecker.class.getName()));
+            if (index != null) {
+                Assert.assertFalse("Found GlobalIndexChecker on transactional index " + index,
+                    admin.getTableDescriptor(TableName.valueOf(index))
+                        .hasCoprocessor(GlobalIndexChecker.class.getName()));
+            }
         }
         for (String table : TRANSACTIONAL_TABLE_LIST) {
-            Assert.assertFalse("Found IndexRegionObserver on transactional table",
-                admin.getTableDescriptor(TableName.valueOf(table))
-                    .hasCoprocessor(IndexRegionObserver.class.getName()));
+            if (table != null) {
+                Assert.assertFalse("Found IndexRegionObserver on transactional table",
+                    admin.getTableDescriptor(TableName.valueOf(table))
+                        .hasCoprocessor(IndexRegionObserver.class.getName()));
+            }
         }
     }
 
@@ -403,13 +464,14 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     @Test
     public void testNonDryRunToolWithMultiTables() throws Exception {
-        validate(true);
+        prepareFullSetup(); //test with all tables
+        validate(true, false);
         iut.setDryRun(false);
         iut.setLogFile(null);
         iut.prepareToolSetup();
         iut.executeTool();
         //testing actual run
-        validate(false);
+        validate(false, false);
         // testing if tool waited in case of immutable tables
         if (!mutable) {
             Assert.assertEquals("Index upgrade tool didn't wait for client cache to expire "
@@ -430,7 +492,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     @Test
     public void testDryRunAndFailures() throws Exception {
-        validate(true);
+        prepareFullSetup(); //test with all tables
+        validate(true, false);
 
         // test with incorrect table
         iut.setInputTables("TEST3.TABLE_NOT_PRESENT");
@@ -438,7 +501,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
         int status = iut.executeTool();
         Assert.assertEquals(-1, status);
-        validate(true);
+        validate(true, false);
 
         // test with input file parameter
         BufferedWriter writer = new BufferedWriter(new FileWriter(new File(INPUT_FILE)));
@@ -451,7 +514,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         status = iut.executeTool();
         Assert.assertEquals(0, status);
 
-        validate(true);
+        validate(true, false);
 
         // test table without index
         if (upgrade && !isNamespaceEnabled) {
@@ -467,7 +530,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     @Test
     public void testRollbackAfterFailure() throws Exception {
-        validate(true);
+        prepareSimplifiedSetup(); //only need one table and index to verify rollback
+        validate(true, true);
         if (upgrade) {
             iut.setFailUpgradeTask(true);
         } else {
@@ -477,12 +541,13 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         int status = iut.executeTool();
         Assert.assertEquals(-1, status);
         //should have rolled back and be in the same status we started with
-        validate(true);
+        validate(true, true);
     }
 
     @Test
     public void testTableReenableAfterDoubleFailure() throws Exception {
-        validate(true);
+        prepareSimplifiedSetup(); //only need one table and index to verify re-enabling
+        validate(true, true);
         //this will force the upgrade/downgrade to fail, and then the rollback to fail too
         //we want to make sure that even then, we'll try to re-enable the HBase tables
         iut.setFailUpgradeTask(true);
