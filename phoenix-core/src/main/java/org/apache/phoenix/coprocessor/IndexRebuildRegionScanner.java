@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -112,6 +113,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private byte[][] viewConstants;
     private IndexVerificationOutputRepository verificationOutputRepository;
     protected IndexVerificationResultRepository verificationResultRepository;
+    private boolean skipped = false;
+    private boolean shouldVerifyCheckDone = false;
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -151,6 +154,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
                 verificationOutputRepository =
                         new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+                verificationResult = new IndexToolVerificationResult(scan);
+                verificationResultRepository =
+                        new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
                 indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
@@ -160,6 +166,38 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                                 INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
             }
         }
+    }
+
+    @VisibleForTesting
+    public boolean shouldVerify(IndexTool.IndexVerifyType verifyType,
+            byte[] indexRowKey, Scan scan, Region region, IndexMaintainer indexMaintainer,
+            IndexVerificationResultRepository verificationResultRepository, boolean shouldVerifyCheckDone) throws IOException {
+        this.verifyType = verifyType;
+        this.indexRowKey = indexRowKey;
+        this.scan = scan;
+        this.region = region;
+        this.indexMaintainer = indexMaintainer;
+        this.verificationResultRepository = verificationResultRepository;
+        this.shouldVerifyCheckDone = shouldVerifyCheckDone;
+        return shouldVerify();
+    }
+
+    private boolean shouldVerify() throws IOException {
+        //In case of read repair, proceed with rebuild
+        //All other types of rebuilds/verification should be incrementally performed if appropriate param is passed
+        byte[] lastVerifyTimeValue = scan.getAttribute(UngroupedAggregateRegionObserver.INDEX_RETRY_VERIFY);
+        Long lastVerifyTime = lastVerifyTimeValue == null ? 0 : Bytes.toLong(lastVerifyTimeValue);
+        if(indexRowKey != null || lastVerifyTime == 0 || shouldVerifyCheckDone) {
+            return true;
+        }
+
+        IndexToolVerificationResult verificationResultTemp = verificationResultRepository
+                .getVerificationResult(lastVerifyTime, scan, region, indexMaintainer.getIndexTableName()) ;
+        if(verificationResultTemp != null) {
+            verificationResult = verificationResultTemp;
+        }
+        shouldVerifyCheckDone = true;
+        return verificationResultTemp == null;
     }
 
     private void setReturnCodeForSingleRowRebuild() throws IOException {
@@ -201,7 +239,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         if (verify) {
             try {
                 verificationResultRepository.logToIndexToolResultTable(verificationResult,
-                    verifyType, region.getRegionInfo().getRegionName());
+                        verifyType, region.getRegionInfo().getRegionName(), skipped);
             } finally {
                 this.pool.stop("IndexRebuildRegionScanner is closing");
                 indexHTable.close();
@@ -1150,6 +1188,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         try {
             byte[] uuidValue = ServerCacheClient.generateId();
             synchronized (innerScanner) {
+                if(!shouldVerify()) {
+                    skipped = true;
+                    return false;
+                }
                 do {
                     List<Cell> row = new ArrayList<Cell>();
                     hasMore = innerScanner.nextRaw(row);

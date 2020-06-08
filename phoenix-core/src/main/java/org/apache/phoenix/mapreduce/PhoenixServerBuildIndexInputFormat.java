@@ -43,6 +43,8 @@ import com.google.common.base.Preconditions;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getCurrentScnValue;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolLastVerifyTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolStartTime;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
@@ -73,6 +75,8 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
         final String currentScnValue = getCurrentScnValue(configuration);
         final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
+        final String lastVerifyTime = getIndexToolLastVerifyTime(configuration);
+
         //until PHOENIX-5783 is fixed; we'll continue with startTime = 0
         final String startTimeValue = null;
         final Properties overridingProps = new Properties();
@@ -96,12 +100,12 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                     new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
             MutationPlan plan = compiler.compile(indexTable);
             Scan scan = plan.getContext().getScan();
-
+            Long lastVerifyTimeValue = lastVerifyTime == null ? 0L : Long.valueOf(lastVerifyTime);
             try {
                 scan.setTimeRange(startTime, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
-                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE,
-                        PhoenixConfigurationUtil.getIndexVerifyType(configuration).toBytes());
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_RETRY_VERIFY, Bytes.toBytes(lastVerifyTimeValue));
             } catch (IOException e) {
                 throw new SQLException(e);
             }

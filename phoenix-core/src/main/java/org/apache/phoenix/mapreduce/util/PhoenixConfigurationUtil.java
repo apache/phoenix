@@ -165,6 +165,7 @@ public final class PhoenixConfigurationUtil {
     public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
     private static final String INDEX_TOOL_END_TIME = "phoenix.mr.index.endtime";
     private static final String INDEX_TOOL_START_TIME = "phoenix.mr.index.starttime";
+    private static final String INDEX_TOOL_LAST_VERIFY_TIME = "phoenix.mr.index.last.verify.time";
 
     public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
 
@@ -288,6 +289,12 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INDEX_TOOL_START_TIME, Long.toString(startTime));
     }
 
+    public static void setIndexToolLastVerifyTime(Configuration configuration, Long lastVerifyTime) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(lastVerifyTime);
+        configuration.set(INDEX_TOOL_LAST_VERIFY_TIME, Long.toString(lastVerifyTime));
+    }
+
     public static void setCurrentScnValue(Configuration configuration, Long scn) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(scn);
@@ -302,6 +309,11 @@ public final class PhoenixConfigurationUtil {
     public static String getCurrentScnValue(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(CURRENT_SCN_VALUE);
+    }
+
+    public static String getIndexToolLastVerifyTime(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_LAST_VERIFY_TIME);
     }
     
     public static List<String> getUpsertColumnNames(final Configuration configuration) {

@@ -23,6 +23,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -49,13 +51,17 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -95,7 +101,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -171,10 +176,11 @@ public class IndexTool extends Configured implements Tool {
     private PTable pDataTable;
     private String tenantId = null;
     private Job job;
-    private Long startTime, endTime;
+    private Long startTime, endTime, lastVerifyTime;
     private IndexType indexType;
     private String basePath;
     byte[][] splitKeysBeforeJob = null;
+    Configuration configuration;
 
     private static final Option SCHEMA_NAME_OPTION = new Option("s", "schema", true,
             "Phoenix schema name (optional)");
@@ -233,10 +239,13 @@ public class IndexTool extends Configured implements Tool {
             + "If specified, truncates the index table and rebuilds (optional)");
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
-    private static final Option START_TIME_OPTION = new Option("st", "starttime",
+    private static final Option START_TIME_OPTION = new Option("st", "start-time",
             true, "Start time for indextool rebuild or verify");
-    private static final Option END_TIME_OPTION = new Option("et", "endtime",
+    private static final Option END_TIME_OPTION = new Option("et", "end-time",
             true, "End time for indextool rebuild or verify");
+
+    private static final Option RETRY_VERIFY_OPTION = new Option("rv", "retry-verify",
+            true, "Max scan ts of the last rebuild/verify that needs to be retried incrementally");
 
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -244,8 +253,12 @@ public class IndexTool extends Configured implements Tool {
             + "or equal to endTime "
             + "or either of them are set in the future; IndexTool can't proceed.";
 
-    public static final String FEATURE_NOT_APPLICABLE = "starttime-endtime feature is only "
+    public static final String FEATURE_NOT_APPLICABLE = "start-time/end-time and retry verify feature are only "
             + "applicable for local or non-transactional global indexes";
+
+
+    public static final String RETRY_VERIFY_NOT_APPLICABLE = "retry verify feature accepts "
+            + "non-zero ts set in the past and ts must be present in PHOENIX_INDEX_TOOL_RESULT table";
 
     private Options getOptions() {
         final Options options = new Options();
@@ -265,10 +278,12 @@ public class IndexTool extends Configured implements Tool {
         SPLIT_INDEX_OPTION.setOptionalArg(true);
         START_TIME_OPTION.setOptionalArg(true);
         END_TIME_OPTION.setOptionalArg(true);
+        RETRY_VERIFY_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
         options.addOption(SPLIT_INDEX_OPTION);
         options.addOption(START_TIME_OPTION);
         options.addOption(END_TIME_OPTION);
+        options.addOption(RETRY_VERIFY_OPTION);
         return options;
     }
 
@@ -341,9 +356,9 @@ public class IndexTool extends Configured implements Tool {
         return startTime;
     }
 
-    public Long getEndTime() {
-        return endTime;
-    }
+    public Long getEndTime() { return endTime; }
+
+    public Long getLastVerifyTime() { return lastVerifyTime; }
 
     class JobFactory {
         Connection connection;
@@ -381,6 +396,9 @@ public class IndexTool extends Configured implements Tool {
                     // When endTime is passed for local and non-tx global indexes, we'll override the CURRENT_SCN_VALUE.
                     if (endTime != null) {
                         PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
+                    }
+                    if (lastVerifyTime != null) {
+                        PhoenixConfigurationUtil.setIndexToolLastVerifyTime(configuration, lastVerifyTime);
                     }
                     return configureJobForServerBuildIndex();
                 }
@@ -487,13 +505,13 @@ public class IndexTool extends Configured implements Tool {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
                 }
-            }
-            // Do check if table is disabled again after user invoked async rebuilding during the run of the job
-            if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
-                return maxRebuilAsyncDate;
-            } else {
-                throw new RuntimeException(
-                        "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                // Do check if table is disabled again after user invoked async rebuilding during the run of the job
+                if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
+                    return maxRebuilAsyncDate;
+                } else {
+                    throw new RuntimeException(
+                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                }
             }
         }
 
@@ -660,13 +678,16 @@ public class IndexTool extends Configured implements Tool {
             printHelpAndExit(e.getMessage(), getOptions());
             return -1;
         }
+        configuration = HBaseConfiguration.addHbaseResources(getConf());
         populateIndexToolAttributes(cmdLine);
-        Configuration configuration = getConfiguration(tenantId);
+        if (tenantId != null) {
+            configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
         try (Connection conn = getConnection(configuration)) {
             createIndexToolTables(conn);
             if (dataTable != null && indexTable != null) {
                 setupIndexAndDataTable(conn);
-                checkTimeRangeFeature(startTime, endTime, pDataTable, isLocalIndexBuild);
+                checkIfFeatureApplicable(startTime, endTime, lastVerifyTime, pDataTable, isLocalIndexBuild);
                 if (shouldDeleteBeforeRebuild) {
                     deleteBeforeRebuild(conn);
                 }
@@ -686,18 +707,14 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    public static void checkTimeRangeFeature(Long startTime, Long endTime, PTable pDataTable, boolean isLocalIndexBuild) {
-        if (isTimeRangeSet(startTime, endTime) && !isTimeRangeFeatureApplicable(pDataTable, isLocalIndexBuild)) {
-            throw new RuntimeException(FEATURE_NOT_APPLICABLE);
+    public static void checkIfFeatureApplicable(Long startTime, Long endTime, Long lastVerifyTime,
+            PTable pDataTable, boolean isLocalIndexBuild) {
+        boolean isApplicable = isFeatureApplicable(pDataTable, isLocalIndexBuild);
+        if (!isApplicable) {
+            if(isTimeRangeSet(startTime, endTime) || lastVerifyTime!=null) {
+                throw new RuntimeException(FEATURE_NOT_APPLICABLE);
+            }
         }
-    }
-
-    private Configuration getConfiguration(String tenantId) {
-        final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
-        if (tenantId != null) {
-            configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        }
-        return configuration;
     }
 
     private boolean submitIndexToolJob(Connection conn, Configuration configuration)
@@ -726,10 +743,11 @@ public class IndexTool extends Configured implements Tool {
     }
 
     @VisibleForTesting
-    public void populateIndexToolAttributes(CommandLine cmdLine) {
+    public int populateIndexToolAttributes(CommandLine cmdLine) throws Exception {
         boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
         boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
         boolean useEndTime = cmdLine.hasOption(END_TIME_OPTION.getOpt());
+        boolean retryVerify = cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
 
         if (useTenantId) {
@@ -740,6 +758,10 @@ public class IndexTool extends Configured implements Tool {
         }
         if (useEndTime) {
             endTime = new Long(cmdLine.getOptionValue(END_TIME_OPTION.getOpt()));
+        }
+        if(retryVerify) {
+            lastVerifyTime = new Long(cmdLine.getOptionValue(RETRY_VERIFY_OPTION.getOpt()));
+            validateLastVerifyTime();
         }
         if(isTimeRangeSet(startTime, endTime)) {
             validateTimeRange();
@@ -757,6 +779,30 @@ public class IndexTool extends Configured implements Tool {
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
         useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
         shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+        return 0;
+    }
+
+    public int validateLastVerifyTime() throws Exception {
+        Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (lastVerifyTime.compareTo(currentTime) > 0 || lastVerifyTime == 0L || !isValidLastVerifyTime(lastVerifyTime)) {
+            throw new RuntimeException(RETRY_VERIFY_NOT_APPLICABLE);
+        }
+        return 0;
+    }
+
+    public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
+        try(Connection conn = getConnection(configuration)) {
+            Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
+            Scan s = new Scan();
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());
+            s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", lastVerifyTime,
+                    ROW_KEY_SEPARATOR,
+                    SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTable, isNamespaceMapped))));
+            ResultScanner rs = hIndexToolTable.getScanner(s);
+            return rs.next() != null;
+        }
     }
 
     private void validateTimeRange() {
@@ -805,7 +851,7 @@ public class IndexTool extends Configured implements Tool {
         return startTime != null || endTime != null;
     }
 
-    private static boolean isTimeRangeFeatureApplicable(PTable dataTable, boolean isLocalIndexBuild) {
+    private static boolean isFeatureApplicable(PTable dataTable, boolean isLocalIndexBuild) {
         if (isLocalIndexBuild || !dataTable.isTransactional()) {
             return true;
         }
@@ -1028,7 +1074,7 @@ public class IndexTool extends Configured implements Tool {
         indexingTool.setConf(conf);
         int status = indexingTool.run(args.toArray(new String[0]));
         Job job = indexingTool.getJob();
-        return new AbstractMap.SimpleEntry<Integer, Job>(status, job);
+        return new AbstractMap.SimpleEntry<>(status, job);
     }
 
     public static void main(final String[] args) throws Exception {

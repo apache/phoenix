@@ -71,6 +71,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
+    public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.

@@ -84,6 +84,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             final RegionCoprocessorEnvironment env) throws IOException {
         super(innerScanner, region, scan, env);
         indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        verificationResult = new IndexToolVerificationResult(scan);
         verificationResultRepository =
                 new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
     }
