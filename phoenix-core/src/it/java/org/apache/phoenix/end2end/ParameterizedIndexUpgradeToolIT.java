@@ -178,8 +178,6 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS TEST1");
         }
 
-
-
         conn.createStatement().execute("CREATE TABLE " + mockTableOne + " (id bigint NOT NULL "
                 + "PRIMARY KEY, a.name varchar, sal bigint, address varchar)" + tableDDLOptions);
         conn.createStatement().execute("CREATE TABLE "+ mockTableTwo + " (id bigint NOT NULL "
