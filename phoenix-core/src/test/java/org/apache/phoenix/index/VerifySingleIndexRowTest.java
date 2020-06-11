@@ -35,6 +35,7 @@ import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
@@ -279,10 +280,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         doNothing().when(rebuildScanner)
                 .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
                         Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
-                        Matchers.<byte[]>any(), Matchers.<byte[]>any(), Matchers.anyBoolean());
+                        Matchers.<byte[]>any(), Matchers.<byte[]>any(), Matchers.anyBoolean(),
+                    Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
         doNothing().when(rebuildScanner)
                 .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
-                        Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(), Matchers.anyBoolean());
+                        Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
+                    Matchers.anyBoolean(),
+                    Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
 
         //populate the local map to use to create actual mutations
         indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
