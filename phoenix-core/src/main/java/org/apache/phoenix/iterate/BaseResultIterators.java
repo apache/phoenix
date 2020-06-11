@@ -83,6 +83,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -251,6 +252,24 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst());
                             }
                         }
+                    }
+                }
+            } else {
+                boolean containsNullableGroubBy = false;
+                if (!plan.getOrderBy().isEmpty()) {
+                    for (OrderByExpression orderByExpression : plan.getOrderBy()
+                            .getOrderByExpressions()) {
+                        if (orderByExpression.getExpression().isNullable()) {
+                            containsNullableGroubBy = true;
+                            break;
+                        }
+                    }
+                }
+                if(containsNullableGroubBy){
+                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                    if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
+                        scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table)
+                                .getFirst());
                     }
                 }
             }
