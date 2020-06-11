@@ -1101,6 +1101,26 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
+    @Test
+    public void testViewConditionsOptimizesCompositePKLookups() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (k1 INTEGER NOT NULL, k2 VARCHAR NOT NULL,k3 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2, K3))" + tableDDLOptions;
+        conn.createStatement().execute(ddl);
+        String viewName = "V_" + generateUniqueName();
+        ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR, V3 VARCHAR ) AS SELECT * FROM " + tableName + " WHERE K2 = 'A'";
+        conn.createStatement().execute(ddl);
+        String explainQuery = String.format("EXPLAIN SELECT K1, K2, K3, V1, V2, V3 FROM %s WHERE (K1,K3) IN ((?,?),(?,?))", viewName);
+        try (PreparedStatement psmt = conn.prepareStatement(explainQuery)) {
+            psmt.setInt(1, 1);
+            psmt.setInt(2, 2);
+            psmt.setInt(3, 3);
+            psmt.setInt(4, 4);
+            String explainPlan = QueryUtil.getExplainPlan(psmt.executeQuery());
+            assertEquals(explainPlan, String.format("CLIENT PARALLEL 1-WAY POINT LOOKUP ON 2 KEYS OVER %s", tableName));
+        }
+    }
+
     private class CreateViewRunnable implements Callable<Exception> {
         private final String fullTableName;
         private final String fullViewName;
