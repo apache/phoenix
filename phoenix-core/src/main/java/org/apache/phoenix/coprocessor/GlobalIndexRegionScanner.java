@@ -134,11 +134,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
         indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         maxLookBackInMills = ScanInfoUtil.getMaxLookbackInMillis(config);
-        pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
-                new ThreadPoolBuilder("IndexVerify",
-                        env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
-                        DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
-                        INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
     }
