@@ -99,16 +99,15 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean skipped = false;
     private boolean shouldVerifyCheckDone = false;
     final private RegionCoprocessorEnvironment env;
-    byte[][] endKeys;
+    private byte[][] endKeys;
+    private org.apache.hadoop.hbase.client.Connection connection;
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
                               final RegionCoprocessorEnvironment env) throws IOException {
         super(innerScanner, region, scan, env);
         this.env = env;
-        try (org.apache.hadoop.hbase.client.Connection connection =
-                     HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
-            endKeys = connection.getRegionLocator(indexHTable.getName()).getEndKeys();
-        }
+        connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration());
+        endKeys = connection.getRegionLocator(indexHTable.getName()).getEndKeys();
         indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKey != null) {
             setReturnCodeForSingleRowRebuild();
@@ -198,6 +197,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     @Override
     public void close() throws IOException {
+        connection.close();
         innerScanner.close();
         if (verify) {
             try {
@@ -952,10 +952,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         if (verifyType != IndexTool.IndexVerifyType.ONLY) {
             // Since we are building the index table, the region boundaries may change while we are building. Thus,
             // we should update endKeys
-            try (org.apache.hadoop.hbase.client.Connection connection =
-                         HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
-                endKeys = connection.getRegionLocator(indexHTable.getName()).getEndKeys();
-            }
+            endKeys = connection.getRegionLocator(indexHTable.getName()).getEndKeys();
         }
         List<Map<byte[], List<Mutation>>> mapList = getPerTaskIndexKeyToMutationMaps((TreeMap)indexKeyToMutationMap,
                 endKeys, rowCountPerTask);
