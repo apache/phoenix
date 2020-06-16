@@ -60,6 +60,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -178,8 +179,8 @@ public class CreateTableCompiler {
                     }
                 }
                 if (isPKMissed) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
-                            .build().buildException();
+                    throw new TableNotFoundException(tableRef.getTable().getSchemaName().toString(),
+                            tableRef.getTable().getTableName().toString());
                 }
             }
         }
