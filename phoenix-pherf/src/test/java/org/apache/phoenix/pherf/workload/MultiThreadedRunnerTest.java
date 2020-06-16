@@ -93,10 +93,14 @@ public class MultiThreadedRunnerTest {
         DefaultEnvironmentEdge myClock = Mockito.mock(DefaultEnvironmentEdge.class);
         Mockito.when(myClock.currentTime()).thenReturn(0L, 5000L);
         EnvironmentEdgeManager.injectEdge(myClock);
-        Mockito.when(mockRS.next()).thenReturn(true);
-        Mockito.when(mockRS.getLong(1)).thenReturn(1L);
-        Pair<Long, Long> results = mtr.getResults(mockRS, "test_iteration", false,0L);
-        assertTrue(results.getSecond()>mockQuery.getTimeoutDuration());
+        try {
+            Mockito.when(mockRS.next()).thenReturn(true);
+            Mockito.when(mockRS.getLong(1)).thenReturn(1L);
+            Pair<Long, Long> results = mtr.getResults(mockRS, "test_iteration", false, 0L);
+            assertTrue(results.getSecond() > mockQuery.getTimeoutDuration());
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
     }
 
     @Test
@@ -104,17 +108,21 @@ public class MultiThreadedRunnerTest {
         DefaultEnvironmentEdge myClock = Mockito.mock(DefaultEnvironmentEdge.class);
         Mockito.when(myClock.currentTime()).thenReturn(0L);
         EnvironmentEdgeManager.injectEdge(myClock);
-        Mockito.when(mockQuery.getTimeoutDuration()).thenReturn(1000L);
-        Mockito.when(mockQuery.getExpectedAggregateRowCount()).thenReturn(1L);
-        MultiThreadedRunner mtr = new MultiThreadedRunner("test",
-                mockQuery, mockDMR, mockTT,
-                10L, 1000L,
-                true, mockRA,
-                mockScenario, mockWE, mockParser);
-        Mockito.when(mockRS.next()).thenReturn(true, false);
-        Mockito.when(mockRS.getLong(1)).thenReturn(1L);
-        Pair<Long, Long> results = mtr.getResults(mockRS, "test_iteration", false, 0L);
-        assertFalse(results.getSecond() > mockQuery.getTimeoutDuration());
+        try {
+            Mockito.when(mockQuery.getTimeoutDuration()).thenReturn(1000L);
+            Mockito.when(mockQuery.getExpectedAggregateRowCount()).thenReturn(1L);
+            MultiThreadedRunner mtr = new MultiThreadedRunner("test",
+                    mockQuery, mockDMR, mockTT,
+                    10L, 1000L,
+                    true, mockRA,
+                    mockScenario, mockWE, mockParser);
+            Mockito.when(mockRS.next()).thenReturn(true, false);
+            Mockito.when(mockRS.getLong(1)).thenReturn(1L);
+            Pair<Long, Long> results = mtr.getResults(mockRS, "test_iteration", false, 0L);
+            assertFalse(results.getSecond() > mockQuery.getTimeoutDuration());
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
     }
 
 }

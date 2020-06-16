@@ -76,23 +76,26 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     private static void populateDataTable() throws SQLException {
         myClock = new MyClock();
         EnvironmentEdgeManager.injectEdge(myClock);
-        //So that we don't have to recompute the values below
-        myClock.tickTime();
-        myClock.tickTime();
-        try (Connection conn = getConnection()) {
-            //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
-            for (int i=0; i<5; i++) {
-                myClock.tickTime();
-                PreparedStatement ps = conn.prepareStatement(
-                        String.format(UPSERT_TABLE_DML, dataTableFullName));
-                ps.setInt(1, i+1);
-                ps.setInt(2,(i+1)*10);
-                ps.setInt(3, (i+1)*100);
-                ps.execute();
-                conn.commit();
+        try {
+            //So that we don't have to recompute the values below
+            myClock.tickTime();
+            myClock.tickTime();
+            try (Connection conn = getConnection()) {
+                //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
+                for (int i=0; i<5; i++) {
+                    myClock.tickTime();
+                    PreparedStatement ps = conn.prepareStatement(
+                            String.format(UPSERT_TABLE_DML, dataTableFullName));
+                    ps.setInt(1, i+1);
+                    ps.setInt(2,(i+1)*10);
+                    ps.setInt(3, (i+1)*100);
+                    ps.execute();
+                    conn.commit();
+                }
             }
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
-        EnvironmentEdgeManager.injectEdge(null);
     }
 
     private static void setupMiniCluster() throws Exception {

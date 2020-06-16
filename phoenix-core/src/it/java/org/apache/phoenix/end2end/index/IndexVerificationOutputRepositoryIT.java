@@ -135,6 +135,8 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
             int count = TestUtil.getRowCount(hTable, false);
 
             Assert.assertEquals(0, count);
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
     }
 
