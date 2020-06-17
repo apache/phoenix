@@ -131,6 +131,20 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     }
 
     @Test
+    public void testCreateViewWithoutBaseTable() throws Exception {
+        String viewName = generateUniqueName();
+        String baseTableName = generateUniqueName();
+        try {
+            Connection conn = DriverManager.getConnection(getUrl());
+            conn.createStatement().executeUpdate("CREATE VIEW IF NOT EXISTS " + viewName +
+                    " (new_col INTEGER) AS SELECT * FROM " + baseTableName);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
     public void testCreateViewFromHBaseTable() throws Exception {
         String tableNameStr = generateUniqueName();
         String familyNameStr = generateUniqueName();
@@ -149,7 +163,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     "\" (ROWKEY VARCHAR, \"" + familyNameStr + "\".a VARCHAR)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
         }
 
         // No error, as PK is specified
@@ -165,7 +179,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     + tableNameStr + "\" WHERE ROWKEY = '1'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.PRIMARY_KEY_MISSING.getErrorCode(), e.getErrorCode());
         }
 
         conn.createStatement().executeUpdate("CREATE VIEW \"" + tableNameStr +

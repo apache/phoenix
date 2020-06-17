@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -178,9 +179,22 @@ public class CreateTableCompiler {
                         }
                     }
                 }
+
                 if (isPKMissed) {
-                    throw new TableNotFoundException(tableRef.getTable().getSchemaName().toString(),
-                            tableRef.getTable().getTableName().toString());
+                    boolean isTableAvailable = true;
+                    try (HBaseAdmin admin = connection.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                        isTableAvailable = admin.isTableAvailable(tableRef.getTable().getTableName().toString());
+                    } catch (Exception e) {
+                        isTableAvailable = false;
+                    }
+
+                    if (isTableAvailable) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
+                                .build().buildException();
+                    } else {
+                        throw new TableNotFoundException(tableRef.getTable().getSchemaName().toString(),
+                                tableRef.getTable().getTableName().toString());
+                    }
                 }
             }
         }
