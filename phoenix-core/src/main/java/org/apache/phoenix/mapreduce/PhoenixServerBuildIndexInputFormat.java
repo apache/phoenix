@@ -75,11 +75,10 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         }
         final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
         final String currentScnValue = getCurrentScnValue(configuration);
+        final String startTimeValue = getIndexToolStartTime(configuration);
         final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
         final String lastVerifyTime = getIndexToolLastVerifyTime(configuration);
 
-        //until PHOENIX-5783 is fixed; we'll continue with startTime = 0
-        final String startTimeValue = null;
         final Properties overridingProps = new Properties();
         if (txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
