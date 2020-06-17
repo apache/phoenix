@@ -195,5 +195,6 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
                 ((HBaseAdmin) admin).deleteTable(RESULT_TABLE_NAME_BYTES);
             }
         }
+        EnvironmentEdgeManager.reset();
     }
 }

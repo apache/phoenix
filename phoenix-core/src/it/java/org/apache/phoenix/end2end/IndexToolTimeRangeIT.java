@@ -137,7 +137,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
         Assert.assertEquals(5, countRowsInIndex());
     }
 
-    @Ignore("Until PHOENIX-5783 is fixed")
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
         String [] args = {"--delete-all-and-rebuild",
@@ -166,7 +165,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
         Assert.assertEquals(5, countRowsInIndex());
     }
 
-    @Ignore("Until PHOENIX-5783 is fixed")
     @Test
     public void testValidTimeRange_onlyStartTimePassed() throws Exception {
         //starttime passed of last upsert

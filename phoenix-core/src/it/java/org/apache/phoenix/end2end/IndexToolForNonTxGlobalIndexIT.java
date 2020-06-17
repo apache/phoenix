@@ -48,6 +48,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -159,6 +160,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             deleteAllRows(conn,
                 TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
         }
+        EnvironmentEdgeManager.reset();
     }
 
     @Test
@@ -589,6 +591,225 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Assert.assertFalse(it.isValidLastVerifyTime(EnvironmentEdgeManager.currentTimeMillis() - 1000L));
             Assert.assertTrue(it.isValidLastVerifyTime(scn));
         }
+    }
+
+    @Test
+    public void testIndexToolForIncrementalVerify() throws Exception {
+        ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        String indexTableName = generateUniqueName();
+        String viewIndexName = generateUniqueName();
+        long waitForUpsert = 2;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE "+dataTableFullName+" "
+                    + "(key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
+                    + "val3 BIGINT, val4 DOUBLE, val5 BIGINT, val6 VARCHAR "
+                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2)) "+tableDDLOptions);
+            conn.createStatement().execute("CREATE VIEW "+viewFullName+" AS SELECT * FROM "+dataTableFullName);
+
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX "+viewIndexName+" ON "+viewFullName+" (val3) INCLUDE(val5)"));
+
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX "+indexTableName+" ON "+dataTableFullName+" (val3) INCLUDE(val5)"));
+
+            customeEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customeEdge);
+            long t0 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("UPSERT INTO "+dataTableFullName+"(key1, key2, val1, val2) VALUES (4,5,'abc',3)");
+            customeEdge.incrementValue(waitForUpsert);
+            long t1 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("UPSERT INTO "+dataTableFullName+"(key1, key2, val1, val2) VALUES (1,2,'abc',3)");
+            customeEdge.incrementValue(waitForUpsert);
+            long t2 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("UPSERT INTO "+dataTableFullName+"(key1, key2, val3, val4) VALUES (1,2,4,1.2)");
+            customeEdge.incrementValue(waitForUpsert);
+            long t3 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("UPSERT INTO "+dataTableFullName+"(key1, key2, val5, val6) VALUES (1,2,5,'def')");
+            customeEdge.incrementValue(waitForUpsert);
+            long t4 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("DELETE FROM "+dataTableFullName+" WHERE key1=4");
+            customeEdge.incrementValue(waitForUpsert);
+            long t5 = customeEdge.currentTime();
+            customeEdge.incrementValue(10);
+            long t6 = customeEdge.currentTime();
+            IndexTool it;
+            if(!mutable) {
+                // job with 2 rows
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
+                verifyCounters(it, 2, 2);
+
+                // only one row
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t2));
+                verifyCounters(it, 1, 1);
+
+                // no rows
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
+                verifyCounters(it, 0, 0);
+
+                //view index
+                // job with 2 rows
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
+                verifyCounters(it, 2, 2);
+
+                // only one row
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t2));
+                verifyCounters(it, 1, 1);
+
+                // no rows
+                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                        null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
+                verifyCounters(it, 0, 0);
+
+                return;
+            }
+            // regular job without delete row
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t4));
+            verifyCounters(it, 2, 3);
+
+            // job with 2 rows
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
+            verifyCounters(it, 2, 2);
+
+            // job with update on only one row
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t3));
+            verifyCounters(it, 1, 2);
+
+            // job with update on only one row
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),"-et", String.valueOf(t4));
+            verifyCounters(it, 1, 2);
+
+            // job with update on only one row
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t4),"-et", String.valueOf(t5));
+            verifyCounters(it, 1, 1);
+
+            // job with no new updates on any row
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
+            verifyCounters(it, 0, 0);
+        }
+    }
+
+    @Test
+    public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
+        ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String viewIndexName = generateUniqueName();
+        long waitForUpsert = 2;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " "
+                    + "(key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
+                    + "val3 BIGINT, val4 DOUBLE, val5 BIGINT, val6 VARCHAR "
+                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2)) COLUMN_ENCODED_BYTES=0");
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE val6 = 'def'");
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX " + viewIndexName + " ON " + viewFullName
+                            + " (val3) INCLUDE(val5)"));
+            customeEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customeEdge);
+
+            long t1 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement()
+                    .execute("UPSERT INTO " + viewFullName + " VALUES (5,6,'abc',8,4,1.3,6,'def')");
+            customeEdge.incrementValue(waitForUpsert);
+            long t2 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement()
+                    .execute("UPSERT INTO " + viewFullName + " VALUES (1,2,'abc',3,4,1.2,5,'def')");
+            customeEdge.incrementValue(waitForUpsert);
+            long t3 = customeEdge.currentTime();
+            customeEdge.incrementValue(waitForUpsert);
+            conn.createStatement().execute("DELETE FROM " + viewFullName + " WHERE key1=5");
+            customeEdge.incrementValue(waitForUpsert);
+            long t4 = customeEdge.currentTime();
+            customeEdge.incrementValue(10);
+            long t5 = customeEdge.currentTime();
+            IndexTool it;
+            // regular job without delete row
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
+                            "-et", String.valueOf(t4));
+            verifyCounters(it, 2, 2);
+
+            // job with 1 row
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
+                            "-et", String.valueOf(t2));
+            verifyCounters(it, 1, 1);
+
+            // job with update on only one row
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),
+                            "-et", String.valueOf(t3));
+            verifyCounters(it, 1, 1);
+
+            // job with update on 2 rows
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
+                            "-et", String.valueOf(t3));
+            verifyCounters(it, 2, 2);
+
+            // job with update on only one row
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t3),
+                            "-et", String.valueOf(t4));
+            verifyCounters(it, 1, 1);
+
+            // job with no new updates on any row
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                            viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t4),
+                            "-et", String.valueOf(t5));
+            verifyCounters(it, 0, 0);
+        }
+    }
+
+    private void verifyCounters(IndexTool it, int scanned, int valid) throws IOException {
+        assertEquals(scanned, it.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+        assertEquals(valid, it.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
     }
 
     @Test

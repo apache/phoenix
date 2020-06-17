@@ -53,12 +53,15 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ScanRanges;
@@ -100,6 +103,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean shouldVerifyCheckDone = false;
     final private RegionCoprocessorEnvironment env;
     private byte[][] indexRegionEndKeys;
+    private byte[] nextStartKey;
+    private boolean hasMoreIncr = false;
+    private long minTimestamp = 0;
+
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
                               final RegionCoprocessorEnvironment env) throws IOException {
@@ -129,6 +136,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             verificationResult = new IndexToolVerificationResult(scan);
             verificationResultRepository =
                 new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+            nextStartKey = null;
+            minTimestamp = scan.getTimeRange().getMin();
         }
     }
 
@@ -1207,15 +1216,20 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         int dataRowCount = 0;
         int indexMutationCount = 0;
         region.startRegionOperation();
+        RegionScanner localScanner = null;
         try {
-            synchronized (innerScanner) {
-                if(!shouldVerify()) {
+            localScanner = getLocalScanner();
+            if (localScanner == null) {
+                return false;
+            }
+            synchronized (localScanner) {
+                if (!shouldVerify()) {
                     skipped = true;
                     return false;
                 }
                 do {
                     List<Cell> row = new ArrayList<Cell>();
-                    hasMore = innerScanner.nextRaw(row);
+                    hasMore = localScanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         lastCell = row.get(0); // lastCell is any cell from the last visited row
                         Put put = null;
@@ -1260,6 +1274,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             throw e;
         } finally {
             region.closeRegionOperation();
+            if (localScanner!=null && localScanner!=innerScanner) {
+                localScanner.close();
+            }
         }
         if (indexRowKeyforReadRepair != null) {
             dataRowCount = singleRowRebuildReturnCode;
@@ -1274,7 +1291,67 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         }
         results.add(aggKeyValue);
-        return hasMore;
+        return hasMore || hasMoreIncr;
+    }
+
+    private RegionScanner getLocalScanner() throws IOException {
+        // override the filter to skip scan and open new scanner
+        // when lower bound of timerange is passed or newStartKey was populated
+        // from previous call to next()
+        if(minTimestamp!= 0) {
+            Scan incrScan = new Scan(scan);
+            incrScan.setTimeRange(minTimestamp, scan.getTimeRange().getMax());
+            incrScan.setRaw(true);
+            incrScan.setMaxVersions();
+            incrScan.getFamilyMap().clear();
+            incrScan.setCacheBlocks(false);
+            for (byte[] family : scan.getFamilyMap().keySet()) {
+                incrScan.addFamily(family);
+            }
+            // For rebuilds we use count (*) as query for regular tables which ends up setting the FKOF on scan
+            // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
+            // For rebuilds we need all columns and all versions
+            if (scan.getFilter() instanceof FirstKeyOnlyFilter) {
+                incrScan.setFilter(null);
+            } else if (scan.getFilter() != null) {
+                // Override the filter so that we get all versions
+                incrScan.setFilter(new AllVersionsIndexRebuildFilter(scan.getFilter()));
+            }
+            if(nextStartKey != null) {
+                incrScan.setStartRow(nextStartKey);
+            }
+            List<KeyRange> keys = new ArrayList<>();
+            try(RegionScanner scanner = region.getScanner(incrScan)) {
+                List<Cell> row = new ArrayList<>();
+                int rowCount = 0;
+                // collect row keys that have been modified in the given time-range
+                // up to the size of page to build skip scan filter
+                do {
+                    hasMoreIncr = scanner.nextRaw(row);
+                    if (!row.isEmpty()) {
+                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
+                        rowCount++;
+                    }
+                    row.clear();
+                } while (hasMoreIncr && rowCount < pageSizeInRows);
+            }
+            if (!hasMoreIncr && keys.isEmpty()) {
+                return null;
+            }
+            if (keys.isEmpty()) {
+                return innerScanner;
+            }
+            nextStartKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(keys.get(keys.size() - 1).getLowerRange());
+            ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
+            scanRanges.initializeScan(incrScan);
+            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+            incrScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+            //putting back the min time to 0 for index and data reads
+            incrScan.setTimeRange(0, scan.getTimeRange().getMax());
+            scan.setTimeRange(0, scan.getTimeRange().getMax());
+            return region.getScanner(incrScan);
+        }
+        return innerScanner;
     }
 
     @Override
