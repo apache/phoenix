@@ -119,6 +119,9 @@
                   <include>com.ibm.icu:icu4j-charset</include>
                   <include>com.ibm.icu:icu4j-localespi</include>
                   <include>com.lmax:disruptor</include>
+                  <include>com.fasterxml.jackson.core:jackson-core</include>
+                  <include>com.fasterxml.jackson.core:jackson-annotations</include>
+                  <include>com.fasterxml.jackson.core:jackson-databind</include>
                 </includes>
                   <excludes>
                     <exclude>org.apache.phoenix:phoenix-server</exclude>
