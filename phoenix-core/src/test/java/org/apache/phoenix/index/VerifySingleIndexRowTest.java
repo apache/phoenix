@@ -349,14 +349,18 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
         IndexToolVerificationResult.PhaseResult
                 expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0,0,0);
-        for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMap.entrySet()) {
-            initializeLocalMockitoSetup(entry, TestType.EXPIRED);
-            expireThisRow();
-            //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap, mostRecentIndexRowKeys, actualPR, true);
+        try {
+            for (Map.Entry<byte[], List<Mutation>>
+                    entry : indexKeyToMutationMap.entrySet()) {
+                initializeLocalMockitoSetup(entry, TestType.EXPIRED);
+                expireThisRow();
+                //test code
+                rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap, mostRecentIndexRowKeys, actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+                assertTrue(actualPR.equals(expectedPR));
+            }
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
     }
 

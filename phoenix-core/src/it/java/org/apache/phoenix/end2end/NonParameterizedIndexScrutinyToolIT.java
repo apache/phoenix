@@ -178,6 +178,8 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
             assertEquals(2, getCounterValue(counters, EXPIRED_ROW_COUNT));
             assertEquals(0, getCounterValue(counters, VALID_ROW_COUNT));
             assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
         }
     }
 
@@ -220,6 +222,8 @@ public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT
             assertEquals(2, getCounterValue(counters, EXPIRED_ROW_COUNT));
             assertEquals(0, getCounterValue(counters, VALID_ROW_COUNT));
             assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
+        } finally {
+            EnvironmentEdgeManager.injectEdge(null);
         }
     }
 

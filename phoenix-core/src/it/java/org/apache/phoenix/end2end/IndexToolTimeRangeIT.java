@@ -91,8 +91,9 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
                 ps.execute();
                 conn.commit();
             }
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
-        EnvironmentEdgeManager.injectEdge(null);
     }
 
     private static void setupMiniCluster() throws Exception {

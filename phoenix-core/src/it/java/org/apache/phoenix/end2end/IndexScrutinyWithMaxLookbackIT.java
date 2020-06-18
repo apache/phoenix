@@ -99,8 +99,12 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     @Test
     public void testScrutinyOnRowsBeyondMaxLookBack() throws Exception {
         setupTables();
-        upsertDataAndScrutinize(dataTableName, dataTableFullName, testClock);
-        assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
+        try {
+            upsertDataAndScrutinize(dataTableName, dataTableFullName, testClock);
+            assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
 
     }
 
@@ -156,8 +160,12 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     @Test
     public void testScrutinyOnDeletedRowsBeyondMaxLookBack() throws Exception {
         setupTables();
-        upsertDataThenDeleteAndScrutinize(dataTableName, dataTableFullName, testClock);
-        assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
+        try {
+            upsertDataThenDeleteAndScrutinize(dataTableName, dataTableFullName, testClock);
+            assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
     }
 
     private void setupTables() throws SQLException {

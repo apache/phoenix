@@ -40,6 +40,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.AfterClass;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -85,6 +86,11 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
         injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
         EnvironmentEdgeManager.injectEdge(injectEdge);
+    }
+
+    @AfterClass
+    public static synchronized void afterClass() {
+        EnvironmentEdgeManager.reset();
     }
 
     @Test
