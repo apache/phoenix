@@ -472,10 +472,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
      * @throws IOException
      */
     private List<UserPermission> getUserPermissions(final TableName tableName) throws IOException {
-        List<UserPermission> userPermissions =
-                User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
+
+        return User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
                     @Override
-                    public List<UserPermission> run() throws Exception {
+            public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                 final RpcServer.Call rpcContext = RpcUtil.getRpcContext();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
@@ -501,20 +501,21 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     // Setting RPC context back to original context of the RPC
                     RpcUtil.setRpcContext(rpcContext);
                 }
+                getUserDefinedPermissions(tableName, userPermissions);
                 return userPermissions;
             }
         });
-        getUserDefinedPermissions(tableName, userPermissions);
-        return userPermissions;
     }
 
     private void getUserDefinedPermissions(final TableName tableName, final List<UserPermission> userPermissions) throws IOException {
         User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
             @Override
             public List<UserPermission> run() throws Exception {
-                final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
+                final RpcServer.Call rpcContext = RpcUtil.getRpcContext();
                 try (Connection connection =
                         ConnectionFactory.createConnection(env.getConfiguration())) {
+                    // Setting RPC context as null so that user can be resetted
+                    RpcUtil.setRpcContext(null);
                     for (BaseMasterAndRegionObserver service : getAccessControllers()) {
                          if (service.getClass().getName().equals(org.apache.hadoop.hbase.security.access.AccessController.class.getName())) {
                             continue;
@@ -529,6 +530,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                         throw (Error) e;
                     }
                     throw new Exception(e);
+                } finally {
+                    // Setting RPC context back to original context of the RPC
+                    RpcUtil.setRpcContext(rpcContext);
                 }
                 return userPermissions;
             }
@@ -584,12 +588,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User user = getActiveUser();
         AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
-        List<UserPermission> userPermissions = new ArrayList<>();
-        if(permissions.length > 0) {
-           getUserDefinedPermissions(tableName, userPermissions);
-        }
         for (Action permission : permissions) {
-             if (hasAccess(userPermissions, tableName, permission, user)) {
+             if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
                 result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
             } else {
                 result = AuthResult.deny(request, "Insufficient permissions", user, permission, tableName, null, null);
