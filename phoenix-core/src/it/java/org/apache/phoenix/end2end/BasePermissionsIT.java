@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.LocalHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
@@ -36,9 +36,9 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.AccessControlUtil;
 import org.apache.hadoop.hbase.security.access.AccessController;
-import org.apache.hadoop.hbase.security.access.GetUserPermissionsRequest;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
+import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -67,6 +67,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -1436,45 +1437,57 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     public static class  CustomAccessController extends AccessController {
 
-        org.apache.hadoop.hbase.client.Connection connection;
+        Configuration configuration;
+        boolean aclRegion;
         @Override
         public void start(CoprocessorEnvironment env) throws IOException {
             super.start(env);
-             connection = ConnectionFactory.createConnection(env.getConfiguration());
+            configuration = env.getConfiguration();
+            if(env instanceof RegionCoprocessorEnvironment) {
+                aclRegion = AccessControlClient.ACL_TABLE_NAME.
+                        equals(((RegionCoprocessorEnvironment) env).getRegion().
+                                getTableDescriptor().getTableName());
+            }
         }
 
         @Override
         public void getUserPermissions(RpcController controller,
                                        AccessControlProtos.GetUserPermissionsRequest request,
                                        RpcCallback<AccessControlProtos.GetUserPermissionsResponse> done) {
+            if(aclRegion) {
+                super.getUserPermissions(controller,request,done);
+                return;
+            }
             AccessControlProtos.GetUserPermissionsResponse response = null;
+            org.apache.hadoop.hbase.client.Connection connection;
             try {
-                final String userName = request.hasUserName() ? request.getUserName().toStringUtf8() : null;
-                final String namespace =
-                        request.hasNamespaceName() ? request.getNamespaceName().toStringUtf8() : null;
-                final TableName table =
-                        request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
-                final byte[] cf =
-                        request.hasColumnFamily() ? request.getColumnFamily().toByteArray() : null;
-                final byte[] cq =
-                        request.hasColumnQualifier() ? request.getColumnQualifier().toByteArray() : null;
-                GetUserPermissionsRequest getUserPermissionsRequest = null;
-                if (request.getType() == AccessControlProtos.Permission.Type.Table) {
-                    getUserPermissionsRequest = GetUserPermissionsRequest.newBuilder(table).withFamily(cf)
-                            .withQualifier(cq).withUserName(userName).build();
-                } else if (request.getType() == AccessControlProtos.Permission.Type.Namespace) {
-                    getUserPermissionsRequest =
-                            GetUserPermissionsRequest.newBuilder(namespace).withUserName(userName).build();
-                } else {
-                    getUserPermissionsRequest =
-                            GetUserPermissionsRequest.newBuilder().withUserName(userName).build();
-                }
-                List<UserPermission> perms =
-                        connection.getAdmin().getUserPermissions(getUserPermissionsRequest);
-                response = AccessControlUtil.buildGetUserPermissionsResponse(perms);
+                connection = ConnectionFactory.createConnection(configuration);
             } catch (IOException e) {
                 // pass exception back up
-                CoprocessorRpcUtils.setControllerException(controller, e);
+                ResponseConverter.setControllerException(controller, new IOException(e));
+                return;
+            }
+            try {
+                final List<UserPermission> perms = new ArrayList<>();
+                if(request.getType() == AccessControlProtos.Permission.Type.Table) {
+                    final TableName table =
+                            request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
+                    perms.addAll(AccessControlClient.getUserPermissions(connection, table.getNameAsString()));
+                } else if(request.getType() == AccessControlProtos.Permission.Type.Namespace) {
+                    final String namespace =
+                            request.hasNamespaceName() ? request.getNamespaceName().toStringUtf8() : null;
+                    perms.addAll(AccessControlClient.getUserPermissions(connection, AuthUtil.toGroupEntry(namespace)));
+                }
+                response = AccessControlUtil.buildGetUserPermissionsResponse(perms);
+            } catch (Throwable ioe) {
+                // pass exception back up
+                ResponseConverter.setControllerException(controller, new IOException(ioe));
+            }
+            if(connection != null) {
+                try {
+                    connection.close();
+                } catch (IOException e) {
+                }
             }
             done.run(response);
         }
