@@ -945,4 +945,68 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testOptimizeLeftSemiJoinForSortMergeJoinBug5956() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.commit();
+
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,55)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
+            conn.commit();
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a where a.aid in  "+
+                    "(select bid from "+tableName2+" where code > 70 limit 2)";
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a where a.aid in  "+
+                    "(select bid from "+tableName2+" where code > 50 limit 2)";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a where a.aid not in  "+
+                    "(select bid from "+tableName2+" where code > 50 limit 2)";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a where a.aid not in  "+
+                    "(select bid from "+tableName2+" where code > 70 limit 2)";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 1);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(!rs.next());
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
 }

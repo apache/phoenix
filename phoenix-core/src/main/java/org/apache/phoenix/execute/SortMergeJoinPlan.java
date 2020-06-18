@@ -74,6 +74,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -502,8 +503,9 @@ public class SortMergeJoinPlan implements QueryPlan {
             }
         }
     }
-    
-    private class SemiAntiJoinIterator implements ResultIterator {
+
+    @VisibleForTesting
+    public class SemiAntiJoinIterator implements ResultIterator {
         private final ResultIterator lhsIterator;
         private final ResultIterator rhsIterator;
         private final boolean isSemi;
@@ -542,7 +544,7 @@ public class SortMergeJoinPlan implements QueryPlan {
             }
             
             Tuple next = null;            
-            while (lhsTuple != null && next == null) {
+            while (next == null && !isEnd()) {
                 if (rhsTuple != null) {
                     if (lhsKey.equals(rhsKey)) {
                         if (isSemi) {
@@ -566,6 +568,16 @@ public class SortMergeJoinPlan implements QueryPlan {
             }
             
             return next;
+        }
+
+        /**
+         * Check if the {@link #next} could exit early when the {@link #lhsTuple}
+         * or {@link #rhsTuple} is null.
+         */
+        @VisibleForTesting
+        public boolean isEnd() {
+            return (this.lhsTuple == null) ||
+                   (this.rhsTuple == null && this.isSemi);
         }
 
         @Override
