@@ -978,21 +978,25 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
             conn.commit();
 
+            //test left semi join, rhs is null
             sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a where a.aid in  "+
                     "(select bid from "+tableName2+" where code > 70 limit 2)";
             ResultSet rs=conn.prepareStatement(sql).executeQuery();
             assertTrue(!rs.next());
 
+            //test left semi join,lhs is null
             sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a where a.aid in  "+
                     "(select bid from "+tableName2+" where code > 50 limit 2)";
             rs=conn.prepareStatement(sql).executeQuery();
             assertTrue(!rs.next());
 
+            //test left anti join,lhs is null
             sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a where a.aid not in  "+
                     "(select bid from "+tableName2+" where code > 50 limit 2)";
             rs=conn.prepareStatement(sql).executeQuery();
             assertTrue(!rs.next());
 
+            //test left anti join,rhs is null
             sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a where a.aid not in  "+
                     "(select bid from "+tableName2+" where code > 70 limit 2)";
             rs=conn.prepareStatement(sql).executeQuery();
@@ -1003,6 +1007,81 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertTrue(rs.getInt(1) == 3);
             assertTrue(!rs.next());
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testSortMergeFastReturnNullBug5793() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.commit();
+
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,55)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
+            conn.commit();
+
+            //test inner join, rhs is null
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a inner join  "+
+                    "(select bid,code from "+tableName2+" where code > 70 limit 2) b on a.aid = b.bid";
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            //test inner join,lhs is null
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a inner join  "+
+                    "(select bid from "+tableName2+" where code > 50 limit 2) b on a.aid = b.bid";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            //test left join,lhs is null
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a left join  "+
+                    "(select bid from "+tableName2+" where code > 50 limit 2) b on a.aid = b.bid";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            //test left join,rhs is null
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age >=11 and age<=33) a left join  "+
+                    "(select bid from "+tableName2+" where code > 70 limit 2) b on a.aid = b.bid";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 1);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(!rs.next());
+
+            //test full join, lhs return null and rhs return null.
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid from (select aid,age from "+tableName1+" where age > 40) a left join  "+
+                    "(select bid from "+tableName2+" where code > 70 limit 2) b on a.aid = b.bid";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
         } finally {
             if(conn!=null) {
                 conn.close();
