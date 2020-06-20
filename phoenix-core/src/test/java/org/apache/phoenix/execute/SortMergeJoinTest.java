@@ -36,6 +36,9 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
 import static org.junit.Assert.assertTrue;
 
 
@@ -163,5 +166,306 @@ public class SortMergeJoinTest {
         resultTuple = semiAntiJoinIterator.next();
         assertTrue(resultTuple == null);
         assertTrue(semiAntiJoinIterator.isEnd());
+    }
+
+    private final long INIT_LATENCY = 10 * 1000L;
+
+    @Test
+    public void testSortMergeFastReturnNullBug5793() throws SQLException, InterruptedException {
+        // mock for SortMergeJoinPlan
+        StatementContext statementContext = Mockito.mock(StatementContext.class);
+        PhoenixConnection phoenixConnection = Mockito.mock(PhoenixConnection.class);
+        when(statementContext.getConnection()).thenReturn(phoenixConnection);
+        ConnectionQueryServices connectionQueryServices = Mockito.mock(ConnectionQueryServices.class);
+        when(connectionQueryServices.getProps()).thenReturn(ReadOnlyProps.EMPTY_PROPS);
+        when(phoenixConnection.getQueryServices()).thenReturn(connectionQueryServices);
+
+        List<Expression> expressions = new ArrayList<Expression>();
+        Pair<List<Expression>,List<Expression>> lhsAndRhsJoinExpressions = Pair.newPair(expressions, expressions);
+        Pair<List<OrderByNode>, List<OrderByNode>> lhsAndRhsOrderByNodes = Pair.<List<OrderByNode>, List<OrderByNode>> newPair(
+                new ArrayList<OrderByNode>(),
+                new ArrayList<OrderByNode>());
+
+        //test inner join, lhs long latency and rhs return null.
+        JoinTableNode.JoinType joinType = JoinTableNode.JoinType.Inner;
+        ResultIterator lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenAnswer(longLatencyInit());
+        QueryPlan lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        QueryPlan rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        ResultIterator rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenReturn(null);
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        SortMergeJoinPlan sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        SortMergeJoinPlan.BasicJoinIterator sortMergeJoinResultIterator =
+                (SortMergeJoinPlan.BasicJoinIterator)sortMergeJoinPlan.iterator();
+
+        long startTime = System.currentTimeMillis();
+        Tuple resultTuple = sortMergeJoinResultIterator.next();
+        long elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+
+        //test inner join, lhs return null and rhs long latency.
+        joinType = JoinTableNode.JoinType.Inner;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenReturn(null);
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenAnswer(longLatencyInit());
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        sortMergeJoinResultIterator =
+                (SortMergeJoinPlan.BasicJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+        //test left join, lhs return null and rhs long latency.
+        joinType = JoinTableNode.JoinType.Left;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenReturn(null);
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenAnswer(longLatencyInit());
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        sortMergeJoinResultIterator = (SortMergeJoinPlan.BasicJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+        //test full join, lhs return null and rhs return null.
+        joinType = JoinTableNode.JoinType.Full;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenReturn(null);
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenReturn(null);
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        sortMergeJoinResultIterator = (SortMergeJoinPlan.BasicJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(!sortMergeJoinResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+        //test left semi join, lhs return null and rhs long latency.
+        joinType = JoinTableNode.JoinType.Semi;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenReturn(null);
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenAnswer(longLatencyInit());
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        SortMergeJoinPlan.SemiAntiJoinIterator sortMergeJoinSemiAntiResultIterator =
+                (SortMergeJoinPlan.SemiAntiJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinSemiAntiResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+        //test left semi join, lhs long latency and rhs return null.
+        joinType = JoinTableNode.JoinType.Semi;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenAnswer(longLatencyInit());
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenReturn(null);
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        sortMergeJoinSemiAntiResultIterator = (SortMergeJoinPlan.SemiAntiJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinSemiAntiResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+
+        //test left semi join, lhs return null and rhs long latency.
+        joinType = JoinTableNode.JoinType.Anti;
+        lhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(lhsResultIterator.next()).thenReturn(null);
+        lhsQueryPlan = Mockito.mock(QueryPlan.class);
+        when(lhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(lhsResultIterator);
+
+        rhsQueryPlan = Mockito.mock(QueryPlan.class);
+        rhsResultIterator = Mockito.mock(ResultIterator.class);
+        when(rhsResultIterator.next()).thenAnswer(longLatencyInit());
+        when(rhsQueryPlan.iterator(DefaultParallelScanGrouper.getInstance())).thenReturn(rhsResultIterator);
+
+        sortMergeJoinPlan = new SortMergeJoinPlan(
+                statementContext,
+                null,
+                null,
+                joinType,
+                lhsQueryPlan,
+                rhsQueryPlan,
+                lhsAndRhsJoinExpressions,
+                expressions,
+                null,
+                null,
+                null,
+                0,
+                true,
+                lhsAndRhsOrderByNodes);
+        sortMergeJoinSemiAntiResultIterator =
+                (SortMergeJoinPlan.SemiAntiJoinIterator)sortMergeJoinPlan.iterator();
+
+        startTime = System.currentTimeMillis();
+        resultTuple = sortMergeJoinSemiAntiResultIterator.next();
+        elapsed = System.currentTimeMillis() - startTime;
+
+        assertTrue(resultTuple == null);
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isJoinResultNullBecauseOneSideNull());
+        assertTrue(sortMergeJoinSemiAntiResultIterator.isInitialized());
+        assertTrue(elapsed < INIT_LATENCY);
+    }
+
+    private Answer<Tuple> longLatencyInit() {
+        return new Answer<Tuple>() {
+            @Override
+            public Tuple answer(InvocationOnMock invocation) throws Throwable {
+                Thread.sleep(INIT_LATENCY);
+                Tuple tuple = Mockito.mock(Tuple.class);
+                return tuple;
+            }
+        };
     }
 }

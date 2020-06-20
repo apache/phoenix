@@ -28,6 +28,11 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -36,6 +41,7 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatelessExpressionCompiler;
@@ -73,18 +79,25 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
 public class SortMergeJoinPlan implements QueryPlan {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SortMergeJoinPlan.class);
     private static final byte[] EMPTY_PTR = new byte[0];
     
     private final StatementContext context;
     private final FilterableStatement statement;
     private final TableRef table;
-    private final JoinType type;
+    /**
+     * In {@link QueryCompiler#compileJoinQuery},{@link JoinType#Right} is converted
+     * to {@link JoinType#Left}.
+     */
+    private final JoinType joinType;
     private final QueryPlan lhsPlan;
     private final QueryPlan rhsPlan;
     private final List<Expression> lhsKeyExpressions;
@@ -122,7 +135,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.context = context;
         this.statement = statement;
         this.table = table;
-        this.type = type;
+        this.joinType = type;
         this.lhsPlan = lhsPlan;
         this.rhsPlan = rhsPlan;
         this.lhsKeyExpressions = lhsAndRhsKeyExpressions.getFirst();
@@ -170,7 +183,7 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {        
-        return type == JoinType.Semi || type == JoinType.Anti ? 
+        return joinType == JoinType.Semi || joinType == JoinType.Anti ?
                 new SemiAntiJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper)) :
                 new BasicJoinIterator(lhsPlan.iterator(scanGrouper), rhsPlan.iterator(scanGrouper));
     }
@@ -183,7 +196,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
         List<String> steps = Lists.newArrayList();
-        steps.add("SORT-MERGE-JOIN (" + type.toString().toUpperCase() + ") TABLES");
+        steps.add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES");
         for (String step : lhsPlan.getExplainPlan().getPlanSteps()) {
             steps.add("    " + step);            
         }
@@ -277,7 +290,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     public JoinType getJoinType() {
-        return type;
+        return joinType;
     }
 
     private static SQLException closeIterators(ResultIterator lhsIterator, ResultIterator rhsIterator) {
@@ -300,7 +313,31 @@ public class SortMergeJoinPlan implements QueryPlan {
         return e;
     }
 
-    private class BasicJoinIterator implements ResultIterator {
+    /**
+     * close the futures and threadPoolExecutor,ignore exception.
+     * @param threadPoolExecutor
+     * @param futures
+     */
+    private static void clearThreadPoolExecutor(
+            ExecutorService threadPoolExecutor,
+            List<Future<Boolean>> futures) {
+        for(Future<?> future : futures) {
+            try {
+                future.cancel(true);
+            } catch(Throwable ignore) {
+                LOGGER.error("cancel future error", ignore);
+            }
+        }
+
+        try {
+            threadPoolExecutor.shutdownNow();
+        } catch(Throwable ignore) {
+            LOGGER.error("shutdownNow threadPoolExecutor error", ignore);
+        }
+    }
+
+    @VisibleForTesting
+    public class BasicJoinIterator implements ResultIterator {
         private final ResultIterator lhsIterator;
         private final ResultIterator rhsIterator;
         private boolean initialized;
@@ -318,7 +355,8 @@ public class SortMergeJoinPlan implements QueryPlan {
         private byte[] emptyProjectedValue;
         private SizeAwareQueue<Tuple> queue;
         private Iterator<Tuple> queueIterator;
-        
+        private boolean joinResultNullBecauseOneSideNull = false;
+
         public BasicJoinIterator(ResultIterator lhsIterator, ResultIterator rhsIterator) {
             this.lhsIterator = lhsIterator;
             this.rhsIterator = rhsIterator;
@@ -341,22 +379,30 @@ public class SortMergeJoinPlan implements QueryPlan {
             this.queue = PhoenixQueues.newTupleQueue(spoolingEnabled, thresholdBytes);
             this.queueIterator = null;
         }
-        
+
+        public boolean isJoinResultNullBecauseOneSideNull() {
+            return this.joinResultNullBecauseOneSideNull;
+        }
+
+        public boolean isInitialized() {
+            return this.initialized;
+        }
+
         @Override
         public void close() throws SQLException {
-            SQLException e = closeIterators(lhsIterator, rhsIterator);
+            SQLException sqlException = closeIterators(lhsIterator, rhsIterator);
             try {
               queue.close();
             } catch (IOException t) {
-              if (e != null) {
-                    e.setNextException(
+              if (sqlException != null) {
+                    sqlException.setNextException(
                         new SQLException("Also encountered exception while closing queue", t));
               } else {
-                e = new SQLException("Error while closing queue",t);
+                sqlException = new SQLException("Error while closing queue",t);
               }
             }
-            if (e != null) {
-                throw e;
+            if (sqlException != null) {
+                LOGGER.error("BasicJoinIterator close error!", sqlException);
             }
         }
 
@@ -364,6 +410,10 @@ public class SortMergeJoinPlan implements QueryPlan {
         public Tuple next() throws SQLException {
             if (!initialized) {
                 init();
+            }
+
+            if(this.joinResultNullBecauseOneSideNull) {
+                return null;
             }
 
             Tuple next = null;
@@ -404,12 +454,12 @@ public class SortMergeJoinPlan implements QueryPlan {
                             }
                             advance(false);
                         } else if (lhsKey.compareTo(rhsKey) < 0) {
-                            if (type == JoinType.Full || type == JoinType.Left) {
+                            if (joinType == JoinType.Full || joinType == JoinType.Left) {
                                 next = join(lhsTuple, null);
                             }
                             advance(true);
                         } else {
-                            if (type == JoinType.Full) {
+                            if (joinType == JoinType.Full) {
                                 next = join(null, rhsTuple);
                             }
                             advance(false);
@@ -430,21 +480,72 @@ public class SortMergeJoinPlan implements QueryPlan {
         @Override
         public void explain(List<String> planSteps) {
         }
-        
-        private void init() throws SQLException {
-            nextLhsTuple = lhsIterator.next();
-            if (nextLhsTuple != null) {
-                nextLhsKey.evaluate(nextLhsTuple);
+
+        private void doInit(boolean lhs) throws SQLException {
+            if(lhs) {
+                nextLhsTuple = lhsIterator.next();
+                if (nextLhsTuple != null) {
+                    nextLhsKey.evaluate(nextLhsTuple);
+                }
+                advance(true);
+            } else {
+                nextRhsTuple = rhsIterator.next();
+                if (nextRhsTuple != null) {
+                    nextRhsKey.evaluate(nextRhsTuple);
+                }
+                advance(false);
             }
-            advance(true);
-            nextRhsTuple = rhsIterator.next();
-            if (nextRhsTuple != null) {
-                nextRhsKey.evaluate(nextRhsTuple);
-            }
-            advance(false);
-            initialized = true;
         }
-        
+
+        /**
+         * Parallel init, when:
+         * 1. {@link #lhsTuple} is null for inner join or left join.
+         * 2. {@link #rhsTuple} is null for inner join.
+         * we could conclude that the join result is null early, set {@link #joinResultNullBecauseOneSideNull} true.
+         * @throws SQLException
+         */
+        private void init() throws SQLException {
+            ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(2);
+            ExecutorCompletionService<Boolean> executorCompletionService =
+                    new ExecutorCompletionService<Boolean>(threadPoolExecutor);
+            List<Future<Boolean>> futures = new ArrayList<Future<Boolean>>(2);
+            futures.add(executorCompletionService.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    doInit(true);
+                    return lhsTuple == null &&
+                            ((joinType == JoinType.Inner) || (joinType == JoinType.Left));
+                }
+            }));
+
+            futures.add(executorCompletionService.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    doInit(false);
+                    return rhsTuple == null && joinType == JoinType.Inner;
+                }
+            }));
+
+            try {
+                Future<Boolean> future = executorCompletionService.take();
+                if(future.get()) {
+                    this.joinResultNullBecauseOneSideNull = true;
+                    this.initialized = true;
+                    return;
+                }
+
+                future = executorCompletionService.take();
+                if(future.get()) {
+                    this.joinResultNullBecauseOneSideNull = true;
+                }
+                initialized = true;
+            } catch (Throwable throwable) {
+                throw new SQLException("failed in init join iterators", throwable);
+            } finally {
+                clearThreadPoolExecutor(threadPoolExecutor, futures);
+            }
+        }
+
         private void advance(boolean lhs) throws SQLException {
             if (lhs) {
                 lhsTuple = nextLhsTuple;
@@ -472,8 +573,8 @@ public class SortMergeJoinPlan implements QueryPlan {
         }
         
         private boolean isEnd() {
-            return (lhsTuple == null && (rhsTuple == null || type != JoinType.Full))
-                    || (queueIterator == null && rhsTuple == null && type == JoinType.Inner);
+            return (lhsTuple == null && (rhsTuple == null || joinType != JoinType.Full))
+                    || (queueIterator == null && rhsTuple == null && joinType == JoinType.Inner);
         }        
         
         private Tuple join(Tuple lhs, Tuple rhs) throws SQLException {
@@ -514,12 +615,15 @@ public class SortMergeJoinPlan implements QueryPlan {
         private Tuple rhsTuple;
         private JoinKey lhsKey;
         private JoinKey rhsKey;
-        
+        private boolean joinResultNullBecauseOneSideNull = false;
+
         public SemiAntiJoinIterator(ResultIterator lhsIterator, ResultIterator rhsIterator) {
-            if (type != JoinType.Semi && type != JoinType.Anti) throw new IllegalArgumentException("Type " + type + " is not allowed by " + SemiAntiJoinIterator.class.getName());
+            if (joinType != JoinType.Semi && joinType != JoinType.Anti) {
+                throw new IllegalArgumentException("Type " + joinType + " is not allowed by " + SemiAntiJoinIterator.class.getName());
+            }
             this.lhsIterator = lhsIterator;
             this.rhsIterator = rhsIterator;
-            this.isSemi = type == JoinType.Semi;
+            this.isSemi = joinType == JoinType.Semi;
             this.initialized = false;
             this.lhsTuple = null;
             this.rhsTuple = null;
@@ -527,22 +631,80 @@ public class SortMergeJoinPlan implements QueryPlan {
             this.rhsKey = new JoinKey(rhsKeyExpressions);
         }
 
+        public boolean isJoinResultNullBecauseOneSideNull() {
+            return this.joinResultNullBecauseOneSideNull;
+        }
+
+        public boolean isInitialized() {
+            return this.initialized;
+        }
+
         @Override
         public void close() throws SQLException {
-            SQLException e = closeIterators(lhsIterator, rhsIterator);
-            if (e != null) {
-                throw e;
+            SQLException sqlException = closeIterators(lhsIterator, rhsIterator);
+            if (sqlException != null) {
+                LOGGER.error("SemiAntiJoinIterator close error!", sqlException);
+            }
+        }
+
+        /**
+         * Parallel init, when:
+         * 1. {@link #lhsTuple} is null.
+         * 2. {@link #rhsTuple} is null for left semi join.
+         * we could conclude that the join result is null early, set {@link #joinResultNullBecauseOneSideNull} true.
+         * @throws SQLException
+         */
+        private void init() throws SQLException {
+            ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(2);
+            ExecutorCompletionService<Boolean> executorCompletionService =
+                    new ExecutorCompletionService<Boolean>(threadPoolExecutor);
+            List<Future<Boolean>> futures = new ArrayList<Future<Boolean>>(2);
+            futures.add(executorCompletionService.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    advance(true);
+                    return lhsTuple == null;
+                }
+            }));
+
+            futures.add(executorCompletionService.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    advance(false);
+                    return (rhsTuple == null && isSemi);
+                }
+            }));
+
+            try {
+                Future<Boolean> future = executorCompletionService.take();
+                if(future.get()) {
+                    this.joinResultNullBecauseOneSideNull = true;
+                    this.initialized = true;
+                    return;
+                }
+
+                future = executorCompletionService.take();
+                if(future.get()) {
+                    this.joinResultNullBecauseOneSideNull = true;
+                }
+                initialized = true;
+            } catch (Throwable throwable) {
+                throw new SQLException("failed in init join iterators", throwable);
+            } finally {
+                clearThreadPoolExecutor(threadPoolExecutor, futures);
             }
         }
 
         @Override
         public Tuple next() throws SQLException {
             if (!initialized) {
-                advance(true);
-                advance(false);
-                initialized = true;
+                init();
             }
-            
+
+            if(this.joinResultNullBecauseOneSideNull) {
+                return null;
+            }
+
             Tuple next = null;            
             while (next == null && !isEnd()) {
                 if (rhsTuple != null) {
