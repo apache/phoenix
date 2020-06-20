@@ -225,6 +225,44 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Test
+    public void testLimitWithUnverifiedRows() throws Exception {
+        if (async) {
+            return;
+        }
+        String dataTableName = generateUniqueName();
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+            conn.commit();
+            // Read all index rows and rewrite them back directly. This will overwrite existing rows with newer
+            // timestamps and set the empty column to value "x". This will make them unverified
+            conn.createStatement().execute("UPSERT INTO " + indexTableName + " SELECT * FROM " +
+                    indexTableName);
+            conn.commit();
+            // Verified that read repair will not reduce the number of rows returned for LIMIT queries
+            String selectSql = "SELECT * from " + indexTableName + " LIMIT 1";
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+            selectSql = "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' LIMIT 1";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("bcde", rs.getString(1));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
+        }
+    }
+
+    @Test
     public void testSimulateConcurrentUpdates() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();

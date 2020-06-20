@@ -29,9 +29,11 @@ import static org.apache.phoenix.compat.hbase.CompatUtil.*;
 
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import com.google.common.collect.Iterators;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
@@ -49,12 +51,16 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -66,6 +72,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 /**
@@ -134,6 +141,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         private long minTimestamp;
         private long maxTimestamp;
         private GlobalIndexCheckerSource metricsSource;
+        private long rowCount = 0;
+        private long pageSize = Long.MAX_VALUE;
 
         public GlobalIndexScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
@@ -173,12 +182,15 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             return scanner.getMaxResultSize();
         }
 
-        @Override
-        public boolean next(List<Cell> result) throws IOException {
+        public boolean next(List<Cell> result, boolean raw) throws IOException {
             try {
                 boolean hasMore;
                 do {
-                    hasMore = scanner.next(result);
+                    if (raw) {
+                        hasMore = scanner.nextRaw(result);
+                    } else {
+                        hasMore = scanner.next(result);
+                    }
                     if (result.isEmpty()) {
                         break;
                     }
@@ -188,11 +200,25 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                     // skip this row as it is invalid
                     // if there is no more row, then result will be an empty list
                 } while (hasMore);
+                rowCount++;
+                if (rowCount == pageSize) {
+                    return false;
+                }
                 return hasMore;
             } catch (Throwable t) {
                 ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
                 return false; // impossible
             }
+        }
+
+        @Override
+        public boolean next(List<Cell> result) throws IOException {
+           return next(result, false);
+        }
+
+        @Override
+        public boolean nextRaw(List<Cell> result) throws IOException {
+            return next(result, true);
         }
 
         @Override
@@ -233,27 +259,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             return scanner.getMvccReadPoint();
         }
 
-        @Override
-        public boolean nextRaw(List<Cell> result) throws IOException {
-            try {
-                boolean hasMore;
-                do {
-                    hasMore = scanner.nextRaw(result);
-                    if (result.isEmpty()) {
-                        break;
-                    }
-                    if (verifyRowAndRepairIfNecessary(result)) {
-                        break;
-                    }
-                    // skip this row as it is invalid
-                    // if there is no more row, then result will be an empty list
-                } while (hasMore);
-                return hasMore;
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-                return false; // impossible
-            }
-        }
 
         private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts, boolean specific) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
@@ -270,9 +275,30 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
         }
 
+        private void removePageFilter(Scan scan) {
+            Filter topLevelFilter = scan.getFilter();
+            if (topLevelFilter == null) {
+                return;
+            } else if (topLevelFilter instanceof PageFilter) {
+                pageSize = ((PageFilter) topLevelFilter).getPageSize();
+                scan.setFilter(null);
+                return;
+            } else if (topLevelFilter instanceof FilterList) {
+                Iterator<Filter> filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
+                while (filterIterator.hasNext()) {
+                    Filter filter = filterIterator.next();
+                    if (filter instanceof PageFilter) {
+                        pageSize = ((PageFilter) filter).getPageSize();
+                        filterIterator.remove();
+                        return;
+                    }
+                }
+            }
+        }
+
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
-            // Build the data table row key from the index table row key
             if (buildIndexScan == null) {
+                removePageFilter(scan);
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
                 deleteRowScan = new Scan();
