@@ -187,16 +187,34 @@ public class ViewUtil {
         Table hTable = null;
         try {
             hTable = ServerUtil.getHTableForCoprocessorScan(env, sysCatOrSysChildLink);
-        }
-        catch (Exception e){
+        } catch (Exception e) {
+            logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
         }
         // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
         if (hTable==null) {
             return;
         }
 
-        TableViewFinderResult childViewsResult = findRelatedViews(hTable, tenantIdBytes, schemaName, tableName,
-                LinkType.CHILD_TABLE, HConstants.LATEST_TIMESTAMP);
+        TableViewFinderResult childViewsResult = null;
+        try {
+            childViewsResult = findRelatedViews(
+                    hTable,
+                    tenantIdBytes,
+                    schemaName,
+                    tableName,
+                    LinkType.CHILD_TABLE,
+                    HConstants.LATEST_TIMESTAMP);
+        } finally {
+           hTable.close();
+        }
+
+        if(childViewsResult == null) {
+            logger.info("tenantIdBytes:" + Bytes.toStringBinary(tenantIdBytes) +
+                        ", schemaName:" + Bytes.toStringBinary(schemaName) +
+                        ", tableName:" + Bytes.toStringBinary(tableName) +
+                        ", ViewUtil.findRelatedViews return null.");
+            return;
+        }
 
         for (TableInfo viewInfo : childViewsResult.getLinks()) {
             byte[] viewTenantId = viewInfo.getTenantId();
