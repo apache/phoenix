@@ -27,13 +27,10 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import static org.apache.phoenix.compat.hbase.CompatUtil.*;
 
-
 import java.io.IOException;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.collect.Iterators;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
@@ -60,7 +57,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -72,7 +68,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 /**
@@ -143,7 +138,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         private GlobalIndexCheckerSource metricsSource;
         private long rowCount = 0;
         private long pageSize = Long.MAX_VALUE;
-
+        private boolean restartScanDueToPageFilterRemoval = false;
+        private boolean hasMore;
         public GlobalIndexScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
                                   RegionScanner scanner,
@@ -184,7 +180,6 @@ public class GlobalIndexChecker extends BaseRegionObserver {
 
         public boolean next(List<Cell> result, boolean raw) throws IOException {
             try {
-                boolean hasMore;
                 do {
                     if (raw) {
                         hasMore = scanner.nextRaw(result);
@@ -282,6 +277,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             } else if (topLevelFilter instanceof PageFilter) {
                 pageSize = ((PageFilter) topLevelFilter).getPageSize();
                 scan.setFilter(null);
+                restartScanDueToPageFilterRemoval = true;
                 return;
             } else if (topLevelFilter instanceof FilterList) {
                 Iterator<Filter> filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
@@ -290,6 +286,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                     if (filter instanceof PageFilter) {
                         pageSize = ((PageFilter) filter).getPageSize();
                         filterIterator.remove();
+                        restartScanDueToPageFilterRemoval = true;
                         return;
                     }
                 }
@@ -344,10 +341,20 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
+                if (restartScanDueToPageFilterRemoval) {
+                    scanner.close();
+                    setStartRow(indexScan, indexRowKey, false);
+                    scanner = region.getScanner(indexScan);
+                    hasMore = true;
+                    // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
+                    restartScanDueToPageFilterRemoval = false;
+                }
                 return;
             }
             // An index row has been built. Close the current scanner as the newly built row will not be visible to it
             scanner.close();
+            // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
+            restartScanDueToPageFilterRemoval = false;
             if (code == RebuildReturnCode.NO_INDEX_ROW.getValue()) {
                 // This means there exists a data table row for the data row key derived from this unverified index row
                 // but the data table row does not point back to the index row.
@@ -356,6 +363,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // Open a new scanner starting from the row after the current row
                 setStartRow(indexScan, indexRowKey, false);
                 scanner = region.getScanner(indexScan);
+                hasMore = true;
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
@@ -365,7 +373,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             // Open a new scanner starting from the current row
             setStartRow(indexScan, indexRowKey, true);
             scanner = region.getScanner(indexScan);
-            scanner.next(row);
+            hasMore = scanner.next(row);
             if (row.isEmpty()) {
                 // This means the index row has been deleted before opening the new scanner.
                 return;
@@ -382,6 +390,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 // so that it can be repaired
                 scanner.close();
                 scanner = region.getScanner(indexScan);
+                hasMore = true;
                 row.clear();
                 return;
             }

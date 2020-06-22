@@ -257,8 +257,25 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(rs.next());
             assertEquals("bcde", rs.getString(1));
             assertFalse(rs.next());
+            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the verify flag is set
+            // to true and/or index rows are deleted and check that this does not impact the correctness
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // This is to cover the case where there is no data table row for an unverified index row
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'aa','cde')");
+            commitWithException(conn);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            // Verified that read repair will not reduce the number of rows returned for LIMIT queries
+            selectSql = "SELECT * from " + indexTableName + " LIMIT 1";
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexTableName);
+
         }
     }
 
