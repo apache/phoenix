@@ -61,7 +61,9 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -934,29 +936,60 @@ public class IndexUtil {
         return false;
     }
 
+    private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
+        if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
+            ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
+            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+                scan.addColumn(emptyCF, emptyCQ);
+                return true;
+            }
+        }
+        else if (filter instanceof ColumnProjectionFilter) {
+            ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
+            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+                scan.addColumn(emptyCF, emptyCQ);
+                return true;
+            }
+        }
+        else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
+            ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
+        }
+        else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
+            scan.addColumn(emptyCF, emptyCQ);
+            return true;
+        }
+        return addedEmptyColumn;
+    }
+
+    private static boolean addEmptyColumnToFilterList(Scan scan, byte[] emptyCF, byte[] emptyCQ, FilterList filterList, boolean addedEmptyColumn) {
+        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        while (filterIterator.hasNext()) {
+            Filter filter = filterIterator.next();
+            if (filter instanceof FilterList) {
+                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
+                    addedEmptyColumn =  true;
+                }
+            } else {
+                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
+                    addedEmptyColumn =  true;
+                }
+            }
+        }
+        return addedEmptyColumn;
+    }
+
     public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
         boolean addedEmptyColumn = false;
-        Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
-        while (iterator.hasNext()) {
-            Filter filter = iterator.next();
-            if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
-                ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
-                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                    scan.addColumn(emptyCF, emptyCQ);
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            if (filter instanceof FilterList) {
+                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
+                    addedEmptyColumn = true;
                 }
-            }
-            else if (filter instanceof ColumnProjectionFilter) {
-                ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
-                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                    scan.addColumn(emptyCF, emptyCQ);
+            } else {
+                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
+                    addedEmptyColumn = true;
                 }
-            }
-            else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
-                ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
-            }
-            else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
-                scan.addColumn(emptyCF, emptyCQ);
-                addedEmptyColumn = true;
             }
         }
         if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {

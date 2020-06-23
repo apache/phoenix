@@ -270,32 +270,44 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             }
         }
 
-        private void removePageFilter(Scan scan) {
-            Filter topLevelFilter = scan.getFilter();
-            if (topLevelFilter == null) {
-                return;
-            } else if (topLevelFilter instanceof PageFilter) {
-                pageSize = ((PageFilter) topLevelFilter).getPageSize();
-                scan.setFilter(null);
-                restartScanDueToPageFilterRemoval = true;
-                return;
-            } else if (topLevelFilter instanceof FilterList) {
-                Iterator<Filter> filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
-                while (filterIterator.hasNext()) {
-                    Filter filter = filterIterator.next();
-                    if (filter instanceof PageFilter) {
-                        pageSize = ((PageFilter) filter).getPageSize();
-                        filterIterator.remove();
-                        restartScanDueToPageFilterRemoval = true;
-                        return;
+        private PageFilter removePageFilterFromFilterList(FilterList filterList) {
+            Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+            while (filterIterator.hasNext()) {
+                Filter filter = filterIterator.next();
+                if (filter instanceof PageFilter) {
+                    filterIterator.remove();
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
+                    if (pageFilter != null) {
+                        return pageFilter;
                     }
                 }
             }
+            return null;
+        }
+
+        // This method assumes that there is at most one instance of PageFilter in a scan
+        private PageFilter removePageFilter(Scan scan) {
+            Filter filter = scan.getFilter();
+            if (filter != null) {
+                if (filter instanceof PageFilter) {
+                    scan.setFilter(null);
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    return removePageFilterFromFilterList((FilterList) filter);
+                }
+            }
+            return null;
         }
 
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
             if (buildIndexScan == null) {
-                removePageFilter(scan);
+                PageFilter pageFilter = removePageFilter(scan);
+                if (pageFilter != null) {
+                    pageSize = pageFilter.getPageSize();
+                    restartScanDueToPageFilterRemoval = true;
+                }
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
                 deleteRowScan = new Scan();
