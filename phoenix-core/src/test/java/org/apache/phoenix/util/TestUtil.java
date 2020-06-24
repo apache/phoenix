@@ -58,16 +58,15 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.CompactionState;
 import org.apache.hadoop.hbase.client.Delete;
 
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -804,6 +803,21 @@ public class TestUtil {
             conn.createStatement().execute(ddl);
     }
 
+    public static void majorCompact(HBaseTestingUtility utility, TableName table)
+        throws IOException, InterruptedException {
+        long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
+        Admin admin = utility.getHBaseAdmin();
+        admin.majorCompact(table);
+        long lastCompactionTimestamp;
+        CompactionState state = null;
+        while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table))
+            < compactionRequestedSCN
+            || (state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
+            || admin.getCompactionState(table).equals(CompactionState.MAJOR_AND_MINOR)){
+            Thread.sleep(100);
+        }
+    }
+
     /**
      * Runs a major compaction, and then waits until the compaction is complete before returning.
      *
@@ -875,6 +889,13 @@ public class TestUtil {
 
     public static void createTransactionalTable(Connection conn, String tableName, String extraProps) throws SQLException {
         conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true" + (extraProps.length() == 0 ? "" : ("," + extraProps)));
+    }
+
+    public static void dumpTable(Connection conn, TableName tableName)
+        throws SQLException, IOException{
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Table table = cqs.getTable(tableName.getName());
+        dumpTable(table);
     }
 
     public static void dumpTable(Table table) throws IOException {

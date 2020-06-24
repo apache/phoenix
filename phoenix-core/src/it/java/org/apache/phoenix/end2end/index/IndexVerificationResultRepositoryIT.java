@@ -62,7 +62,7 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
             resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
                 regionTwo);
             IndexToolVerificationResult actualResult =
-                resultRepository.getVerificationResult(conn, scanMaxTs);
+                resultRepository.getVerificationResult(conn, scanMaxTs, indexNameBytes);
             assertVerificationResult(expectedResult, actualResult);
 
         }
