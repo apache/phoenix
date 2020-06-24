@@ -155,6 +155,21 @@ public class IndexVerificationResultRepository implements AutoCloseable {
             setResultTable(admin.getConnection().getTable(resultTableName));
         }
     }
+    private static byte[] generatePartialResultTableRowKey(long ts, byte[] indexTableName) {
+        byte[] keyPrefix = Bytes.toBytes(Long.toString(ts));
+        int targetOffset = 0;
+        // The row key for the result table : timestamp | index table name | datable table region name |
+        //                                    scan start row | scan stop row
+        byte[] partialRowKey = new byte[keyPrefix.length + ROW_KEY_SEPARATOR_BYTE.length
+            + indexTableName.length];
+        Bytes.putBytes(partialRowKey, targetOffset, keyPrefix, 0, keyPrefix.length);
+        targetOffset += keyPrefix.length;
+        Bytes.putBytes(partialRowKey, targetOffset, ROW_KEY_SEPARATOR_BYTE, 0, ROW_KEY_SEPARATOR_BYTE.length);
+        targetOffset += ROW_KEY_SEPARATOR_BYTE.length;
+        Bytes.putBytes(partialRowKey, targetOffset, indexTableName, 0, indexTableName.length);
+        return partialRowKey;
+    }
+
     private static byte[] generateResultTableRowKey(long ts, byte[] indexTableName,  byte [] regionName,
                                                     byte[] startRow, byte[] stopRow) {
         byte[] keyPrefix = Bytes.toBytes(Long.toString(ts));
@@ -248,11 +263,6 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         resultTable.put(put);
     }
 
-    public IndexToolVerificationResult getVerificationResult(Connection conn, long ts) throws IOException, SQLException {
-        Table hTable = getTable(conn, RESULT_TABLE_NAME_BYTES);
-        return getVerificationResult(hTable, ts);
-    }
-
     public Table getTable(Connection conn, byte[] tableName) throws SQLException {
         return conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getTable(tableName);
@@ -266,6 +276,12 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         Scan scan = new Scan();
         scan.setStartRow(startRowKey);
         scan.setStopRow(stopRowKey);
+        return aggregateVerificationResult(htable, verificationResult, scan);
+    }
+
+    private IndexToolVerificationResult aggregateVerificationResult(Table htable,
+                                                                    IndexToolVerificationResult verificationResult,
+                                                                    Scan scan) throws IOException {
         ResultScanner scanner = htable.getScanner(scan);
         for (Result result = scanner.next(); result != null; result = scanner.next()) {
             boolean isFirst = true;
@@ -281,6 +297,21 @@ public class IndexVerificationResultRepository implements AutoCloseable {
             }
         }
         return verificationResult;
+    }
+
+    public IndexToolVerificationResult getVerificationResult(Connection conn,
+                                                             long ts,
+                                                             byte[] indexTableName
+                                                             ) throws IOException,
+        SQLException {
+        Table htable = getTable(conn, RESULT_TABLE_NAME_BYTES);
+        byte[] startRowKey = generatePartialResultTableRowKey(ts, indexTableName);
+        byte[] stopRowKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(startRowKey);
+        IndexToolVerificationResult verificationResult = new IndexToolVerificationResult(ts);
+        Scan scan = new Scan();
+        scan.setStartRow(startRowKey);
+        scan.setStopRow(stopRowKey);
+        return aggregateVerificationResult(htable, verificationResult, scan);
     }
 
     private IndexToolVerificationResult getVerificationResult(Table htable, byte [] oldRowKey, Scan scan )
