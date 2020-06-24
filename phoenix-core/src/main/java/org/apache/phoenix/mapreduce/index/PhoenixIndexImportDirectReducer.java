@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -54,6 +55,8 @@ public class PhoenixIndexImportDirectReducer extends
     private IndexVerificationResultRepository resultRepository;
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
+    private String indexTableName;
+    private byte[] indexTableNameBytes;
 
     private void updateCounters(IndexTool.IndexVerifyType verifyType,
                                 Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context context)
@@ -62,7 +65,7 @@ public class PhoenixIndexImportDirectReducer extends
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration)) {
             long ts = Long.valueOf(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             IndexToolVerificationResult verificationResult =
-                    resultRepository.getVerificationResult(connection, ts);
+                    resultRepository.getVerificationResult(connection, ts, indexTableNameBytes);
             context.getCounter(PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT).
                     setValue(verificationResult.getScannedDataRowCount());
             context.getCounter(PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT).
@@ -121,6 +124,8 @@ public class PhoenixIndexImportDirectReducer extends
     @Override
     protected void setup(Context context) throws IOException {
         resultRepository = new IndexVerificationResultRepository();
+        indexTableName = PhoenixConfigurationUtil.getPhysicalTableName(context.getConfiguration());
+        indexTableNameBytes = Bytes.toBytes(indexTableName);
     }
 
     @Override
