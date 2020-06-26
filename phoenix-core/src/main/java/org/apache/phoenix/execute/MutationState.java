@@ -17,35 +17,14 @@
  */
 package org.apache.phoenix.execute;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-
-import javax.annotation.Nonnull;
-import javax.annotation.concurrent.Immutable;
-
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -60,12 +39,8 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.IndexMetaDataCacheClient;
-import org.apache.phoenix.index.PhoenixIndexBuilder;
-import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
+import org.apache.phoenix.index.*;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
-import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -76,19 +51,7 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PMetaData;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PRow;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableRef;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -97,26 +60,20 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.Immutable;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.*;
+import java.util.Map.Entry;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.*;
 
 /**
  * Tracks the uncommitted state
@@ -223,6 +180,15 @@ public class MutationState implements SQLCloseable {
 
     public PhoenixTransactionContext getPhoenixTransactionContext() {
         return phoenixTransactionContext;
+    }
+
+    public void checkIdReached(){
+        //System.out.println("size of map is"+mutations.size()); returns 1;
+        for(Map.Entry<TableRef,MultiRowMutationState>entry:mutations.entrySet()){
+            //System.out.println("tableref is "+entry.getKey());
+            //System.out.println("MultiRowMutationState is "+entry.getValue());
+            entry.getValue().checkIdReached();
+        }
     }
 
     /**
@@ -634,6 +600,7 @@ public class MutationState implements SQLCloseable {
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again
                 rowMutationsPertainingToIndex = Collections.emptyList();
             } else {
+                row.setTraceId(rowEntry.getValue().getTraceId());
                 for (Map.Entry<PColumn, byte[]> valueEntry : rowEntry.getValue().getColumnValues().entrySet()) {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
                 }
@@ -885,6 +852,9 @@ public class MutationState implements SQLCloseable {
 
     @SuppressWarnings("deprecation")
     private void send(Iterator<TableRef> tableRefIterator) throws SQLException {
+        //System.out.println("state in send2 "+this.getClass().getName());
+        //System.out.println("in send2 ");
+        //this.checkIdReached();
         int i = 0;
         long[] serverTimeStamps = null;
         boolean sendAll = false;
@@ -1089,6 +1059,10 @@ public class MutationState implements SQLCloseable {
                             shouldRetryIndexedMutation = false;
                         } else {
                             hTable.batch(mutationBatch);
+                            /*for(int ii=0;ii<mutationBatch.size();ii++){
+                                System.out.println(mutationBatch.get(ii).getId());
+                            }*/
+
                         }
                         // remove each batch from the list once it gets applied
                         // so when failures happens for any batch we only start
@@ -1625,6 +1599,15 @@ public class MutationState implements SQLCloseable {
         public Collection<RowMutationState> values() {
             return rowKeyToRowMutationState.values();
         }
+
+        public void checkIdReached(){
+            //System.out.println("MultiRowMutationState is "+this);
+            for(Map.Entry<ImmutableBytesPtr,RowMutationState>entry:rowKeyToRowMutationState.entrySet()){
+                //System.out.println("Immutable byteptr is "+entry.getKey()+"rowMutationState id is "+entry.getValue().getTraceId());
+                System.out.println("trace id is "+entry.getValue().getTraceId());
+            }
+        }
+
     }
 
     public static class RowMutationState {
@@ -1635,6 +1618,7 @@ public class MutationState implements SQLCloseable {
         private final RowTimestampColInfo rowTsColInfo;
         private byte[] onDupKeyBytes;
         private long colValuesSize;
+        private int traceId=3121999;
 
         public RowMutationState(@Nonnull Map<PColumn, byte[]> columnValues, long colValuesSize, int statementIndex,
                 @Nonnull RowTimestampColInfo rowTsColInfo, byte[] onDupKeyBytes) {
@@ -1645,6 +1629,14 @@ public class MutationState implements SQLCloseable {
             this.rowTsColInfo = rowTsColInfo;
             this.onDupKeyBytes = onDupKeyBytes;
             this.colValuesSize = colValuesSize;
+        }
+
+        public void setTraceId(int id){
+            this.traceId=id;
+        }
+
+        public int getTraceId(){
+            return this.traceId;
         }
 
         public long calculateEstimatedSize() {

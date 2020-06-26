@@ -17,26 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.closeStatement;
-import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.util.Properties;
-
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -44,12 +24,22 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.sql.*;
+import java.util.Properties;
+
+import static org.apache.phoenix.util.TestUtil.closeStatement;
+import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
+import static org.junit.Assert.*;
 
 
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
@@ -82,7 +72,39 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         conn.close();
     }
-    
+
+    @Test
+    public void myTest() throws Exception{
+        Properties props = new Properties();
+        String tableName = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("create table " + tableName + " (mac_md5 VARCHAR not null primary key,raw_mac VARCHAR)");
+        conn.close();
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into " + tableName + " values ('00000000591','a')");
+        conn.createStatement().execute("upsert into " + tableName + " values ('000000005919','b')");
+        conn.commit();
+        conn.close();
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select max(mac_md5) from " + tableName );
+        assertTrue(rs.next());
+        assertEquals("000000005919", rs.getString(1));
+        conn.close();
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into " + tableName + " values ('000000005919adfasfasfsafdasdfasfdasdfdasfdsafaxxf1','b')");
+        conn.commit();
+        conn.close();
+
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("select max(mac_md5) from " + tableName);
+        assertTrue(rs.next());
+        assertEquals("000000005919adfasfasfsafdasdfasfdasdfdasfdsafaxxf1", rs.getString(1));
+        conn.close();
+    }
+
     @Test
     public void testUpsertDateValues() throws Exception {
         String tableName = generateUniqueName();
@@ -91,14 +113,18 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String dateString = "1999-01-01 02:00:00";
+        //System.out.println("hello");
         PreparedStatement upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('aaa','bbb',to_date('" + dateString + "'))");
+        //System.out.println(upsertStmt.getClass().getName());//changes made by me returns prepared statement
+        PhoenixPreparedStatement upsertStmtTrace=(PhoenixPreparedStatement)(upsertStmt);
+        //System.out.println("system returns trace id "+upsertStmtTrace.getTraceId());
         int rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
         upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('ccc','ddd',current_date())");
         rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
         conn.commit();
-        
+
         conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT \"DATE\",current_date() FROM " + tableName;
         ResultSet rs = conn.createStatement().executeQuery(select);

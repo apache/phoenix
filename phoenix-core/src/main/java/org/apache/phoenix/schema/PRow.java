@@ -17,12 +17,11 @@
  */
 package org.apache.phoenix.schema;
 
-import java.util.List;
-import java.util.Map;
-
+import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.hbase.client.Mutation;
 
-import com.google.common.collect.ImmutableMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 
@@ -61,4 +60,6 @@ public interface PRow {
      * values that may have been set before or after the delete call.
      */
     public void delete();
+    public int getTraceId();//changes made by me
+    public void setTraceId(int traceId);
 }
