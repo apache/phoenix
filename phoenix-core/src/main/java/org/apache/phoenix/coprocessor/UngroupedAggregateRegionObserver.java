@@ -1103,13 +1103,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if (oldCoproc) {
                 return new IndexerRegionScanner(scanner, region, scan, env, this);
             } else {
-                return new IndexRebuildRegionScanner(scanner, region, scan, env);
+                return new IndexRebuildRegionScanner(scanner, region, scan, env, verifyType);
             }
         }
         if (oldCoproc) {
             return new IndexerRegionScanner(innerScanner, region, scan, env, this);
         } else {
-            return new IndexRebuildRegionScanner(innerScanner, region, scan, env);
+            return new IndexRebuildRegionScanner(innerScanner, region, scan, env, verifyType);
         }
     }
     

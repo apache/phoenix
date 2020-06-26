@@ -123,9 +123,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
-                              final RegionCoprocessorEnvironment env) throws IOException {
+                                     final RegionCoprocessorEnvironment env,
+                                     IndexTool.IndexVerifyType verifyType) throws IOException {
         super(innerScanner, region, scan, env);
         this.env = env;
+        this.verifyType = verifyType;
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKeyforReadRepair != null) {
             setReturnCodeForSingleRowRebuild();
