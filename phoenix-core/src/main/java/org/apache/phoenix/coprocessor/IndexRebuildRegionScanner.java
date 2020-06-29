@@ -21,6 +21,12 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTE
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
+import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.EXTRA_CELLS;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.INVALID_ROW;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.MISSING_ROW;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -96,6 +102,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
 
+    public static final String PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS =
+        "phoenix.index.mr.log.beyond.max.lookback.errors";
+    public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
     private static boolean ignoreIndexRebuildForTesting  = false;
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
     private byte[] indexRowKeyforReadRepair;
@@ -113,7 +122,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
-                              final RegionCoprocessorEnvironment env) throws IOException {
+                                     final RegionCoprocessorEnvironment env) throws IOException {
         super(innerScanner, region, scan, env);
         this.env = env;
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
@@ -133,6 +142,17 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
 
         if (verify) {
+            boolean shouldLogBeyondMaxLookbackInvalidRows;
+            byte[] scanParamShouldLogBeyondMaxLookbackInvalidRows =
+                scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE);
+            if (scanParamShouldLogBeyondMaxLookbackInvalidRows != null) {
+                shouldLogBeyondMaxLookbackInvalidRows =
+                    Boolean.parseBoolean(Bytes.toString(scanParamShouldLogBeyondMaxLookbackInvalidRows));
+            } else {
+                shouldLogBeyondMaxLookbackInvalidRows =
+                    env.getConfiguration().getBoolean(PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS,
+                    DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS);
+            }
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             byte[] disableLoggingValueBytes =
                     scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
@@ -141,14 +161,14 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
             }
             verificationOutputRepository =
-                    new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
-                            , hTableFactory, disableLoggingVerifyType);
+                new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                    , hTableFactory, disableLoggingVerifyType);
+            verificationOutputRepository.setShouldLogBeyondMaxLookback(shouldLogBeyondMaxLookbackInvalidRows);
             verificationResult = new IndexToolVerificationResult(scan);
             verificationResultRepository =
                 new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
             nextStartKey = null;
             minTimestamp = scan.getTimeRange().getMin();
-                    new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
         }
     }
 
@@ -278,17 +298,19 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-            String errorMsg, boolean isBeforeRebuild) throws IOException {
-        logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs, errorMsg, null, null, isBeforeRebuild);
+            String errorMsg, boolean isBeforeRebuild,
+            IndexVerificationOutputRepository.IndexVerificationErrorType errorType) throws IOException {
+        logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs, errorMsg, null,
+            null, isBeforeRebuild, errorType);
     }
 
     @VisibleForTesting
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-            String errorMsg, byte[] expectedVaue, byte[] actualValue, boolean isBeforeRebuild)
-            throws IOException {
+            String errorMsg, byte[] expectedVaue, byte[] actualValue, boolean isBeforeRebuild,
+                                          IndexVerificationOutputRepository.IndexVerificationErrorType errorType) throws IOException {
         verificationOutputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs,
                 errorMsg, expectedVaue, actualValue, scan.getTimeRange().getMax(),
-                region.getRegionInfo().getTable().getName(), isBeforeRebuild);
+                region.getRegionInfo().getTable().getName(), isBeforeRebuild, errorType);
     }
 
     private static Cell getCell(Mutation m, byte[] family, byte[] qualifier) {
@@ -309,7 +331,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             String errorMsg = "Not matching timestamp";
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
             logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                    errorMsg, null, null, isBeforeRebuild);
+                    errorMsg, null, null, isBeforeRebuild, INVALID_ROW);
             return;
         }
         int expectedCellCount = 0;
@@ -326,7 +348,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         !CellUtil.matchingType(expectedCell, actualCell)) {
                     byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
                     String errorMsg = "Missing cell (in iteration " + iteration + ") " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
-                    logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual), errorMsg,isBeforeRebuild);
+                    logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected),
+                        getTimestamp(actual), errorMsg, isBeforeRebuild, INVALID_ROW);
                     verificationPhaseResult.setIndexHasMissingCellsCount(verificationPhaseResult.getIndexHasMissingCellsCount() + 1);
                     return;
                 }
@@ -334,7 +357,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     String errorMsg = "Not matching value (in iteration " + iteration + ") for " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
                     byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
                     logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                            errorMsg, CellUtil.cloneValue(expectedCell), CellUtil.cloneValue(actualCell), isBeforeRebuild);
+                            errorMsg, CellUtil.cloneValue(expectedCell),
+                        CellUtil.cloneValue(actualCell), isBeforeRebuild, INVALID_ROW);
                     return;
                 }
             }
@@ -350,7 +374,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             String errorMsg = "Index has extra cells (in iteration " + iteration + ")";
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
             logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                    errorMsg, isBeforeRebuild);
+                    errorMsg, isBeforeRebuild, EXTRA_CELLS);
             verificationPhaseResult.setIndexHasExtraCellsCount(verificationPhaseResult.getIndexHasExtraCellsCount() + 1);
         }
     }
@@ -749,7 +773,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     actualSize);
             logToIndexToolOutputTable(dataKey, indexRow.getRow(),
                     getTimestamp(expectedMutationList.get(expectedIndex)),
-                    0, errorMsg, isBeforeRebuild);
+                    0, errorMsg, isBeforeRebuild, BEYOND_MAX_LOOKBACK_INVALID);
             return false;
         }
         else {
@@ -760,7 +784,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
                 String errorMsg = "Not matching index row";
                 logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg, isBeforeRebuild);
+                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg, isBeforeRebuild,
+                    INVALID_ROW);
             }
             verificationPhaseResult.setInvalidIndexRowCount(verificationPhaseResult.getInvalidIndexRowCount() + 1);
             return false;
@@ -821,17 +846,21 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             }
             currentTime = EnvironmentEdgeManager.currentTimeMillis();
             String errorMsg;
+            IndexVerificationOutputRepository.IndexVerificationErrorType errorType;
             if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, getTimestamp(mutation))){
                 errorMsg = ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
+                errorType = BEYOND_MAX_LOOKBACK_MISSING;
                 verificationPhaseResult.
                         setBeyondMaxLookBackMissingIndexRowCount(verificationPhaseResult.getBeyondMaxLookBackMissingIndexRowCount() + 1);
             }
             else {
                 errorMsg = ERROR_MESSAGE_MISSING_INDEX_ROW;
+                errorType = MISSING_ROW;
                 verificationPhaseResult.setMissingIndexRowCount(verificationPhaseResult.getMissingIndexRowCount() + 1);
             }
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexKey), viewConstants);
-            logToIndexToolOutputTable(dataKey, indexKey, getTimestamp(mutation), 0, errorMsg, isBeforeRebuild);
+            logToIndexToolOutputTable(dataKey, indexKey, getTimestamp(mutation), 0, errorMsg,
+                isBeforeRebuild, errorType);
         }
         // Leave the invalid and missing rows in indexKeyToMutationMap
         indexKeyToMutationMap.putAll(invalidIndexRows);
@@ -1223,7 +1252,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                                      Set<byte[]> mostRecentIndexRowKeys) throws IOException {
         List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
         boolean mostRecentDone = false;
-        // Do not populate mostRecentIndexRowKeys when verifyType != IndexTool.IndexVerifyType.ONLY
+        // Do not populate mostRecentIndexRowKeys when verifyType is NONE or AFTER
         if (verifyType == IndexTool.IndexVerifyType.NONE || verifyType == IndexTool.IndexVerifyType.AFTER) {
             mostRecentDone = true;
         }

@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -108,6 +109,12 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_RETRY_VERIFY, Bytes.toBytes(lastVerifyTimeValue));
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE,
                     getDisableLoggingVerifyType(configuration).toBytes());
+                String shouldLogMaxLookbackOutput =
+                    configuration.get(IndexRebuildRegionScanner.PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS);
+                if (shouldLogMaxLookbackOutput != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE,
+                        Bytes.toBytes(shouldLogMaxLookbackOutput));
+                }
             } catch (IOException e) {
                 throw new SQLException(e);
             }

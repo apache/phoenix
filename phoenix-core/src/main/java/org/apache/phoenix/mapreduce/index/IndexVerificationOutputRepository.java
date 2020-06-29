@@ -52,6 +52,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     private Table outputTable;
     private IndexTool.IndexDisableLoggingType disableLoggingVerifyType =
         IndexTool.IndexDisableLoggingType.NONE;
+    private boolean shouldLogBeyondMaxLookback = true;
 
     public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
     public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
@@ -71,6 +72,8 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public final static byte[] INDEX_TABLE_TS_BYTES = Bytes.toBytes(INDEX_TABLE_TS);
     public final static String ERROR_MESSAGE = "Error";
     public final static byte[] ERROR_MESSAGE_BYTES = Bytes.toBytes(ERROR_MESSAGE);
+    public static final String ERROR_TYPE = "ErrorType";
+    public static final byte[] ERROR_TYPE_BYTES = Bytes.toBytes(ERROR_TYPE);
 
     public static String  VERIFICATION_PHASE = "Phase";
     public final static byte[] VERIFICATION_PHASE_BYTES = Bytes.toBytes(VERIFICATION_PHASE);
@@ -85,6 +88,15 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public static final byte[] PHASE_BEFORE_VALUE = Bytes.toBytes("BEFORE");
     public static final byte[] PHASE_AFTER_VALUE = Bytes.toBytes("AFTER");
 
+
+    public enum IndexVerificationErrorType {
+        INVALID_ROW,
+        MISSING_ROW,
+        EXTRA_CELLS,
+        BEYOND_MAX_LOOKBACK_INVALID,
+        BEYOND_MAX_LOOKBACK_MISSING,
+        UNKNOWN
+    }
     /**
      * Only usable for the create table / read path or for testing. Use setOutputTable and
      * setIndexTable first to write.
@@ -115,6 +127,10 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         outputTable = hTableFactory.getTable(new ImmutableBytesPtr(OUTPUT_TABLE_NAME_BYTES));
         indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
         this.disableLoggingVerifyType = disableLoggingVerifyType;
+    }
+
+    public void setShouldLogBeyondMaxLookback(boolean shouldLogBeyondMaxLookback) {
+        this.shouldLogBeyondMaxLookback = shouldLogBeyondMaxLookback;
     }
 
     public static byte[] generateOutputTableRowKey(long ts, byte[] indexTableName, byte[] dataRowKey ) {
@@ -173,9 +189,11 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs,
                                           long indexRowTs,
                                           String errorMsg, byte[] expectedValue, byte[] actualValue,
-                                          long scanMaxTs, byte[] tableName, boolean isBeforeRebuild)
+                                          long scanMaxTs, byte[] tableName,
+                                          boolean isBeforeRebuild,
+                                          IndexVerificationErrorType errorType)
         throws IOException {
-        if (shouldLogOutput(isBeforeRebuild)) {
+        if (shouldLogOutput(isBeforeRebuild, errorType)) {
             byte[] rowKey = generateOutputTableRowKey(scanMaxTs, indexTable.getName().toBytes(), dataRowKey);
             Put put = new Put(rowKey);
             put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, DATA_TABLE_NAME_BYTES, tableName);
@@ -193,6 +211,8 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
                 errorMessageBytes = Bytes.toBytes(errorMsg);
             }
             put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ERROR_MESSAGE_BYTES, errorMessageBytes);
+            put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, ERROR_TYPE_BYTES,
+                Bytes.toBytes(errorType.toString()));
             if (isBeforeRebuild) {
                 put.addColumn(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES, PHASE_BEFORE_VALUE);
             } else {
@@ -202,7 +222,12 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         }
     }
 
-    public boolean shouldLogOutput(boolean isBeforeRebuild) {
+    public boolean shouldLogOutput(boolean isBeforeRebuild, IndexVerificationErrorType errorType) {
+        return shouldLogOutputForVerifyType(isBeforeRebuild) &&
+            shouldLogOutputForErrorType(errorType);
+    }
+
+    private boolean shouldLogOutputForVerifyType(boolean isBeforeRebuild) {
         if (disableLoggingVerifyType.equals(IndexTool.IndexDisableLoggingType.BOTH)) {
             return false;
         }
@@ -217,6 +242,15 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
             return true;
         }
         return false;
+    }
+
+    private boolean shouldLogOutputForErrorType(IndexVerificationErrorType errorType) {
+        if (errorType != null &&
+            (errorType.equals(IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID) ||
+                errorType.equals(IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING))){
+            return shouldLogBeyondMaxLookback;
+        }
+        return true;
     }
 
     public static byte[] getErrorMessageBytes(String errorMsg, byte[] expectedValue, byte[] actualValue) {
@@ -297,6 +331,18 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         builder.setExpectedValue(result.getValue(OUTPUT_TABLE_COLUMN_FAMILY, EXPECTED_VALUE_BYTES));
         builder.setActualValue(result.getValue(OUTPUT_TABLE_COLUMN_FAMILY, ACTUAL_VALUE_BYTES));
         builder.setPhaseValue(result.getValue(OUTPUT_TABLE_COLUMN_FAMILY, VERIFICATION_PHASE_BYTES));
+        IndexVerificationErrorType errorType;
+        try {
+          errorType =
+              IndexVerificationErrorType.valueOf(
+                  Bytes.toString(result.getValue(OUTPUT_TABLE_COLUMN_FAMILY, ERROR_TYPE_BYTES)));
+        } catch (Throwable e) {
+            //in case we have a cast exception because an incompatible version of the enum produced
+            //the row, or an earlier version that didn't record error types, it's better to mark
+            // the error type unknown and move on rather than fail
+            errorType = IndexVerificationErrorType.UNKNOWN;
+        }
+        builder.setErrorType(errorType);
         return builder.build();
     }
 

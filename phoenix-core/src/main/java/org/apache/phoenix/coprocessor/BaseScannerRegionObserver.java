@@ -91,6 +91,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
     public static final String INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE =
         "_IndexRebuildDisableLoggingVerifyType";
+    public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
+        "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
