@@ -773,8 +773,16 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                          String dataTableName, String indexTableName, String tenantId,
                                          int expectedStatus, IndexTool.IndexVerifyType verifyType,
                                          String... additionalArgs) throws Exception {
-        IndexTool indexingTool = new IndexTool();
         Configuration conf = new Configuration(getUtility().getConfiguration());
+        return runIndexTool(conf, directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            tenantId, expectedStatus, verifyType, additionalArgs);
+    }
+
+    public static IndexTool runIndexTool(Configuration conf, boolean directApi, boolean useSnapshot, String schemaName,
+            String dataTableName, String indexTableName, String tenantId,
+            int expectedStatus, IndexTool.IndexVerifyType verifyType,
+            String... additionalArgs) throws Exception {
+        IndexTool indexingTool = new IndexTool();
         conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         indexingTool.setConf(conf);
         final String[] cmdArgs = getArgValues(directApi, useSnapshot, schemaName, dataTableName,

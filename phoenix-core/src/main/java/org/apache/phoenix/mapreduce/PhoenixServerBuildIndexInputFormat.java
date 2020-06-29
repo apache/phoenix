@@ -34,6 +34,7 @@ import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
@@ -105,6 +106,13 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             try {
                 scan.setTimeRange(startTime, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
+                // Serialize page row size only if we're overriding, else use server side value
+                String rebuildPageRowSize =
+                        configuration.get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+                if (rebuildPageRowSize != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
+                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                }
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_RETRY_VERIFY, Bytes.toBytes(lastVerifyTimeValue));
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE,
