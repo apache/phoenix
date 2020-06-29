@@ -105,8 +105,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     public static final String PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS =
         "phoenix.index.mr.log.beyond.max.lookback.errors";
     public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
-    private boolean useProto = true;
-    private byte[] indexRowKey;
     private static boolean ignoreIndexRebuildForTesting  = false;
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
     private byte[] indexRowKeyforReadRepair;
