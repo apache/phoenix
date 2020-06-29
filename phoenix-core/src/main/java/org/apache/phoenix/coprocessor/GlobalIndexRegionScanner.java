@@ -101,8 +101,15 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
-            pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
-                    QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+            byte[] pageSizeFromScan =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS);
+            if (pageSizeFromScan != null) {
+                pageSizeInRows = Bytes.toLong(pageSizeFromScan);
+            } else {
+                pageSizeInRows =
+                        config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+            }
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
