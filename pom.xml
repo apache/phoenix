@@ -42,7 +42,6 @@
   <modules>
     <module>phoenix-hbase-compat-2.2.1</module>
     <module>phoenix-hbase-compat-2.1.6</module>
-    <module>phoenix-hbase-compat-2.0.1</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
@@ -623,11 +622,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-tracing-webapp</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.0.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -1502,21 +1496,6 @@
         <hbase.compat.version>2.1.6</hbase.compat.version>
         <!-- Update to latest before release -->
         <hbase.version>2.1.8</hbase.version>
-      </properties>
-    </profile>
-    <!-- EOM, consider removing -->
-    <profile>
-      <id>phoenix-hbase-compat-2.0.1</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.0</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.0</hbase.profile>
-        <hbase.compat.version>2.0.1</hbase.compat.version>
-        <hbase.version>2.0.4</hbase.version>
       </properties>
     </profile>
     <profile>
