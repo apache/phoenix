@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -85,8 +86,15 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
-            pageSizeInRows = config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
-                    QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+            byte[] pageSizeFromScan =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS);
+            if (pageSizeFromScan != null) {
+                pageSizeInRows = Bytes.toLong(pageSizeFromScan);
+            } else {
+                pageSizeInRows =
+                        config.getLong(INDEX_REBUILD_PAGE_SIZE_IN_ROWS,
+                            QueryServicesOptions.DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+            }
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
