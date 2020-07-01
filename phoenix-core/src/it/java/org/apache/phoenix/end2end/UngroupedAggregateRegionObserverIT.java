@@ -18,10 +18,12 @@
 package org.apache.phoenix.end2end;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.never;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -151,6 +153,23 @@ public class UngroupedAggregateRegionObserverIT extends ParallelStatsDisabledIT 
             LoggingEvent loggingEvent = captorLoggingEvent.getValue();
             assertThat(loggingEvent.getLevel(), is(Level.DEBUG));
         }
+    }
+
+    /**
+     * Tests that RollBackSplit
+     * preRollBackSplit
+     */
+    @Test
+    public void testSplitFailedRollBack() throws Exception {
+        Class<?> ungroupClass = (Class<UngroupedAggregateRegionObserver>) Class.forName("org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver");
+        Object observer = ungroupClass.newInstance();
+        UngroupedAggregateRegionObserver ungroupObserver = (UngroupedAggregateRegionObserver) observer;
+        ungroupObserver.preClose(null, true);
+        ungroupObserver.preRollBackSplit(null);
+        Field fieldTag = ungroupClass.getDeclaredField("isRegionClosingOrSplitting");
+        fieldTag.setAccessible(true);
+        Boolean isRegionClosingOrSplitting = (Boolean) fieldTag.get(observer);
+        assertEquals(isRegionClosingOrSplitting, false);
     }
 
     private void stopCapturingIndexLog() {

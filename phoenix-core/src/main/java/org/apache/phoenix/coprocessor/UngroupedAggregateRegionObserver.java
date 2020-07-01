@@ -513,7 +513,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if(needToWrite) {
                 synchronized (lock) {
                     if (isRegionClosingOrSplitting) {
-                        throw new IOException("Temporarily unable to write from scan because region is closing or splitting");
+                        throw new IOException("Temporarily unable to write from scan because region is closing or splitting. region name is " + region.getRegionInfo());
                     }
                     scansReferenceCount++;
                     incrScanRefCount = true;
@@ -1366,5 +1366,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
+    }
+
+    /**
+     * roll back after split failed, will isRegionClosingOrSplitting set false,
+     * and then write region will is available
+     * @param ctx
+     * @throws IOException
+     */
+    @Override
+    public void preRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx) throws IOException {
+        synchronized (lock) {
+            isRegionClosingOrSplitting = false;
+        }
     }
 }
