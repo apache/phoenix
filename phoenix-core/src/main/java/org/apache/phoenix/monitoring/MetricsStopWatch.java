@@ -49,6 +49,10 @@ final class MetricsStopWatch {
             }
         }
     }
+
+    boolean isRunning() {
+        return isMetricsEnabled && stopwatch.isRunning();
+    }
     
     long getElapsedTimeInMs() {
         if (isMetricsEnabled) {
