@@ -27,6 +27,7 @@ import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.log.LogLevel;
 
 /**
@@ -82,8 +83,11 @@ public class OverAllQueryMetrics {
     }
 
     public void endQuery() {
+        boolean wasRunning = queryWatch.isRunning();
         queryWatch.stop();
-        wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        }
     }
 
     public void startResultSetWatch() {
@@ -91,8 +95,21 @@ public class OverAllQueryMetrics {
     }
 
     public void stopResultSetWatch() {
+        boolean wasRunning = resultSetWatch.isRunning();
         resultSetWatch.stop();
-        resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        }
+    }
+
+    @VisibleForTesting
+    long getWallClockTimeMs() {
+        return wallClockTimeMS.getValue();
+    }
+
+    @VisibleForTesting
+    long getResultSetTimeMs() {
+        return resultSetTimeMS.getValue();
     }
 
     public Map<MetricType, Long> publish() {
