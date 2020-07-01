@@ -48,6 +48,7 @@ import org.apache.phoenix.monitoring.MutationMetricQueue;
 import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -182,14 +183,6 @@ public class MutationState implements SQLCloseable {
         return phoenixTransactionContext;
     }
 
-    public void checkIdReached(){
-        //System.out.println("size of map is"+mutations.size()); returns 1;
-        for(Map.Entry<TableRef,MultiRowMutationState>entry:mutations.entrySet()){
-            //System.out.println("tableref is "+entry.getKey());
-            //System.out.println("MultiRowMutationState is "+entry.getValue());
-            entry.getValue().checkIdReached();
-        }
-    }
 
     /**
      * Commit a write fence when creating an index so that we can detect when a data table transaction is started before
@@ -600,7 +593,8 @@ public class MutationState implements SQLCloseable {
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again
                 rowMutationsPertainingToIndex = Collections.emptyList();
             } else {
-                row.setTraceId(rowEntry.getValue().getTraceId());
+                TracePropagation.propagateTraceId(rowEntry.getValue(),row);
+
                 for (Map.Entry<PColumn, byte[]> valueEntry : rowEntry.getValue().getColumnValues().entrySet()) {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
                 }
@@ -852,9 +846,6 @@ public class MutationState implements SQLCloseable {
 
     @SuppressWarnings("deprecation")
     private void send(Iterator<TableRef> tableRefIterator) throws SQLException {
-        //System.out.println("state in send2 "+this.getClass().getName());
-        //System.out.println("in send2 ");
-        //this.checkIdReached();
         int i = 0;
         long[] serverTimeStamps = null;
         boolean sendAll = false;
@@ -1058,11 +1049,8 @@ public class MutationState implements SQLCloseable {
                             }, iwe, connection, connection.getQueryServices().getProps());
                             shouldRetryIndexedMutation = false;
                         } else {
+                            TracePropagation.logTraceIdAssigned(mutationBatch);
                             hTable.batch(mutationBatch);
-                            /*for(int ii=0;ii<mutationBatch.size();ii++){
-                                System.out.println(mutationBatch.get(ii).getId());
-                            }*/
-
                         }
                         // remove each batch from the list once it gets applied
                         // so when failures happens for any batch we only start
@@ -1493,6 +1481,7 @@ public class MutationState implements SQLCloseable {
             }
         });
         if (filteredTableRefs.hasNext()) {
+
             // FIXME: strip table alias to prevent equality check from failing due to alias mismatch on null alias.
             // We really should be keying the tables based on the physical table name.
             List<TableRef> strippedAliases = Lists.newArrayListWithExpectedSize(mutations.keySet().size());
@@ -1508,6 +1497,7 @@ public class MutationState implements SQLCloseable {
             send(strippedAliases.iterator());
             return true;
         }
+
         return false;
     }
 
@@ -1598,14 +1588,6 @@ public class MutationState implements SQLCloseable {
 
         public Collection<RowMutationState> values() {
             return rowKeyToRowMutationState.values();
-        }
-
-        public void checkIdReached(){
-            //System.out.println("MultiRowMutationState is "+this);
-            for(Map.Entry<ImmutableBytesPtr,RowMutationState>entry:rowKeyToRowMutationState.entrySet()){
-                //System.out.println("Immutable byteptr is "+entry.getKey()+"rowMutationState id is "+entry.getValue().getTraceId());
-                System.out.println("trace id is "+entry.getValue().getTraceId());
-            }
         }
 
     }

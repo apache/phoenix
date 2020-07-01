@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -113,18 +112,15 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String dateString = "1999-01-01 02:00:00";
-        //System.out.println("hello");
-        PreparedStatement upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('aaa','bbb',to_date('" + dateString + "'))");
-        //System.out.println(upsertStmt.getClass().getName());//changes made by me returns prepared statement
-        PhoenixPreparedStatement upsertStmtTrace=(PhoenixPreparedStatement)(upsertStmt);
-        //System.out.println("system returns trace id "+upsertStmtTrace.getTraceId());
-        int rowsInserted = upsertStmt.executeUpdate();
-        assertEquals(1, rowsInserted);
-        upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('ccc','ddd',current_date())");
-        rowsInserted = upsertStmt.executeUpdate();
-        assertEquals(1, rowsInserted);
+        for(int i=0;i<1;i++) {
+            PreparedStatement upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('aaa','bbb',to_date('" + dateString + "'))");
+            int rowsInserted = upsertStmt.executeUpdate();
+            assertEquals(1, rowsInserted);
+            upsertStmt = conn.prepareStatement("upsert into " + tableName + "(inst,host,\"DATE\") values('ccc','ddd',current_date())");
+            rowsInserted = upsertStmt.executeUpdate();
+            assertEquals(1, rowsInserted);
+        }
         conn.commit();
-
         conn = DriverManager.getConnection(getUrl(), props);
         String select = "SELECT \"DATE\",current_date() FROM " + tableName;
         ResultSet rs = conn.createStatement().executeQuery(select);

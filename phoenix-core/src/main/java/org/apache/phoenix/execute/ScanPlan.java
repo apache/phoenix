@@ -18,14 +18,6 @@
 package org.apache.phoenix.execute;
 
 
-import static org.apache.phoenix.util.ScanUtil.isPacingScannersPossible;
-import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
-
-import java.sql.SQLException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -41,29 +33,11 @@ import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.iterate.BaseResultIterators;
-import org.apache.phoenix.iterate.ChunkedResultIterator;
-import org.apache.phoenix.iterate.ConcatResultIterator;
-import org.apache.phoenix.iterate.LimitingResultIterator;
-import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
-import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
-import org.apache.phoenix.iterate.OffsetResultIterator;
-import org.apache.phoenix.iterate.ParallelIteratorFactory;
-import org.apache.phoenix.iterate.ParallelIterators;
-import org.apache.phoenix.iterate.ParallelScanGrouper;
-import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.iterate.RoundRobinResultIterator;
-import org.apache.phoenix.iterate.SequenceResultIterator;
-import org.apache.phoenix.iterate.SerialIterators;
-import org.apache.phoenix.iterate.SpoolingResultIterator;
+import org.apache.phoenix.iterate.*;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.query.*;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -75,6 +49,14 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static org.apache.phoenix.util.ScanUtil.isPacingScannersPossible;
+import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
 
 
 
@@ -176,7 +158,6 @@ public class ScanPlan extends BaseQueryPlan {
     @SuppressWarnings("deprecation")
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context, FilterableStatement statement,
             TableRef tableRef, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
-
         if ((isSerial(context, statement, tableRef, orderBy, getEstimateOfDataSizeToScanIfWithinThreshold(context, tableRef.getTable(), QueryUtil.getOffsetLimit(limit, offset)) != null)
                 || isRoundRobinPossible(orderBy, context) || isPacingScannersPossible(context))) {
             return ParallelIteratorFactory.NOOP_FACTORY;

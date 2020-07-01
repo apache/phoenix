@@ -43,6 +43,7 @@ import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.query.*;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PMetaData.Pruner;
@@ -659,8 +660,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public Statement createStatement() throws SQLException {
         checkOpen();
         PhoenixStatement statement = new PhoenixStatement(this);
-        Random random=new Random();
-        statement.setTraceId(random.nextInt()+random.nextInt());
+        TracePropagation.setInitialTrace(statement);
+        //TracePropagation.logTraceIdAssigned(statement);
         statements.add(statement);
         return statement;
     }
@@ -845,9 +846,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         checkOpen();
         PhoenixPreparedStatement statement = new PhoenixPreparedStatement(this,
                 sql);
-        Random random=new Random();
-        statement.setTraceId(random.nextInt()+random.nextInt());   //trace id set here
-        //System.out.println("trace id set to "+statement.getTraceId());      //trace id reached here, test clear
+        TracePropagation.setInitialTrace(statement);//changes under pr
+        //TracePropagation.logTraceIdAssigned(statement);
         statements.add(statement);
         return statement;
     }

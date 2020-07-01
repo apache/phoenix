@@ -41,6 +41,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -941,9 +942,10 @@ public class PTableImpl implements PTable {
                     mutations.add(unsetValues);
                 }
             }
-            for(int it=0;it<mutations.size();it++){                             //changed by me
+            /*for(int it=0;it<mutations.size();it++){                             //changed by me
                 mutations.get(it).setId(Integer.toString(this.getTraceId()));
-            }
+            }*/
+            TracePropagation.propagateTraceId(this,mutations);
             return mutations;
         }
 

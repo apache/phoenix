@@ -54,6 +54,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -131,7 +132,7 @@ public class UpsertCompiler {
             }
         }
         RowMutationState rowMutationStateTrace=new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes);
-        rowMutationStateTrace.setTraceId(statement.getTraceId());
+        TracePropagation.propagateTraceId(statement,rowMutationStateTrace);
         mutation.put(ptr,rowMutationStateTrace);
     }
     
