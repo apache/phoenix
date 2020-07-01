@@ -98,6 +98,7 @@
     <commons-io.version>2.5</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
+    <commons-logging.version>1.2</commons-logging.version>
     <sqlline.version>1.9.0</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <guava.version>13.0.1</guava.version>
@@ -1375,6 +1376,11 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>${commons-logging.version}</version>
+    </dependency>
 
       <!-- Other test dependencies -->
       <dependency>
