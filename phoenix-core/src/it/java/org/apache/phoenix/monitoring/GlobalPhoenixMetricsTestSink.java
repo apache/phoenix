@@ -22,13 +22,6 @@ import org.apache.commons.configuration.SubsetConfiguration;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
-import org.apache.phoenix.util.PhoenixRuntime;
-
-import java.util.Map;
-
-import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 public class GlobalPhoenixMetricsTestSink implements MetricsSink {
 
@@ -36,7 +29,7 @@ public class GlobalPhoenixMetricsTestSink implements MetricsSink {
     // PhoenixMetricsIT tests verifies these metrics from this sink in a separate thread
     // GlobalPhoenixMetricsTestSink is invoked based on time defined in hadoop-metrics2.properties
     // This lock is to prevent concurrent access to metrics Iterable for these threads
-    static Object lock = new Object();
+    static final Object lock = new Object();
     static Iterable<AbstractMetric> metrics;
 
     @Override
