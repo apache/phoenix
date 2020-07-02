@@ -652,14 +652,18 @@ public class Indexer extends BaseRegionObserver {
 
   @Override
   public void postOpen(final ObserverContext<RegionCoprocessorEnvironment> c) {
-    Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
-    
     if (this.disabled) {
         super.postOpen(c);
         return;
     }
 
+    // if stopped is true, and then init writer
+    if (this.stopped) {
+        initBuilderAndWriter(c.getEnvironment());
+    }
+
     long start = EnvironmentEdgeManager.currentTimeMillis();
+    Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
     try {
         //if we have no pending edits to complete, then we are done
         if (updates == null || updates.size() == 0) {
@@ -799,6 +803,63 @@ public class Indexer extends BaseRegionObserver {
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
     desc.addCoprocessor(Indexer.class.getName(), null, priority, properties);
+  }
+
+    /**
+     * stop indexer when region split, but split failed, and then rollback, open region.
+     * this need init builder and writer,recoveryWriter.
+     *
+     * @param env
+     */
+  private void initBuilderAndWriter(RegionCoprocessorEnvironment env) {
+      // init index build manager
+      try {
+          this.builder = new IndexBuildManager(env);
+      } catch (IOException e) {
+          LOG.warn("failed to new index build manager", e);
+      }
+      //init index writer
+      // Clone the config since it is shared
+      Configuration clonedConfig = PropertiesUtil.cloneConfig(env.getConfiguration());
+      /*
+       * Set the rpc controller factory so that the HTables used by IndexWriter would
+       * set the correct priorities on the remote RPC calls.
+       */
+      clonedConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+          InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
+      // lower the number of rpc retries.  We inherit config from HConnectionManager#setServerSideHConnectionRetries,
+      // which by default uses a multiplier of 10.  That is too many retries for our synchronous index writes
+      clonedConfig.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
+          env.getConfiguration().getInt(INDEX_WRITER_RPC_RETRIES_NUMBER,
+              DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER));
+      clonedConfig.setInt(HConstants.HBASE_CLIENT_PAUSE, env.getConfiguration()
+          .getInt(INDEX_WRITER_RPC_PAUSE, DEFAULT_INDEX_WRITER_RPC_PAUSE));
+      DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
+      // setup the actual index writer
+      String serverName = env.getRegionServerServices().getServerName().getServerName();
+      try {
+          this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
+      } catch (IOException e) {
+          LOG.warn("Failed to init index writer ", e);
+      }
+
+      //init recovery wirter
+      try {
+          // get the specified failure policy. We only ever override it in tests, but we need to do it
+          // here
+          Class<? extends IndexFailurePolicy> policyClass =
+              env.getConfiguration().getClass(INDEX_RECOVERY_FAILURE_POLICY_KEY,
+                  StoreFailuresInCachePolicy.class, IndexFailurePolicy.class);
+          IndexFailurePolicy policy =
+              policyClass.getConstructor(PerRegionIndexWriteCache.class).newInstance(failedIndexEdits);
+          LOG.debug("Setting up recovery writter with failure policy: " + policy.getClass());
+          recoveryWriter =
+              new RecoveryIndexWriter(policy, indexWriterEnv, serverName + "-recovery-writer");
+      } catch (Exception e) {
+          LOG.warn("Failed to init recovery writer ", e);
+      }
+      this.stopped = false;
+      LOG.info("Init writer finished");
   }
 }
 
