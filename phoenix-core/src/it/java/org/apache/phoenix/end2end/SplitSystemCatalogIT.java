@@ -57,6 +57,8 @@ public class SplitSystemCatalogIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
+            // splitSystemCatalog is incompatible with the balancer chore
+            getUtility().getHBaseCluster().getMaster().balanceSwitch(false);
             splitSystemCatalog();
         }
     }

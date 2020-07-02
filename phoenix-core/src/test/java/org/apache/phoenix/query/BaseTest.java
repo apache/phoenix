@@ -92,9 +92,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -102,7 +104,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
-import java.util.HashSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -1838,31 +1839,6 @@ public abstract class BaseTest {
         return false;
     }
 
-    protected static HashMap<ServerName, List<HRegionInfo>> getRegionMap(Admin admin,
-            HBaseTestingUtility util, TableName fullTableName, List<byte[]> splitPoints)
-            throws IOException {
-        MiniHBaseCluster cluster = util.getHBaseCluster();
-        HMaster master = cluster.getMaster();
-        AssignmentManager am = master.getAssignmentManager();
-        List<HRegionInfo> tableRegions =
-                admin.getTableRegions(fullTableName);
-        HashMap<ServerName, List<HRegionInfo>> serverToRegionsMap =
-                Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
-
-        for (HRegionInfo hRegionInfo : tableRegions) {
-            // filter on regions we are interested in
-            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
-                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
-                if (!serverToRegionsMap.containsKey(serverName)) {
-                    serverToRegionsMap.put(serverName, new ArrayList<HRegionInfo>());
-                }
-                serverToRegionsMap.get(serverName).add(hRegionInfo);
-            }
-        }
-        return serverToRegionsMap;
-
-    }
-
     protected static void splitTable(TableName fullTableName, List<byte[]> splitPoints) throws Exception {
         HBaseAdmin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
@@ -1873,42 +1849,43 @@ public abstract class BaseTest {
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();
+        //We don't want BalancerChore to undo our hard work
+        assertFalse("Balancer must be off", master.isBalancerOn());
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
         for (int i=1; i<splitPoints.size(); ++i) {
             splitRegion(fullTableName, splitPoints.get(i));
         }
-        HashSet<ServerName> allRegionServers = new HashSet<>(NUM_SLAVES_BASE);
+        HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
+        Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
         for (int i=0; i<NUM_SLAVES_BASE; ++i) {
-            allRegionServers.add(util.getHBaseCluster().getRegionServer(i).getServerName());
+            availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
         }
-        HashSet<ServerName> availableRegionServers;
-        HashMap<ServerName, List<HRegionInfo>> serverToRegionsMap = getRegionMap(admin,
-                util, fullTableName, splitPoints);
-
-        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsMap.entrySet()) {
+        List<HRegionInfo> tableRegions =
+                admin.getTableRegions(fullTableName);
+        for (HRegionInfo hRegionInfo : tableRegions) {
+            // filter on regions we are interested in
+            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
+                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
+                if (!serverToRegionsList.containsKey(serverName)) {
+                    serverToRegionsList.put(serverName, new ArrayList<HRegionInfo>());
+                }
+                serverToRegionsList.get(serverName).add(hRegionInfo);
+                availableRegionServers.remove(serverName);
+            }
+        }
+        assertTrue("No region servers available to move regions on to ", !availableRegionServers.isEmpty());
+        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
             List<HRegionInfo> regions = entry.getValue();
             if (regions.size()>1) {
                 for (int i=1; i< regions.size(); ++i) {
-                    availableRegionServers = new HashSet<>(NUM_SLAVES_BASE);
-                    for (ServerName serverName: allRegionServers) {
-                        availableRegionServers.add(serverName);
-                    }
-                    //PHOENIX-5779 refresh the server to region map
-                    //The regions may have been moved either by us, or by an HBase chore
-                    HashMap<ServerName, List<HRegionInfo>> currentServerToRegionsMap =
-                            getRegionMap(admin, util, fullTableName, splitPoints);
-                    availableRegionServers.removeAll(currentServerToRegionsMap.keySet());
-                    assertTrue("No region servers available to move regions on to ",
-                            !availableRegionServers.isEmpty());
-                    ServerName serverName = availableRegionServers.iterator().next();
-                    moveRegion(regions.get(i), entry.getKey(), serverName);
+                    moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
                 }
             }
         }
 
         // verify each region is on its own region server
-        List<HRegionInfo> tableRegions =
+        tableRegions =
                 admin.getTableRegions(fullTableName);
         Set<ServerName> serverNames = Sets.newHashSet();
         for (HRegionInfo hRegionInfo : tableRegions) {
