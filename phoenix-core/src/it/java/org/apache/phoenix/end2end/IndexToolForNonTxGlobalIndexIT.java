@@ -889,14 +889,19 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t3));
             verifyCounters(it, 2, 2);
-/*
-            // job with update on only one row
+
+            // job with update on only one row - commented out because it requires PHOENIX-5989
+            // because the view index verification code doesn't recognize the delete marker as
+            // being part of the view, because the view filters on a non-PK field
+            /*
             it =
                     IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t3),
                             "-et", String.valueOf(t4));
+            //0,0 because the view index verification code doesn't recognize the delete marker as
+            // being part of the view, because the view filters on a non-PK field
             verifyCounters(it, 1, 1);
-*/
+            */
             // job with no new updates on any row
             it =
                     IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
@@ -967,47 +972,48 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
 
+            truncateIndexAndIndexToolTables(indexTableFullName);
+
             // disabling logging AFTER on an AFTER run should leave no output rows
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.AFTER,
                 IndexTool.IndexDisableLoggingType.AFTER, null, schemaName, dataTableName,
                 indexTableName,
                 indexTableFullName, 0);
 
+            truncateIndexAndIndexToolTables(indexTableFullName);
+
             //disabling logging BEFORE on a BEFORE run should leave no output rows
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BEFORE,
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
             //now clear out all the rebuilt index rows
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
             //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
             assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.AFTER,
                 IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
                 dataTableName, indexTableName,
-                indexTableFullName, -1);
+                indexTableFullName, 0);
 
             //clear out both the output table and the index
-            deleteAllRows(conn,
-                TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
             //now check that disabling logging BEFORE creates only the AFTER logs on a BOTH run
-            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.BEFORE,
                 IndexVerificationOutputRepository.PHASE_AFTER_VALUE, schemaName,
                 dataTableName, indexTableName,
-                indexTableFullName, -1);
+                indexTableFullName, 0);
 
-            deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
             //now check that disabling logging BOTH creates no logs on a BOTH run
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.BOTH,
                 IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
                 dataTableName, indexTableName,
-                indexTableFullName, -1);
+                indexTableFullName, 0);
 
         }
     }
@@ -1326,6 +1332,12 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             getUtility().getHBaseAdmin().flush(tableName);
             TestUtil.majorCompact(getUtility(), tableName);
         }
+    }
+
+    private void truncateIndexAndIndexToolTables(String indexTableFullName) throws IOException {
+        truncateIndexToolTables();
+        getUtility().getHBaseAdmin().disableTable(TableName.valueOf(indexTableFullName));
+        getUtility().getHBaseAdmin().truncateTable(TableName.valueOf(indexTableFullName), true);
     }
 
     private void truncateIndexToolTables() throws IOException {
