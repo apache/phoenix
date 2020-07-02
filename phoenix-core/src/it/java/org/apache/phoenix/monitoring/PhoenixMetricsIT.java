@@ -9,6 +9,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
@@ -35,6 +36,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FIL
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -71,6 +73,8 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
@@ -92,6 +96,23 @@ import com.google.common.collect.Sets;
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);
+
+    private static class MyClock extends EnvironmentEdge {
+        private long time;
+        private final long delay;
+
+        public MyClock (long time, long delay) {
+            this.time = time;
+            this.delay = delay;
+        }
+
+        @Override
+        public long currentTime() {
+            long currentTime = this.time;
+            this.time += this.delay;
+            return currentTime;
+        }
+    }
 
     @Test
     public void testResetGlobalPhoenixMetrics() throws Exception {
@@ -249,28 +270,32 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
                 }
             }
         }
-        assertTrue("Metric expected but not present in Hadoop Metrics Sink (GlobalPhoenixMetricsTestSink)",
-                expectedMetrics.size() == 0);
+        assertEquals("Metric expected but not present in Hadoop Metrics Sink "
+                        + "(GlobalPhoenixMetricsTestSink)", 0, expectedMetrics.size());
         return true;
     }
 
-    private static void createTableAndInsertValues(String tableName, boolean resetGlobalMetricsAfterTableCreate)
-            throws Exception {
-        String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute(ddl);
-        if (resetGlobalMetricsAfterTableCreate) {
-            resetGlobalMetrics();
+    private static void createTableAndInsertValues(String tableName,
+            boolean resetGlobalMetricsAfterTableCreate) throws SQLException {
+        String ddl = String.format("CREATE TABLE %s (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)",
+                tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(ddl);
+            if (resetGlobalMetricsAfterTableCreate) {
+                resetGlobalMetrics();
+            }
+            // executing 10 upserts/mutations.
+            String dml = String.format("UPSERT INTO %s VALUES (?, ?)", tableName);
+            try(PreparedStatement prepStmt = conn.prepareStatement(dml)) {
+                for (int i = 1; i <= 10; i++) {
+                    prepStmt.setString(1, "key" + i);
+                    prepStmt.setString(2, "value" + i);
+                    prepStmt.executeUpdate();
+                }
+            }
+            conn.commit();
         }
-        // executing 10 upserts/mutations.
-        String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        for (int i = 1; i <= 10; i++) {
-            stmt.setString(1, "key" + i);
-            stmt.setString(2, "value" + i);
-            stmt.executeUpdate();
-        }
-        conn.commit();
     }
 
     @Test
@@ -295,6 +320,33 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         ResultSet rs = stmt.executeQuery(query);
         while (rs.next()) {}
         rs.close();
+    }
+
+    @Test
+    public void testMetricsForSelectFetchResultsTimeout() throws SQLException {
+        String tableName = generateUniqueName();
+        final int queryTimeout = 10; //seconds
+        createTableAndInsertValues(tableName, true);
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.setQueryTimeout(queryTimeout);
+            ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s", tableName));
+            // Make the query time out with a longer delay than the set query timeout value (in ms)
+            MyClock clock = new MyClock(10, queryTimeout * 2 * 1000);
+            EnvironmentEdgeManager.injectEdge(clock);
+            try {
+                rs.next();
+                fail();
+            } catch (SQLException e) {
+                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            }
+            Map<MetricType, Long> overallReadMetrics =
+                    PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+            assertEquals(1L, (long)overallReadMetrics.get(QUERY_TIMEOUT_COUNTER));
+            assertEquals(1L, GLOBAL_QUERY_TIMEOUT_COUNTER.getMetric().getValue());
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
     }
 
     @Test
