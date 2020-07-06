@@ -998,7 +998,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t3));
             verifyCounters(it, 2, 2);
-/*
+/*          Disabled pending completion of PHOENIX-5989, because the view filter doesn't include
+            a PK column, so the delete is getting filtered out of the verification scan
             // job with update on only one row
             it =
                     IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
