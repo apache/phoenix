@@ -210,35 +210,7 @@ public class Indexer extends BaseRegionObserver {
             throw ioe;
           }
         }
-    
-        this.builder = new IndexBuildManager(env);
-        // Clone the config since it is shared
-        DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
-        // setup the actual index writer
-        this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
-        
-        this.rowLockWaitDuration = env.getConfiguration().getInt("hbase.rowlock.wait.duration",
-                DEFAULT_ROWLOCK_WAIT_DURATION);
-        this.lockManager = new LockManager();
-
-        // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
-        this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
-        setSlowThresholds(e.getConfiguration());
-
-        try {
-          // get the specified failure policy. We only ever override it in tests, but we need to do it
-          // here
-          Class<? extends IndexFailurePolicy> policyClass =
-              env.getConfiguration().getClass(INDEX_RECOVERY_FAILURE_POLICY_KEY,
-                StoreFailuresInCachePolicy.class, IndexFailurePolicy.class);
-          IndexFailurePolicy policy =
-              policyClass.getConstructor(PerRegionIndexWriteCache.class).newInstance(failedIndexEdits);
-          LOGGER.debug("Setting up recovery writter with failure policy: " + policy.getClass());
-          recoveryWriter =
-              new RecoveryIndexWriter(policy, indexWriterEnv, serverName + "-recovery-writer");
-        } catch (Exception ex) {
-          throw new IOException("Could not instantiate recovery failure policy!", ex);
-        }
+        initBuilderAndWriter(env);
       } catch (NoSuchMethodError ex) {
           disabled = true;
           super.start(e);
@@ -659,7 +631,11 @@ public class Indexer extends BaseRegionObserver {
 
     // if stopped is true, and then init writer
     if (this.stopped) {
-        initBuilderAndWriter(c.getEnvironment());
+        try {
+            initBuilderAndWriter(c.getEnvironment());
+        } catch (IOException e) {
+            LOG.error("Init builder and writer failed", e);
+        }
     }
 
     long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -811,13 +787,9 @@ public class Indexer extends BaseRegionObserver {
      *
      * @param env
      */
-  private void initBuilderAndWriter(RegionCoprocessorEnvironment env) {
+  private void initBuilderAndWriter(RegionCoprocessorEnvironment env) throws IOException {
       // init index build manager
-      try {
-          this.builder = new IndexBuildManager(env);
-      } catch (IOException e) {
-          LOG.warn("failed to new index build manager", e);
-      }
+      this.builder = new IndexBuildManager(env);
       //init index writer
       // Clone the config since it is shared
       Configuration clonedConfig = PropertiesUtil.cloneConfig(env.getConfiguration());
@@ -837,12 +809,7 @@ public class Indexer extends BaseRegionObserver {
       DelegateRegionCoprocessorEnvironment indexWriterEnv = new DelegateRegionCoprocessorEnvironment(clonedConfig, env);
       // setup the actual index writer
       String serverName = env.getRegionServerServices().getServerName().getServerName();
-      try {
-          this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
-      } catch (IOException e) {
-          LOG.warn("Failed to init index writer ", e);
-      }
-
+      this.writer = new IndexWriter(indexWriterEnv, serverName + "-index-writer");
       //init recovery wirter
       try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
@@ -857,6 +824,7 @@ public class Indexer extends BaseRegionObserver {
               new RecoveryIndexWriter(policy, indexWriterEnv, serverName + "-recovery-writer");
       } catch (Exception e) {
           LOG.warn("Failed to init recovery writer ", e);
+          throw new IOException("Could not instantiate recovery failure policy!", e);
       }
       this.stopped = false;
       LOG.info("Init writer finished");
