@@ -17,31 +17,12 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
-import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
-import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
-
-import java.io.IOException;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-
-import javax.annotation.Nonnull;
-
+import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.*;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Increment;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -60,32 +41,24 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.apache.phoenix.util.*;
 
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import javax.annotation.Nonnull;
+import java.io.IOException;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.Map.Entry;
+
+import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
+import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
+import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 
 
 /**
@@ -870,6 +843,7 @@ public class PTableImpl implements PTable {
      * @since 0.1
      */
     private class PRowImpl implements PRow {
+        public int traceId=3121999;//changes made by me
         private final byte[] key;
         private final ImmutableBytesWritable keyPtr;
         // default to the generic builder, and only override when we know on the client
@@ -881,8 +855,13 @@ public class PTableImpl implements PTable {
         private final long ts;
         private final boolean hasOnDupKey;
         // map from column name to value 
-        private Map<PColumn, byte[]> columnToValueMap; 
-
+        private Map<PColumn, byte[]> columnToValueMap;
+        public int getTraceId(){       //changes made by me
+            return this.traceId;
+        }
+        public void setTraceId(int traceId){
+            this.traceId=traceId;
+        }
         public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
             this.kvBuilder = kvBuilder;
             this.ts = ts;
@@ -963,6 +942,10 @@ public class PTableImpl implements PTable {
                     mutations.add(unsetValues);
                 }
             }
+            /*for(int it=0;it<mutations.size();it++){                             //changed by me
+                mutations.get(it).setId(Integer.toString(this.getTraceId()));
+            }*/
+            TracePropagation.propagateTraceId(this,mutations);
             return mutations;
         }
 

@@ -17,21 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.Lists.newArrayListWithCapacity;
-
-import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -64,58 +52,29 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
-import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.BindParseNode;
-import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.*;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.SequenceValueParseNode;
-import org.apache.phoenix.parse.UpsertStatement;
+import org.apache.phoenix.propagatetrace.TracePropagation;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.ConstraintViolationException;
-import org.apache.phoenix.schema.DelegateColumn;
-import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.ReadOnlyTableException;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.UpsertColumnsValuesMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PSmallint;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ExpressionUtil;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.util.*;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import java.sql.ParameterMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.BitSet;
+import java.util.*;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Lists.newArrayListWithCapacity;
 
 public class UpsertCompiler {
 
@@ -171,8 +130,10 @@ public class UpsertCompiler {
                 ptr.set(ScanRanges.prefixKey(ptr.get(), 0, ptr.getLength(), regionPrefix,
                     regionPrefix.length));
             }
-        } 
-        mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
+        }
+        RowMutationState rowMutationStateTrace=new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes);
+        TracePropagation.propagateTraceId(statement,rowMutationStateTrace);
+        mutation.put(ptr,rowMutationStateTrace);
     }
     
     public static MutationState upsertSelect(StatementContext childContext, TableRef tableRef, RowProjector projector,

@@ -17,29 +17,10 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.Reader;
-import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.sql.SQLWarning;
-import java.sql.Statement;
-import java.text.Format;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
+import com.google.common.base.Throwables;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.math.IntMath;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -49,37 +30,9 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
-import org.apache.phoenix.compile.BaseMutationPlan;
-import org.apache.phoenix.compile.CloseStatementCompiler;
-import org.apache.phoenix.compile.ColumnProjector;
-import org.apache.phoenix.compile.ColumnResolver;
-import org.apache.phoenix.compile.CreateFunctionCompiler;
-import org.apache.phoenix.compile.CreateIndexCompiler;
-import org.apache.phoenix.compile.CreateSchemaCompiler;
-import org.apache.phoenix.compile.CreateSequenceCompiler;
-import org.apache.phoenix.compile.CreateTableCompiler;
-import org.apache.phoenix.compile.DeclareCursorCompiler;
-import org.apache.phoenix.compile.DeleteCompiler;
-import org.apache.phoenix.compile.DropSequenceCompiler;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExpressionProjector;
-import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.*;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.ListJarsQueryPlan;
-import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.compile.OpenStatementCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.QueryCompiler;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.RowProjector;
-import org.apache.phoenix.compile.SequenceManager;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.StatementNormalizer;
-import org.apache.phoenix.compile.StatementPlan;
-import org.apache.phoenix.compile.SubqueryRewriter;
-import org.apache.phoenix.compile.SubselectRewriter;
-import org.apache.phoenix.compile.TraceQueryPlan;
-import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -93,82 +46,14 @@ import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.log.QueryLogInfo;
-import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
+import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.parse.AddColumnStatement;
-import org.apache.phoenix.parse.AddJarsStatement;
-import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.AlterIndexStatement;
-import org.apache.phoenix.parse.AlterSessionStatement;
-import org.apache.phoenix.parse.BindableStatement;
-import org.apache.phoenix.parse.ChangePermsStatement;
-import org.apache.phoenix.parse.CloseStatement;
-import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.CreateFunctionStatement;
-import org.apache.phoenix.parse.CreateIndexStatement;
-import org.apache.phoenix.parse.CreateSchemaStatement;
-import org.apache.phoenix.parse.CreateSequenceStatement;
-import org.apache.phoenix.parse.CreateTableStatement;
-import org.apache.phoenix.parse.CursorName;
-import org.apache.phoenix.parse.DeclareCursorStatement;
-import org.apache.phoenix.parse.DeleteJarStatement;
-import org.apache.phoenix.parse.DeleteStatement;
-import org.apache.phoenix.parse.DropColumnStatement;
-import org.apache.phoenix.parse.DropFunctionStatement;
-import org.apache.phoenix.parse.DropIndexStatement;
-import org.apache.phoenix.parse.DropSchemaStatement;
-import org.apache.phoenix.parse.DropSequenceStatement;
-import org.apache.phoenix.parse.DropTableStatement;
-import org.apache.phoenix.parse.ExecuteUpgradeStatement;
-import org.apache.phoenix.parse.ExplainStatement;
-import org.apache.phoenix.parse.FetchStatement;
-import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.IndexKeyConstraint;
-import org.apache.phoenix.parse.LimitNode;
-import org.apache.phoenix.parse.ListJarsStatement;
-import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.OffsetNode;
-import org.apache.phoenix.parse.OpenStatement;
-import org.apache.phoenix.parse.OrderByNode;
-import org.apache.phoenix.parse.PFunction;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.TableNode;
-import org.apache.phoenix.parse.TraceStatement;
-import org.apache.phoenix.parse.UDFParseNode;
-import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.parse.UpsertStatement;
-import org.apache.phoenix.parse.UseSchemaStatement;
-import org.apache.phoenix.query.HBaseFactoryProvider;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
-import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
-import org.apache.phoenix.schema.FunctionNotFoundException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.parse.*;
+import org.apache.phoenix.query.*;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -176,23 +61,18 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CursorUtil;
-import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.PhoenixContextExecutor;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.math.IntMath;
+import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.sql.*;
+import java.text.Format;
+import java.util.*;
+
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.*;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -250,6 +130,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
+    private int traceId=3121999; //added by me
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
@@ -260,9 +141,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
      * Internally to Phoenix we allow callers to set the query timeout in millis
      * via the phoenix.query.timeoutMs. Therefore we store the time in millis.
      */
+
+
+
     private int getDefaultQueryTimeoutMillis() {
         return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    public int getTraceId(){
+        return this.traceId;
+    }
+    public void setTraceId(int traceIdNumber){
+        this.traceId=traceIdNumber;
     }
 
     protected List<PhoenixResultSet> getResultSets() {
