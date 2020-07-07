@@ -78,7 +78,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.0.0</hadoop.version>
+    <hadoop.version>3.0.3</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
     <!-- General Properties -->
@@ -523,6 +523,7 @@
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
+          <trimStackTrace>false</trimStackTrace>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
@@ -1455,6 +1456,7 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
+      <!-- must be identical to phoenix-hbase-compat-2.2.1 profile -->
       <id>phoenix-hbase-compat-2.2.1-default</id>
       <activation>
         <property>
@@ -1464,7 +1466,8 @@
       <properties>
         <hbase.profile>2.2</hbase.profile>
         <hbase.compat.version>2.2.1</hbase.compat.version>
-        <hbase.version>2.2.3</hbase.version>
+        <!-- PHOENIX-5993 HBase 2.2.5 public maven artifacts are incompatible with Hadoop 3 -->
+        <hbase.version>2.2.4</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1478,8 +1481,8 @@
       <properties>
         <hbase.profile>2.2</hbase.profile>
         <hbase.compat.version>2.2.1</hbase.compat.version>
-        <!-- Update to latest before release -->
-        <hbase.version>2.2.3</hbase.version>
+        <!-- PHOENIX-5993 HBase 2.2.5 public maven artifacts are incompatible with Hadoop 3 -->
+        <hbase.version>2.2.4</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1494,8 +1497,7 @@
       <properties>
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
-        <!-- Update to latest before release -->
-        <hbase.version>2.1.8</hbase.version>
+        <hbase.version>2.1.9</hbase.version>
       </properties>
     </profile>
     <profile>
