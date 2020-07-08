@@ -83,8 +83,6 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <shadedArtifactAttached>true</shadedArtifactAttached>
-                <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
@@ -122,6 +120,7 @@
                         <exclude>log4j:log4j</exclude>
                         <exclude>org.slf4j:slf4j-api</exclude>
                         <exclude>org.slf4j:slf4j-log4j</exclude>
+                        <exlcude>org.apache.phoenix:phoenix-hbase-compat*</exlcude>
                     </excludes>
                 </artifactSet>
                 <filters>

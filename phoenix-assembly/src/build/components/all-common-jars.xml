@@ -27,7 +27,6 @@
       <directory>${project.basedir}/../phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-client-${project.version}-${hbase.profile.string}.jar</include>
         <include>phoenix-client-${project.version}.jar</include>
         <include>phoenix-client.jar</include>
       </includes>
@@ -36,7 +35,6 @@
       <directory>${project.basedir}/../phoenix-server/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-server-${project.version}-${hbase.profile.string}.jar</include>
         <include>phoenix-server-${project.version}.jar</include>
         <include>phoenix-server.jar</include>
       </includes>
