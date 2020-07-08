@@ -74,8 +74,6 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <shadedArtifactAttached>true</shadedArtifactAttached>
-                <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
@@ -97,7 +95,6 @@
                 <artifactSet>
                 <includes>
                   <include>org.apache.phoenix:phoenix-core</include>
-                  <include>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</include>
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
                   <include>org.apache.tephra:tephra*</include>

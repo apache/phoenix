@@ -58,6 +58,19 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+                <exclude>META-INF/license/*</exclude>
+                <exclude>LICENSE.*</exclude>
+                <exclude>NOTICE.*</exclude>
+              </excludes>
+            </filter>
+          </filters>
           <transformers>
             <transformer
                 implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
@@ -346,8 +359,6 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>${hbase.profile.string}</shadedClassifierName>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <createSourcesJar>true</createSourcesJar>
@@ -361,19 +372,6 @@
                   <exclude>xom:xom</exclude>
                 </excludes>
               </artifactSet>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                    <exclude>META-INF/license/*</exclude>
-                    <exclude>LICENSE.*</exclude>
-                    <exclude>NOTICE.*</exclude>
-                  </excludes>
-                </filter>
-              </filters>
             </configuration>
           </execution>
           <execution>
@@ -384,7 +382,7 @@
             </goals>
             <configuration>
               <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>${hbase.profile.string}-embedded</shadedClassifierName>
+              <shadedClassifierName>embedded</shadedClassifierName>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <artifactSet>
@@ -397,19 +395,6 @@
                   <exclude>org.slf4j:slf4j-log4j12</exclude>
                 </excludes>
               </artifactSet>
-              <filters>
-                <filter>
-                  <artifact>*:*</artifact>
-                  <excludes>
-                    <exclude>META-INF/*.SF</exclude>
-                    <exclude>META-INF/*.DSA</exclude>
-                    <exclude>META-INF/*.RSA</exclude>
-                    <exclude>META-INF/license/*</exclude>
-                    <exclude>LICENSE.*</exclude>
-                    <exclude>NOTICE.*</exclude>
-                  </excludes>
-                </filter>
-              </filters>
             </configuration>
           </execution>
         </executions>

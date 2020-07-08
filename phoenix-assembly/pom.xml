@@ -42,7 +42,7 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>client without classifier</id>
+            <id>client without version</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
@@ -52,28 +52,8 @@
               <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${project.version}-${hbase.profile.string}.jar
-                </argument>
                 <argument>
                   phoenix-client-${project.version}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>client without version and classifier</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded client JAR, but we don't care -->
@@ -83,7 +63,7 @@
             </configuration>
           </execution>
           <execution>
-            <id>server without classifier</id>
+            <id>server without version</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
@@ -93,28 +73,8 @@
               <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>
-                  phoenix-server-${project.version}-${hbase.profile.string}.jar
-                </argument>
                 <argument>
                   phoenix-server-${project.version}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>server without version and classifier</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-server-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded server JAR, but we don't care -->
@@ -147,7 +107,7 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}-${hbase.profile.string}</finalName>
+            <finalName>phoenix-${project.version}</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
@@ -196,6 +156,18 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-tracing-webapp</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-1.3.0</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-1.4.0</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-1.5.0</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
