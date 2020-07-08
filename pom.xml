@@ -73,7 +73,6 @@
     <!-- The HBase compatibility module that that will be included in
     the shaded JARs and the assembly -->
     <hbase.profile>2.2</hbase.profile>
-    <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
 
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
