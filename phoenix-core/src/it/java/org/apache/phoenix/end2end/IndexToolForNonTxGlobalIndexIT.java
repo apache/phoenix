@@ -1130,6 +1130,53 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
     }
 
     @Test
+    public void testPointDeleteRebuildWithPageSize() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(
+                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
+            conn.commit();
+            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC",
+                indexTableName, fullDataTableName));
+            // Run the index MR job and verify that the index table is built correctly
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(1));
+            IndexTool indexTool =
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE,
+                        new String[0]);
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(3,
+                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT)
+                        .getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT)
+                        .getValue());
+        }
+    }
+
+
+    @Test
     public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
         if (!mutable) {
             return;

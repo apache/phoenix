@@ -1333,7 +1333,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         indexMutationCount += prepareIndexMutations(put, del, indexKeyToMutationMap, mostRecentIndexRowKeys);
                         dataRowCount++;
                     }
-                } while (hasMore && indexMutationCount < pageSizeInRows);
+                } while (hasMore && indexMutationCount < pageSizeInRows
+                        && dataRowCount < pageSizeInRows);
                 if (!indexKeyToMutationMap.isEmpty()) {
                     if (indexRowKeyforReadRepair != null) {
                         rebuildIndexRows(indexKeyToMutationMap, Collections.EMPTY_LIST, verificationResult);
