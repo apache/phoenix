@@ -1165,6 +1165,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         for (int i = 0; i < dataMutationListSize; i++) {
             Mutation mutation = dataMutations.get(i);
             long ts = getTimestamp(mutation);
+            Delete deleteToApply = null;
             if (mutation instanceof Put) {
                 if (i < dataMutationListSize - 1) {
                     // If there is a pair of a put and delete mutation with the same timestamp then apply the delete
@@ -1173,18 +1174,27 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     Mutation nextMutation = dataMutations.get(i + 1);
                     if (getTimestamp(nextMutation) == ts && nextMutation instanceof Delete) {
                         applyDeleteOnPut((Delete) nextMutation, (Put) mutation);
-                        // Apply the delete mutation on the current data row state too
-                        if (currentDataRowState != null) {
-                            applyDeleteOnPut((Delete) nextMutation, currentDataRowState);
-                            if (currentDataRowState.getFamilyCellMap().size() == 0) {
-                                currentDataRowState = null;
-                                indexRowKeyForCurrentDataRow = null;
+                        if(mutation.getFamilyCellMap().size() != 0) {
+                            // Apply the delete mutation on the current data row state too
+                            if (currentDataRowState != null) {
+                                applyDeleteOnPut((Delete) nextMutation, currentDataRowState);
+                                if (currentDataRowState.getFamilyCellMap().size() == 0) {
+                                    currentDataRowState = null;
+                                    indexRowKeyForCurrentDataRow = null;
+                                }
                             }
+                        } else {
+                            /**
+                             * When the mutation is empty after the delete mutation is applied, we should
+                             * reuse the logical of applying a delete mutation on currentDataRowState.
+                             */
+                            deleteToApply = (Delete)nextMutation;
                         }
                         // This increment is to skip the next (delete) mutation as we have already processed it
                         i++;
                     }
                 }
+
                 if (mutation.getFamilyCellMap().size() != 0) {
                     // Add this put on top of the current data row state to get the next data row state
                     Put nextDataRow = (currentDataRowState == null) ? new Put((Put)mutation) : applyNew((Put)mutation, currentDataRowState);
@@ -1202,45 +1212,39 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     // For the next iteration of the for loop
                     currentDataRowState = nextDataRow;
                     indexRowKeyForCurrentDataRow = indexPut.getRow();
-                } else {
-                    if (currentDataRowState != null) {
-                        Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                        indexMutations.add(del);
-                        // For the next iteration of the for loop
-                        currentDataRowState = null;
-                        indexRowKeyForCurrentDataRow = null;
-                    }
+                    continue;
                 }
-            } else { // mutation instanceof Delete
-                if (currentDataRowState != null) {
-                    // We apply delete mutations only on the current data row state to obtain the next data row state.
-                    // For the index table, we are only interested in if the index row should be deleted or not.
-                    // There is no need to apply column deletes to index rows since index rows are always full rows
-                    // and all the cells in an index row have the same timestamp value. Because of this index rows
-                    // versions do not share cells.
-                    applyDeleteOnPut((Delete) mutation, currentDataRowState);
-                    Put nextDataRowState = currentDataRowState;
-                    if (nextDataRowState.getFamilyCellMap().size() == 0) {
-                        Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                        indexMutations.add(del);
-                        currentDataRowState = null;
-                        indexRowKeyForCurrentDataRow = null;
-                    } else {
-                        ValueGetter nextDataRowVG = new SimpleValueGetter(nextDataRowState);
-                        Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
-                        indexMutations.add(indexPut);
-                        // Delete the current index row if the new index key is different than the current one
-                        if (indexRowKeyForCurrentDataRow != null) {
-                            if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
-                                Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                                        IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                                indexMutations.add(del);
-                            }
+            } else if(mutation instanceof Delete) {
+                deleteToApply = (Delete)mutation;
+            }
+
+            if (deleteToApply != null && currentDataRowState != null) {
+                // We apply delete mutations only on the current data row state to obtain the next data row state.
+                // For the index table, we are only interested in if the index row should be deleted or not.
+                // There is no need to apply column deletes to index rows since index rows are always full rows
+                // and all the cells in an index row have the same timestamp value. Because of this index rows
+                // versions do not share cells.
+                applyDeleteOnPut(deleteToApply, currentDataRowState);
+                Put nextDataRowState = currentDataRowState;
+                if (nextDataRowState.getFamilyCellMap().size() == 0) {
+                    Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                    indexMutations.add(del);
+                    currentDataRowState = null;
+                    indexRowKeyForCurrentDataRow = null;
+                } else {
+                    ValueGetter nextDataRowVG = new SimpleValueGetter(nextDataRowState);
+                    Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
+                    indexMutations.add(indexPut);
+                    // Delete the current index row if the new index key is different than the current one
+                    if (indexRowKeyForCurrentDataRow != null) {
+                        if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
+                            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                                    IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                            indexMutations.add(del);
                         }
-                        indexRowKeyForCurrentDataRow = indexPut.getRow();
                     }
+                    indexRowKeyForCurrentDataRow = indexPut.getRow();
                 }
             }
         }
