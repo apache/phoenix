@@ -1175,6 +1175,60 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         }
     }
 
+    @Test
+    public void testIncrementalRebuildWithPageSize() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            long minTs = EnvironmentEdgeManager.currentTimeMillis();
+            conn.createStatement().execute(
+                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aa')");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bb')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
+            conn.commit();
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aaa')");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bbb')");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
+            conn.commit();
+            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC",
+                indexTableName, fullDataTableName));
+            // Run the index MR job and verify that the index table is built correctly
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
+            IndexTool indexTool =
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER,
+                        "-st", String.valueOf(minTs), "-et",
+                        String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(3,
+                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(4,
+                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(4, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT)
+                        .getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT)
+                        .getValue());
+        }
+    }
+
 
     @Test
     public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
