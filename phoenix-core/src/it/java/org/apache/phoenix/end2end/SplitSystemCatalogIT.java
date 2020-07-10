@@ -51,8 +51,14 @@ public class SplitSystemCatalogIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
+       doSetup(null);
+    }
+
+    public static synchronized void doSetup(Map<String, String> props) throws Exception {
         NUM_SLAVES_BASE = 6;
-        Map<String, String> props = Collections.emptyMap();
+        if (props == null) {
+            props = Collections.emptyMap();
+        }
         boolean splitSystemCatalog = (driver == null);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
