@@ -1,11 +1,13 @@
 package org.apache.phoenix.query;
 
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -13,7 +15,7 @@ import java.util.Properties;
 import static org.apache.phoenix.query.QueryServices.AUTO_COMMIT_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class ExplainPlanTextTest extends BaseConnectionlessQueryTest{
 
