@@ -817,7 +817,7 @@ public class DeleteCompiler {
         public ExplainPlan getExplainPlan() throws SQLException {
             List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
             List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
-            planSteps.add("DELETE ROWS");
+            planSteps.add("DELETE ROWS SERVER SELECT");
             planSteps.addAll(queryPlanSteps);
             return new ExplainPlan(planSteps);
         }
@@ -953,7 +953,7 @@ public class DeleteCompiler {
         public ExplainPlan getExplainPlan() throws SQLException {
             List<String> queryPlanSteps =  bestPlan.getExplainPlan().getPlanSteps();
             List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
-            planSteps.add("DELETE ROWS");
+            planSteps.add("DELETE ROWS CLIENT SELECT");
             planSteps.addAll(queryPlanSteps);
             return new ExplainPlan(planSteps);
         }
