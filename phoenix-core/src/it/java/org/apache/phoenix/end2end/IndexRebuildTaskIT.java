@@ -179,11 +179,15 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
         String taskData = "";
         do {
             Thread.sleep(2000);
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
+            String stmt = "SELECT * " +
                     " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "' AND " +
-                    PhoenixDatabaseMetaData.TASK_TYPE + " = " +
-                    taskType.getSerializedValue());
+                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                    taskType.getSerializedValue();
+            if (expectedTableName != null) {
+                stmt += " AND " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "'";
+            }
+
+            ResultSet rs = conn.createStatement().executeQuery(stmt);
 
             while (rs.next()) {
                 taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);

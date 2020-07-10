@@ -21,10 +21,13 @@ import com.google.common.base.Strings;
 import org.apache.hadoop.hbase.ipc.RpcServer;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.phoenix.coprocessor.tasks.DropChildViewsTask;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -38,6 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Task {
+    public static final Logger LOGGER = LoggerFactory.getLogger(Task.class);
     private static void mutateSystemTaskTable(final PhoenixConnection conn, final PreparedStatement stmt, boolean accessCheckEnabled)
             throws IOException {
         // we need to mutate SYSTEM.TASK with HBase/login user if access is enabled.
@@ -138,6 +142,7 @@ public class Task {
                     PhoenixDatabaseMetaData.TASK_DATA +
                     " ) VALUES(?,?,?,?,?,?,?,?,?)");
             stmt = setValuesToAddTaskPS(stmt, taskType, tenantId, schemaName, tableName, taskStatus, data, priority, startTs, endTs);
+            LOGGER.info("Adding task " + taskType + "," +tableName + "," + taskStatus + "," + startTs, ","+endTs);
         } catch (SQLException e) {
             throw new IOException(e);
         }

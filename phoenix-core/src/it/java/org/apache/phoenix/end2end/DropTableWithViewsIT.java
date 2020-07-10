@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -30,10 +29,14 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 
+import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.util.ViewUtil;
@@ -47,6 +50,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public class DropTableWithViewsIT extends SplitSystemCatalogIT {
@@ -54,12 +59,17 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
     private final boolean isMultiTenant;
     private final boolean columnEncoded;
     private final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=" + TENANT1;
-
+    public static final Logger LOGGER = LoggerFactory.getLogger(DropTableWithViewsIT.class);
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        SplitSystemCatalogIT.doSetup();
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
+        serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        serverProps.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        SplitSystemCatalogIT.doSetup(serverProps);
         TaskRegionEnvironment =
                 (RegionCoprocessorEnvironment)getUtility()
                         .getRSForFirstRegionInTable(
@@ -107,6 +117,8 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+            conn.setAutoCommit(true);
+            viewConn.setAutoCommit(true);
             // Empty the task table first.
             conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
 
@@ -115,7 +127,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
                             + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)" + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            conn.commit();
+
             // Create a view tree (i.e., tree of views) with depth of 2 and fanout factor of 4
             for (int  i = 0; i < 4; i++) {
                 String childView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
