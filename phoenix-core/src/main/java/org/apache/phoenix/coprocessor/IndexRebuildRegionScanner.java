@@ -1351,6 +1351,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         if (indexRowKey != null) {
             rowCount = singleRowRebuildReturnCode;
         }
+        if (minTimestamp != 0) {
+            nextStartKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(CellUtil.cloneRow(lastCell));
+        }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
         final Cell aggKeyValue;
         if (lastCell == null) {
@@ -1411,8 +1414,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (keys.isEmpty()) {
                 return innerScanner;
             }
-            nextStartKey =
-                    ByteUtil.calculateTheClosestNextRowKeyForPrefix(keys.get(keys.size() - 1).getLowerRange());
             ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
             scanRanges.initializeScan(incrScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
