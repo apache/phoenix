@@ -421,6 +421,134 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         assertEqualMutationList(Arrays.asList((Mutation)idxPut1), actualIndexMutations);
     }
 
+    // Simulate the put and delete mutation with the same timestamp and put mutation is empty
+    // after applied delete mutation
+    @Test
+    public void testPutDeleteOnSameTimeStampAndPutNullifiedByDelete() throws Exception {
+        SetupInfo info = setup(
+                TABLE_NAME,
+                INDEX_NAME,
+                "ROW_KEY VARCHAR, CF1.C1 VARCHAR, CF2.C2 VARCHAR",
+                "CF2.C2",
+                "ROW_KEY",
+                "");
+
+        Put dataPut = new Put(Bytes.toBytes(ROW_KEY));
+        addCellToPutMutation(
+                dataPut,
+                Bytes.toBytes("CF2"),
+                Bytes.toBytes("C2"),
+                1,
+                Bytes.toBytes("v2"));
+        addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 1);
+
+        addCellToPutMutation(
+                dataPut,
+                Bytes.toBytes("CF1"),
+                Bytes.toBytes("C1"),
+                2,
+                Bytes.toBytes("v1"));
+        addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 2);
+
+        Delete dataDel = new Delete(Bytes.toBytes(ROW_KEY));
+        addCellToDelMutation(
+                dataDel,
+                Bytes.toBytes("CF1"),
+                null,
+                2,
+                KeyValue.Type.DeleteFamily);
+
+        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
+                info.indexMaintainer,
+                dataPut,
+                dataDel);
+
+        List<Mutation> expectedIndexMutations = new ArrayList<>();
+        byte[] idxKeyBytes = generateIndexRowKey("v2");
+
+        // idxPut1 is generated corresponding to dataPut of timestamp 1.
+        // idxPut2 is generated corresponding to dataPut and dataDel of timestamp 2
+        Put idxPut1 = new Put(idxKeyBytes);
+        addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
+        expectedIndexMutations.add(idxPut1);
+
+        Put idxPut2 = new Put(idxKeyBytes);
+        addEmptyColumnToIndexPutMutation(idxPut2, info.indexMaintainer, 2);
+        expectedIndexMutations.add(idxPut2);
+
+        assertEqualMutationList(expectedIndexMutations, actualIndexMutations);
+    }
+
+    // Simulate the put and delete mutation with the same timestamp and put mutation and current row state
+    // are empty after applied delete mutation
+    @Test
+    public void testPutDeleteOnSameTimeStampAndPutAndOldPutAllNullifiedByDelete() throws Exception {
+        SetupInfo info = setup(
+                TABLE_NAME,
+                INDEX_NAME,
+                "ROW_KEY VARCHAR, CF1.C1 VARCHAR, CF2.C2 VARCHAR",
+                "CF2.C2",
+                "ROW_KEY",
+                "");
+
+        Put dataPut = new Put(Bytes.toBytes(ROW_KEY));
+        addCellToPutMutation(
+                dataPut,
+                Bytes.toBytes("CF2"),
+                Bytes.toBytes("C2"),
+                1,
+                Bytes.toBytes("v2"));
+        addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 1);
+
+        addCellToPutMutation(
+                dataPut,
+                Bytes.toBytes("CF2"),
+                Bytes.toBytes("C2"),
+                2,
+                Bytes.toBytes("v2"));
+        addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 2);
+
+        Delete dataDel = new Delete(Bytes.toBytes(ROW_KEY));
+        addCellToDelMutation(
+                dataDel,
+                Bytes.toBytes("CF2"),
+                null,
+                2,
+                KeyValue.Type.DeleteFamily);
+        addCellToDelMutation(
+                dataDel,
+                SchemaUtil.getEmptyColumnFamily(info.pDataTable),
+                null,
+                2,
+                KeyValue.Type.DeleteFamily);
+
+        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
+                info.indexMaintainer,
+                dataPut,
+                dataDel);
+
+        List<Mutation> expectedIndexMutations = new ArrayList<>();
+        byte[] idxKeyBytes = generateIndexRowKey("v2");
+
+        // idxPut1 is generated corresponding to dataPut of timestamp 1.
+        // idxDel2 is generated because the dataDel of timestamp 2 deletes dataPut of timestamp 2
+        // and current row state.
+        Put idxPut1 = new Put(idxKeyBytes);
+        addEmptyColumnToIndexPutMutation(idxPut1, info.indexMaintainer, 1);
+        expectedIndexMutations.add(idxPut1);
+
+        Delete idxDel2 = new Delete(idxKeyBytes);
+        addCellToDelMutation(
+                idxDel2,
+                info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                null,
+                2,
+                KeyValue.Type.DeleteFamily);
+        expectedIndexMutations.add(idxDel2);
+
+        assertEqualMutationList(expectedIndexMutations, actualIndexMutations);
+    }
+
     // Simulate the put and delete mutation on the covered column of data table
     @Test
     public void testCoveredIndexColumns() throws Exception {
