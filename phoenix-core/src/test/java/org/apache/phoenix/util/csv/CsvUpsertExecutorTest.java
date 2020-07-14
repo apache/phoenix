@@ -29,8 +29,8 @@ import org.apache.phoenix.util.AbstractUpsertExecutorTest;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.junit.Before;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord, String> {
 

@@ -60,7 +60,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(RunUntilFailure.class)
 public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {

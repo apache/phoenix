@@ -30,7 +30,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ScanRangesIntersectTest {
 

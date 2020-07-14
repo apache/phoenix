@@ -124,13 +124,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
-        <configuration>
-          <ignoredUsedUndeclaredDependencies>
-            <ignoredUsedUndeclaredDependency>
-              dnsjava:dnsjava
-            </ignoredUsedUndeclaredDependency>
-          </ignoredUsedUndeclaredDependencies>
-        </configuration>
         <executions>
           <execution>
             <!-- generates the file that will be used by the sandbox script in the dev env -->
@@ -158,6 +151,12 @@
   </build>
 
   <dependencies>
+    <!-- shaded thirdparty dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+
     <!-- HBase compat dependency -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
@@ -327,10 +326,6 @@
       <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.google.inject</groupId>
       <artifactId>guice</artifactId>
     </dependency>
@@ -419,22 +414,6 @@
       <artifactId>disruptor</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-common</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-discovery-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-zookeeper</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-discovery-core</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
     </dependency>
@@ -486,12 +465,13 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <classifier>shaded</classifier>
         <scope>provided</scope>
       </dependency>
       <dependency>
@@ -515,11 +495,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <classifier>shaded</classifier>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>

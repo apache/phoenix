@@ -42,8 +42,8 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.MapMaker;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MapMaker;
 
 public class UDFExpression extends ScalarFunction {
     

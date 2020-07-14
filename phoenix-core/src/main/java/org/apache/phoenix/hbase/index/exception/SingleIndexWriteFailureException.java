@@ -22,8 +22,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Mutation;
-
-import com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 /**
  * Exception thrown if we cannot successfully write to an index table.
@@ -81,7 +81,7 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
 
   @Override
     public String getMessage() {
-      return Objects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: " + this.table + "\n\t edits: " + mutationsMsg
+      return MoreObjects.firstNonNull(super.getMessage(), "") + " " + FAILED_MSG + "\n\t table: " + this.table + "\n\t edits: " + mutationsMsg
       + "\n\tcause: " + getCause() == null ? "UNKNOWN" : getCause().getMessage();
     }
 }

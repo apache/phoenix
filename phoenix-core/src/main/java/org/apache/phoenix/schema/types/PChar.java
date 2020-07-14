@@ -28,7 +28,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 
 /**
  * Fixed length single byte characters

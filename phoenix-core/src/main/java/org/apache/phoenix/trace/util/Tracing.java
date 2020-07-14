@@ -47,8 +47,8 @@ import org.apache.phoenix.trace.TraceWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 

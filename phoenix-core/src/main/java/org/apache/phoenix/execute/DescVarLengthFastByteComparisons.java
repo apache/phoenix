@@ -24,8 +24,8 @@ import java.security.PrivilegedAction;
 
 import sun.misc.Unsafe;
 
-import com.google.common.primitives.Longs;
-import com.google.common.primitives.UnsignedBytes;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.UnsignedBytes;
 
 /**
  * Utility code to do optimized byte-array comparison.

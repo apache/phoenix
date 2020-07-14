@@ -46,7 +46,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
 public class ParallelIteratorsIT extends ParallelStatsEnabledIT {

@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.QueryBuilder;

@@ -76,7 +76,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();

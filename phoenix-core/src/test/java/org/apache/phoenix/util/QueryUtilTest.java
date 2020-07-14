@@ -30,8 +30,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryUtilTest {
 

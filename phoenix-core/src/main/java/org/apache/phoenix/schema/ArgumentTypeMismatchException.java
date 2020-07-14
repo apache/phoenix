@@ -20,8 +20,8 @@ package org.apache.phoenix.schema;
 import java.sql.SQLException;
 import java.util.Arrays;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.types.PDataType;

@@ -23,8 +23,8 @@ import java.sql.Types;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 
 public class PDouble extends PRealNumber<Double> {
   public static final PDouble INSTANCE = new PDouble();

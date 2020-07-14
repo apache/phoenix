@@ -19,7 +19,7 @@ package org.apache.phoenix.schema;
 
 import java.util.Map;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 public enum PTableType {

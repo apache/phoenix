@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
-import static com.google.common.collect.Lists.newArrayList;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayList;
 import static java.util.Collections.singletonList;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
@@ -67,9 +67,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 // Needs to extend BaseUniqueNamesOwnClusterIT due to installation of FailingRegionObserver coprocessor

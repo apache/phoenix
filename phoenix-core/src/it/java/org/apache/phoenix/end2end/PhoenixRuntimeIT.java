@@ -52,7 +52,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     private static void assertTenantIds(Expression e, Table htable, Filter filter, String[] tenantIds) throws IOException {

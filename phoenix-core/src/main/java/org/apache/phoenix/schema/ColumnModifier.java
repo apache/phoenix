@@ -19,7 +19,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * A ColumnModifier implementation modifies how bytes are stored in a primary key column.</p>  
