@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
 
 /**
  * Generic {@link Exception} that an index write has failed
@@ -82,6 +82,6 @@ public IndexWriteException(Throwable cause) {
 
     @Override
     public String getMessage() {
-        return Objects.firstNonNull(super.getMessage(), "") + " " + DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + ",";
+        return MoreObjects.firstNonNull(super.getMessage(), "") + " " + DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + ",";
     }
 }

@@ -49,6 +49,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <!-- Eclipse cannot handle shaded subprojects -->
     <module>phoenix-shaded-guava</module>
   </modules>
 
@@ -102,7 +103,8 @@
     <commons-logging.version>1.2</commons-logging.version>
     <sqlline.version>1.9.0</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
-    <guava.version>13.0.1</guava.version>
+    <!-- The -android version is compatible with Java 7, which we need -->
+    <guava.version>29.0-android</guava.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
@@ -1226,11 +1228,6 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr-runtime</artifactId>
         <version>${antlr.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>${guava.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.inject</groupId>
