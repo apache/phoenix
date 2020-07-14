@@ -24,8 +24,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.Region;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 

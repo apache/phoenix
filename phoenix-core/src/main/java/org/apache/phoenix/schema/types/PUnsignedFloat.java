@@ -20,7 +20,7 @@ package org.apache.phoenix.schema.types;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PUnsignedFloat extends PRealNumber<PFloat> {
 

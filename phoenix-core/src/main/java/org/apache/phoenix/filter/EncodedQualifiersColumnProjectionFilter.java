@@ -41,8 +41,8 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 public class EncodedQualifiersColumnProjectionFilter extends FilterBase implements Writable {
 

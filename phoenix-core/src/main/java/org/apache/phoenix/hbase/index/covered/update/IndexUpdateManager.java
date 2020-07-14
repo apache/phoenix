@@ -34,8 +34,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
-import com.google.common.collect.Lists;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * Keeps track of the index updates

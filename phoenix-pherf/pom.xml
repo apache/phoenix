@@ -48,6 +48,12 @@
 
   <dependencyManagement>
     <dependencies>
+    <!-- shaded thirdparty dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+    
       <dependency>
         <groupId>com.googlecode.java-diff-utils</groupId>
         <artifactId>diffutils</artifactId>
@@ -130,10 +136,6 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
     </dependency>
     <dependency>
       <groupId>joda-time</groupId>

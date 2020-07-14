@@ -18,8 +18,8 @@ import java.util.regex.Pattern;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.*;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * ColumnInfo used to store Column Name and its associated PDataType

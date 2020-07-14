@@ -38,8 +38,8 @@ import org.apache.phoenix.util.LogUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Joiner;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * Read the traces written to phoenix tables by the {@link TraceWriter}.

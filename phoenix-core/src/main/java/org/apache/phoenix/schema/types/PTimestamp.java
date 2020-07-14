@@ -31,7 +31,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;

@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class NotQueryWithLocalImmutableIndexesIT extends NotQueryIT {
 

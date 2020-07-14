@@ -49,6 +49,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-shaded-guava</module>
   </modules>
 
   <repositories>
@@ -111,8 +112,8 @@
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <tephra.version>0.15.0-incubating</tephra.version>
-    <omid.version>1.0.1</omid.version>
+    <tephra.version>0.16.0-incubating-SNAPSHOT</tephra.version>
+    <omid.version>1.0.2-SNAPSHOT</omid.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
     <twill.version>0.8.0</twill.version>
@@ -623,6 +624,18 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-shaded-guava</artifactId>
+        <version>${project.version}</version>
+        <exclusions>
+          <exclusion>
+            <!-- MSHADE-206 MNG-5899 must exclude until moved to another repo-->
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -880,7 +893,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-shaded</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
           <exclusion>
@@ -1334,36 +1347,36 @@
         <artifactId>joni</artifactId>
         <version>${joni.version}</version>
       </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-zookeeper</artifactId>
-        <version>${twill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-common</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-discovery-api</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-discovery-core</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
+<!--       <dependency> -->
+<!--         <groupId>org.apache.twill</groupId> -->
+<!--         <artifactId>twill-zookeeper</artifactId> -->
+<!--         <version>${twill.version}</version> -->
+<!--         <exclusions> -->
+<!--           <exclusion> -->
+<!--             <groupId>ch.qos.logback</groupId> -->
+<!--             <artifactId>logback-core</artifactId> -->
+<!--           </exclusion> -->
+<!--           <exclusion> -->
+<!--             <groupId>ch.qos.logback</groupId> -->
+<!--             <artifactId>logback-classic</artifactId> -->
+<!--           </exclusion> -->
+<!--         </exclusions> -->
+<!--       </dependency> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.twill</groupId> -->
+<!--         <artifactId>twill-common</artifactId> -->
+<!--         <version>${twill.version}</version> -->
+<!--       </dependency> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.twill</groupId> -->
+<!--         <artifactId>twill-discovery-api</artifactId> -->
+<!--         <version>${twill.version}</version> -->
+<!--       </dependency> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.twill</groupId> -->
+<!--         <artifactId>twill-discovery-core</artifactId> -->
+<!--         <version>${twill.version}</version> -->
+<!--       </dependency> -->
       <dependency>
         <groupId>org.jruby.jcodings</groupId>
         <artifactId>jcodings</artifactId>

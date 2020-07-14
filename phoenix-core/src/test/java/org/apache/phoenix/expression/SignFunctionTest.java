@@ -40,7 +40,7 @@ import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Unit tests for {@link SignFunction}

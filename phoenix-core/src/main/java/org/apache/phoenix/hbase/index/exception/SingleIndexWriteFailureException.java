@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Mutation;
 
-import com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 /**
  * Exception thrown if we cannot successfully write to an index table.

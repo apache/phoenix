@@ -45,9 +45,9 @@ import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
-import com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.CaseFormat;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 
 /** {@link UpsertExecutor} over {@link Map} objects, as parsed from JSON. */
 public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {

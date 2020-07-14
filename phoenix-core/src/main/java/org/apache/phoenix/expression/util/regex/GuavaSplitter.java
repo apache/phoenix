@@ -25,8 +25,8 @@ import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
 
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class GuavaSplitter implements AbstractBaseSplitter {
     private final Splitter splitter;

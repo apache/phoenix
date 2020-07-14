@@ -26,7 +26,7 @@ import java.util.Properties;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 public class ReadOnlyPropertiesTest {
     

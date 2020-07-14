@@ -73,9 +73,9 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 

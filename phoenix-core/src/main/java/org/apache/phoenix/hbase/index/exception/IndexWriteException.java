@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 /**
  * Generic {@link Exception} that an index write has failed
