@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Standard replication of the SYSTEM.CATALOG table can be dangerous because schemas

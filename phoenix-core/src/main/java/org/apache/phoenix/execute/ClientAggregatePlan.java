@@ -72,7 +72,7 @@ import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.TupleUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ClientAggregatePlan extends ClientProcessingPlan {
     private final GroupBy groupBy;

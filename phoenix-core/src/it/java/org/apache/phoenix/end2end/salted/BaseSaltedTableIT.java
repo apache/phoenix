@@ -35,7 +35,7 @@ import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT  {
 

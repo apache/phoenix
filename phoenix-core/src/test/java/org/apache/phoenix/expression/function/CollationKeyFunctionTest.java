@@ -37,8 +37,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
-import com.google.common.primitives.UnsignedBytes;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.UnsignedBytes;
 
 /**
  * "Unit" tests for CollationKeyFunction

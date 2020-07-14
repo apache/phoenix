@@ -45,7 +45,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class NullIT extends BaseQueryIT {
     

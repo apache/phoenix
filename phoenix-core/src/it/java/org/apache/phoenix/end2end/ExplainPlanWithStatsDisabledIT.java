@@ -29,7 +29,7 @@ import java.util.List;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * This class has tests for asserting the bytes and rows information exposed in the explain plan

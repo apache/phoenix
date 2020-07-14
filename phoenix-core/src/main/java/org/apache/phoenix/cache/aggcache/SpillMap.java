@@ -31,11 +31,11 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.util.Bytes;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.hash.BloomFilter;
-import com.google.common.hash.Funnels;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.hash.BloomFilter;
+import org.apache.phoenix.thirdparty.com.google.common.hash.Funnels;
 
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 

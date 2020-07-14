@@ -48,8 +48,8 @@
             <artifactId>hadoop-common</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
+          <groupId>org.apache.phoenix.thirdparty</groupId>
+          <artifactId>phoenix-shaded-guava</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

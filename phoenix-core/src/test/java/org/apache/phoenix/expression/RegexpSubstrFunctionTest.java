@@ -31,7 +31,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class RegexpSubstrFunctionTest {
     private final static PVarchar TYPE = PVarchar.INSTANCE;

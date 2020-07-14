@@ -48,10 +48,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.twill.common.Cancellable;
-import org.apache.twill.discovery.DiscoveryServiceClient;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.ZKClient;
+
 import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -214,8 +211,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
-                PhoenixConnection.class, Chronology.class, CharStream.class, ZKClient.class,
-                DiscoveryServiceClient.class, ZKDiscoveryService.class, Cancellable.class,
+                PhoenixConnection.class, Chronology.class, CharStream.class,
                 SpanReceiver.class, Gauge.class, MetricRegistriesImpl.class);
         try {
             TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
