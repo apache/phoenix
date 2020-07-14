@@ -52,10 +52,7 @@ import org.apache.tephra.TransactionNotInProgressException;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
 import org.apache.thrift.transport.TTransportException;
-import org.apache.twill.common.Cancellable;
-import org.apache.twill.discovery.DiscoveryServiceClient;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.ZKClient;
+
 import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -219,8 +216,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
                 CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
-                ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
-                Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
+                TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }
