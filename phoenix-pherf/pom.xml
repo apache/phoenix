@@ -48,11 +48,6 @@
 
   <dependencyManagement>
     <dependencies>
-    <!-- shaded thirdparty dependencies -->
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-shaded-guava</artifactId>
-    </dependency>
     
       <dependency>
         <groupId>com.googlecode.java-diff-utils</groupId>
@@ -100,6 +95,13 @@
   </dependencyManagement>
 
   <dependencies>
+  
+    <!-- shaded thirdparty dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+    
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
