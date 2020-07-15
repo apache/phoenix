@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
@@ -411,5 +412,171 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
             assertNull(results.next());
         }
     }
-    
+
+    @Test
+    public void testDropViewIndexColumn() throws Exception {
+        String table = generateUniqueName();
+        String view = generateUniqueName();
+        String index = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX))");
+                // create view
+                stmt.execute(
+                        "CREATE VIEW IF NOT EXISTS " + view +
+                                "  (PK1 DATE NOT NULL,PK2 CHAR(15) NOT NULL," +
+                                "NON_PK1 CHAR(15),NON_PK2 CHAR(15) CONSTRAINT " +
+                                "PKVIEW PRIMARY KEY (PK1,PK2)) " +
+                                "AS SELECT * FROM " + table + " WHERE KEY_PREFIX = '123'");
+                // create index
+                stmt.execute("CREATE INDEX " + index + " ON " + view +
+                        " (PK2, PK1) INCLUDE (NON_PK1, NON_PK2)");
+                // drop column
+                stmt.execute("ALTER VIEW "  + view + " DROP COLUMN NON_PK1");
+            }
+        }
+    }
+
+    @Test
+    public void testDropViewIndexColumnForMultiTenantTable() throws Exception {
+        String table = generateUniqueName();
+        String view = generateUniqueName();
+        String index = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS "  + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX)) MULTI_TENANT=TRUE");
+                // create view
+                stmt.execute(
+                        "CREATE VIEW IF NOT EXISTS "  + view +
+                                "  (PK1 DATE NOT NULL,PK2 CHAR(15) NOT NULL," +
+                                "NON_PK1 CHAR(15),NON_PK2 CHAR(15) CONSTRAINT " +
+                                "PKVIEW PRIMARY KEY (PK1,PK2)) " +
+                                "AS SELECT * FROM "  + table + " WHERE KEY_PREFIX = '123'");
+                // create index
+                stmt.execute("CREATE INDEX " + index + " ON " + view +
+                        " (PK2, PK1) INCLUDE (NON_PK1, NON_PK2)");
+                // drop column
+                stmt.execute("ALTER VIEW "  + view + " DROP COLUMN NON_PK1");
+            }
+        }
+    }
+
+    @Test
+    public void testDropIndexColumn() throws Exception {
+        String table = generateUniqueName();
+        String index = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL, NON_PK1 CHAR(15),NON_PK2 CHAR(15), " +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX))");
+                // create index
+                stmt.execute("CREATE INDEX " + index + " ON " + table +
+                        " (KEY_PREFIX, ID) INCLUDE (NON_PK1, NON_PK2)");
+                // drop column
+                stmt.execute("ALTER TABLE " + table + " DROP COLUMN NON_PK1");
+            }
+        }
+    }
+
+    @Test
+    public void testDropColumnForMultiTenantTable() throws Exception {
+        String table = generateUniqueName();
+        String view = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL, NON_PK3 CHAR(15)," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX)) MULTI_TENANT=TRUE");
+                // create view
+                stmt.execute(
+                        "CREATE VIEW IF NOT EXISTS " +  view  +
+                                "  (PK1 DATE NOT NULL,PK2 CHAR(15) NOT NULL," +
+                                "NON_PK1 CHAR(15),NON_PK2 CHAR(15) CONSTRAINT " +
+                                "PKVIEW PRIMARY KEY (PK1,PK2)) " +
+                                "AS SELECT * FROM " + table + " WHERE KEY_PREFIX = '123'");
+                // drop column
+                stmt.execute("ALTER VIEW " + view + " DROP COLUMN NON_PK3");
+            }
+        }
+    }
+
+    @Test
+    public void testDropColumnForMultiTenantTableWithIndex() throws Exception {
+        String table = generateUniqueName();
+        String view = generateUniqueName();
+        String index = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL, NON_PK3 CHAR(15)," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX)) MULTI_TENANT=TRUE");
+                // create view
+                stmt.execute(
+                        "CREATE VIEW IF NOT EXISTS " +  view  +
+                                "  (PK1 DATE NOT NULL,PK2 CHAR(15) NOT NULL," +
+                                "NON_PK1 CHAR(15),NON_PK2 CHAR(15) CONSTRAINT PKVIEW PRIMARY KEY (PK1,PK2)) " +
+                                "AS SELECT * FROM " + table + " WHERE KEY_PREFIX = '123'");
+
+                stmt.execute("CREATE INDEX " + index + " ON " + view +
+                        " (PK2, PK1) INCLUDE (NON_PK1, NON_PK2)");
+                // drop column
+                stmt.execute("ALTER VIEW " + view + " DROP COLUMN NON_PK3");
+            }
+        }
+    }
+
+    @Test
+    public void testDropColumnForTableWithIndex() throws Exception {
+        String table = generateUniqueName();
+        String index = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL, NON_PK1 CHAR(15)," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX))");
+                stmt.execute("CREATE INDEX " + index + " ON " + table +
+                        " (KEY_PREFIX, ID) INCLUDE (NON_PK1)");
+                stmt.execute("ALTER TABLE " + table + " DROP COLUMN NON_PK1");
+            }
+        }
+    }
+
+    @Test
+    public void testDropColumnForTableWithView() throws Exception {
+        String table = generateUniqueName();
+        String view = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE IF NOT EXISTS " + table +
+                        " (ID CHAR(10) NOT NULL,KEY_PREFIX CHAR(3) NOT NULL, NON_PK1 CHAR(15)," +
+                        " CONSTRAINT PK PRIMARY KEY (ID,KEY_PREFIX))");
+
+                stmt.execute(
+                        "CREATE VIEW IF NOT EXISTS " +  view  +
+                                "  (PK1 DATE NOT NULL,PK2 CHAR(15) NOT NULL," +
+                                "NON_PK2 CHAR(15),NON_PK3 CHAR(15) CONSTRAINT PKVIEW PRIMARY KEY (PK1,PK2)) " +
+                                "AS SELECT * FROM " + table + " WHERE KEY_PREFIX = '123'");
+                stmt.execute("ALTER TABLE " + table + " DROP COLUMN NON_PK1");
+            }
+        }
+    }
 }

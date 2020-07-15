@@ -42,6 +42,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
@@ -181,13 +182,28 @@ public class DropColumnMutator implements ColumnMutator {
             byte[] key = mutation.getRow();
             int pkCount = getVarChars(key, rowKeyMetaData);
             if (isView && mutation instanceof Put) {
-                PColumn column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, table);
+                PColumn column = null;
+                // checking put from the view or index
+                if (Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
+                        && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
+                    column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, table);
+                } else {
+                    for(int i = 0; i < table.getIndexes().size(); i++) {
+                        PTableImpl indexTable = (PTableImpl) table.getIndexes().get(i);
+                        byte[] indexTableName = indexTable.getTableName().getBytes();
+                        byte[] indexSchema = indexTable.getSchemaName().getBytes();
+                        if (Bytes.compareTo(indexSchema, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
+                                && Bytes.compareTo(indexTableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
+                            column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, indexTable);
+                            break;
+                        }
+                    }
+                }
                 if (column == null)
                     continue;
                 // ignore any puts that modify the ordinal positions of columns
                 iterator.remove();
-            }
-            else if (mutation instanceof Delete) {
+            } else if (mutation instanceof Delete) {
                 if (pkCount > COLUMN_NAME_INDEX
                         && Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
                         && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
