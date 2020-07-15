@@ -49,8 +49,6 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
-    <!-- Eclipse cannot handle shaded subprojects -->
-    <module>phoenix-shaded-guava</module>
   </modules>
 
   <repositories>
@@ -630,7 +628,7 @@
         <version>${project.version}</version>
         <exclusions>
           <exclusion>
-            <!-- MSHADE-206 MNG-5899 must exclude until moved to another repo-->
+            <!-- MSHADE-206 MNG-5899 must exclude until moved to another repo -->
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>

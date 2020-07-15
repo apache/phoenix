@@ -175,10 +175,10 @@
 
   <dependencies>
     <!-- shaded thirdparty dependencies -->
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-shaded-guava</artifactId>
-    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>org.apache.phoenix</groupId> -->
+<!--       <artifactId>phoenix-shaded-guava</artifactId> -->
+<!--     </dependency> -->
     
     <!-- HBase compat dependency -->
     <dependency>
