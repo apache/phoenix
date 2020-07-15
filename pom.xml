@@ -80,6 +80,8 @@
     along with hbase.version (defined in profiles) -->
     <hadoop.version>3.0.3</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
+    
+    <phoenix.thirdparty.version>1.0.0-SNAPSHOT</phoenix.thirdparty.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -625,7 +627,7 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
-        <version>${project.version}</version>
+        <version>${phoenix.thirdparty.version}</version>
         <exclusions>
           <exclusion>
             <!-- MSHADE-206 MNG-5899 must exclude until moved to another repo -->
