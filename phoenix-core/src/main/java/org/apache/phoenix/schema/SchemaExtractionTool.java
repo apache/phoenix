@@ -100,7 +100,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
         String coveredColumnsString = getCoveredColumnsString(indexPTable, defaultCF);
 
         return generateIndexDDLString(baseTableFullName, indexedColumnsString, coveredColumnsString,
-                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), pSchemaName, pTableName);
+                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), pTableName);
     }
 
     //TODO: Indexed on an expression
@@ -167,7 +167,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
         return coveredColumnsBuilder.toString();
     }
 
-    protected String generateIndexDDLString(String baseTableFullName, String indexedColumnString, String coveredColumnString, boolean local, String pSchemaName, String pTableName) {
+    protected String generateIndexDDLString(String baseTableFullName, String indexedColumnString, String coveredColumnString, boolean local, String pTableName) {
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_INDEX, local ? "LOCAL " : "", pTableName, baseTableFullName));
         outputBuilder.append("(");
         outputBuilder.append(indexedColumnString);
@@ -192,7 +192,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
         String baseTableName = table.getParentTableName().getString();
         String baseTableFullName = SchemaUtil.getQualifiedTableName(pSchemaName, baseTableName);
         PTable baseTable = getPTable(baseTableFullName);
-        String columnInfoString = getColumnInfoString(table, baseTable);
+        String columnInfoString = getColumnInfoStringForView(table, baseTable);
 
         String whereClause = table.getViewStatement();
         if(whereClause != null) {
@@ -221,7 +221,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
         setHTableProperties(htd);
         setHColumnFamilyProperties(hcd);
 
-        String columnInfoString = getColumnInfoString(table, null);
+        String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString();
 
         return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
@@ -319,29 +319,17 @@ public class SchemaExtractionTool extends Configured implements Tool {
         return ConnectionUtil.getInputConnection(conf);
     }
 
-    private String getColumnInfoString(PTable table, PTable baseTable) {
+    private String getColumnInfoStringForTable(PTable table) {
         StringBuilder colInfo = new StringBuilder();
 
         List<PColumn> columns = table.getColumns();
         List<PColumn> pkColumns = table.getPKColumns();
 
-        if (baseTable != null) {
-            Set<PColumn> columnSet = new HashSet<>(columns);
-            Set<PColumn> pkSet = new HashSet<>(pkColumns);
+        return getColumnInfoString(table, colInfo, columns, pkColumns);
+    }
 
-            List<PColumn> baseColumns = baseTable.getColumns();
-            List<PColumn> basePkColumns = baseTable.getPKColumns();
-
-            Set<PColumn> baseColumnSet = new HashSet<>(baseColumns);
-            Set<PColumn> basePkSet = new HashSet<>(basePkColumns);
-
-            Set<PColumn> columnsSet = Sets.symmetricDifference(baseColumnSet, columnSet);
-            Set<PColumn> pkColumnsSet = Sets.symmetricDifference(basePkSet, pkSet);
-
-            columns = new ArrayList<>(columnsSet);
-            pkColumns = new ArrayList<>(pkColumnsSet);
-
-        }
+    private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
+            List<PColumn> pkColumns) {
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
@@ -350,20 +338,47 @@ public class SchemaExtractionTool extends Configured implements Tool {
             }
             colDefs.add(def);
         }
-        if(colDefs.size()>0) {
+        if (colDefs.size() > 0) {
             colInfo.append('(');
             colInfo.append(StringUtils.join(colDefs, ", "));
         }
         if (pkColumns.size() > 1) {
             // multi column primary key
-            String pkConstraint = String.format(" CONSTRAINT %s PRIMARY KEY (%s)",
-                    table.getPKName().getString(), extractPKConstraint(pkColumns));
+            String
+                    pkConstraint =
+                    String.format(" CONSTRAINT %s PRIMARY KEY (%s)", table.getPKName().getString(),
+                            extractPKConstraint(pkColumns));
             colInfo.append(pkConstraint);
         }
-        if(colDefs.size()>0) {
+        if (colDefs.size() > 0) {
             colInfo.append(')');
         }
         return colInfo.toString();
+    }
+
+    private String getColumnInfoStringForView(PTable table, PTable baseTable) throws SQLException {
+        StringBuilder colInfo = new StringBuilder();
+
+        List<PColumn> columns = table.getColumns();
+        List<PColumn> pkColumns = table.getPKColumns();
+
+        Set<PColumn> columnSet = new HashSet<>(columns);
+        Set<PColumn> pkSet = new HashSet<>(pkColumns);
+
+        List<PColumn> baseColumns = baseTable.getColumns();
+        List<PColumn> basePkColumns = baseTable.getPKColumns();
+
+        Set<PColumn> baseColumnSet = new HashSet<>(baseColumns);
+        Set<PColumn> basePkSet = new HashSet<>(basePkColumns);
+
+        Set<PColumn> columnsSet = Sets.symmetricDifference(baseColumnSet, columnSet);
+        Set<PColumn> pkColumnsSet = Sets.symmetricDifference(basePkSet, pkSet);
+
+        columns = new ArrayList<>(columnsSet);
+        pkColumns = new ArrayList<>(pkColumnsSet);
+
+
+        return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
     private String extractColumn(PColumn column) {
