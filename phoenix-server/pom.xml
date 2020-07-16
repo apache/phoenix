@@ -74,6 +74,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+                <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
