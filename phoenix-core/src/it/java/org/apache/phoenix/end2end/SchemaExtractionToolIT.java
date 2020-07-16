@@ -32,7 +32,7 @@ public class SchemaExtractionToolIT extends BaseTest {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_MIGRATION=true,DISABLE_SOR=true,DISABLE_WAL=true";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
@@ -46,7 +46,7 @@ public class SchemaExtractionToolIT extends BaseTest {
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
             String actualProperties = set.output.substring(set.output.lastIndexOf(")")+1).replace(" ","");
-            Assert.assertEquals(5, actualProperties.split(",").length);
+            Assert.assertEquals(3, actualProperties.split(",").length);
         }
     }
 
@@ -58,7 +58,7 @@ public class SchemaExtractionToolIT extends BaseTest {
         String indexName1 = generateUniqueName();
         String indexName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_MIGRATION=true,DISABLE_SOR=true,DISABLE_WAL=true";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
@@ -99,7 +99,7 @@ public class SchemaExtractionToolIT extends BaseTest {
         String schemaName = generateUniqueName();
         String viewName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_MIGRATION=true,DISABLE_SOR=true,DISABLE_WAL=true";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
@@ -133,7 +133,7 @@ public class SchemaExtractionToolIT extends BaseTest {
         String childView = generateUniqueName();
         String indexName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_MIGRATION=true,DISABLE_SOR=true,DISABLE_WAL=true";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
