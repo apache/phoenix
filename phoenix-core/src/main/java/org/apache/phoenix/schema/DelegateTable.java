@@ -341,13 +341,13 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
-    @Override public long getViewTTL() { return delegate.getViewTTL(); }
+    @Override public long getPhoenixTTL() { return delegate.getPhoenixTTL(); }
 
-    @Override public long getViewTTLHighWaterMark() {
-        return delegate.getViewTTLHighWaterMark();
+    @Override public long getPhoenixTTLHighWaterMark() {
+        return delegate.getPhoenixTTLHighWaterMark();
     }
 
-    @Override public boolean hasViewModifiedViewTTL() {
-        return delegate.hasViewModifiedViewTTL();
+    @Override public boolean hasViewModifiedPhoenixTTL() {
+        return delegate.hasViewModifiedPhoenixTTL();
     }
 }

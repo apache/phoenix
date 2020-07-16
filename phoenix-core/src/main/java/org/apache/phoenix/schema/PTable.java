@@ -802,19 +802,19 @@ public interface PTable extends PMetaDataEntity {
     boolean hasViewModifiedUseStatsForParallelization();
 
     /**
-     * @return The VIEW_TTL duration associated with the view.
+     * @return The PHOENIX_TTL duration associated with the entity.
      */
-    long getViewTTL();
+    long getPhoenixTTL();
 
     /**
-     * @return The VIEW_TTL high water mark timestamp associated with the view.
+     * @return The PHOENIX_TTL high water mark timestamp associated with the entity.
      */
-    long getViewTTLHighWaterMark();
+    long getPhoenixTTLHighWaterMark();
 
     /**
-     * @return If the view has overridden the TTL set at the parent view level.
+     * @return If the view has overridden the TTL set at the parent entity level.
      */
-    boolean hasViewModifiedViewTTL();
+    boolean hasViewModifiedPhoenixTTL();
 
     /**
      * Class to help track encoded column qualifier counters per column family.

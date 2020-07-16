@@ -106,9 +106,9 @@ message PTable {
   optional int32 viewIndexIdType = 39 [default = 5];
   optional bool viewModifiedUpdateCacheFrequency = 40;
   optional bool viewModifiedUseStatsForParallelization = 41;
-  optional int64 viewTTL = 42;
-  optional int64 viewTTLHighWaterMark = 43;
-  optional bool viewModifiedViewTTL = 44;
+  optional int64 phoenixTTL = 42;
+  optional int64 phoenixTTLHighWaterMark = 43;
+  optional bool viewModifiedPhoenixTTL = 44;
 }
 
 message EncodedCQCounter {
