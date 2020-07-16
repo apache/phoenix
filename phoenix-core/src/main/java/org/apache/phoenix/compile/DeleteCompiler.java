@@ -522,7 +522,7 @@ public class DeleteCompiler {
         // that is being upserted for conflict detection purposes.
         // If we have immutable indexes, we'd increase the number of bytes scanned by executing
         // separate queries against each index, so better to drive from a single table in that case.
-        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasClientSideIndexes;
+        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasClientSideIndexes && allowServerMutations;
         HintNode hint = delete.getHint();
         if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
             select = SelectStatement.create(select, HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE));
@@ -536,26 +536,8 @@ public class DeleteCompiler {
         queryPlans = Lists.newArrayList(!clientSideIndexes.isEmpty()
                 ? optimizer.getApplicablePlans(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe)
                 : optimizer.getBestPlan(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe));
-        // Filter out any local indexes that don't contain all indexed columns.
-        // We have to do this manually because local indexes are still used
-        // when referenced columns aren't in the index, so they won't be
-        // filtered by the optimizer.
-        queryPlans = new ArrayList<>(queryPlans);
-        Iterator<QueryPlan> iterator = queryPlans.iterator();
-        while (iterator.hasNext()) {
-            QueryPlan plan = iterator.next();
-            if (plan.getTableRef().getTable().getIndexType() == IndexType.LOCAL) {
-                if (!plan.getContext().getDataColumns().isEmpty()) {
-                    iterator.remove();
-                }
-            }            
-        }
-        if (queryPlans.isEmpty()) {
-            queryPlans = Collections.singletonList(dataPlan);
-        }
-        
+
         runOnServer &= queryPlans.get(0).getTableRef().getTable().getType() != PTableType.INDEX;
-        runOnServer &= allowServerMutations;
 
         // We need to have all indexed columns available in all immutable indexes in order
         // to generate the delete markers from the query. We also cannot have any filters

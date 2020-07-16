@@ -50,13 +50,60 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
         conn.close();
     }
 
-    private void createIndex(String indexName, String tableName, String columns) throws SQLException {
+    private void createIndex(String indexName, String tableName, String columns, String includes, boolean local) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE INDEX " + indexName + " ON " + tableName + " (" + columns + ")";
+        String ddl = "CREATE " + (local ? "LOCAL " : "") + "INDEX " + indexName + " ON " + tableName + " (" + columns + ")" + (includes != null ? " INCLUDE (" + includes + ")" : "");
         conn.createStatement().execute(ddl);
         conn.close();
     }
     
+    @Test
+    public void testIndexDeleteOptimizationWithLocalIndex() throws Exception {
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
+        createBaseTable(dataTableName, null, null, false);
+        // create a local index that only covers k3
+        createIndex(indexTableName+"L", dataTableName, "k3", null, true);
+        // create a gloval index covering v1, and k3
+        createIndex(indexTableName+"G", dataTableName, "v1", "k3", false);
+
+        String query = "DELETE FROM " + dataTableName + " where k3 < 100";
+        try (Connection conn1 = DriverManager.getConnection(getUrl())) {
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(TO_CHAR(rand()*100),rand()*10000,rand()*10000,rand()*10000,TO_CHAR(rand()*100))");
+            for (int i=0; i<16; i++) {
+                conn1.createStatement().execute("UPSERT INTO " + dataTableName + " SELECT TO_CHAR(rand()*100),rand()*10000,rand()*10000,rand()*10000,TO_CHAR(rand()*100) FROM " + dataTableName);
+            }
+            ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
+            String expected =
+                    "DELETE ROWS CLIENT SELECT\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableName +" [1,*] - [1,100]\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "CLIENT MERGE SORT";
+            String actual = QueryUtil.getExplainPlan(rs);
+            assertEquals(expected, actual);
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + dataTableName);
+            rs.next();
+            int count = rs.getInt(1);
+            int deleted = conn1.createStatement().executeUpdate(query);
+            int expectedCount = count - deleted;
+
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + dataTableName);
+            rs.next();
+            count = rs.getInt(1);
+            assertEquals(expectedCount, count);
+
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName+"L");
+            rs.next();
+            count = rs.getInt(1);
+            assertEquals(expectedCount, count);
+
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName+"G");
+            rs.next();
+            count = rs.getInt(1);
+            assertEquals(expectedCount, count);
+        }
+    }
+
     @Test
     public void testGlobalIndexOptimization() throws Exception {
         String dataTableName = generateUniqueName();
@@ -98,7 +145,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('j',2,4,2,'a')");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('q',3,1,1,'c')");
             conn1.commit();
-            createIndex(indexTableName, dataTableName, "v1");
+            createIndex(indexTableName, dataTableName, "v1", null, false);
             
             String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
@@ -284,7 +331,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(2,4,2,'a')");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(3,1,1,'c')");
             conn1.commit();
-            createIndex(indexTableName, dataTableName, "v1");
+            createIndex(indexTableName, dataTableName, "v1", null, false);
             
             String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ k1,k2,k3,v1 FROM " + dataTableName +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
