@@ -153,12 +153,13 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     "Not a valid environment, should be loaded by PhoenixMetaDataControllerEnvironment");
         }
 
+        //2.3+ doesn't need to access ZK object.
         ZKWatcher zk = null;
         RegionCoprocessorEnvironment regionEnv = this.env.getRegionCoprocessorEnvironment();
         if (regionEnv instanceof HasRegionServerServices) {
             zk = ((HasRegionServerServices) regionEnv).getRegionServerServices().getZooKeeper();
         }
-        accessChecker = new AccessChecker(env.getConfiguration(), zk);
+        accessChecker = CompatPermissionUtil.newAccessChecker(env.getConfiguration(), zk);
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
         // init superusers and add the server principal (if using security)

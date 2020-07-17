@@ -15,12 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-{
-    "_comment": "Lists all phoenix compatible client versions against the current branch version for a given hbase profile If hbase profile is 1.3, phoenix client versions 4.14.3 and 4.15.0 are tested against current branch version",
-    "1.3": ["4.14.3", "4.15.0"],
-    "1.4": ["4.14.3", "4.15.0"],
-    "1.5": ["4.15.0"],
-    "2.1": ["5.1.0"],
-    "2.2": ["5.1.0"],
-    "2.3": ["5.1.0"]
+package org.apache.phoenix.compat.hbase;
+
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Table;
+
+public abstract class CompatOmidTransactionTable implements Table {
+
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        throw new UnsupportedOperationException();
+    }
 }

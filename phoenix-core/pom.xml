@@ -493,6 +493,33 @@
 
   </dependencies>
 
+<profiles>
+  <profile>
+    <id>phoenix-hbase-compat-2.3.0</id>
+    <!-- keep enforcer plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+    <properties>
+      <dnsjava.version>2.1.7</dnsjava.version>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>dnsjava</groupId>
+        <artifactId>dnsjava</artifactId>
+        <version>${dnsjava.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </profile>
+</profiles>
   <reporting>
       <plugins>
           <plugin>

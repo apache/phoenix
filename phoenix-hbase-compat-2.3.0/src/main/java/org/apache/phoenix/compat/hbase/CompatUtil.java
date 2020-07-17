@@ -19,37 +19,54 @@ package org.apache.phoenix.compat.hbase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
-
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
+import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
+import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
-import org.apache.hadoop.hbase.security.access.AccessControlLists;
 import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
+
 
 public class CompatUtil {
 
     private CompatUtil() {
-        // Not to be instantiated
+        //Not to be instantiated
     }
 
     public static int getCellSerializedSize(Cell cell) {
-        return org.apache.hadoop.hbase.KeyValueUtil.length(cell);
+        return cell.getSerializedSize();
     }
 
-    public static ListMultimap<String, ? extends Permission> readPermissions(byte[] data,
-            Configuration conf) throws DeserializationException {
-        return AccessControlLists.readPermissions(data, conf);
+    public static ListMultimap<String, ? extends Permission> readPermissions(
+            byte[] data, Configuration conf) throws DeserializationException {
+        return PermissionStorage.readPermissions(data, conf);
+    }
+
+    public static HFileContext createHFileContext(Configuration conf, Algorithm compression,
+            Integer blockSize, DataBlockEncoding encoding, CellComparator comparator) {
+
+        return new HFileContextBuilder()
+            .withCompression(compression)
+            .withChecksumType(HStore.getChecksumType(conf))
+            .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
+            .withBlockSize(blockSize)
+            .withDataBlockEncoding(encoding)
+            .build();
     }
 
     public static HFileContextBuilder withComparator(HFileContextBuilder contextBuilder,
             CellComparatorImpl cellComparator) {
-        return contextBuilder;
+        return contextBuilder.withCellComparator(cellComparator);
     }
 
     public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
             CellComparatorImpl cellComparator) {
-        return builder.withComparator(cellComparator);
+        return builder;
     }
 }

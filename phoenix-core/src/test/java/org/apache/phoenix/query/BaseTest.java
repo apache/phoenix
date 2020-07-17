@@ -900,7 +900,7 @@ public abstract class BaseTest {
         deletePriorSchemas(ts, url);
     }
 
-    private static void deletePriorTables(long ts, String url) throws Exception {
+    public static void deletePriorTables(long ts, String url) throws Exception {
         deletePriorTables(ts, (String)null, url);
     }
     

@@ -53,8 +53,6 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -118,7 +116,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 }
                 if (result == null || result.isEmpty()) {
                     List<RegionInfo> mergeRegions =
-                            CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
+                            MetaTableAccessor.getMergeRegions(ctx.getEnvironment().getConnection(),
                                 region.getRegionInfo().getRegionName());
                     if (mergeRegions == null || mergeRegions.isEmpty()){
                         return reader;

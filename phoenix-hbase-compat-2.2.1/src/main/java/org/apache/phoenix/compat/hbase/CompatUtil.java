@@ -17,26 +17,38 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
-import java.util.List;
-
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.MetaTableAccessor;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.exceptions.DeserializationException;
+import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
+import org.apache.hadoop.hbase.security.access.AccessControlLists;
+import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 
 public class CompatUtil {
 
     private CompatUtil() {
-        //Not to be instantiated
-    }
-
-    public static List<RegionInfo> getMergeRegions(Connection conn, byte[] regionName)
-            throws IOException {
-        return MetaTableAccessor.getMergeRegions(conn, regionName);
+        // Not to be instantiated
     }
 
     public static int getCellSerializedSize(Cell cell) {
         return cell.getSerializedSize();
+    }
+
+    public static ListMultimap<String, ? extends Permission> readPermissions(byte[] data,
+            Configuration conf) throws DeserializationException {
+        return AccessControlLists.readPermissions(data, conf);
+    }
+
+    public static HFileContextBuilder withComparator(HFileContextBuilder contextBuilder,
+            CellComparatorImpl cellComparator) {
+        return contextBuilder;
+    }
+
+    public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
+            CellComparatorImpl cellComparator) {
+        return builder.withComparator(cellComparator);
     }
 }
