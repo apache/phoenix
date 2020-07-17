@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
@@ -327,7 +328,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 }
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
-                FSUtils.setRootDir(configuration, rootDir);
+                CommonFSUtils.setRootDir(configuration, rootDir);
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,

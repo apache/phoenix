@@ -43,17 +43,17 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
+import org.apache.phoenix.compat.hbase.CompatDelegateHTable;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Message;
 import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 
-public class DelegateHTable implements Table {
-    protected final Table delegate;
+public class DelegateHTable extends CompatDelegateHTable implements Table {
 
     public DelegateHTable(Table delegate) {
-        this.delegate = delegate;
+        super(delegate);
     }
 
     @Override

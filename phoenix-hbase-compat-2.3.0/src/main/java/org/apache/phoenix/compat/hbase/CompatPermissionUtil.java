@@ -34,11 +34,12 @@ public class CompatPermissionUtil {
     }
 
     public static AccessChecker newAccessChecker(final Configuration conf, ZKWatcher zk) {
-        return new AccessChecker(conf, zk);
+        //Ignore ZK parameter
+        return new AccessChecker(conf);
     }
 
     public static void stopAccessChecker(AccessChecker accessChecker) throws IOException {
-        accessChecker.stop();
+        //NOOP
     }
 
     public static String getUserFromUP(UserPermission userPermission) {

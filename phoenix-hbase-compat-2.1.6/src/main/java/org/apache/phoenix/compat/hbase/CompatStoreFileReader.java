@@ -17,18 +17,23 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * {@link RpcScheduler} that first checks to see if this is an index or metedata update before
- * passing off the call to the delegate {@link RpcScheduler}.
- */
-public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
+import org.apache.hadoop.hbase.io.hfile.CacheConfig;
+import org.apache.hadoop.hbase.regionserver.StoreFileReader;
 
-    @Override
-    public int getMetaPriorityQueueLength() {
-        return this.delegate.getMetaPriorityQueueLength();
+public class CompatStoreFileReader extends StoreFileReader {
+
+    public CompatStoreFileReader(final FileSystem fs, final Path p,
+            final FSDataInputStreamWrapper in, long size, final CacheConfig cacheConf,
+            boolean primaryReplicaStoreFile, AtomicInteger refCount, final Configuration conf)
+            throws IOException {
+        super(fs, p, in, size, cacheConf, primaryReplicaStoreFile, refCount, false, conf);
     }
 
 }

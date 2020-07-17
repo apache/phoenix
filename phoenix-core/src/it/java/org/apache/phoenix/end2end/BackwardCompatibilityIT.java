@@ -106,6 +106,7 @@ public class BackwardCompatibilityIT {
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static String url;
+    private String tmpDir;
 
     public BackwardCompatibilityIT(String compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
@@ -118,6 +119,7 @@ public class BackwardCompatibilityIT {
 
     @Before
     public synchronized void doSetup() throws Exception {
+        tmpDir = System.getProperty("java.io.tmpdir");
         conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
@@ -136,6 +138,7 @@ public class BackwardCompatibilityIT {
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
         }
+        System.setProperty("java.io.tmpdir", tmpDir);
     }
     
     private static List<String> computeClientVersions() throws Exception {
