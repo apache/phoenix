@@ -30,6 +30,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.QueryPlan;
@@ -1008,6 +1010,43 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
                 QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
                 assertEquals(PTableType.INDEX, plan.getTableRef().getTable().getType());
             }
+        }
+    }
+
+    @Test
+    public void rvcOffsetTrailingVariableLengthKeyTest() throws Exception {
+        String TEST_DDL = "CREATE TABLE IF NOT EXISTS TEST_SCHEMA (\n"
+                + " ORGANIZATION_ID VARCHAR(15), \n" + " TEST_ID VARCHAR(15), \n"
+                + " CREATED_DATE DATE, \n" + " LAST_UPDATE DATE\n"
+                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")";
+
+        try (Statement statement = conn.createStatement()) {
+            statement.execute(TEST_DDL);
+        }
+        //setup
+        List<String> upserts = new ArrayList<>();
+        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('1','1')");
+        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('1','10')");
+        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('2','2')");
+
+        for(String sql : upserts) {
+            try (Statement statement = conn.createStatement())
+
+            { statement.execute(sql); }
+        }
+
+        conn.commit();
+
+        String query = "SELECT * FROM TEST_SCHEMA OFFSET (ORGANIZATION_ID,TEST_ID) = ('1','1')";
+
+        try (Statement statement = conn.createStatement() ; ResultSet rs2 = statement.executeQuery(query) ) {
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("10",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("2",rs2.getString(1));
+            assertEquals("2",rs2.getString(2));
+            assertFalse(rs2.next());
         }
     }
 
