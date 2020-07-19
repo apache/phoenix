@@ -336,6 +336,9 @@ public class ServerCacheClient {
         } finally {
             try {
                 if (!success) {
+                    if (hashCacheSpec != null) {
+                        SQLCloseables.closeAllQuietly(Collections.singletonList(hashCacheSpec));
+                    }
                     SQLCloseables.closeAllQuietly(Collections.singletonList(hashCacheSpec));
                     for (Future<Boolean> future : futures) {
                         future.cancel(true);
