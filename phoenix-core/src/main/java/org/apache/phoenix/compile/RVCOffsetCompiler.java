@@ -25,6 +25,7 @@ import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.parse.CastParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -185,24 +186,18 @@ public class RVCOffsetCompiler {
             throw new RowValueConstructorOffsetInternalErrorException(
                     "RVC Offset unexpected failure.");
         }
-        if (expression == null) {
+
+        //If the whereExpression is a single term comparison/isNull it will be entirely removed
+        if (expression == null && whereExpression instanceof AndExpression) {
             LOGGER.error("Unexpected error while compiling RVC Offset, got null expression.");
             throw new RowValueConstructorOffsetInternalErrorException(
                     "RVC Offset unexpected failure.");
         }
 
         // Now that columns etc have been resolved lets check to make sure they match the pk order
-        // Today the RowValueConstuctor Equality gets Rewritten into AND of EQ Ops.
-        if (!(whereExpression instanceof AndExpression)) {
-            LOGGER.warn("Unexpected error while compiling RVC Offset, expected AndExpression got "
-                    + whereExpression.getClass().getName());
-            throw new RowValueConstructorOffsetInternalErrorException(
-                    "RVC Offset must specify the tables PKs.");
-        }
-
         List<RowKeyColumnExpression>
                 rowKeyColumnExpressionList =
-                buildListOfRowKeyColumnExpressions(whereExpression.getChildren(), isIndex);
+                buildListOfRowKeyColumnExpressions(whereExpression, isIndex);
         if (rowKeyColumnExpressionList.size() != numUserColumns) {
             LOGGER.warn("Unexpected error while compiling RVC Offset, expected " + numUserColumns
                     + " found " + rowKeyColumnExpressionList.size());
@@ -272,7 +267,7 @@ public class RVCOffsetCompiler {
 
         //subtract 1 see ScanUtil.SINGLE_COLUMN_SLOT_SPAN is 0
         slotSpan[0] = columns.size() - 1;
-        byte[] key = ScanUtil.getMinKey(rowKeySchema,slots,slotSpan);
+        byte[] key = ScanUtil.getMinKey(rowKeySchema, slots, slotSpan);
 
         // Note the use of ByteUtil.nextKey() to generate exclusive offset
         CompiledOffset
@@ -283,19 +278,34 @@ public class RVCOffsetCompiler {
         return compiledOffset;
     }
 
-    @VisibleForTesting List<RowKeyColumnExpression> buildListOfRowKeyColumnExpressions(
-            List<Expression> expressions, boolean isIndex)
-            throws RowValueConstructorOffsetNotCoercibleException {
+    @VisibleForTesting
+    List<RowKeyColumnExpression> buildListOfRowKeyColumnExpressions (
+            Expression whereExpression, boolean isIndex)
+            throws RowValueConstructorOffsetNotCoercibleException, RowValueConstructorOffsetInternalErrorException {
+
+        List<Expression> expressions;
+        if((whereExpression instanceof AndExpression)) {
+            expressions = whereExpression.getChildren();
+        } else if (whereExpression instanceof ComparisonExpression || whereExpression instanceof IsNullExpression) {
+            expressions = Lists.newArrayList(whereExpression);
+        } else {
+            LOGGER.warn("Unexpected error while compiling RVC Offset, expected either a Comparison/IsNull Expression of a AndExpression got "
+                    + whereExpression.getClass().getName());
+            throw new RowValueConstructorOffsetInternalErrorException(
+                    "RVC Offset must specify the tables PKs.");
+        }
+
         List<RowKeyColumnExpression>
                 rowKeyColumnExpressionList =
                 new ArrayList<RowKeyColumnExpression>();
         for (Expression child : expressions) {
-            if (!(child instanceof ComparisonExpression)) {
+            if (!(child instanceof ComparisonExpression || child instanceof IsNullExpression)) {
                 LOGGER.warn("Unexpected error while compiling RVC Offset");
                 throw new RowValueConstructorOffsetNotCoercibleException(
                         "RVC Offset must specify the tables PKs.");
             }
 
+            //For either case comparison/isNull the first child should be the rowkey
             Expression possibleRowKeyColumnExpression = child.getChildren().get(0);
 
             // Note that since we store indexes in variable length form there may be casts from fixed types to
