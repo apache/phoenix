@@ -801,8 +801,8 @@ public interface PTable extends PMetaDataEntity {
     Boolean useStatsForParallelization();
     boolean hasViewModifiedUpdateCacheFrequency();
     boolean hasViewModifiedUseStatsForParallelization();
-    Map<String, String> getValues();
-    Map<String, String> getDefaultValues();
+    Map<String, String> getPropertyValues();
+    Map<String, String> getDefaultPropertyValues();
 
     /**
      * @return The VIEW_TTL duration associated with the view.

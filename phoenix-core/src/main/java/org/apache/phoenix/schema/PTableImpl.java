@@ -2069,12 +2069,12 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public Map<String, String> getValues() {
+    public Map<String, String> getPropertyValues() {
         return Collections.unmodifiableMap(values);
     }
 
     @Override
-    public Map<String, String> getDefaultValues() {
+    public Map<String, String> getDefaultPropertyValues() {
         Map<String, String> map = new HashMap<>();
         map.put(DISABLE_WAL, String.valueOf(DEFAULT_DISABLE_WAL));
         map.put(IMMUTABLE_ROWS, String.valueOf(DEFAULT_IMMUTABLE_ROWS));

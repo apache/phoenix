@@ -350,7 +350,7 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedViewTTL();
     }
 
-    @Override public Map<String, String> getValues() { return delegate.getValues(); }
+    @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
-    @Override public Map<String, String> getDefaultValues() { return delegate.getDefaultValues(); }
+    @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }
 }

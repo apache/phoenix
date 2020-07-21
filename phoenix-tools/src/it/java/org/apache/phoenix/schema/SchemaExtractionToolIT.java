@@ -1,8 +1,7 @@
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.schema;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.schema.SchemaExtractionTool;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -37,7 +36,8 @@ public class SchemaExtractionToolIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
             String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+            conn.createStatement().execute("CREATE TABLE "+ pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, "
+                    + "v1 VARCHAR, v2 VARCHAR)"
                     + properties);
             conn.commit();
             String [] args = {"-tb", tableName, "-s", schemaName};
@@ -104,14 +104,19 @@ public class SchemaExtractionToolIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
             String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
+                    + "v1 VARCHAR, v2 VARCHAR)"
                     + properties);
             String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
             String viewFullName1 = SchemaUtil.getQualifiedTableName(schemaName, viewName+"1");
 
 
-            String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) AS SELECT * FROM "+pTableFullName;
-            String createView1 = "CREATE VIEW "+viewFullName1 + "(id1 BIGINT, id2 BIGINT NOT NULL, id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) AS SELECT * FROM "+pTableFullName;
+            String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                    + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                    + "AS SELECT * FROM "+pTableFullName;
+            String createView1 = "CREATE VIEW "+viewFullName1 + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                    + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                    + "AS SELECT * FROM "+pTableFullName;
 
             conn.createStatement().execute(createView);
             conn.createStatement().execute(createView1);
@@ -138,12 +143,15 @@ public class SchemaExtractionToolIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
             String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
+                    + "v1 VARCHAR, v2 VARCHAR)"
                     + properties);
             String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
             String childviewName = SchemaUtil.getQualifiedTableName(schemaName, childView);
 
-            String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) AS SELECT * FROM "+pTableFullName;
+            String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                    + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                    + "AS SELECT * FROM "+pTableFullName;
 
             String createView1 = "CREATE VIEW "+childviewName + " AS SELECT * FROM "+viewFullName;
 
