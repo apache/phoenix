@@ -56,9 +56,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -66,6 +66,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -195,16 +196,36 @@ public class WhereCompiler {
         @Override
         protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
             ColumnRef ref = super.resolveColumn(node);
+            if (disambiguateWithFamily) {
+                return ref;
+            }
             PTable table = ref.getTable();
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we
             // just use that.
-            try {
-                if (!SchemaUtil.isPKColumn(ref.getColumn())) {
-                    table.getColumnForColumnName(ref.getColumn().getName().getString());
+            if (!SchemaUtil.isPKColumn(ref.getColumn())) {
+                if (!EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+                    try {
+                        table.getColumnForColumnName(ref.getColumn().getName().getString());
+                    } catch (AmbiguousColumnException e) {
+                        disambiguateWithFamily = true;
+                    }
+                } else {
+                    for (PColumnFamily columnFamily : table.getColumnFamilies()) {
+                        if (columnFamily.getName().equals(ref.getColumn().getFamilyName())) {
+                            continue;
+                        }
+                        try {
+                            table.getColumnForColumnQualifier(columnFamily.getName().getBytes(),
+                                ref.getColumn().getColumnQualifierBytes());
+                            // If we find the same qualifier name with different columnFamily,
+                            // then set disambiguateWithFamily to true
+                            disambiguateWithFamily = true;
+                            break;
+                        } catch (ColumnNotFoundException ignore) {
+                        }
+                    }
                 }
-            } catch (AmbiguousColumnException e) {
-                disambiguateWithFamily = true;
             }
             return ref;
          }
