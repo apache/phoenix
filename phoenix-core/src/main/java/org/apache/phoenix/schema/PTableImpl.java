@@ -197,7 +197,7 @@ public class PTableImpl implements PTable {
     private final long viewTTL;
     private final long viewTTLHighWaterMark;
     private final BitSet viewModifiedPropSet;
-    private Map<String, String> values;
+    private Map<String, String> propertyValues;
 
     public static class Builder {
         private PTableKey key;
@@ -254,7 +254,7 @@ public class PTableImpl implements PTable {
         private Boolean useStatsForParallelization;
         private long viewTTL;
         private long viewTTLHighWaterMark;
-        private Map<String, String> values = new HashMap<>();
+        private Map<String, String> propertyValues = new HashMap<>();
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -369,7 +369,7 @@ public class PTableImpl implements PTable {
 
         public Builder setBucketNum(Integer bucketNum) {
             if(bucketNum!=null) {
-                values.put(SALT_BUCKETS, String.valueOf(bucketNum));
+                propertyValues.put(SALT_BUCKETS, String.valueOf(bucketNum));
             }
             this.bucketNum = bucketNum;
             return this;
@@ -406,7 +406,7 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setImmutableRows(boolean immutableRows) {
-            values.put(IMMUTABLE_ROWS, String.valueOf(immutableRows));
+            propertyValues.put(IMMUTABLE_ROWS, String.valueOf(immutableRows));
             isImmutableRows = immutableRows;
             return this;
         }
@@ -432,13 +432,13 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setDisableWAL(boolean disableWAL) {
-            values.put(DISABLE_WAL, String.valueOf(disableWAL));
+            propertyValues.put(DISABLE_WAL, String.valueOf(disableWAL));
             this.disableWAL = disableWAL;
             return this;
         }
 
         public Builder setMultiTenant(boolean multiTenant) {
-            values.put(MULTI_TENANT, String.valueOf(multiTenant));
+            propertyValues.put(MULTI_TENANT, String.valueOf(multiTenant));
             this.multiTenant = multiTenant;
             return this;
         }
@@ -450,7 +450,7 @@ public class PTableImpl implements PTable {
 
         public Builder setTransactionProvider(TransactionFactory.Provider transactionProvider) {
             if(transactionProvider != null) {
-                values.put(TRANSACTION_PROVIDER, String.valueOf(transactionProvider));
+                propertyValues.put(TRANSACTION_PROVIDER, String.valueOf(transactionProvider));
             }
             this.transactionProvider = transactionProvider;
             return this;
@@ -502,7 +502,7 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setUpdateCacheFrequency(long updateCacheFrequency) {
-            values.put(UPDATE_CACHE_FREQUENCY, String.valueOf(updateCacheFrequency));
+            propertyValues.put(UPDATE_CACHE_FREQUENCY, String.valueOf(updateCacheFrequency));
             this.updateCacheFrequency = updateCacheFrequency;
             return this;
         }
@@ -513,25 +513,25 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setAutoPartitionSeqName(String autoPartitionSeqName) {
-            values.put(AUTO_PARTITION_SEQ, autoPartitionSeqName);
+            propertyValues.put(AUTO_PARTITION_SEQ, autoPartitionSeqName);
             this.autoPartitionSeqName = autoPartitionSeqName;
             return this;
         }
 
         public Builder setAppendOnlySchema(boolean appendOnlySchema) {
-            values.put(APPEND_ONLY_SCHEMA, String.valueOf(appendOnlySchema));
+            propertyValues.put(APPEND_ONLY_SCHEMA, String.valueOf(appendOnlySchema));
             isAppendOnlySchema = appendOnlySchema;
             return this;
         }
 
         public Builder setImmutableStorageScheme(ImmutableStorageScheme immutableStorageScheme) {
-            values.put(IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.toString());
+            propertyValues.put(IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.toString());
             this.immutableStorageScheme = immutableStorageScheme;
             return this;
         }
 
         public Builder setQualifierEncodingScheme(QualifierEncodingScheme qualifierEncodingScheme) {
-            values.put(ENCODING_SCHEME, qualifierEncodingScheme.toString());
+            propertyValues.put(ENCODING_SCHEME, qualifierEncodingScheme.toString());
             this.qualifierEncodingScheme = qualifierEncodingScheme;
             return this;
         }
@@ -543,7 +543,7 @@ public class PTableImpl implements PTable {
 
         public Builder setUseStatsForParallelization(Boolean useStatsForParallelization) {
             if(useStatsForParallelization!=null) {
-                values.put(USE_STATS_FOR_PARALLELIZATION, String.valueOf(useStatsForParallelization));
+                propertyValues.put(USE_STATS_FOR_PARALLELIZATION, String.valueOf(useStatsForParallelization));
             }
             this.useStatsForParallelization = useStatsForParallelization;
             return this;
@@ -850,7 +850,7 @@ public class PTableImpl implements PTable {
         this.viewTTL = builder.viewTTL;
         this.viewTTLHighWaterMark = builder.viewTTLHighWaterMark;
         this.viewModifiedPropSet = builder.viewModifiedPropSet;
-        this.values = builder.values;
+        this.propertyValues = builder.propertyValues;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -2070,7 +2070,7 @@ public class PTableImpl implements PTable {
 
     @Override
     public Map<String, String> getPropertyValues() {
-        return Collections.unmodifiableMap(values);
+        return Collections.unmodifiableMap(propertyValues);
     }
 
     @Override
