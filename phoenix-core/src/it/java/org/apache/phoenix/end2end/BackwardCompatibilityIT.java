@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.apache.phoenix.query.BaseTest.deletePriorTables;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -51,7 +50,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -65,8 +63,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -109,6 +106,7 @@ public class BackwardCompatibilityIT {
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static String url;
+    private String tmpDir;
 
     public BackwardCompatibilityIT(String compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
@@ -119,8 +117,9 @@ public class BackwardCompatibilityIT {
         return computeClientVersions();
     }
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
+    @Before
+    public synchronized void doSetup() throws Exception {
+        tmpDir = System.getProperty("java.io.tmpdir");
         conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
@@ -132,21 +131,14 @@ public class BackwardCompatibilityIT {
         checkForPreConditions();
     }
     
-    @AfterClass
-    public static void cleanUpAfterTest() throws Exception {
+    @After
+    public void cleanUpAfterTest() throws Exception {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
         }
-    }
-    
-    @After
-    public void DropTables() {
-        try {
-            deletePriorTables(HConstants.LATEST_TIMESTAMP, url);
-        } catch (Exception e) {
-        }
+        System.setProperty("java.io.tmpdir", tmpDir);
     }
     
     private static List<String> computeClientVersions() throws Exception {
