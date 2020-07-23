@@ -50,14 +50,17 @@ As Phoenix uses *limited public* HBase APIs, which sometimes change even within 
 Phoenix may not build or work with older releases of HBase, or ones that were released after
 Phoenix, even within the same HBase minor release.
 
-By default, Phoenix will be built for the latest supported HBase 1.x release. You can specify the
-targeted HBase minor release by setting the `hbase.profile` system property for maven.
+By default, Phoenix will be built for the latest known patch level of the earliest HBase 1.x
+minor release that Phoenix supports.
+
+You can specify the targeted HBase minor release by setting the `hbase.profile` system property for 
+maven.
 
 You can also specify the exact HBase release to build Phoenix with by additionally
 setting the `hbase.version` system property.
 
- * `mvn clean install` will build the for the latest known supported HBase 1.x relese
- * `mvn clean install -Dhbase.profile=1.4` will use the latest known supported HBase 1.1 release
+ * `mvn clean install` will use the latest known patch release of the the earliest supported HBase 1 minor relese
+ * `mvn clean install -Dhbase.profile=1.4` will use the latest known patch release of HBase 1.4
  * `mvn clean install -Dhbase.profile=1.4 -Dhbase.version=1.4.3` will build with HBase 1.4.3
 
 Phoenix verifies the specified `hbase.profile` and `hbase.version` properties, and will reject

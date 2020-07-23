@@ -1141,10 +1141,70 @@
     </profile>
     <!-- See BUILDING.md for profile selection -->
     <profile>
-      <id>phoenix-hbase-compat-1.5.0-default</id>
+      <id>phoenix-hbase-compat-1.3.0-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-1.3.0</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>1.3</hbase.profile>
+        <hbase.compat.version>1.3.0</hbase.compat.version>
+        <hbase.version>1.3.5</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.3.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.3</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-1.3.0</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>1.3</hbase.profile>
+        <hbase.compat.version>1.3.0</hbase.compat.version>
+        <hbase.version>1.3.5</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.4.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.4</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-1.4.0</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <hbase.profile>1.4</hbase.profile>
+        <hbase.compat.version>1.4.0</hbase.compat.version>
+        <hbase.version>1.4.10</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.5.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.5</value>
         </property>
       </activation>
       <dependencies>
@@ -1174,73 +1234,16 @@
         </dependency>
       </dependencies>
       <properties>
-        <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.profile>1.6</hbase.profile>
         <hadoop-two.version>2.8.5</hadoop-two.version>
+        <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.compat.version>1.5.0</hbase.compat.version>
         <hbase.version>1.6.0</hbase.version>
       </properties>
     </profile>
-    <profile>
-      <id>phoenix-hbase-compat-1.5.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>1.5</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-1.5.0</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hbase.profile>1.5</hbase.profile>
-        <hbase.compat.version>1.5.0</hbase.compat.version>
-        <hbase.version>1.5.0</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>phoenix-hbase-compat-1.4.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>1.4</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-1.4.0</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hbase.profile>1.4</hbase.profile>
-        <hbase.compat.version>1.4.0</hbase.compat.version>
-        <hbase.version>1.4.10</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>phoenix-hbase-compat-1.3.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>1.3</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-hbase-compat-1.3.0</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <hbase.profile>1.3</hbase.profile>
-        <hbase.compat.version>1.3.0</hbase.compat.version>
-        <hbase.version>1.3.5</hbase.version>
-      </properties>
-    </profile>
+
+
+
     <profile>
       <id>codecoverage</id>
       <activation>
