@@ -98,7 +98,7 @@
   
     <!-- shaded thirdparty dependencies -->
     <dependency>
-      <groupId>org.apache.phoenix</groupId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
       <artifactId>phoenix-shaded-guava</artifactId>
     </dependency>
     

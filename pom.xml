@@ -625,16 +625,9 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
         <version>${phoenix.thirdparty.version}</version>
-        <exclusions>
-          <exclusion>
-            <!-- MSHADE-206 MNG-5899 must exclude until moved to another repo -->
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
