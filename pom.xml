@@ -1466,59 +1466,17 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.2.1 profile -->
-      <id>phoenix-hbase-compat-2.2.1-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.1.6 profile -->
+      <id>phoenix-hbase-compat-2.1.6-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.1</hbase.compat.version>
-        <hbase.version>2.2.4</hbase.version>
-        <!-- PHOENIX-5993 We should use this, if we could,
-        as 2.2.4 is not the latest version, Hadoop 3.0.3 is unsupported with Hbase 2.2.x
-        <hbase.version>2.2.5</hbase.version>
-        <hadoop.version>3.1.2</hadoop.version>
-        -->
-      </properties>
-    </profile>
-    <profile>
-      <!-- PHOENIX-5993 This  won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.3.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.3</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.3</hbase.profile>
-        <hbase.compat.version>2.3.0</hbase.compat.version>
-        <hbase.version>2.3.0</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
-        <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>phoenix-hbase-compat-2.2.1</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.2</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.1</hbase.compat.version>
-        <hbase.version>2.2.4</hbase.version>
-        <!-- PHOENIX-5993 We should use this, if we could
-        <hbase.version>2.2.5</hbase.version>
-        <hadoop.version>3.1.2</hadoop.version>
-        -->
+        <hbase.profile>2.1</hbase.profile>
+        <hbase.compat.version>2.1.6</hbase.compat.version>
+        <hbase.version>2.1.9</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1534,6 +1492,42 @@
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
         <hbase.version>2.1.9</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.2.1</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.2</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.2</hbase.profile>
+        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <hbase.version>2.2.5</hbase.version>
+        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
+        <hadoop.version>3.1.2</hadoop.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.3.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.3</hbase.profile>
+        <hbase.compat.version>2.3.0</hbase.compat.version>
+        <hbase.version>2.3.0</hbase.version>
+        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
+        <hadoop.version>3.1.2</hadoop.version>
+        <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
     </profile>
     <profile>
