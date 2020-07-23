@@ -204,7 +204,8 @@ public class WhereCompiler {
             // using column family. If the column qualifier is enough, we
             // just use that.
             if (!SchemaUtil.isPKColumn(ref.getColumn())) {
-                if (!EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+                if (!EncodedColumnsUtil.usesEncodedColumnNames(table)
+                    || ref.getColumn().isDynamic()) {
                     try {
                         table.getColumnForColumnName(ref.getColumn().getName().getString());
                     } catch (AmbiguousColumnException e) {
