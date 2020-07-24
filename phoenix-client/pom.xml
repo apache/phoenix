@@ -123,6 +123,8 @@
               <pattern>com.fasterxml</pattern>
               <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
             </relocation>
+            <!-- Phoenix uses phoenix-thirdparty Guava, but we still want to shade away any Guava we
+            may get as a transitive dependency (from Hadoop) -->
             <relocation>
               <pattern>com.google</pattern>
               <shadedPattern>${shaded.package}.com.google</shadedPattern>
