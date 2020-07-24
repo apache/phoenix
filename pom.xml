@@ -888,7 +888,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-shaded</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
           <exclusion>

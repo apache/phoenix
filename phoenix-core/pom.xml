@@ -142,8 +142,13 @@
         <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
           <ignoredUsedUndeclaredDependencies>
+            <!-- Either maven-dependency-plugin is buggy,
+            or it does something else than I think it does -->
             <ignoredUsedUndeclaredDependency>
               dnsjava:dnsjava
+            </ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>
+              com.google.guava:guava
             </ignoredUsedUndeclaredDependency>
           </ignoredUsedUndeclaredDependencies>
         </configuration>
@@ -350,7 +355,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-shaded</artifactId>
+      <artifactId>tephra-core-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
