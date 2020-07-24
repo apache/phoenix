@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.printResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -878,6 +879,67 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 conn.createStatement().execute("DELETE FROM " + tableName);
             } catch (Exception e) {
                 fail("Should not throw any exception");
+            }
+        }
+    }
+
+    @Test
+    public void testDeleteFilterWithMultipleIndexes() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName +
+                " (PKEY1 CHAR(15) NOT NULL, PKEY2 CHAR(15) NOT NULL, VAL1 CHAR(15), VAL2 CHAR(15)," +
+                " CONSTRAINT PK PRIMARY KEY (PKEY1, PKEY2)) ";
+        String indexName1 = generateUniqueName();
+        String indexDdl1 = "CREATE INDEX IF NOT EXISTS " + indexName1 + " ON " + tableName + " (VAL1)";
+        String indexName2 = generateUniqueName();
+        String indexDdl2 = "CREATE INDEX IF NOT EXISTS " + indexName2 + " ON " + tableName + " (VAL2)";
+        String delete = "DELETE FROM " + tableName + " WHERE VAL1 = '000000000000000' limit 1";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(ddl);
+            }
+            conn.createStatement().execute("upsert into " + tableName +" values ('PKEY1', 'PKEY2', '000000000000000', 'VAL2')");
+            conn.commit();
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(indexDdl1);
+            }
+        }
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try (Statement statement = conn.createStatement()) {
+                ResultSet rs = statement.executeQuery("EXPLAIN " + delete);
+                String explainPlan = QueryUtil.getExplainPlan(rs);
+                // Verify index is used for the delete query
+                IndexToolIT.assertExplainPlan(false, explainPlan, tableName, indexName1);
+            }
+            // Created the second index
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(indexDdl2);
+            }
+            try (Statement statement = conn.createStatement()) {
+                ResultSet rs = statement.executeQuery("EXPLAIN " + delete);
+                String explainPlan = QueryUtil.getExplainPlan(rs);
+                // Verify index is used for the delete query
+                IndexToolIT.assertExplainPlan(false, explainPlan, tableName, indexName1);
+                statement.executeUpdate(delete);
+                // Count the number of rows
+                String query = "SELECT COUNT(*) from " + tableName;
+                // There should be no rows on the data table
+                rs = conn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+                query = "SELECT COUNT(*) from " + indexName1;
+                // There should be no rows on any of the index tables
+                rs = conn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+                query = "SELECT COUNT(*) from " + indexName2;
+                // There should be no rows on any of the index tables
+                rs = conn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
             }
         }
     }
