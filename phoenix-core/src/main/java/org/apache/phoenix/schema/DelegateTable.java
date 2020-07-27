@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -138,9 +139,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public List<PTable> getIndexes() {
-        return delegate.getIndexes();
-    }
+    public List<PTable> getIndexes() { return delegate.getIndexes(); }
 
     @Override
     public PIndexState getIndexState() {
@@ -350,4 +349,8 @@ public class DelegateTable implements PTable {
     @Override public boolean hasViewModifiedPhoenixTTL() {
         return delegate.hasViewModifiedPhoenixTTL();
     }
+
+    @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
+
+    @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }
 }
