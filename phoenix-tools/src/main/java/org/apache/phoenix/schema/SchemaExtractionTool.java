@@ -30,7 +30,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
     private String pSchemaName;
 
     public static Configuration conf;
-    public String output;
+    private String output;
 
     @Override
     public int run(String[] args) throws Exception {
@@ -39,6 +39,10 @@ public class SchemaExtractionTool extends Configured implements Tool {
         SchemaExtractionProcessor processor = new SchemaExtractionProcessor(conf, pSchemaName, pTableName);
         output = processor.process();
         return 0;
+    }
+
+    public String getOutput() {
+        return output;
     }
 
     private void populateToolAttributes(String[] args) {

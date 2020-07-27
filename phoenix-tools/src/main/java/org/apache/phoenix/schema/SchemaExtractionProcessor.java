@@ -36,6 +36,8 @@ public class SchemaExtractionProcessor {
 
     private PTable table;
     private Configuration conf;
+    private String ddl = null;
+
     public SchemaExtractionProcessor(Configuration conf, String pSchemaName, String pTableName)
             throws SQLException {
         this.conf = conf;
@@ -43,7 +45,9 @@ public class SchemaExtractionProcessor {
     }
 
     public String process() throws Exception {
-        String ddl = null;
+        if (ddl != null) {
+            return ddl;
+        }
         if(this.table.getType().equals(PTableType.TABLE)) {
             ddl = extractCreateTableDDL(this.table);
         } else if(this.table.getType().equals(PTableType.INDEX)) {

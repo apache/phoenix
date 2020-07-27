@@ -45,7 +45,7 @@ public class SchemaExtractionToolIT extends BaseTest {
             SchemaExtractionTool set = new SchemaExtractionTool();
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
-            String actualProperties = set.output.substring(set.output.lastIndexOf(")")+1).replace(" ","");
+            String actualProperties = set.getOutput().substring(set.getOutput().lastIndexOf(")")+1).replace(" ","");
             Assert.assertEquals(3, actualProperties.split(",").length);
         }
     }
@@ -81,15 +81,15 @@ public class SchemaExtractionToolIT extends BaseTest {
 
             String [] args = {"-tb", indexName, "-s", schemaName};
             set.run(args);
-            Assert.assertEquals(createIndexStatement.toUpperCase(), set.output.toUpperCase());
+            Assert.assertEquals(createIndexStatement.toUpperCase(), set.getOutput().toUpperCase());
 
             String [] args1 = {"-tb", indexName1, "-s", schemaName};
             set.run(args1);
-            Assert.assertEquals(createIndexStatement1.toUpperCase(), set.output.toUpperCase());
+            Assert.assertEquals(createIndexStatement1.toUpperCase(), set.getOutput().toUpperCase());
 
             String [] args2 = {"-tb", indexName2, "-s", schemaName};
             set.run(args2);
-            Assert.assertEquals(createIndexStatement2.toUpperCase(), set.output.toUpperCase());
+            Assert.assertEquals(createIndexStatement2.toUpperCase(), set.getOutput().toUpperCase());
         }
     }
 
@@ -126,7 +126,7 @@ public class SchemaExtractionToolIT extends BaseTest {
             SchemaExtractionTool set = new SchemaExtractionTool();
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
-            Assert.assertEquals(createView.toUpperCase(), set.output.toUpperCase());
+            Assert.assertEquals(createView.toUpperCase(), set.getOutput().toUpperCase());
         }
     }
 
@@ -166,7 +166,7 @@ public class SchemaExtractionToolIT extends BaseTest {
             SchemaExtractionTool set = new SchemaExtractionTool();
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
-            Assert.assertEquals(createIndexStatement.toUpperCase(), set.output.toUpperCase());
+            Assert.assertEquals(createIndexStatement.toUpperCase(), set.getOutput().toUpperCase());
         }
     }
 }
