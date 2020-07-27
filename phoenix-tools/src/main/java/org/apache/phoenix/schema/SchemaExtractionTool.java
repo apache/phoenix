@@ -25,9 +25,12 @@ public class SchemaExtractionTool extends Configured implements Tool {
             "[Required] Table name ex. table1");
     private static final Option SCHEMA_OPTION = new Option("s", "schema", true,
             "[Optional] Schema name ex. schema");
+    private static final Option TENANT_OPTION = new Option("t", "tenant", true,
+            "[Optional] Tenant Id ex. abc");
 
     private String pTableName;
     private String pSchemaName;
+    private String tenantId;
 
     public static Configuration conf;
     private String output;
@@ -36,7 +39,8 @@ public class SchemaExtractionTool extends Configured implements Tool {
     public int run(String[] args) throws Exception {
         populateToolAttributes(args);
         conf = HBaseConfiguration.addHbaseResources(getConf());
-        SchemaExtractionProcessor processor = new SchemaExtractionProcessor(conf, pSchemaName, pTableName);
+        SchemaExtractionProcessor processor = new SchemaExtractionProcessor(tenantId,
+                conf, pSchemaName, pTableName);
         output = processor.process();
         return 0;
     }
@@ -50,6 +54,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
             CommandLine cmdLine = parseOptions(args);
             pTableName = cmdLine.getOptionValue(TABLE_OPTION.getOpt());
             pSchemaName = cmdLine.getOptionValue(SCHEMA_OPTION.getOpt());
+            tenantId = cmdLine.getOptionValue(TENANT_OPTION.getOpt());
             LOGGER.info("Schema Extraction Tool initiated: " + StringUtils.join( args, ","));
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
@@ -81,6 +86,8 @@ public class SchemaExtractionTool extends Configured implements Tool {
         options.addOption(TABLE_OPTION);
         SCHEMA_OPTION.setOptionalArg(true);
         options.addOption(SCHEMA_OPTION);
+        TENANT_OPTION.setOptionalArg(true);
+        options.addOption(TENANT_OPTION);
         return options;
     }
 

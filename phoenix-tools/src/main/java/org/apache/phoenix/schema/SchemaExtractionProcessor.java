@@ -27,6 +27,9 @@ import java.util.Set;
 
 public class SchemaExtractionProcessor {
 
+    public static final String
+            FEATURE_NOT_SUPPORTED_ON_EXTRACTION_TOOL =
+            "Multiple CF feature not supported on extraction tool";
     Map<String, String> defaultProps = new HashMap<>();
     Map<String, String> definedProps = new HashMap<>();
 
@@ -37,9 +40,12 @@ public class SchemaExtractionProcessor {
     private PTable table;
     private Configuration conf;
     private String ddl = null;
+    private String tenantId;
 
-    public SchemaExtractionProcessor(Configuration conf, String pSchemaName, String pTableName)
+    public SchemaExtractionProcessor(String tenantId, Configuration conf,
+            String pSchemaName, String pTableName)
             throws SQLException {
+        this.tenantId = tenantId;
         this.conf = conf;
         this.table = getPTable(pSchemaName, pTableName);
     }
@@ -47,6 +53,9 @@ public class SchemaExtractionProcessor {
     public String process() throws Exception {
         if (ddl != null) {
             return ddl;
+        }
+        if(this.table.getColumnFamilies().size() > 1 ) {
+            throw new RuntimeException(FEATURE_NOT_SUPPORTED_ON_EXTRACTION_TOOL);
         }
         if(this.table.getType().equals(PTableType.TABLE)) {
             ddl = extractCreateTableDDL(this.table);
@@ -185,7 +194,6 @@ public class SchemaExtractionProcessor {
     }
 
     public String extractCreateTableDDL(PTable table) throws IOException, SQLException {
-
         String pSchemaName = table.getSchemaName().getString();
         String pTableName = table.getTableName().getString();
 
@@ -296,6 +304,9 @@ public class SchemaExtractionProcessor {
     }
 
     public Connection getConnection() throws SQLException {
+        if(tenantId!=null) {
+            conf.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
         return ConnectionUtil.getInputConnection(conf);
     }
 

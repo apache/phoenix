@@ -2,6 +2,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -11,6 +12,7 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Collections;
 
 import java.util.Map;
@@ -48,6 +50,45 @@ public class SchemaExtractionToolIT extends BaseTest {
             String actualProperties = set.getOutput().substring(set.getOutput().lastIndexOf(")")+1).replace(" ","");
             Assert.assertEquals(3, actualProperties.split(",").length);
         }
+    }
+
+    @Test
+    public void testCreateTableStatement_tenant() throws Exception {
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String tenantId = "abc";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        SchemaExtractionTool set;
+        String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
+        String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                + "AS SELECT * FROM "+pTableFullName;
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+
+            conn.createStatement().execute("CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
+                    + "v1 VARCHAR, v2 VARCHAR)"
+                    + properties);
+            set = new SchemaExtractionTool();
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            conn.commit();
+        }
+        try (Connection conn = getTenantConnection(getUrl(), tenantId)) {
+            conn.createStatement().execute(createView);
+            conn.commit();
+        }
+        String [] args = {"-tb", viewName, "-s", schemaName, "-t", tenantId};
+        set.run(args);
+        Assert.assertEquals(createView.toUpperCase(), set.getOutput().toUpperCase());
+    }
+
+    private Connection getTenantConnection(String url, String tenantId) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(url, props);
     }
 
     @Test
