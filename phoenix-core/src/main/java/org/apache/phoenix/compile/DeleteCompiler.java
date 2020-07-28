@@ -89,11 +89,13 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.sun.istack.NotNull;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class DeleteCompiler {
     private static ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -195,6 +197,12 @@ public class DeleteCompiler {
                     // The data table is always the last one in the list if it's
                     // not chosen as the best of the possible plans.
                     dataTable = otherTableRefs.get(otherTableRefs.size()-1).getTable();
+                    if (!isMaintainedOnClient(table)) {
+                        // dataTable is a projected table and may not include all the indexed columns and so we need to get
+                        // the actual data table
+                        dataTable = PhoenixRuntime.getTable(connection,
+                                SchemaUtil.getTableName(dataTable.getSchemaName().getString(), dataTable.getTableName().getString()));
+                    }
                     scannedIndexMaintainer = IndexMaintainer.create(dataTable, table, connection);
                 }
                 maintainers = new IndexMaintainer[otherTableRefs.size()];
@@ -486,19 +494,22 @@ public class DeleteCompiler {
             projectedColumns.add(column);
             aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
         }
-        // Project all non PK indexed columns so that we can do the proper index maintenance
+        // Project all non PK indexed columns so that we can do the proper index maintenance on the indexes for which
+        // mutations are generated on the client side. Indexed columns are needed to identify index rows to be deleted
         for (PTable index : table.getIndexes()) {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
-            // Go through maintainer as it handles functional indexes correctly
-            for (Pair<String,String> columnInfo : maintainer.getIndexedColumnInfo()) {
-                String familyName = columnInfo.getFirst();
-                if (familyName != null) {
-                    String columnName = columnInfo.getSecond();
-                    boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
-                    PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
-                    if(!projectedColumns.contains(column)) {
-                        projectedColumns.add(column);
-                        aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+            if (isMaintainedOnClient(index)) {
+                IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+                // Go through maintainer as it handles functional indexes correctly
+                for (Pair<String, String> columnInfo : maintainer.getIndexedColumnInfo()) {
+                    String familyName = columnInfo.getFirst();
+                    if (familyName != null) {
+                        String columnName = columnInfo.getSecond();
+                        boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
+                        PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
+                        if (!projectedColumns.contains(column)) {
+                            projectedColumns.add(column);
+                            aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+                        }
                     }
                 }
             }
