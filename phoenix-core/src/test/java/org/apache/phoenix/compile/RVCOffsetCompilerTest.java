@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
@@ -119,9 +120,10 @@ public class RVCOffsetCompilerTest {
         AndExpression expression = mock(AndExpression.class);
         Mockito.when(expression.getChildren()).thenReturn(expressions);
 
+        RVCOffsetCompiler.RowKeyColumnExpressionOutput
+                output = offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
         List<RowKeyColumnExpression>
-                result =
-                offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+                result = output.getRowKeyColumnExpressions();
 
         assertEquals(2,result.size());
         assertEquals(rvc1,result.get(0));
@@ -156,9 +158,10 @@ public class RVCOffsetCompilerTest {
         AndExpression expression = mock(AndExpression.class);
         Mockito.when(expression.getChildren()).thenReturn(expressions);
 
+        RVCOffsetCompiler.RowKeyColumnExpressionOutput
+                output = offsetCompiler.buildListOfRowKeyColumnExpressions(expression, true);
         List<RowKeyColumnExpression>
-                result =
-                offsetCompiler.buildListOfRowKeyColumnExpressions(expression, true);
+                result = output.getRowKeyColumnExpressions();
 
         assertEquals(2,result.size());
         assertEquals(rvc1,result.get(0));
@@ -175,9 +178,10 @@ public class RVCOffsetCompilerTest {
 
         Mockito.when(expression.getChildren()).thenReturn(Lists.<Expression>newArrayList(rvc));
 
+        RVCOffsetCompiler.RowKeyColumnExpressionOutput
+                output = offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
         List<RowKeyColumnExpression>
-                result =
-                offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+                result = output.getRowKeyColumnExpressions();
 
         assertEquals(1,result.size());
         assertEquals(rvc,result.get(0));
@@ -193,12 +197,14 @@ public class RVCOffsetCompilerTest {
 
         Mockito.when(expression.getChildren()).thenReturn(Lists.<Expression>newArrayList(rvc));
 
-        List<RowKeyColumnExpression>
-                result =
-                offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+        RVCOffsetCompiler.RowKeyColumnExpressionOutput output = offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+
+        List<RowKeyColumnExpression> result = output.getRowKeyColumnExpressions();
 
         assertEquals(1,result.size());
         assertEquals(rvc,result.get(0));
+
+        assertTrue(output.isTrailingNull());
     }
 
     @Test
@@ -220,13 +226,14 @@ public class RVCOffsetCompilerTest {
         AndExpression expression = mock(AndExpression.class);
         Mockito.when(expression.getChildren()).thenReturn(expressions);
 
-        List<RowKeyColumnExpression>
-                result =
-                offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+        RVCOffsetCompiler.RowKeyColumnExpressionOutput output = offsetCompiler.buildListOfRowKeyColumnExpressions(expression, false);
+
+        List<RowKeyColumnExpression> result = output.getRowKeyColumnExpressions();
 
         assertEquals(2,result.size());
         assertEquals(rvc1,result.get(0));
-
         assertEquals(rvc2,result.get(1));
+
+        assertTrue(output.isTrailingNull());
     }
 }
