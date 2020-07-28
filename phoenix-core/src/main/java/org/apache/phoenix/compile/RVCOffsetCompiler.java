@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
+import com.ibm.icu.impl.number.Parse;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -32,6 +33,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OffsetNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
@@ -45,6 +47,7 @@ import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryExcep
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,9 +198,12 @@ public class RVCOffsetCompiler {
         }
 
         // Now that columns etc have been resolved lets check to make sure they match the pk order
-        List<RowKeyColumnExpression>
-                rowKeyColumnExpressionList =
+        RowKeyColumnExpressionOutput rowKeyColumnExpressionOutput =
                 buildListOfRowKeyColumnExpressions(whereExpression, isIndex);
+
+        List<RowKeyColumnExpression>
+                rowKeyColumnExpressionList = rowKeyColumnExpressionOutput.getRowKeyColumnExpressions();
+
         if (rowKeyColumnExpressionList.size() != numUserColumns) {
             LOGGER.warn("Unexpected error while compiling RVC Offset, expected " + numUserColumns
                     + " found " + rowKeyColumnExpressionList.size());
@@ -240,34 +246,41 @@ public class RVCOffsetCompiler {
             }
         }
 
+        byte[] key;
+
         // check to see if this was a single key expression
         ScanRanges scanRanges = context.getScanRanges();
 
+        //We do not generate a point lookup today in phoenix if the rowkey has a trailing null, we generate a range scan.
         if (!scanRanges.isPointLookup()) {
-            throw new RowValueConstructorOffsetNotCoercibleException(
-                    "RVC Offset must be a point lookup.");
+            //Since we use a range scan to guarantee we get only the null value and the upper bound is unset this suffices
+            //sanity check
+            if (!rowKeyColumnExpressionOutput.isTrailingNull()) {
+                throw new RowValueConstructorOffsetNotCoercibleException(
+                        "RVC Offset must be a point lookup.");
+            }
+            key = scanRanges.getScanRange().getUpperRange();
+        } else {
+            RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(columns.size());
+
+            for (PColumn column : columns) {
+                builder.addField(column, column.isNullable(), column.getSortOrder());
+            }
+
+            RowKeySchema rowKeySchema = builder.build();
+
+            //we make a ScanRange with 1 keyslots that cover the entire PK to reuse the code
+            KeyRange pointKeyRange = scanRanges.getScanRange();
+            KeyRange keyRange = KeyRange.getKeyRange(pointKeyRange.getLowerRange(), false, KeyRange.UNBOUND, true);
+            List<KeyRange> myRangeList = Lists.newArrayList(keyRange);
+            List<List<KeyRange>> slots = new ArrayList<>();
+            slots.add(myRangeList);
+            int[] slotSpan = new int[1];
+
+            //subtract 1 see ScanUtil.SINGLE_COLUMN_SLOT_SPAN is 0
+            slotSpan[0] = columns.size() - 1;
+            key = ScanUtil.getMinKey(rowKeySchema, slots, slotSpan);
         }
-
-
-        RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(columns.size());
-
-        for(PColumn column : columns) {
-            builder.addField(column, column.isNullable(), column.getSortOrder());
-        }
-
-        RowKeySchema rowKeySchema = builder.build();
-
-        //we make a ScanRange with 1 keyslots that cover the entire PK to reuse the code
-        KeyRange pointKeyRange = scanRanges.getScanRange();
-        KeyRange keyRange = KeyRange.getKeyRange(pointKeyRange.getLowerRange(), false, KeyRange.UNBOUND, true);
-        List<KeyRange> myRangeList = Lists.newArrayList(keyRange);
-        List<List<KeyRange>> slots = new ArrayList<>();
-        slots.add(myRangeList);
-        int[] slotSpan = new int[1];
-
-        //subtract 1 see ScanUtil.SINGLE_COLUMN_SLOT_SPAN is 0
-        slotSpan[0] = columns.size() - 1;
-        byte[] key = ScanUtil.getMinKey(rowKeySchema, slots, slotSpan);
 
         // Note the use of ByteUtil.nextKey() to generate exclusive offset
         CompiledOffset
@@ -279,10 +292,30 @@ public class RVCOffsetCompiler {
     }
 
     @VisibleForTesting
-    List<RowKeyColumnExpression> buildListOfRowKeyColumnExpressions (
+    static class RowKeyColumnExpressionOutput {
+        public RowKeyColumnExpressionOutput(List<RowKeyColumnExpression> rowKeyColumnExpressions, boolean trailingNull) {
+            this.rowKeyColumnExpressions = rowKeyColumnExpressions;
+            this.trailingNull = trailingNull;
+        }
+
+        private final List<RowKeyColumnExpression> rowKeyColumnExpressions;
+        private final boolean trailingNull;
+
+        public List<RowKeyColumnExpression> getRowKeyColumnExpressions() {
+            return rowKeyColumnExpressions;
+        }
+
+        public boolean isTrailingNull() {
+            return trailingNull;
+        }
+    }
+
+    @VisibleForTesting
+    RowKeyColumnExpressionOutput buildListOfRowKeyColumnExpressions (
             Expression whereExpression, boolean isIndex)
             throws RowValueConstructorOffsetNotCoercibleException, RowValueConstructorOffsetInternalErrorException {
 
+        boolean trailingNull = false;
         List<Expression> expressions;
         if((whereExpression instanceof AndExpression)) {
             expressions = whereExpression.getChildren();
@@ -298,11 +331,19 @@ public class RVCOffsetCompiler {
         List<RowKeyColumnExpression>
                 rowKeyColumnExpressionList =
                 new ArrayList<RowKeyColumnExpression>();
-        for (Expression child : expressions) {
+        for (int i = 0; i < expressions.size(); i++) {
+            Expression child = expressions.get(i);
             if (!(child instanceof ComparisonExpression || child instanceof IsNullExpression)) {
                 LOGGER.warn("Unexpected error while compiling RVC Offset");
                 throw new RowValueConstructorOffsetNotCoercibleException(
                         "RVC Offset must specify the tables PKs.");
+            }
+
+            //if this is the last position
+            if(i == expressions.size() - 1) {
+                if(child instanceof IsNullExpression) {
+                    trailingNull = true;
+                }
             }
 
             //For either case comparison/isNull the first child should be the rowkey
@@ -325,7 +366,7 @@ public class RVCOffsetCompiler {
             }
             rowKeyColumnExpressionList.add((RowKeyColumnExpression) possibleRowKeyColumnExpression);
         }
-        return rowKeyColumnExpressionList;
+        return new RowKeyColumnExpressionOutput(rowKeyColumnExpressionList,trailingNull);
     }
 
     @VisibleForTesting List<ColumnParseNode> buildListOfColumnParseNodes(
