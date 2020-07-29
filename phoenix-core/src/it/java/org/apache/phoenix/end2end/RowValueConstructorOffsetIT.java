@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -1116,19 +1117,22 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     @Test
     public void rvcOffsetTrailingVariableLengthKeyTest() throws Exception {
-        String TEST_DDL = "CREATE TABLE IF NOT EXISTS TEST_SCHEMA (\n"
+
+        String tableName = generateUniqueName();
+        String ddl = String.format("CREATE TABLE IF NOT EXISTS %s (\n"
                 + " ORGANIZATION_ID VARCHAR(15), \n" + " TEST_ID VARCHAR(15), \n"
                 + " CREATED_DATE DATE, \n" + " LAST_UPDATE DATE\n"
-                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")";
+                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")",tableName);
 
         try (Statement statement = conn.createStatement()) {
-            statement.execute(TEST_DDL);
+            statement.execute(ddl);
         }
         //setup
+        String upsert = "UPSERT INTO %s(ORGANIZATION_ID,TEST_ID) VALUES (%s,%s)";
         List<String> upserts = new ArrayList<>();
-        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('1','1')");
-        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('1','10')");
-        upserts.add("UPSERT INTO TEST_SCHEMA(ORGANIZATION_ID,TEST_ID) VALUES ('2','2')");
+        upserts.add(String.format(upsert,tableName,"'1'","'1'"));
+        upserts.add(String.format(upsert,tableName,"'1'","'10'"));
+        upserts.add(String.format(upsert,tableName,"'2'","'2'"));
 
         for(String sql : upserts) {
             try (Statement statement = conn.createStatement()) {
@@ -1137,7 +1141,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         }
         conn.commit();
 
-        String query = "SELECT * FROM TEST_SCHEMA OFFSET (ORGANIZATION_ID,TEST_ID) = ('1','1')";
+        String query = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = ('1','1')",tableName);
 
         try (Statement statement = conn.createStatement() ; ResultSet rs2 = statement.executeQuery(query) ) {
             assertTrue(rs2.next());
@@ -1147,6 +1151,71 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
             assertEquals("2",rs2.getString(1));
             assertEquals("2",rs2.getString(2));
             assertFalse(rs2.next());
+        }
+    }
+
+    //Note that phoenix does not suport a rowkey with a null inserted so there is no single key version of this.
+    @Test
+    public void rvcOffsetTrailingNullKeyTest() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = String.format("CREATE TABLE IF NOT EXISTS %s (\n"
+                + " ORGANIZATION_ID VARCHAR(15), \n" + " TEST_ID VARCHAR(15), \n"
+                + " CREATED_DATE DATE, \n" + " LAST_UPDATE DATE\n"
+                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")",tableName);
+
+        try (Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+        //setup
+        String upsert = "UPSERT INTO %s(ORGANIZATION_ID,TEST_ID) VALUES (%s,%s)";
+        List<String> upserts = new ArrayList<>();
+        upserts.add(String.format(upsert,tableName,"'0'","null"));
+        upserts.add(String.format(upsert,tableName,"'1'","null"));
+        upserts.add(String.format(upsert,tableName,"'1'","'1'"));
+        upserts.add(String.format(upsert,tableName,"'1'","'10'"));
+        upserts.add(String.format(upsert,tableName,"'2'","null"));
+
+        for(String sql : upserts) {
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(sql);
+            }
+        }
+        conn.commit();
+
+        String query = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = ('1',null)",tableName);
+
+        try (Statement statement = conn.createStatement() ; ResultSet rs2 = statement.executeQuery(query) ) {
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("1",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("10",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("2",rs2.getString(1));
+            assertNull(rs2.getString(2));
+            assertFalse(rs2.next());
+        }
+
+        String preparedQuery = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = (?,?)",tableName);
+
+        try (PreparedStatement statement = conn.prepareStatement(preparedQuery)  ) {
+
+            statement.setString(1,"1");
+            statement.setString(2,null);
+
+            try(ResultSet rs2 = statement.executeQuery()) {
+                assertTrue(rs2.next());
+                assertEquals("1", rs2.getString(1));
+                assertEquals("1", rs2.getString(2));
+                assertTrue(rs2.next());
+                assertEquals("1", rs2.getString(1));
+                assertEquals("10", rs2.getString(2));
+                assertTrue(rs2.next());
+                assertEquals("2", rs2.getString(1));
+                assertNull(rs2.getString(2));
+                assertFalse(rs2.next());
+            }
         }
     }
 
