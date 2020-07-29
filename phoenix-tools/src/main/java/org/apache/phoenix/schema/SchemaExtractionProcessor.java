@@ -1,9 +1,12 @@
 package org.apache.phoenix.schema;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+import com.google.inject.internal.util.$ImmutableCollection;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -19,18 +22,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class SchemaExtractionProcessor {
 
-    public static final String
-            FEATURE_NOT_SUPPORTED_ON_EXTRACTION_TOOL =
-            "Multiple CF feature not supported on extraction tool";
+    public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES = ImmutableList.of(
+            HColumnDescriptor.TTL,
+            HColumnDescriptor.KEEP_DELETED_CELLS,
+            HColumnDescriptor.REPLICATION_SCOPE);
     Map<String, String> defaultProps = new HashMap<>();
     Map<String, String> definedProps = new HashMap<>();
 
@@ -198,12 +197,11 @@ public class SchemaExtractionProcessor {
 
         ConnectionQueryServices cqsi = getCQSIObject();
         HTableDescriptor htd = getTableDescriptor(cqsi, table);
-        HColumnDescriptor hcd = htd.getFamily(SchemaUtil.getEmptyColumnFamily(table));
-
+        HColumnDescriptor[] hcds = htd.getColumnFamilies();
         populateDefaultProperties(table);
         setPTableProperties(table);
         setHTableProperties(htd);
-        setHColumnFamilyProperties(hcd);
+        setHColumnFamilyProperties(hcds);
 
         String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString();
@@ -249,12 +247,31 @@ public class SchemaExtractionProcessor {
         }
     }
 
-    private void setHColumnFamilyProperties(HColumnDescriptor columnDescriptor) {
-        Map<ImmutableBytesWritable, ImmutableBytesWritable> propsMap = columnDescriptor.getValues();
-        for (Map.Entry<ImmutableBytesWritable, ImmutableBytesWritable> entry : propsMap.entrySet()) {
+    private void setHColumnFamilyProperties(HColumnDescriptor[] columnDescriptors) {
+        Map<ImmutableBytesWritable, ImmutableBytesWritable> propsMap = columnDescriptors[0].getValues();
+        for(Map.Entry<ImmutableBytesWritable, ImmutableBytesWritable> entry : propsMap.entrySet()){
             ImmutableBytesWritable key = entry.getKey();
-            ImmutableBytesWritable value = entry.getValue();
-            definedProps.put(Bytes.toString(key.get()), Bytes.toString(value.get()));
+            ImmutableBytesWritable defaultValue = entry.getValue();
+            Map<String, String> CFMap = new HashMap<String, String>();
+            Set<ImmutableBytesWritable> set = new HashSet<ImmutableBytesWritable>();
+            for(HColumnDescriptor columnDescriptor: columnDescriptors){
+                String columnFamilyName = Bytes.toString(columnDescriptor.getName());
+                ImmutableBytesWritable value = columnDescriptor.getValues().get(key);
+                // check if it is universal properties
+                if (SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(Bytes.toString(key.get()))){
+                    definedProps.put(Bytes.toString(key.get()), Bytes.toString(value.get()));
+                    continue;
+                }
+                CFMap.put(columnFamilyName, Bytes.toString(value.get()));
+                set.add(value);
+            }
+            if (set.size() > 1){
+                for(Map.Entry<String, String> mapEntry: CFMap.entrySet()){
+                    definedProps.put(String.format("%s.%s",  mapEntry.getKey(), Bytes.toString(key.get())), mapEntry.getValue());
+                }
+            } else {
+                definedProps.put(Bytes.toString(key.get()), Bytes.toString(defaultValue.get()));
+            }
         }
     }
 
@@ -277,14 +294,22 @@ public class SchemaExtractionProcessor {
 
     private String convertPropertiesToString() {
         StringBuilder optionBuilder = new StringBuilder();
-
         for(Map.Entry<String, String> entry : definedProps.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
+            String columnFamilyName = QueryConstants.DEFAULT_COLUMN_FAMILY;
+
+            String[] colPropKey = key.split("\\.");
+            if (colPropKey.length > 1) {
+                columnFamilyName = colPropKey[0];
+                key = colPropKey[1];
+            }
+
             if(value!=null && defaultProps.get(key) != null && !value.equals(defaultProps.get(key))) {
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }
+                key = columnFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)? key : String.format("\"%s\".%s", columnFamilyName, key);
                 optionBuilder.append(key+"="+value);
             }
         }

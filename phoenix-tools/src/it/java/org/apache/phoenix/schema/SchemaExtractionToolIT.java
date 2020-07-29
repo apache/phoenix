@@ -13,10 +13,7 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Collections;
-
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -33,22 +30,21 @@ public class SchemaExtractionToolIT extends BaseTest {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        String createTable = "CREATE TABLE "+ pTableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, "
+                + "V1 VARCHAR, V2 VARCHAR) TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-
-            String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-            conn.createStatement().execute("CREATE TABLE "+ pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, "
-                    + "v1 VARCHAR, v2 VARCHAR)"
-                    + properties);
+            conn.createStatement().execute(createTable);
             conn.commit();
             String [] args = {"-tb", tableName, "-s", schemaName};
 
             SchemaExtractionTool set = new SchemaExtractionTool();
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
-            String actualProperties = set.getOutput().substring(set.getOutput().lastIndexOf(")")+1).replace(" ","");
-            Assert.assertEquals(3, actualProperties.split(",").length);
+            //String actualProperties = set.getOutput().substring(set.getOutput().lastIndexOf(")")+1).replace(" ","");
+            Assert.assertEquals(createTable, set.getOutput().toUpperCase());
         }
     }
 
@@ -308,6 +304,63 @@ public class SchemaExtractionToolIT extends BaseTest {
     }
 
     @Test
+    public void testCreateTableWithUniversalCFProperties() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+            String query = "create table " + pTableFullName +
+                    "(a_char CHAR(15) NOT NULL, " +
+                    "b_char CHAR(10) NOT NULL, " +
+                    "\"av\".\"_\" CHAR(1), " +
+                    "\"bv\".\"_\" CHAR(1), " +
+                    "\"cv\".\"_\" CHAR(1), " +
+                    "\"dv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+            conn.createStatement().execute(query);
+            conn.commit();
+            String[] args = {"-tb", tableName, "-s", schemaName};
+            SchemaExtractionTool set = new SchemaExtractionTool();
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            set.run(args);
+
+            Assert.assertEquals(query.toUpperCase(), set.getOutput().toUpperCase());
+        }
+    }
+
+
+    @Test
+    public void testCreateTableWithMultipleCFs() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String properties = "\"av\".VERSIONS=2, \"bv\".VERSIONS=3, " +
+                "\"cv\".VERSIONS=4, DATA_BLOCK_ENCODING=DIFF, " +
+                "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, DISABLE_TABLE_SOR=true, MULTI_TENANT=true";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+            String query = "create table " + pTableFullName +
+                    "(a_char CHAR(15) NOT NULL, " +
+                    "b_char CHAR(10) NOT NULL, " +
+                    "\"av\".\"_\" CHAR(1), " +
+                    "\"bv\".\"_\" CHAR(1), " +
+                    "\"cv\".\"_\" CHAR(1), " +
+                    "\"dv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+            conn.createStatement().execute(query);
+            conn.commit();
+            String[] args = {"-tb", tableName, "-s", schemaName};
+            SchemaExtractionTool set = new SchemaExtractionTool();
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            set.run(args);
+
+            Assert.assertEquals(true, compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
+        }
+    }
+
+    @Test
     public void testCreateIndexStatementWithColumnFamily() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -326,5 +379,15 @@ public class SchemaExtractionToolIT extends BaseTest {
             set.run(args2);
             Assert.assertEquals(createIndexStatement.toUpperCase(), set.getOutput().toUpperCase());
         }
+    }
+
+    private boolean compareProperties(String prop1, String prop2){
+        String[] propArray1 = prop1.toUpperCase().replaceAll("\\s+","").split(",");
+        String[] propArray2 = prop2.toUpperCase().replaceAll("\\s+","").split(",");
+
+        Set<String> set1 = new HashSet<>(Arrays.asList(propArray1));
+        Set<String> set2 = new HashSet<>(Arrays.asList(propArray2));
+
+        return set1.equals(set2);
     }
 }
