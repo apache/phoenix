@@ -355,9 +355,8 @@ public class SchemaExtractionToolIT extends BaseTest {
         }
     }
 
-
     @Test
-    public void testCreateTableWithMultipleCFs() throws Exception {
+    public void testCreateTableWithMultipleCFProperties() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -381,12 +380,12 @@ public class SchemaExtractionToolIT extends BaseTest {
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
 
-            Assert.assertEquals(true, compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
+            Assert.assertTrue(compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
         }
     }
 
     @Test
-    public void testCreateTableWithMultipleCFs2() throws Exception {
+    public void testCreateTableWithMultipleCFProperties2() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

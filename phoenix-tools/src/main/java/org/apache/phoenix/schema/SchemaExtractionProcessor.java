@@ -254,7 +254,7 @@ public class SchemaExtractionProcessor {
             ImmutableBytesWritable globalValue = entry.getValue();
             Map<String, String> cfToPropertyValueMap = new HashMap<String, String>();
             Set<ImmutableBytesWritable> cfPropertyValueSet = new HashSet<ImmutableBytesWritable>();
-            for(HColumnDescriptor columnDescriptor: columnDescriptors){
+            for(HColumnDescriptor columnDescriptor: columnDescriptors) {
                 String columnFamilyName = Bytes.toString(columnDescriptor.getName());
                 ImmutableBytesWritable value = columnDescriptor.getValues().get(key);
                 // check if it is universal properties
