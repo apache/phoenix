@@ -292,7 +292,8 @@ public class AddColumnMutator implements ColumnMutator {
                                                          Region region,
                                                          List<ImmutableBytesPtr> invalidateList,
                                                          List<Region.RowLock> locks,
-                                                         long clientTimeStamp) {
+                                                         long clientTimeStamp,
+                                                         long clientVersion) {
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];

@@ -51,7 +51,8 @@ public interface ColumnMutator {
                                                                    List<Mutation> tableMetadata, Region region,
                                                                    List<ImmutableBytesPtr> invalidateList,
                                                                    List<Region.RowLock> locks,
-                                                                   long clientTimeStamp)
+                                                                   long clientTimeStamp,
+                                                                   long clientVersion)
             throws IOException, SQLException;
 
     /**

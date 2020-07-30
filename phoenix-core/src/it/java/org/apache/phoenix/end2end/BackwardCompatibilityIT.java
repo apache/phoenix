@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assume.assumeFalse;
 
@@ -83,20 +84,24 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class BackwardCompatibilityIT {
 
     private static final String SQL_DIR = "sql_files/";
-    private static final String RESULT_DIR = "gold_files/";
+    private static final String RESULTS_AND_GOLD_FILES_DIR = "gold_files/";
     private static final String COMPATIBLE_CLIENTS_JSON = 
             "compatible_client_versions.json";
     private static final String BASH = "/bin/bash";
     private static final String EXECUTE_QUERY_SH = "scripts/execute_query.sh";
+    private static final String QUERY_PREFIX = "query_";
     private static final String RESULT_PREFIX = "result_";
+    private static final String GOLD_PREFIX = "gold_";
     private static final String SQL_EXTENSION = ".sql";
     private static final String TEXT_EXTENSION = ".txt";
     private static final String CREATE_ADD = "create_add";
+    private static final String CREATE_DIVERGED_VIEW = "create_diverged_view";
     private static final String ADD_DATA = "add_data";
     private static final String ADD_DELETE = "add_delete";
-    private static final String QUERY = "query";
-    private static final String QUERY_MORE = "query_more";
-    private static final String QUERY_ADD_DELETE = "query_add_delete";
+    private static final String QUERY_CREATE_ADD = QUERY_PREFIX + CREATE_ADD;
+    private static final String QUERY_ADD_DATA = QUERY_PREFIX + ADD_DATA;
+    private static final String QUERY_ADD_DELETE = QUERY_PREFIX + ADD_DELETE;
+    private static final String QUERY_CREATE_DIVERGED_VIEW = QUERY_PREFIX + CREATE_DIVERGED_VIEW;
     private static final String MVN_HOME = "maven.home";
     private static final String JAVA_TMP_DIR = "java.io.tmpdir";
 
@@ -172,15 +177,58 @@ public class BackwardCompatibilityIT {
     public void testUpsertWithOldClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithOldClientReadFromNewClient() throws Exception {
+        // Create a base table, view and make it diverge from an old client
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithOldClientReadFromOldClient() throws Exception {
+        // Create a base table, view and make it diverge from an old client
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_DIVERGED_VIEW);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithOldClientReadFromOldClientAfterUpgrade()
+            throws Exception {
+        // Create a base table, view and make it diverge from an old client
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW);
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Just connect with a new client to cause a metadata upgrade
+        }
+        // Query with an old client again
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_DIVERGED_VIEW);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithNewClientReadFromOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_DIVERGED_VIEW);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithNewClientReadFromNewClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }
 
     /**
      * Scenario: 
      * 1. New Client connects to the updated server 
      * 2. New Client creates tables and inserts data 
-     * 3. Old Client reads the data inserted by the old client
+     * 3. Old Client reads the data inserted by the new client
      * 
      * @throws Exception thrown if any errors encountered during query execution or file IO
      */
@@ -188,8 +236,8 @@ public class BackwardCompatibilityIT {
     public void testSelectWithOldClient() throws Exception {
         // Insert data with new client and read with old client
         executeQueriesWithCurrentVersion(CREATE_ADD);
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
     }
 
     /**
@@ -206,13 +254,13 @@ public class BackwardCompatibilityIT {
     public void testSelectUpsertWithNewClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Insert more data with new client and read with old client
         executeQueriesWithCurrentVersion(ADD_DATA);
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY_MORE);
-        assertExpectedOutput(ADD_DATA, QUERY_MORE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ADD_DATA);
+        assertExpectedOutput(QUERY_ADD_DATA);
     }
 
     /**
@@ -229,13 +277,13 @@ public class BackwardCompatibilityIT {
     public void testSelectUpsertWithOldClient() throws Exception {
         // Insert data with new client and read with old client
         executeQueriesWithCurrentVersion(CREATE_ADD);
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Insert more data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, ADD_DATA);
-        executeQueriesWithCurrentVersion(QUERY_MORE);
-        assertExpectedOutput(ADD_DATA, QUERY_MORE);
+        executeQueriesWithCurrentVersion(QUERY_ADD_DATA);
+        assertExpectedOutput(QUERY_ADD_DATA);
     }
 
     /**
@@ -251,13 +299,13 @@ public class BackwardCompatibilityIT {
     public void testUpsertDeleteWithOldClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Deletes with the old client
         executeQueryWithClientVersion(compatibleClientVersion, ADD_DELETE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_ADD_DELETE);
-        assertExpectedOutput(ADD_DELETE, QUERY_ADD_DELETE);
+        assertExpectedOutput(QUERY_ADD_DELETE);
     }
 
     /**
@@ -273,13 +321,13 @@ public class BackwardCompatibilityIT {
     public void testUpsertDeleteWithNewClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueriesWithCurrentVersion(CREATE_ADD);
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY);
-        assertExpectedOutput(CREATE_ADD, QUERY);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
+        assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Deletes with the new client
         executeQueriesWithCurrentVersion(ADD_DELETE);
         executeQueriesWithCurrentVersion(QUERY_ADD_DELETE);
-        assertExpectedOutput(ADD_DELETE, QUERY_ADD_DELETE);
+        assertExpectedOutput(QUERY_ADD_DELETE);
     }
     
     private void checkForPreConditions() throws Exception {
@@ -312,10 +360,12 @@ public class BackwardCompatibilityIT {
                 .getResource(SQL_DIR + operation + SQL_EXTENSION);
         assertNotNull(fileUrl);
         cmdParams.add(new File(fileUrl.getFile()).getAbsolutePath());
-        fileUrl = BackwardCompatibilityIT.class.getClassLoader().getResource(RESULT_DIR);
+        fileUrl = BackwardCompatibilityIT.class.getClassLoader().getResource(
+                RESULTS_AND_GOLD_FILES_DIR);
         assertNotNull(fileUrl);
-        cmdParams.add(new File(fileUrl.getFile()).getAbsolutePath() + "/" +
-                RESULT_PREFIX + operation + TEXT_EXTENSION);
+        String resultFilePath = new File(fileUrl.getFile()).getAbsolutePath() + "/" +
+                RESULT_PREFIX + operation + TEXT_EXTENSION;
+        cmdParams.add(resultFilePath);
         cmdParams.add(System.getProperty(JAVA_TMP_DIR));
 
         if (System.getProperty(MVN_HOME) != null) {
@@ -342,7 +392,9 @@ public class BackwardCompatibilityIT {
         };
         errorStreamThread.start();
         p.waitFor();
-        assertEquals(sb.toString(), 0, p.exitValue());
+        assertEquals(String.format("Executing the query failed%s. Check the result file: %s",
+                sb.length() > 0 ? sb.append(" with : ").toString() : "", resultFilePath),
+                0, p.exitValue());
     }
 
     // Executes the SQL commands listed in the given operation file from the sql_files directory
@@ -365,7 +417,8 @@ public class BackwardCompatibilityIT {
             ResultSet rs;
             String[] sqlCommands = sb.toString().split(";");
 
-            URL fileUrl = BackwardCompatibilityIT.class.getClassLoader().getResource(RESULT_DIR);
+            URL fileUrl = BackwardCompatibilityIT.class.getClassLoader().getResource(
+                    RESULTS_AND_GOLD_FILES_DIR);
             assertNotNull(fileUrl);
             final String resultFile = new File(fileUrl.getFile()).getAbsolutePath() + "/" +
                     RESULT_PREFIX + operation + TEXT_EXTENSION;
@@ -417,18 +470,18 @@ public class BackwardCompatibilityIT {
 
     // Compares the result file against the gold file to match for the expected output
     // for the given operation
-    private void assertExpectedOutput(String gold, String result) throws Exception {
+    private void assertExpectedOutput(String result) throws Exception {
         List<String> resultFile = Lists.newArrayList();
         List<String> goldFile = Lists.newArrayList();
         String line;
         try (BufferedReader resultFileReader = getBufferedReaderForResource(
-                RESULT_DIR + RESULT_PREFIX + result + TEXT_EXTENSION)) {
+                RESULTS_AND_GOLD_FILES_DIR + RESULT_PREFIX + result + TEXT_EXTENSION)) {
             while ((line = resultFileReader.readLine()) != null) {
                 resultFile.add(line.trim());
             }
         }
         try (BufferedReader goldFileReader = getBufferedReaderForResource(
-                RESULT_DIR + "gold_query_" + gold + TEXT_EXTENSION)) {
+                RESULTS_AND_GOLD_FILES_DIR + GOLD_PREFIX + result + TEXT_EXTENSION)) {
             while ((line = goldFileReader.readLine()) != null) {
                 line = line.trim();
                 if ( !(line.isEmpty() || line.startsWith("*") || line.startsWith("/"))) {
@@ -440,7 +493,8 @@ public class BackwardCompatibilityIT {
         // We take the first line in gold file and match against the result file to exclude any
         // other WARNING messages that comes as a result of the query execution
         int index = resultFile.indexOf(goldFile.get(0));
+        assertNotEquals("Mismatch found between gold file and result file", -1, index);
         resultFile = resultFile.subList(index, resultFile.size());
-        assertEquals(resultFile, goldFile);
+        assertEquals(goldFile, resultFile);
     }
 }
