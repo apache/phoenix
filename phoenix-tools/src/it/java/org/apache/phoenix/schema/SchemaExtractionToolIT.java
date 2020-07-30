@@ -31,7 +31,6 @@ public class SchemaExtractionToolIT extends BaseTest {
         String schemaName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
         String createTable = "CREATE TABLE "+ pTableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, "
                 + "V1 VARCHAR, V2 VARCHAR) TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
 
@@ -43,7 +42,6 @@ public class SchemaExtractionToolIT extends BaseTest {
             SchemaExtractionTool set = new SchemaExtractionTool();
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
-            //String actualProperties = set.getOutput().substring(set.getOutput().lastIndexOf(")")+1).replace(" ","");
             Assert.assertEquals(createTable, set.getOutput().toUpperCase());
         }
     }
@@ -330,6 +328,33 @@ public class SchemaExtractionToolIT extends BaseTest {
         }
     }
 
+    @Test
+    public void testCreateTableWithDefaultCFProperties() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1, DEFAULT_COLUMN_FAMILY=cv";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+            String query = "create table " + pTableFullName +
+                    "(a_char CHAR(15) NOT NULL, " +
+                    "b_char CHAR(10) NOT NULL, " +
+                    "\"av\".\"_\" CHAR(1), " +
+                    "\"bv\".\"_\" CHAR(1), " +
+                    "\"cv\".\"_\" CHAR(1), " +
+                    "\"dv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+            conn.createStatement().execute(query);
+            conn.commit();
+            String[] args = {"-tb", tableName, "-s", schemaName};
+            SchemaExtractionTool set = new SchemaExtractionTool();
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            set.run(args);
+
+            Assert.assertTrue(compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
+        }
+    }
+
 
     @Test
     public void testCreateTableWithMultipleCFs() throws Exception {
@@ -384,7 +409,7 @@ public class SchemaExtractionToolIT extends BaseTest {
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
             set.run(args);
 
-            Assert.assertEquals(true, compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
+            Assert.assertTrue(compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
         }
     }
 

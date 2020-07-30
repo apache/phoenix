@@ -1,12 +1,9 @@
 package org.apache.phoenix.schema;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
-import com.google.inject.internal.util.$ImmutableCollection;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -22,14 +19,17 @@ import org.apache.phoenix.util.SchemaUtil;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
+
+
+import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor {
-
-    public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES = ImmutableList.of(
-            HColumnDescriptor.TTL,
-            HColumnDescriptor.KEEP_DELETED_CELLS,
-            HColumnDescriptor.REPLICATION_SCOPE);
     Map<String, String> defaultProps = new HashMap<>();
     Map<String, String> definedProps = new HashMap<>();
 
@@ -249,28 +249,28 @@ public class SchemaExtractionProcessor {
 
     private void setHColumnFamilyProperties(HColumnDescriptor[] columnDescriptors) {
         Map<ImmutableBytesWritable, ImmutableBytesWritable> propsMap = columnDescriptors[0].getValues();
-        for(Map.Entry<ImmutableBytesWritable, ImmutableBytesWritable> entry : propsMap.entrySet()){
+        for(Map.Entry<ImmutableBytesWritable, ImmutableBytesWritable> entry : propsMap.entrySet()) {
             ImmutableBytesWritable key = entry.getKey();
-            ImmutableBytesWritable defaultValue = entry.getValue();
-            Map<String, String> CFMap = new HashMap<String, String>();
-            Set<ImmutableBytesWritable> set = new HashSet<ImmutableBytesWritable>();
+            ImmutableBytesWritable globalValue = entry.getValue();
+            Map<String, String> cfToPropertyValueMap = new HashMap<String, String>();
+            Set<ImmutableBytesWritable> cfPropertyValueSet = new HashSet<ImmutableBytesWritable>();
             for(HColumnDescriptor columnDescriptor: columnDescriptors){
                 String columnFamilyName = Bytes.toString(columnDescriptor.getName());
                 ImmutableBytesWritable value = columnDescriptor.getValues().get(key);
                 // check if it is universal properties
-                if (SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(Bytes.toString(key.get()))){
+                if (SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(Bytes.toString(key.get()))) {
                     definedProps.put(Bytes.toString(key.get()), Bytes.toString(value.get()));
-                    continue;
+                    break;
                 }
-                CFMap.put(columnFamilyName, Bytes.toString(value.get()));
-                set.add(value);
+                cfToPropertyValueMap.put(columnFamilyName, Bytes.toString(value.get()));
+                cfPropertyValueSet.add(value);
             }
-            if (set.size() > 1){
-                for(Map.Entry<String, String> mapEntry: CFMap.entrySet()){
+            if (cfPropertyValueSet.size() > 1) {
+                for(Map.Entry<String, String> mapEntry: cfToPropertyValueMap.entrySet()) {
                     definedProps.put(String.format("%s.%s",  mapEntry.getKey(), Bytes.toString(key.get())), mapEntry.getValue());
                 }
             } else {
-                definedProps.put(Bytes.toString(key.get()), Bytes.toString(defaultValue.get()));
+                definedProps.put(Bytes.toString(key.get()), Bytes.toString(globalValue.get()));
             }
         }
     }
@@ -413,15 +413,7 @@ public class SchemaExtractionProcessor {
         if (isArrayType) {
             String arrayPrefix = type.split("\\s+")[0];
             buf.append(arrayPrefix);
-            if (maxLength != null) {
-                buf.append('(');
-                buf.append(maxLength);
-                if (scale != null) {
-                    buf.append(',');
-                    buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
-                }
-                buf.append(')');
-            }
+            appendMaxLengthAndScale(buf, maxLength, scale);
             buf.append(' ');
             buf.append("ARRAY");
             if (arrSize != null) {
@@ -431,15 +423,7 @@ public class SchemaExtractionProcessor {
             }
         } else {
             buf.append(type);
-            if (maxLength != null) {
-                buf.append('(');
-                buf.append(maxLength);
-                if (scale != null) {
-                    buf.append(',');
-                    buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
-                }
-                buf.append(')');
-            }
+            appendMaxLengthAndScale(buf, maxLength, scale);
         }
 
         if (!column.isNullable()) {
@@ -448,6 +432,18 @@ public class SchemaExtractionProcessor {
         }
 
         return buf.toString();
+    }
+
+    private void appendMaxLengthAndScale(StringBuilder buf, Integer maxLength, Integer scale){
+        if (maxLength != null) {
+            buf.append('(');
+            buf.append(maxLength);
+            if (scale != null) {
+                buf.append(',');
+                buf.append(scale); // has both max length and scale. For ex- decimal(10,2)
+            }
+            buf.append(')');
+        }
     }
 
     private String extractPKColumnAttributes(PColumn column) {
