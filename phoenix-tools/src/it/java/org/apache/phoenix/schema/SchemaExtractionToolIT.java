@@ -361,6 +361,34 @@ public class SchemaExtractionToolIT extends BaseTest {
     }
 
     @Test
+    public void testCreateTableWithMultipleCFs2() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String properties = "\"av\".VERSIONS=2, \"bv\".VERSIONS=2, " +
+                "DATA_BLOCK_ENCODING=DIFF, " +
+                "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, DISABLE_TABLE_SOR=true, MULTI_TENANT=true";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+            String query = "create table " + pTableFullName +
+                    "(a_char CHAR(15) NOT NULL, " +
+                    "b_char CHAR(10) NOT NULL, " +
+                    "\"av\".\"_\" CHAR(1), " +
+                    "\"bv\".\"_\" CHAR(1), " +
+                    "\"cv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+            conn.createStatement().execute(query);
+            conn.commit();
+            String[] args = {"-tb", tableName, "-s", schemaName};
+            SchemaExtractionTool set = new SchemaExtractionTool();
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+            set.run(args);
+
+            Assert.assertEquals(true, compareProperties(properties, set.getOutput().substring(set.getOutput().lastIndexOf(")")+1)));
+        }
+    }
+
+    @Test
     public void testCreateIndexStatementWithColumnFamily() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
