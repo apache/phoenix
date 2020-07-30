@@ -2732,7 +2732,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         getParentPhysicalTableName(table), table.getType());
 
                 result = mutator.validateAndAddMetadata(table, rowKeyMetaData, tableMetadata, region,
-                        invalidateList, locks, clientTimeStamp,
+                        invalidateList, locks, clientTimeStamp, clientVersion,
                         ((ExtendedCellBuilder) env.getCellBuilder()));
                 // if the update mutation caused tables to be deleted, the mutation code returned
                 // will be MutationCode.TABLE_ALREADY_EXISTS

@@ -284,6 +284,15 @@ public class ViewUtil {
         return view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
     }
 
+    public static boolean isViewDiverging(PColumn columnToDelete, PTable view,
+            long clientVersion) {
+        // If we are dropping a column from a pre-4.15 client, the only way to know if the
+        // view is diverging is by comparing the base column count
+        return !isDivergedView(view) && (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG ?
+                columnToDelete.getPosition() < view.getBaseColumnCount() :
+                columnToDelete.isDerived());
+    }
+
     /**
      * Adds indexes of the parent table to inheritedIndexes if the index contains all required columns
      */
@@ -367,25 +376,29 @@ public class ViewUtil {
     }
 
     /**
-     * Inherit all columns from the parent unless its an excluded column if the same columns is present in the parent
-     * and child (for table metadata created before PHOENIX-3534) we chose the child column over the parent column
-     * @return table with inherited columns and indexes
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child (for table metadata created before
+     * PHOENIX-3534) we choose the child column over the parent column
+     * @return table with inherited columns
      */
     public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
-                                                               PTable table, PTable parentTable) throws SQLException {
+            PTable view, PTable parentTable) throws SQLException {
         // combine columns for view and view indexes
-        boolean hasIndexId = table.getViewIndexId() != null;
-        boolean isSalted = table.getBucketNum() != null;
-        boolean isDiverged = isDivergedView(table);
+        boolean hasIndexId = view.getViewIndexId() != null;
+        boolean isSalted = view.getBucketNum() != null;
+        boolean isDiverged = isDivergedView(view);
+        boolean isDivergedViewCreatedPre4_15 = isDiverged;
         List<PColumn> allColumns = Lists.newArrayList();
         List<PColumn> excludedColumns = Lists.newArrayList();
         // add my own columns first in reverse order
-        List<PColumn> myColumns = table.getColumns();
+        List<PColumn> myColumns = view.getColumns();
         // skip salted column as it will be created automatically
         myColumns = myColumns.subList(isSalted ? 1 : 0, myColumns.size());
         for (int i = myColumns.size() - 1; i >= 0; i--) {
             PColumn pColumn = myColumns.get(i);
             if (pColumn.isExcluded()) {
+                // Diverged views created pre-4.15 will not have EXCLUDED_COLUMN linking rows
+                isDivergedViewCreatedPre4_15 = false;
                 excludedColumns.add(pColumn);
             }
             allColumns.add(pColumn);
@@ -395,13 +408,13 @@ public class ViewUtil {
         // then remove the data columns that have not been dropped, so that we get the columns that
         // have been dropped
         Map<PColumn, List<String>> indexRequiredDroppedDataColMap =
-                Maps.newHashMapWithExpectedSize(table.getColumns().size());
+                Maps.newHashMapWithExpectedSize(view.getColumns().size());
         if (hasIndexId) {
-            int indexPosOffset = (isSalted ? 1 : 0) + (table.isMultiTenant() ? 1 : 0) + 1;
+            int indexPosOffset = (isSalted ? 1 : 0) + (view.isMultiTenant() ? 1 : 0) + 1;
             ColumnNameTrackingExpressionCompiler expressionCompiler =
                     new ColumnNameTrackingExpressionCompiler();
-            for (int i = indexPosOffset; i < table.getPKColumns().size(); i++) {
-                PColumn indexColumn = table.getPKColumns().get(i);
+            for (int i = indexPosOffset; i < view.getPKColumns().size(); i++) {
+                PColumn indexColumn = view.getPKColumns().get(i);
                 try {
                     expressionCompiler.reset();
                     String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
@@ -415,8 +428,8 @@ public class ViewUtil {
             }
         }
 
-        long maxTableTimestamp = table.getTimeStamp();
-        int numPKCols = table.getPKColumns().size();
+        long maxTableTimestamp = view.getTimeStamp();
+        int numPKCols = view.getPKColumns().size();
         // set the final table timestamp as the max timestamp of the view/view index or its ancestors
         maxTableTimestamp = Math.max(maxTableTimestamp, parentTable.getTimeStamp());
         if (hasIndexId) {
@@ -449,58 +462,10 @@ public class ViewUtil {
                     entry.getValue().remove(dataColumnName);
                 }
             }
-        } else {
-            List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(parentTable);
-            if (currAncestorTableCols != null) {
-                // add the ancestor columns in reverse order so that the final column list
-                // contains ancestor columns and then the view columns in the right order
-                for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
-                    PColumn column = currAncestorTableCols.get(j);
-                    // for diverged views we always include pk columns of the base table. We
-                    // have to include these pk columns to be able to support adding pk
-                    // columns to the diverged view
-                    // we only include regular columns that were created before the view
-                    // diverged
-                    if (isDiverged && column.getFamilyName() != null
-                            && column.getTimestamp() > table.getTimeStamp()) {
-                        continue;
-                    }
-                    // need to check if this column is in the list of excluded (dropped)
-                    // columns of the view
-                    int existingIndex = excludedColumns.indexOf(column);
-                    if (existingIndex != -1) {
-                        // if it is, only exclude the column if was created before the
-                        // column was dropped in the view in order to handle the case where
-                        // a base table column is dropped in a view, then dropped in the
-                        // base table and then added back to the base table
-                        if (column.getTimestamp() <= excludedColumns.get(existingIndex)
-                                .getTimestamp()) {
-                            continue;
-                        }
-                    }
-                    if (column.isExcluded()) {
-                        excludedColumns.add(column);
-                    } else {
-                        int existingColumnIndex = allColumns.indexOf(column);
-                        if (existingColumnIndex != -1) {
-                            // for diverged views if the view was created before
-                            // PHOENIX-3534 the parent table columns will be present in the
-                            // view PTable (since the base column count is
-                            // QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT we can't
-                            // filter them out) so we always pick the parent column
-                            // for non diverged views if the same column exists in a parent
-                            // and child, we keep the latest column
-                            PColumn existingColumn = allColumns.get(existingColumnIndex);
-                            if (isDiverged || column.getTimestamp() > existingColumn.getTimestamp()) {
-                                allColumns.remove(existingColumnIndex);
-                                allColumns.add(column);
-                            }
-                        } else {
-                            allColumns.add(column);
-                        }
-                    }
-                }
-            }
+        } else if (!isDivergedViewCreatedPre4_15) {
+            // For diverged views created by a pre-4.15 client, we don't need to inherit columns
+            // from its ancestors
+            inheritColumnsFromParent(view, parentTable, isDiverged, excludedColumns, allColumns);
         }
         // at this point indexRequiredDroppedDataColMap only contain the columns required by a view
         // index that have dropped
@@ -517,21 +482,13 @@ public class ViewUtil {
                 }
             }
         }
-        // remove the excluded columns if the timestamp of the excludedColumn is newer
-        for (PColumn excludedColumn : excludedColumns) {
-            int index = allColumns.indexOf(excludedColumn);
-            if (index != -1) {
-                if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
-                    allColumns.remove(excludedColumn);
-                }
-            }
-        }
+
         List<PColumn> columnsToAdd = Lists.newArrayList();
         int position = isSalted ? 1 : 0;
         // allColumns contains the columns in the reverse order
         for (int i = allColumns.size() - 1; i >= 0; i--) {
             PColumn column = allColumns.get(i);
-            if (table.getColumns().contains(column)) {
+            if (view.getColumns().contains(column)) {
                 // for views this column is not derived from an ancestor
                 columnsToAdd.add(new PColumnImpl(column, position++));
             } else {
@@ -545,12 +502,12 @@ public class ViewUtil {
                         : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
         // Inherit view-modifiable properties from the parent table/view if the current view has
         // not previously modified this property
-        Long updateCacheFreq = (table.getType() != PTableType.VIEW ||
-                table.hasViewModifiedUpdateCacheFrequency()) ?
-                table.getUpdateCacheFrequency() : parentTable.getUpdateCacheFrequency();
-        Boolean useStatsForParallelization = (table.getType() != PTableType.VIEW ||
-                table.hasViewModifiedUseStatsForParallelization()) ?
-                table.useStatsForParallelization() : parentTable.useStatsForParallelization();
+        long updateCacheFreq = (view.getType() != PTableType.VIEW ||
+                view.hasViewModifiedUpdateCacheFrequency()) ?
+                view.getUpdateCacheFrequency() : parentTable.getUpdateCacheFrequency();
+        Boolean useStatsForParallelization = (view.getType() != PTableType.VIEW ||
+                view.hasViewModifiedUseStatsForParallelization()) ?
+                view.useStatsForParallelization() : parentTable.useStatsForParallelization();
 
         // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
         // inherited from the physical base table.
@@ -559,7 +516,7 @@ public class ViewUtil {
         // if a TableProperty is valid on a view and is mutable on a view, we use the value set
         // on the view if the view had previously modified the property, otherwise we propagate the
         // value from the base table (see PHOENIX-4763)
-        PTable pTable = PTableImpl.builderWithColumns(table, columnsToAdd)
+        PTable pTable = PTableImpl.builderWithColumns(view, columnsToAdd)
                 .setImmutableRows(parentTable.isImmutableRows())
                 .setDisableWAL(parentTable.isWALDisabled())
                 .setMultiTenant(parentTable.isMultiTenant())
@@ -573,8 +530,7 @@ public class ViewUtil {
                         PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : parentTable.getEncodingScheme())
                 .setBaseColumnCount(baseTableColumnCount)
                 .setTimeStamp(maxTableTimestamp)
-                .setExcludedColumns(excludedColumns == null ?
-                        ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns))
+                .setExcludedColumns(ImmutableList.copyOf(excludedColumns))
                 .setUpdateCacheFrequency(updateCacheFreq)
                 .setUseStatsForParallelization(useStatsForParallelization)
                 .build();
@@ -584,7 +540,7 @@ public class ViewUtil {
         if (!hasIndexId) {
             // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
             List<PTable> allIndexes = Lists.newArrayList();
-            if (!pTable.getIndexes().isEmpty()) {
+            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
                 for (PTable viewIndex : pTable.getIndexes()) {
                     PTable resolvedViewIndex =
                             ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
@@ -602,6 +558,85 @@ public class ViewUtil {
             }
         }
         return pTable;
+    }
+
+    /**
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child
+     * (for table metadata created before PHOENIX-3534 or when
+     * {@link org.apache.phoenix.query.QueryServices#ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK} is
+     * enabled) we choose the child column over the parent column.
+     * Note that we don't need to call this method for views created before 4.15 since they
+     * already contain all the columns from their ancestors.
+     * @param view PTable of the view
+     * @param parentTable PTable of the view's parent
+     * @param isDiverged true if it is a diverged view
+     * @param excludedColumns list of excluded columns
+     * @param allColumns list of all columns. Initially this contains just the columns in the view.
+     *                   We will populate inherited columns by adding them to this list
+     */
+    static void inheritColumnsFromParent(PTable view, PTable parentTable,
+            boolean isDiverged, List<PColumn> excludedColumns, List<PColumn> allColumns) {
+        List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(parentTable);
+        if (currAncestorTableCols != null) {
+            // add the ancestor columns in reverse order so that the final column list
+            // contains ancestor columns and then the view columns in the right order
+            for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
+                PColumn ancestorColumn = currAncestorTableCols.get(j);
+                // for diverged views we always include pk columns of the base table. We
+                // have to include these pk columns to be able to support adding pk
+                // columns to the diverged view.
+                // We only include regular columns that were created before the view
+                // diverged.
+                if (isDiverged && ancestorColumn.getFamilyName() != null
+                        && ancestorColumn.getTimestamp() > view.getTimeStamp()) {
+                    // If this is a diverged view, the ancestor column is not a PK and the ancestor
+                    // column was added after the view diverged, ignore this ancestor column.
+                    continue;
+                }
+                // need to check if this ancestor column is in the list of excluded (dropped)
+                // columns of the view
+                int existingExcludedIndex = excludedColumns.indexOf(ancestorColumn);
+                if (existingExcludedIndex != -1) {
+                    // if it is, only exclude the ancestor column if it was created before the
+                    // column was dropped in the view in order to handle the case where
+                    // a base table column is dropped in a view, then dropped in the
+                    // base table and then added back to the base table
+                    if (ancestorColumn.getTimestamp() <= excludedColumns.get(existingExcludedIndex)
+                            .getTimestamp()) {
+                        continue;
+                    }
+                }
+                // A diverged view from a pre-4.15 client won't ever go in this case since
+                // isExcluded was introduced in 4.15. If this is a 4.15+ client, excluded columns
+                // will be identifiable via PColumn#isExcluded()
+                if (ancestorColumn.isExcluded()) {
+                    excludedColumns.add(ancestorColumn);
+                } else {
+                    int existingColumnIndex = allColumns.indexOf(ancestorColumn);
+                    if (existingColumnIndex != -1) {
+                        // For non-diverged views, if the same column exists in a parent and child,
+                        // we keep the latest column.
+                        PColumn existingColumn = allColumns.get(existingColumnIndex);
+                        if (!isDiverged && ancestorColumn.getTimestamp() > existingColumn.getTimestamp()) {
+                            allColumns.remove(existingColumnIndex);
+                            allColumns.add(ancestorColumn);
+                        }
+                    } else {
+                        allColumns.add(ancestorColumn);
+                    }
+                }
+            }
+        }
+        // remove the excluded columns if the timestamp of the excludedColumn is newer
+        for (PColumn excludedColumn : excludedColumns) {
+            int index = allColumns.indexOf(excludedColumn);
+            if (index != -1) {
+                if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
+                    allColumns.remove(excludedColumn);
+                }
+            }
+        }
     }
 
     /**

@@ -68,6 +68,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID_INDEX;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.ViewUtil.isViewDiverging;
 
 public class DropColumnMutator implements ColumnMutator {
 
@@ -167,7 +168,9 @@ public class DropColumnMutator implements ColumnMutator {
                                                          Region region,
                                                          List<ImmutableBytesPtr> invalidateList,
                                                          List<Region.RowLock> locks,
-                                                         long clientTimeStamp, ExtendedCellBuilder extendedCellBuilder)
+                                                         long clientTimeStamp,
+                                                         long clientVersion,
+                                                         ExtendedCellBuilder extendedCellBuilder)
                     throws SQLException {
 
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
@@ -216,7 +219,8 @@ public class DropColumnMutator implements ColumnMutator {
                         deletePKColumn = columnToDelete.getFamilyName() == null;
                         if (isView) {
                             // if we are dropping a derived column add it to the excluded
-                            // column list
+                            // column list. Note that this is only done for 4.15+ clients
+                            // since old clients do not have the isDerived field
                             if (columnToDelete.isDerived()) {
                                 mutation = MetaDataUtil.cloneDeleteToPutAndAddColumn((Delete)
                                                 mutation, TABLE_FAMILY_BYTES, LINK_TYPE_BYTES,
@@ -225,8 +229,7 @@ public class DropColumnMutator implements ColumnMutator {
                                 iterator.set(mutation);
                             }
 
-                            if (table.getBaseColumnCount() != DIVERGED_VIEW_BASE_COLUMN_COUNT
-                                    && columnToDelete.isDerived()) {
+                            if (isViewDiverging(columnToDelete, table, clientVersion)) {
                                 // If the column being dropped is inherited from the base table,
                                 // then the view is about to diverge itself from the base table.
                                 // The consequence of this divergence is that that any further
@@ -255,12 +258,8 @@ public class DropColumnMutator implements ColumnMutator {
                                     columnToDelete);
                         }
                         // drop any indexes that need the column that is going to be dropped
-                        tableAndDroppedColPairs.add(new Pair(table, columnToDelete));
-                    } catch (ColumnFamilyNotFoundException e) {
-                        return new MetaDataProtocol.MetaDataMutationResult(
-                                MetaDataProtocol.MutationCode.COLUMN_NOT_FOUND,
-                                EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);
-                    } catch (ColumnNotFoundException e) {
+                        tableAndDroppedColPairs.add(new Pair<>(table, columnToDelete));
+                    } catch (ColumnFamilyNotFoundException | ColumnNotFoundException e) {
                         return new MetaDataProtocol.MetaDataMutationResult(
                                 MetaDataProtocol.MutationCode.COLUMN_NOT_FOUND,
                                 EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);

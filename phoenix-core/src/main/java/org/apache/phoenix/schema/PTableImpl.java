@@ -811,7 +811,9 @@ public class PTableImpl implements PTable {
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
     public static List<PColumn> getColumnsToClone(PTable table) {
-        return table.getBucketNum() == null ? table.getColumns() : table.getColumns().subList(1, table.getColumns().size());
+        return table == null ? Collections.<PColumn> emptyList() :
+                (table.getBucketNum() == null ? table.getColumns() :
+                        table.getColumns().subList(1, table.getColumns().size()));
     }
 
     /**
