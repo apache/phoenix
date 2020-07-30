@@ -617,7 +617,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     && table.getViewType() != ViewType.MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
-                    table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
+                    table = ViewUtil.addDerivedColumnsFromParent(table, pTable);
                 }
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
@@ -2717,7 +2717,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         getParentPhysicalTableName(table), table.getType());
 
                 result = mutator.validateAndAddMetadata(table, rowKeyMetaData, tableMetadata, region,
-                        invalidateList, locks, clientTimeStamp);
+                        invalidateList, locks, clientTimeStamp, clientVersion);
                 // if the update mutation caused tables to be deleted, the mutation code returned
                 // will be MutationCode.TABLE_ALREADY_EXISTS
                 if (result != null
