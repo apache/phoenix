@@ -23,7 +23,7 @@ $DEV_SUPPORT/cache-apache-project-artifact.sh --keys https://downloads.apache.or
 
 STARTDIR=$PWD
 cd $ARTIFACTS_DIR
-tar xfvz hbase-$1-src.tar.gz
+tar xfz hbase-$1-src.tar.gz
 cd hbase-$1
-mvn clean install -Dhadoop.profile=3.0 -DskipTests
+mvn clean install -Dhadoop.profile=3.0 -DskipTests -B
 cd ${STARTDIR}
