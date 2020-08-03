@@ -202,7 +202,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         TRANSACTIONAL_TABLE_LIST[0] = transactTable;
         conn.createStatement().execute("CREATE TABLE " + transactTable + " (id bigint NOT NULL "
                         + "PRIMARY KEY, a.name varchar, sal bigint, address varchar) "
-                + " TRANSACTIONAL=true "
+                + " TRANSACTIONAL=true, TRANSACTION_PROVIDER='OMID' "
                 + ((tableDDLOptions.trim().length() > 0) ? "," : "") + tableDDLOptions);
 
         String mockOneViewOne = "TEST." + generateUniqueName();
