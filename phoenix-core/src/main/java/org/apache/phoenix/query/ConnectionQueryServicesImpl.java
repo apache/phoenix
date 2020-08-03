@@ -1088,7 +1088,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } else {
                 // Remove all potential transactional coprocessors
-                for (TransactionFactory.Provider aprovider : TransactionFactory.Provider.values()) {
+                for (TransactionFactory.Provider aprovider : TransactionFactory.Provider.available()) {
                     Class<? extends RegionObserver> coprocessorClass = aprovider.getTransactionProvider().getCoprocessor();
                     Class<? extends RegionObserver> coprocessorGCClass = aprovider.getTransactionProvider().getGCCoprocessor();
                     if (coprocessorClass != null && newDesc.hasCoprocessor(coprocessorClass.getName())) {
@@ -1449,7 +1449,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private static boolean hasTxCoprocessor(TableDescriptor descriptor) {
-        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.available()) {
             Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
             if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
                 return true;

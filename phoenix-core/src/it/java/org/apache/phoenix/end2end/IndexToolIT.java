@@ -166,6 +166,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
         for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
+            if(transactionProvider !=null &&
+                    !TransactionFactory.Provider.valueOf(transactionProvider).runTests()) {
+                continue;
+            }
             for (boolean mutable : Booleans) {
                 for (boolean localIndex : Booleans) {
                     if (!localIndex 

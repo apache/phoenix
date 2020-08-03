@@ -54,7 +54,7 @@ public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
                 + "METRIC_ID CHAR(15) NOT NULL,METRIC_VALUE VARCHAR(50) CONSTRAINT PK PRIMARY KEY("
                 + (rowColumn? "CREATED_DATE ROW_TIMESTAMP, ":"") + "METRIC_ID)) "
                 + "IMMUTABLE_ROWS=" + (mutable? "false" : "true" )
-                + (txTable ? ", TRANSACTION_PROVIDER='TEPHRA',TRANSACTIONAL=true":"");
+                + (txTable ? ", TRANSACTION_PROVIDER='OMID',TRANSACTIONAL=true":"");
         props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(createTable);
