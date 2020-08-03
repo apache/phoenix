@@ -219,11 +219,19 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
             PhoenixConnection.class, Chronology.class, CharStream.class,
-            TransactionSystemClient.class, TransactionNotInProgressException.class, ZKClient.class,
-            DiscoveryServiceClient.class, ZKDiscoveryService.class, Cancellable.class,
-            TTransportException.class, SpanReceiver.class, TransactionProcessor.class);
+            ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
+            Cancellable.class, SpanReceiver.class);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
             CompatUtil.getMrMetricsClasses());
+        try {
+            TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
+                Class.forName("org.apache.tephra.TransactionNotInProgressException"),
+                Class.forName("org.apache.tephra.TransactionSystemClient"),
+                Class.forName("org.apache.tephra.hbase.coprocessor.TransactionProcessor"),
+                Class.forName("org.apache.thrift.transport.TTransportException"));
+        } catch (Throwable t) {
+            //Tephra is excluded
+        }
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }

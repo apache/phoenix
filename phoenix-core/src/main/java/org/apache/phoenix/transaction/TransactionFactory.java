@@ -18,26 +18,47 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
-
-
 public class TransactionFactory {
+
+    private static PhoenixTransactionProvider tephraTransactionProvider;
+
+    static{
+        try {
+            tephraTransactionProvider = (PhoenixTransactionProvider)
+                    Class.forName("org.apache.phoenix.transaction.TephraTransactionProvider")
+                    .getMethod("getInstance").invoke(null);
+        } catch (Throwable e) {
+            tephraTransactionProvider = NotAvailableTransactionProvider.getInstance();
+        }
+    }
+
     public enum Provider {
-        TEPHRA((byte)1, TephraTransactionProvider.getInstance(), true),
+        TEPHRA((byte)1, tephraTransactionProvider,
+            tephraTransactionProvider instanceof TephraTransactionProvider),
         OMID((byte)2, OmidTransactionProvider.getInstance(), true);
-        
+
         private final byte code;
         private final PhoenixTransactionProvider provider;
         private final boolean runTests;
-        
+
         Provider(byte code, PhoenixTransactionProvider provider, boolean runTests) {
             this.code = code;
             this.provider = provider;
             this.runTests = runTests;
         }
-        
+
+        public static Provider[] available() {
+            if(TEPHRA.getTransactionProvider() instanceof TephraTransactionProvider) {
+                return values();
+            } else {
+                return new Provider[] {OMID};
+            }
+        }
+
         public byte getCode() {
             return this.code;
         }
@@ -48,7 +69,7 @@ public class TransactionFactory {
             }
             return Provider.values()[code-1];
         }
-        
+
         public static Provider getDefault() {
             return OMID;
         }
@@ -56,7 +77,7 @@ public class TransactionFactory {
         public PhoenixTransactionProvider getTransactionProvider()  {
             return provider;
         }
-        
+
         public boolean runTests() {
             return runTests;
         }
@@ -65,7 +86,7 @@ public class TransactionFactory {
     public static PhoenixTransactionProvider getTransactionProvider(Provider provider) {
         return provider.getTransactionProvider();
     }
-    
+
     public static PhoenixTransactionProvider getTransactionProvider(byte[] txState, int clientVersion) {
         if (txState == null || txState.length == 0) {
             return null;
@@ -75,7 +96,7 @@ public class TransactionFactory {
                 : Provider.fromCode(txState[txState.length-1]);
         return provider.getTransactionProvider();
     }
-    
+
     public static PhoenixTransactionContext getTransactionContext(byte[] txState, int clientVersion) throws IOException {
         PhoenixTransactionProvider provider = getTransactionProvider(txState, clientVersion);
         if (provider == null) {
