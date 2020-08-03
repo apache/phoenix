@@ -46,29 +46,6 @@ public class SchemaExtractionToolIT extends BaseTest {
     }
 
     @Test
-    public void testCreateTableStatement_tenant() throws Exception {
-        String tableName = generateUniqueName();
-        String viewName = generateUniqueName();
-        String schemaName = generateUniqueName();
-        String tenantId = "abc";
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
-                + "v1 VARCHAR, v2 VARCHAR)";
-        String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
-        String createViewStmt = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
-                + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
-                + "AS SELECT * FROM "+pTableFullName;
-
-        List<String> queries1 = new ArrayList<String>(){};
-        queries1.add(createTableStmt);
-        runSchemaExtractionTool(schemaName, tableName, null, queries1);
-        List<String> queries2 = new ArrayList<String>();
-        queries2.add(createViewStmt);
-        String result2 = runSchemaExtractionTool(schemaName, viewName, tenantId, queries2);
-        Assert.assertEquals(createViewStmt.toUpperCase(), result2.toUpperCase());
-    }
-
-    @Test
     public void testCreateIndexStatement() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -145,6 +122,29 @@ public class SchemaExtractionToolIT extends BaseTest {
         queries.add(createIndexStatement);
         String result = runSchemaExtractionTool(schemaName, indexName, null, queries);
         Assert.assertEquals(createIndexStatement.toUpperCase(), result.toUpperCase());
+    }
+
+    @Test
+    public void testCreateTableStatement_tenant() throws Exception {
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String tenantId = "abc";
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
+                + "v1 VARCHAR, v2 VARCHAR)";
+        String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
+        String createViewStmt = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                + "AS SELECT * FROM "+pTableFullName;
+
+        List<String> queries1 = new ArrayList<String>(){};
+        queries1.add(createTableStmt);
+        runSchemaExtractionTool(schemaName, tableName, null, queries1);
+        List<String> queries2 = new ArrayList<String>();
+        queries2.add(createViewStmt);
+        String result2 = runSchemaExtractionTool(schemaName, viewName, tenantId, queries2);
+        Assert.assertEquals(createViewStmt.toUpperCase(), result2.toUpperCase());
     }
 
     @Test
@@ -316,9 +316,9 @@ public class SchemaExtractionToolIT extends BaseTest {
         String schemaName = generateUniqueName();
         String indexName = generateUniqueName();
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        final String createTableStmt = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, \"av\".\"_\" CHAR(1), v2 VARCHAR)";
-        final String createIndexStmt = "CREATE INDEX "+ indexName + " ON "+pTableFullName+ "(\"av\".\"_\")";
-        final List<String> queries = new ArrayList<String>() {};
+        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, \"av\".\"_\" CHAR(1), v2 VARCHAR)";
+        String createIndexStmt = "CREATE INDEX "+ indexName + " ON "+pTableFullName+ "(\"av\".\"_\")";
+        List<String> queries = new ArrayList<String>() {};
         queries.add(createTableStmt);
         queries.add(createIndexStmt);
         String result =  runSchemaExtractionTool(schemaName, indexName, null, queries);
@@ -336,13 +336,13 @@ public class SchemaExtractionToolIT extends BaseTest {
         String output;
         if (tenantId == null){
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                executeCreateStmts(conn, queries);
+                executeCreateStatements(conn, queries);
                 String [] args = {"-tb", tableName, "-s", schemaName};
                 output = extractSchema(conn, args);
             }
         } else {
             try (Connection conn = getTenantConnection(getUrl(), tenantId)) {
-                executeCreateStmts(conn, queries);
+                executeCreateStatements(conn, queries);
                 String [] args = {"-tb", tableName, "-s", schemaName, "-t", tenantId};
                 output = extractSchema(conn, args);
             }
@@ -350,7 +350,7 @@ public class SchemaExtractionToolIT extends BaseTest {
         return output;
     }
 
-    private void executeCreateStmts(Connection conn, List<String> queries) throws SQLException {
+    private void executeCreateStatements(Connection conn, List<String> queries) throws SQLException {
         for (String query: queries){
             conn.createStatement().execute(query);
         }
