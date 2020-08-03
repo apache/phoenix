@@ -127,6 +127,7 @@
     <i18n-util.version>1.0.4</i18n-util.version>
     <servlet.api.version>3.1.0</servlet.api.version>
     <jcodings.version>1.0.55</jcodings.version>
+    <thrift.version>0.9.3-1</thrift.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.13</junit.version>
@@ -937,6 +938,7 @@
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
         <version>${tephra.version}</version>
+        <classifier>shaded</classifier>
         <!-- use tephra-core-shaded instead -->
         <exclusions>
           <exclusion>
@@ -944,7 +946,6 @@
             <artifactId>tephra-core</artifactId>
           </exclusion>
         </exclusions>
-        <classifier>shaded</classifier>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
@@ -1158,6 +1159,17 @@
         <artifactId>jcodings</artifactId>
         <version>${jcodings.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+        <version>${thrift.version}</version>
+        <exclusions>
+           <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -1208,14 +1220,38 @@
       </build>
     </profile>
     <profile>
-      <id>spark16</id>
-      <properties>
-        <spark.version>1.6.1</spark.version>
-        <scala.version>2.10.4</scala.version>
-        <scala.binary.version>2.10</scala.binary.version>
-      </properties>
+      <id>exclude-tephra</id>
+      <activation>
+        <property>
+          <name>without.tephra</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <classpathDependencyExcludes>
+                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+              </classpathDependencyExcludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <classpathDependencyExcludes>
+                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+              </classpathDependencyExcludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <!-- See BUILDING.md for profile selection-->
+    <!-- The dependencies should be defined only in phoenix-core
+    ,but maven doesn't seem to support that -->
     <profile>
       <id>phoenix-hbase-compat-1.6.0-default</id>
       <activation>
