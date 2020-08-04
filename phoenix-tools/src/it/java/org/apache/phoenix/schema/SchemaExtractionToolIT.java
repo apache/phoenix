@@ -193,48 +193,10 @@ public class SchemaExtractionToolIT extends BaseTest {
     }
 
     @Test
-    public void testCreateTableWithNonDefaultColumnFamily() throws Exception {
-        String tableName = generateUniqueName();
-        String schemaName = generateUniqueName();
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String query = "create table " + pTableFullName +
-                "(a_char CHAR(15) NOT NULL, " +
-                "b_char CHAR(10) NOT NULL, " +
-                "\"av\".\"_\" CHAR(1), " +
-                "\"bv\".\"_\" CHAR(1), " +
-                "\"cv\".\"_\" CHAR(1), " +
-                "\"dv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
-                "TTL=1209600, IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, MULTI_TENANT=true";
-        List<String> queries = new ArrayList<String>(){};
-        queries.add(query);
-        String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
-        Assert.assertEquals(query.toUpperCase(), result.toUpperCase());
-    }
-
-    @Test
-    public void testCreateTableWithUniversalCFProperties() throws Exception {
-        String tableName = generateUniqueName();
-        String schemaName = generateUniqueName();
-        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1";
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String query = "create table " + pTableFullName +
-                "(a_char CHAR(15) NOT NULL, " +
-                "b_char CHAR(10) NOT NULL, " +
-                "\"av\".\"_\" CHAR(1), " +
-                "\"bv\".\"_\" CHAR(1), " +
-                "\"cv\".\"_\" CHAR(1), " +
-                "\"dv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
-        List<String> queries = new ArrayList<String>(){};
-        queries.add(query);
-        String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
-        Assert.assertEquals(query.toUpperCase(), result.toUpperCase());
-    }
-
-    @Test
     public void testCreateTableWithDefaultCFProperties() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
-        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1, DEFAULT_COLUMN_FAMILY=cv";
+        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1, DEFAULT_COLUMN_FAMILY=cv, SALT_BUCKETS=16, MULTI_TENANT=true";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
@@ -291,7 +253,7 @@ public class SchemaExtractionToolIT extends BaseTest {
     }
 
     @Test
-    public void testCreateTableWithMultipleCFProperties3() throws Exception {
+    public void testCreateTableWithMultipleCFProperties() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         String properties = "\"av\".DATA_BLOCK_ENCODING=DIFF, \"bv\".DATA_BLOCK_ENCODING=DIFF, \"cv\".DATA_BLOCK_ENCODING=DIFF, " +
