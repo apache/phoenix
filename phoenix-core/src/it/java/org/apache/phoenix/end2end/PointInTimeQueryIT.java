@@ -40,6 +40,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -62,8 +63,7 @@ public class PointInTimeQueryIT extends BaseQueryIT {
     
     public PointInTimeQueryIT(String idxDdl, boolean columnEncoded)
             throws Exception {
-        // These queries fail without KEEP_DELETED_CELLS=true
-        super(idxDdl, columnEncoded, true);
+        super(idxDdl, columnEncoded, !HbaseCompatCapabilities.isLookbackBeyondDeletesSupported());
     }
 
     @Test

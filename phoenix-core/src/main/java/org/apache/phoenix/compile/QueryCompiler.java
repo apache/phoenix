@@ -31,11 +31,15 @@ import java.util.Set;
 import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
@@ -79,6 +83,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -163,6 +168,7 @@ public class QueryCompiler {
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
     public QueryPlan compile() throws SQLException{
+        verifySCN();
         QueryPlan plan;
         if (select.isUnion()) {
             plan = compileUnionAll(select);
@@ -170,6 +176,28 @@ public class QueryCompiler {
             plan = compileSelect(select);
         }
         return plan;
+    }
+
+    private void verifySCN() throws SQLException {
+        if (!HbaseCompatCapabilities.isMaxLookbackTimeSupported()) {
+            return;
+        }
+        PhoenixConnection conn = statement.getConnection();
+        Long scn = conn.getSCN();
+        if (scn == null) {
+            return;
+        }
+        ColumnResolver resolver =
+            FromCompiler.getResolverForQuery(select, conn);
+        long maxLookBackAgeInMillis =
+            CompatBaseScannerRegionObserver.getMaxLookbackInMillis(conn.getQueryServices().
+            getConfiguration());
+        long now = EnvironmentEdgeManager.currentTimeMillis();
+        if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
+            throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE)
+                .build().buildException();
+        }
     }
 
     public QueryPlan compileUnionAll(SelectStatement select) throws SQLException { 

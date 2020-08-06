@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -1020,11 +1021,14 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 customEdge.incrementValue(waitForUpsert);
                 return;
             }
+            //In HBase 2.0-2.2, we can't see Puts behind Deletes even on lookback / SCN queries. Starting in 2.3 we can
+            //That changes the counts we expect from index tool verification
+            int putBehindDeleteMarkerCount = HbaseCompatCapabilities.isLookbackBeyondDeletesSupported() ? 1 :0;
 
             // regular job without delete row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t4));
-            verifyCounters(it, 2, 2);
+            verifyCounters(it, 2, 2 + putBehindDeleteMarkerCount);
             customEdge.incrementValue(waitForUpsert);
 
             // job with 2 rows
@@ -1036,13 +1040,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // job with update on only one row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t3));
-            verifyCounters(it, 1, 1);
+            verifyCounters(it, 1, 1 + putBehindDeleteMarkerCount);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),"-et", String.valueOf(t4));
-            verifyCounters(it, 1, 1);
+            verifyCounters(it, 1, 1 + putBehindDeleteMarkerCount);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
