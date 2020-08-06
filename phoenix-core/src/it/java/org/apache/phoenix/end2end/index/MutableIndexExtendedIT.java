@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import jline.internal.Log;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;

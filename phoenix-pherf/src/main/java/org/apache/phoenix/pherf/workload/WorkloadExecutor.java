@@ -19,7 +19,6 @@
 package org.apache.phoenix.pherf.workload;
 
 import com.google.common.annotations.VisibleForTesting;
-import jline.internal.TestAccessible;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
