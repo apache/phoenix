@@ -283,14 +283,6 @@
       <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
-      <groupId>jline</groupId>
-      <artifactId>jline</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>sqlline</groupId>
-      <artifactId>sqlline</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
