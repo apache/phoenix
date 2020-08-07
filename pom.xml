@@ -118,10 +118,10 @@
     <i18n-util.version>1.0.4</i18n-util.version>
     <twill.version>0.8.0</twill.version>
     <guice.version>4.0</guice.version>
-    <zookeeper.version>3.4.10</zookeeper.version>
+    <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>4.0.0</curator.version>
     <jcodings.version>1.0.18</jcodings.version>
-    <thrift.version>0.9.0</thrift.version>
+    <thrift.version>0.9.3-1</thrift.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
     <junit.version>4.13</junit.version>
@@ -148,6 +148,8 @@
     <!-- JaCoCo thresholds which we can override in each sub-module if required -->
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
+
+    <maven-owasp-plugin.version>5.3.2</maven-owasp-plugin.version>
   </properties>
 
   <build>
@@ -1565,6 +1567,35 @@
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
+    </profile>
+    <profile>
+      <id>owasp-dependency-check</id>
+      <activation>
+        <property>
+          <name>owasp-check</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>${maven-owasp-plugin.version}</version>
+            <configuration>
+              <skipProvidedScope>true</skipProvidedScope>
+              <skipRuntimeScope>true</skipRuntimeScope>
+              <skipSystemScope>true</skipSystemScope>
+            </configuration>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>aggregate</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>codecoverage</id>
