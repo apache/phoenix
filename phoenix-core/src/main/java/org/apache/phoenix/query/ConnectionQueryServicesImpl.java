@@ -2776,7 +2776,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return existingColumnFamilies(table);
     }
 
-    private HashSet<String> existingColumnFamilies(PTable table) {
+    public HashSet<String> existingColumnFamilies(PTable table) {
         List<PColumnFamily> cfs = table.getColumnFamilies();
         HashSet<String> cfNames = new HashSet<>(cfs.size());
         for (PColumnFamily cf : table.getColumnFamilies()) {
@@ -2785,7 +2785,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return cfNames;
     }
 
-    private static KeepDeletedCells getKeepDeletedCells(PTable table, TableDescriptor tableDesc,
+    public static KeepDeletedCells getKeepDeletedCells(PTable table, TableDescriptor tableDesc,
             KeepDeletedCells newKeepDeletedCells) throws SQLException {
         // If we're setting KEEP_DELETED_CELLS now, then use that value. Otherwise, use the empty column family value
         return (newKeepDeletedCells != null) ?
@@ -2793,7 +2793,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getKeepDeletedCells();
     }
 
-    private static int getReplicationScope(PTable table, TableDescriptor tableDesc,
+    public static int getReplicationScope(PTable table, TableDescriptor tableDesc,
             Integer newReplicationScope) throws SQLException {
         // If we're setting replication scope now, then use that value. Otherwise, use the empty column family value
         return (newReplicationScope != null) ?
@@ -2801,7 +2801,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getScope();
     }
 
-    private static int getTTL(PTable table, TableDescriptor tableDesc, Integer newTTL) throws SQLException {
+    public static int getTTL(PTable table, TableDescriptor tableDesc, Integer newTTL) throws SQLException {
         // If we're setting TTL now, then use that value. Otherwise, use empty column family value
         return (newTTL != null) ?
                 newTTL :

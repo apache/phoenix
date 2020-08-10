@@ -56,6 +56,7 @@ public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
+    public static final boolean DEFAULT_IMMUTABLE_ROWS = false;
 
     public enum ViewType {
         MAPPED((byte)1),
@@ -800,6 +801,8 @@ public interface PTable extends PMetaDataEntity {
     Boolean useStatsForParallelization();
     boolean hasViewModifiedUpdateCacheFrequency();
     boolean hasViewModifiedUseStatsForParallelization();
+    Map<String, String> getPropertyValues();
+    Map<String, String> getDefaultPropertyValues();
 
     /**
      * @return The PHOENIX_TTL duration associated with the entity.
