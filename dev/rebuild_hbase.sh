@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # The name of the Apache Hbase source file
 HBASE_SOURCE_NAME="hbase-$1-src.tar.gz"
 # The relative path on the ASF mirrors for the Hbase source file
