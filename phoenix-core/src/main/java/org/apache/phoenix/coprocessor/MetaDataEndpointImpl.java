@@ -2228,7 +2228,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             // Only lock parent table for indexes
             if (parentTableName != null && pTableType == PTableType.INDEX) {
                 parentLockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, parentTableName);
-                result = checkTableKeyInRegion(lockKey, region);
+                result = checkTableKeyInRegion(parentLockKey, region);
                 if (result != null) {
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
