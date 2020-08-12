@@ -400,11 +400,6 @@ public class IndexTool extends Configured implements Tool {
         String loggingDisableValue = cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt());
         String verifyValue = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
         IndexDisableLoggingType loggingDisableType = IndexDisableLoggingType.fromValue(loggingDisableValue);
-        if (loggingDisableType != IndexDisableLoggingType.BEFORE &&
-            loggingDisableType != IndexDisableLoggingType.AFTER &&
-        loggingDisableType != IndexDisableLoggingType.BOTH) {
-            return true;
-        }
         IndexVerifyType verifyType = IndexVerifyType.fromValue(verifyValue);
         //error if we're trying to disable logging when we're not doing any verification
         if (verifyType.equals(IndexVerifyType.NONE)){
@@ -418,6 +413,10 @@ public class IndexTool extends Configured implements Tool {
         //error if we're disabling logging before rebuild but we're not verifying before rebuild
         if ((verifyType.equals(IndexVerifyType.AFTER))
             && loggingDisableType.equals(IndexDisableLoggingType.BEFORE)) {
+            return true;
+        }
+        if (loggingDisableType.equals(IndexDisableLoggingType.BOTH) &&
+            !verifyType.equals(IndexVerifyType.BOTH)){
             return true;
         }
         return false;
