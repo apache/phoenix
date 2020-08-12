@@ -683,7 +683,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add(String.valueOf(endTime));
         }
 
-        if (disableLoggingType != IndexTool.IndexDisableLoggingType.NONE) {
+        if (verifyType != IndexTool.IndexVerifyType.NONE && disableLoggingType != null) {
             args.add("-dl");
             args.add(disableLoggingType.getValue());
         }
@@ -701,6 +701,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
                 tenantId, verifyType, null, null, null);
+        return args.toArray(new String[0]);
+    }
+
+    public static String[] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
+                                        String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType,
+                                        IndexTool.IndexDisableLoggingType disableLoggingType) {
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
+                tenantId, verifyType, null, null, disableLoggingType, null);
         return args.toArray(new String[0]);
     }
 
@@ -775,18 +783,19 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                          String... additionalArgs) throws Exception {
         Configuration conf = new Configuration(getUtility().getConfiguration());
         return runIndexTool(conf, directApi, useSnapshot, schemaName, dataTableName, indexTableName,
-            tenantId, expectedStatus, verifyType, additionalArgs);
+            tenantId, expectedStatus, verifyType, IndexTool.IndexDisableLoggingType.NONE, additionalArgs);
     }
+
 
     public static IndexTool runIndexTool(Configuration conf, boolean directApi, boolean useSnapshot, String schemaName,
             String dataTableName, String indexTableName, String tenantId,
-            int expectedStatus, IndexTool.IndexVerifyType verifyType,
+            int expectedStatus, IndexTool.IndexVerifyType verifyType, IndexTool.IndexDisableLoggingType disableLoggingType,
             String... additionalArgs) throws Exception {
         IndexTool indexingTool = new IndexTool();
         conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         indexingTool.setConf(conf);
         final String[] cmdArgs = getArgValues(directApi, useSnapshot, schemaName, dataTableName,
-                indexTableName, tenantId, verifyType);
+                indexTableName, tenantId, verifyType, disableLoggingType);
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.addAll(Arrays.asList(additionalArgs));
         int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
