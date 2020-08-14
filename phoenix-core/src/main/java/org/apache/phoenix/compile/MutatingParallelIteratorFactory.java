@@ -112,6 +112,8 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
                         MutatingParallelIteratorFactory.this.connection.getMutationState()
                                 .join(finalState);
                     } finally {
+                        //Removing to be closed connection from the parent connection queue.
+                        connection.removeChildConnection(clonedConnection);
                         clonedConnection.close();
                     }
                 }
@@ -124,6 +126,8 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
         } catch (Throwable ex) {
             // Catch just to make sure we close the cloned connection and then rethrow
             try {
+                //Removing to be closed connection from the parent connection queue.
+                connection.removeChildConnection(clonedConnection);
                 // closeQuietly only handles IOException
                 clonedConnection.close();
             } catch (SQLException sqlEx) {
