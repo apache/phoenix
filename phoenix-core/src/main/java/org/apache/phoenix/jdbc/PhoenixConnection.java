@@ -478,6 +478,30 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         childConnections.add(connection);
     }
 
+    /**
+     * Method to remove child connection from childConnections Queue
+     *
+     * @param connection
+     */
+    public void removeChildConnection(PhoenixConnection connection) {
+        if (childConnections != null) {
+            childConnections.remove(connection);
+        }
+    }
+
+    /**
+     * Method to fetch child connections count from childConnections Queue
+     *
+     * @return int count
+     */
+    @VisibleForTesting
+    public int getChildConnectionsCount() {
+        if (childConnections != null) {
+            return childConnections.size();
+        }
+        return 0;
+    }
+
     public Sampler<?> getSampler() {
         return this.sampler;
     }
