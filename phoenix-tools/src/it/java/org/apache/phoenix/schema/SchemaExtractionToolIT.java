@@ -1,7 +1,7 @@
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -24,7 +24,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-public class SchemaExtractionToolIT extends BaseTest {
+public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
     public static void setup() throws Exception {
