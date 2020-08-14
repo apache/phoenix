@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.util.DelayedRegionServer;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -31,22 +32,17 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 
-import static org.apache.phoenix.exception.SQLExceptionCode.NEW_CONNECTION_THROTTLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.NEW_INTERNAL_CONNECTION_THROTTLED;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
-import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -128,5 +124,40 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(String.format("Found %d internal connections still open.", connections),0 ,connections);
         }
 
+    }
+
+    @Test public void testClosedChildConnectionsRemovedFromParentQueue() throws SQLException {
+        String tableName = generateUniqueName();
+        String connectionUrl = getUniqueUrl();
+        int NUMBER_OF_ROWS = 10;
+        String ddl = "CREATE TABLE " + tableName + " (V BIGINT PRIMARY KEY, K BIGINT)";
+        Properties props = new Properties();
+        props.setProperty(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(10));
+        props.setProperty(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(10));
+        try (Connection conn = DriverManager.getConnection(connectionUrl, props);
+                Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+        PhoenixConnection
+                connection =
+                (PhoenixConnection) DriverManager.getConnection(connectionUrl, props);
+        for (int i = 0; i < NUMBER_OF_ROWS; i++) {
+            connection.createStatement()
+                    .execute("UPSERT INTO " + tableName + " VALUES (" + i + ", " + i + ")");
+            connection.commit();
+        }
+        connection.setAutoCommit(false);
+        try {
+            for (int i = 0; i < NUMBER_OF_ROWS; i++) {
+                connection.createStatement()
+                        .execute("DELETE FROM " + tableName + " WHERE K = " + i);
+            }
+        } catch (SQLException e) {
+            fail();
+        } finally {
+            connection.close();
+        }
+        // All 10 child connections should be removed successfully from the queue
+        assertEquals(0, connection.getChildConnectionsCount());
     }
 }
