@@ -76,7 +76,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     }
     
     @Parameters(name="SequenceBulkAllocationIT_tenantId={0}") // name is used by failsafe as file name in reports
-    public static Object[] data() {
+    public static synchronized Object[] data() {
         return new Object[] {null, "tenant1"};
     }
 

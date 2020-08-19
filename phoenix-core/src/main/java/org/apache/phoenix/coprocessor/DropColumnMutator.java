@@ -43,6 +43,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
@@ -67,6 +68,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID_INDEX;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.ViewUtil.isViewDiverging;
 
 public class DropColumnMutator implements ColumnMutator {
 
@@ -130,13 +132,8 @@ public class DropColumnMutator implements ColumnMutator {
                 if (existingViewColumn != null && view.getViewStatement() != null) {
                     ParseNode viewWhere =
                             new SQLParser(view.getViewStatement()).parseQuery().getWhere();
-                    PhoenixConnection conn=null;
-                    try {
-                        conn = QueryUtil.getConnectionOnServer(conf).unwrap(
-                                PhoenixConnection.class);
-                    } catch (ClassNotFoundException e) {
-                        throw new IOException(e);
-                    }
+                    PhoenixConnection conn = QueryUtil.getConnectionOnServer(conf).unwrap(
+                            PhoenixConnection.class);
                     PhoenixStatement statement = new PhoenixStatement(conn);
                     TableRef baseTableRef = new TableRef(view);
                     ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
@@ -171,7 +168,9 @@ public class DropColumnMutator implements ColumnMutator {
                                                          Region region,
                                                          List<ImmutableBytesPtr> invalidateList,
                                                          List<Region.RowLock> locks,
-                                                         long clientTimeStamp, ExtendedCellBuilder extendedCellBuilder)
+                                                         long clientTimeStamp,
+                                                         long clientVersion,
+                                                         ExtendedCellBuilder extendedCellBuilder)
                     throws SQLException {
 
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
@@ -187,13 +186,28 @@ public class DropColumnMutator implements ColumnMutator {
             byte[] key = mutation.getRow();
             int pkCount = getVarChars(key, rowKeyMetaData);
             if (isView && mutation instanceof Put) {
-                PColumn column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, table);
+                PColumn column = null;
+                // checking put from the view or index
+                if (Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
+                        && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
+                    column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, table);
+                } else {
+                    for(int i = 0; i < table.getIndexes().size(); i++) {
+                        PTableImpl indexTable = (PTableImpl) table.getIndexes().get(i);
+                        byte[] indexTableName = indexTable.getTableName().getBytes();
+                        byte[] indexSchema = indexTable.getSchemaName().getBytes();
+                        if (Bytes.compareTo(indexSchema, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
+                                && Bytes.compareTo(indexTableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
+                            column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, indexTable);
+                            break;
+                        }
+                    }
+                }
                 if (column == null)
                     continue;
                 // ignore any puts that modify the ordinal positions of columns
                 iterator.remove();
-            }
-            else if (mutation instanceof Delete) {
+            } else if (mutation instanceof Delete) {
                 if (pkCount > COLUMN_NAME_INDEX
                         && Bytes.compareTo(schemaName, rowKeyMetaData[SCHEMA_NAME_INDEX]) == 0
                         && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
@@ -205,7 +219,8 @@ public class DropColumnMutator implements ColumnMutator {
                         deletePKColumn = columnToDelete.getFamilyName() == null;
                         if (isView) {
                             // if we are dropping a derived column add it to the excluded
-                            // column list
+                            // column list. Note that this is only done for 4.15+ clients
+                            // since old clients do not have the isDerived field
                             if (columnToDelete.isDerived()) {
                                 mutation = MetaDataUtil.cloneDeleteToPutAndAddColumn((Delete)
                                                 mutation, TABLE_FAMILY_BYTES, LINK_TYPE_BYTES,
@@ -214,8 +229,7 @@ public class DropColumnMutator implements ColumnMutator {
                                 iterator.set(mutation);
                             }
 
-                            if (table.getBaseColumnCount() != DIVERGED_VIEW_BASE_COLUMN_COUNT
-                                    && columnToDelete.isDerived()) {
+                            if (isViewDiverging(columnToDelete, table, clientVersion)) {
                                 // If the column being dropped is inherited from the base table,
                                 // then the view is about to diverge itself from the base table.
                                 // The consequence of this divergence is that that any further
@@ -244,12 +258,8 @@ public class DropColumnMutator implements ColumnMutator {
                                     columnToDelete);
                         }
                         // drop any indexes that need the column that is going to be dropped
-                        tableAndDroppedColPairs.add(new Pair(table, columnToDelete));
-                    } catch (ColumnFamilyNotFoundException e) {
-                        return new MetaDataProtocol.MetaDataMutationResult(
-                                MetaDataProtocol.MutationCode.COLUMN_NOT_FOUND,
-                                EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);
-                    } catch (ColumnNotFoundException e) {
+                        tableAndDroppedColPairs.add(new Pair<>(table, columnToDelete));
+                    } catch (ColumnFamilyNotFoundException | ColumnNotFoundException e) {
                         return new MetaDataProtocol.MetaDataMutationResult(
                                 MetaDataProtocol.MutationCode.COLUMN_NOT_FOUND,
                                 EnvironmentEdgeManager.currentTimeMillis(), table, columnToDelete);

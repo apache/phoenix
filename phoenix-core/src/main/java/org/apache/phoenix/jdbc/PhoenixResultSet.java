@@ -50,7 +50,7 @@ import java.util.Map;
 
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;

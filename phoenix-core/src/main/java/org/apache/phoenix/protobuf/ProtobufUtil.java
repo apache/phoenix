@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
@@ -106,6 +107,11 @@ public class ProtobufUtil {
     public static List<Mutation> getMutations(MetaDataProtos.CreateSchemaRequest request) throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
     }
+
+	public static List<Mutation> getMutations(CreateViewAddChildLinkRequest request)
+	throws IOException {
+		return getMutations(request.getTableMetadataMutationsList());
+	}
 
     /**
      * Each ByteString entry is a byte array serialized from MutationProto instance

@@ -71,7 +71,7 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private static final String UPSERT_SQL = "UPSERT INTO %s VALUES(?,?,?,?)";
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static synchronized void setup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));

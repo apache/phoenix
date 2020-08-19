@@ -22,11 +22,15 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -40,23 +44,114 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID;
 
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
+
 /**
  * Reducer class that does only one task and that is to update the index state of the table.
  */
 public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
-
+    private AtomicBoolean calledOnce = new AtomicBoolean(false);
+    private IndexVerificationResultRepository resultRepository;
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
+    private String indexTableName;
+    private byte[] indexTableNameBytes;
+
+    private void updateCounters(IndexTool.IndexVerifyType verifyType,
+                                Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context context)
+            throws IOException {
+        Configuration configuration = context.getConfiguration();
+        try (final Connection connection = ConnectionUtil.getInputConnection(configuration)) {
+            long ts = Long.valueOf(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
+            IndexToolVerificationResult verificationResult =
+                    resultRepository.getVerificationResult(connection, ts, indexTableNameBytes);
+            context.getCounter(PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT).
+                    setValue(verificationResult.getScannedDataRowCount());
+            context.getCounter(PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT).
+                    setValue(verificationResult.getRebuiltIndexRowCount());
+            if (verifyType == IndexTool.IndexVerifyType.ONLY || verifyType == IndexTool.IndexVerifyType.BEFORE ||
+                    verifyType == IndexTool.IndexVerifyType.BOTH) {
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildValidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildExpiredIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
+                        setValue(verificationResult.getBeforeIndexHasExtraCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
+                        setValue(verificationResult.getBeforeIndexHasMissingCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildUnverifiedIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildOldIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildUnknownIndexRowCount());
+            }
+            if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildValidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildExpiredIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
+                        setValue(verificationResult.getAfterIndexHasExtraCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
+                        setValue(verificationResult.getAfterIndexHasMissingCellsCount());
+            }
+            if (verificationResult.isVerificationFailed()) {
+                throw new IOException("Index verification failed! " + verificationResult);
+            }
+        } catch (Exception e) {
+            throw new IOException("Fail to get index verification result", e);
+        }
+    }
+
+    @Override
+    protected void setup(Context context) throws IOException {
+        resultRepository = new IndexVerificationResultRepository();
+        indexTableName = PhoenixConfigurationUtil.getPhysicalTableName(context.getConfiguration());
+        indexTableNameBytes = Bytes.toBytes(indexTableName);
+    }
+
+    @Override
+    protected void reduce(ImmutableBytesWritable arg0, Iterable<IntWritable> arg1,
+                          Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context context)
+            throws IOException, InterruptedException
+
+    {
+        if (!calledOnce.compareAndSet(false, true)) {
+            return;
+        }
+        IndexTool.IndexVerifyType verifyType = getIndexVerifyType(context.getConfiguration());
+        if (verifyType != IndexTool.IndexVerifyType.NONE) {
+            updateCounters(verifyType, context);
+        }
+
+        if (verifyType != IndexTool.IndexVerifyType.ONLY) {
+            // "ONLY" option should not turn index state to ACTIVE, as it doesn't rebuild the index
+            try {
+                IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
+            } catch (SQLException e) {
+                LOGGER.error(" Failed to update the status to Active");
+                throw new RuntimeException(e.getMessage());
+            }
+        }
+    }
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException{
         try {
-            IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
-
             updateTasksTable(context);
+            resultRepository.close();
         } catch (SQLException e) {
-            LOGGER.error(" Failed to update the status to Active");
+            LOGGER.error(" Failed to update the tasks table");
             throw new RuntimeException(e.getMessage());
         }
     }

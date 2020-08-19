@@ -47,7 +47,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     }
     
     @Parameters(name="CastAndCoerceIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return BaseQueryIT.allIndexes();
     }
     

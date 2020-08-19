@@ -49,7 +49,7 @@ public class SystemCatalogIT extends BaseTest {
     private HBaseTestingUtility testUtil = null;
 
 	@BeforeClass
-	public static void doSetup() throws Exception {
+	public static synchronized void doSetup() throws Exception {
 		Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
 		serverProps.put(QueryServices.SYSTEM_CATALOG_SPLITTABLE, "false");
         serverProps.put(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK, "true");

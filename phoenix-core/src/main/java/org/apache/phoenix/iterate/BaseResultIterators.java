@@ -21,6 +21,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_IND
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
@@ -57,6 +58,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -80,6 +82,8 @@ import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -248,6 +252,24 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst());
                             }
                         }
+                    }
+                }
+            } else {
+                boolean containsNullableGroubBy = false;
+                if (!plan.getOrderBy().isEmpty()) {
+                    for (OrderByExpression orderByExpression : plan.getOrderBy()
+                            .getOrderByExpressions()) {
+                        if (orderByExpression.getExpression().isNullable()) {
+                            containsNullableGroubBy = true;
+                            break;
+                        }
+                    }
+                }
+                if(containsNullableGroubBy){
+                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                    if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
+                        scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table)
+                                .getFirst());
                     }
                 }
             }
@@ -777,6 +799,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             for (KeyRange range : ranges) {
                 if (!range.isSingleKey()) {
                     hasRange = true;
+                    break;
                 }
             }
             slotSpan[offset] = rangeSpan - 1;
@@ -1022,6 +1045,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     endKey = regionBoundaries.get(regionIndex);
                 }
                 if (isLocalIndex) {
+                    if (dataPlan != null && dataPlan.getTableRef().getTable().getType() != PTableType.INDEX) { // Sanity check
+                        ScanRanges dataScanRanges = dataPlan.getContext().getScanRanges();
+                        // we can skip a region completely for local indexes if the data plan does not intersect
+                        if (!dataScanRanges.intersectRegion(regionInfo.getStartKey(), regionInfo.getEndKey(), false)) {
+                            currentKeyBytes = endKey;
+                            regionIndex++;
+                            continue;
+                        }
+                    }
                     // Only attempt further pruning if the prefix range is using
                     // a skip scan since we've already pruned the range of regions
                     // based on the start/stop key.
@@ -1228,7 +1260,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     public List<PeekingResultIterator> getIterators() throws SQLException {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
-                    ScanUtil.getCustomAnnotations(scan)));
+                    ScanUtil.getCustomAnnotations(scan)) + "on table " + context.getCurrentTable().getTable().getName());
         }
         boolean isReverse = ScanUtil.isReversed(scan);
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
@@ -1285,7 +1317,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     try {
                         long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
                         if (timeOutForScan < 0) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
+                            throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
+                                    ". Query couldn't be completed in the allotted time: "
+                                            + queryTimeOut + " ms").build().buildException();
                         }
                         // make sure we apply the iterators in order
                         if (isLocalIndex && previousScan != null && previousScan.getScan() != null
@@ -1350,10 +1384,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             context.getOverallQueryMetrics().queryTimedOut();
             GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
             // thrown when a thread times out waiting for the future.get() call to return
-            toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
-                    .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
-                    .setRootCause(e).build().buildException();
+            toThrow = new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT)
+                    .setMessage(". Query couldn't be completed in the allotted time: "
+                            + queryTimeOut + " ms").setRootCause(e).build().buildException();
         } catch (SQLException e) {
+            if (e.getErrorCode() == OPERATION_TIMED_OUT.getErrorCode()) {
+                context.getOverallQueryMetrics().queryTimedOut();
+                GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
+            }
             toThrow = e;
         } catch (Exception e) {
             toThrow = ServerUtil.parseServerException(e);
@@ -1455,7 +1493,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     throw new RuntimeException(e);
                 } catch (ExecutionException e) {
                     LOGGER.info("Failed to execute task during cancel", e);
-                    continue;
                 }
             }
         } finally {
@@ -1554,6 +1591,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
+        if(this.plan instanceof ScanPlan) {
+            ScanPlan scanPlan = (ScanPlan) this.plan;
+            if(scanPlan.getRowOffset().isPresent()) {
+                buf.append("With RVC Offset " + "0x" + Hex.encodeHexString(scanPlan.getRowOffset().get()) + " ");
+            }
+        }
+
         explain(buf.toString(),planSteps);
     }
 

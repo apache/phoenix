@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.ArrayList;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,9 +42,9 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
 
 /*
  * Implementation of a SQL foo IN (a,b,c) expression. Other than the first
@@ -59,24 +60,56 @@ public class InListExpression extends BaseSingleExpression {
     private List<Expression> keyExpressions; // client side only
     private boolean rowKeyOrderOptimizable; // client side only
 
+    // reduce hashCode() complexity
+    private int hashCode = -1;
+    private boolean hashCodeSet = false;
 
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
+        if (children.size() == 1) {
+            throw new SQLException("No element in the IN list");
+        }
+
         Expression firstChild = children.get(0);
-        
+
         if (firstChild.isStateless() && (!firstChild.evaluate(null, ptr) || ptr.getLength() == 0)) {
             return LiteralExpression.newConstant(null, PBoolean.INSTANCE, firstChild.getDeterminism());
         }
-        if (children.size() == 2) {
-            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL, children, ptr, rowKeyOrderOptimizable);
+
+        List<Expression> childrenWithoutNulls = Lists.newArrayList();
+        for (Expression child : children){
+            if(!child.equals(LiteralExpression.newConstant(null))){
+                childrenWithoutNulls.add(child);
+            }
         }
-        
-        boolean addedNull = false;
+        if (childrenWithoutNulls.size() <= 1 ) {
+            // In case of after removing nulls there is no remaining element in the IN list
+            return LiteralExpression.newConstant(false);
+        }
+
+        if (firstChild instanceof RowValueConstructorExpression) {
+            List<InListColumnKeyValuePair> inListColumnKeyValuePairList =
+                    getSortedInListColumnKeyValuePair(childrenWithoutNulls);
+            if (inListColumnKeyValuePairList != null) {
+                childrenWithoutNulls = getSortedRowValueConstructorExpressionList(
+                        inListColumnKeyValuePairList, firstChild.isStateless(),children.size() - 1);
+                firstChild = childrenWithoutNulls.get(0);
+            }
+        }
+
+        boolean nullInList = children.size() != childrenWithoutNulls.size();
+
+        if (childrenWithoutNulls.size() == 2 && !nullInList) {
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+                    childrenWithoutNulls, ptr, rowKeyOrderOptimizable);
+        }
+
         SQLException sqlE = null;
-        List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(children.size());
+        List<Expression> coercedKeyExpressions = Lists.newArrayListWithExpectedSize(childrenWithoutNulls.size());
         coercedKeyExpressions.add(firstChild);
-        for (int i = 1; i < children.size(); i++) {
+        for (int i = 1; i < childrenWithoutNulls.size(); i++) {
             try {
-                Expression rhs = BaseExpression.coerce(firstChild, children.get(i), CompareOp.EQUAL, rowKeyOrderOptimizable);
+                Expression rhs = BaseExpression.coerce(firstChild, childrenWithoutNulls.get(i),
+                        CompareOp.EQUAL, rowKeyOrderOptimizable);
                 coercedKeyExpressions.add(rhs);
             } catch (SQLException e) {
                 // Type mismatch exception or invalid data exception.
@@ -86,14 +119,20 @@ public class InListExpression extends BaseSingleExpression {
                 sqlE = e;
             }
         }
-        if (coercedKeyExpressions.size() == 1) {
-            throw sqlE != null ? sqlE : new SQLException("Only one element in IN list");
+        if (coercedKeyExpressions.size() <= 1 ) {
+            if(nullInList || sqlE == null){
+                // In case of after removing nulls there is no remaining element in the IN list
+                return LiteralExpression.newConstant(false);
+            } else {
+                throw sqlE;
+            }
         }
-        if (coercedKeyExpressions.size() == 2 && addedNull) {
-            return LiteralExpression.newConstant(null, PBoolean.INSTANCE, Determinism.ALWAYS);
+        if (coercedKeyExpressions.size() == 2) {
+            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+                    coercedKeyExpressions, ptr, rowKeyOrderOptimizable);
         }
         Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);
-        if (isNegate) { 
+        if (isNegate) {
             expression = NotExpression.create(expression, ptr);
         }
         if (ExpressionUtil.isConstant(expression)) {
@@ -101,8 +140,14 @@ public class InListExpression extends BaseSingleExpression {
         }
         return expression;
     }
-    
+
     public InListExpression() {
+    }
+
+    @VisibleForTesting
+    protected InListExpression(List<ImmutableBytesPtr> values) {
+        this.children = Collections.emptyList();
+        this.values = Sets.newHashSet(values);
     }
 
     public InListExpression(List<Expression> keyExpressions, boolean rowKeyOrderOptimizable) {
@@ -132,7 +177,7 @@ public class InListExpression extends BaseSingleExpression {
                     } else {
                         isFixedLength &= fixedWidth == length;
                     }
-                    
+
                     valuesByteLength += ptr.getLength();
                 }
             }
@@ -152,6 +197,7 @@ public class InListExpression extends BaseSingleExpression {
             // minValue and maxValue but can infer them based on the first and last position.
             this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
         }
+        this.hashCodeSet = false;
     }
 
     @Override
@@ -173,10 +219,14 @@ public class InListExpression extends BaseSingleExpression {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + children.hashCode() + values.hashCode();
-        return result;
+        if (!hashCodeSet) {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + children.hashCode() + values.hashCode();
+            hashCode = result;
+            hashCodeSet = true;
+        }
+        return hashCode;
     }
 
     @Override
@@ -199,7 +249,7 @@ public class InListExpression extends BaseSingleExpression {
         values.add(new ImmutableBytesPtr(valuesBytes,offset,valueLen));
         return offset + valueLen;
     }
-    
+
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
@@ -210,6 +260,7 @@ public class InListExpression extends BaseSingleExpression {
         int len = fixedWidth == -1 ? WritableUtils.readVInt(input) : valuesByteLength / fixedWidth;
         // TODO: consider using a regular HashSet as we never serialize from the server-side
         values = Sets.newLinkedHashSetWithExpectedSize(len);
+        hashCodeSet = false;
         int offset = 0;
         int i  = 0;
         if (i < len) {
@@ -294,5 +345,109 @@ public class InListExpression extends BaseSingleExpression {
 
     public InListExpression clone(List<Expression> l) {
         return new InListExpression(l, this.rowKeyOrderOptimizable);
+    }
+
+    /**
+     * get list of InListColumnKeyValuePair with a PK ordered structure
+     * @param children children from rvc
+     * @return the list of InListColumnKeyValuePair
+     */
+    public static List<InListColumnKeyValuePair> getSortedInListColumnKeyValuePair(List<Expression> children) {
+        List<InListColumnKeyValuePair> inListColumnKeyValuePairList = new ArrayList<>();
+        int numberOfColumns = 0;
+
+        for (int i = 0; i < children.size(); i++) {
+            Expression child = children.get(i);
+            if (i == 0) {
+                numberOfColumns = child.getChildren().size();
+                for (int j = 0; j < child.getChildren().size(); j++) {
+                    if (child.getChildren().get(j) instanceof RowKeyColumnExpression) {
+                        RowKeyColumnExpression rowKeyColumnExpression =
+                                (RowKeyColumnExpression)child.getChildren().get(j);
+                        InListColumnKeyValuePair inListColumnKeyValuePair =
+                                new InListColumnKeyValuePair(rowKeyColumnExpression);
+                        inListColumnKeyValuePairList.add(inListColumnKeyValuePair);
+                    } else {
+                        // if one of the columns is not part of the pk, we ignore.
+                        return null;
+                    }
+                }
+            } else {
+                if (numberOfColumns != child.getChildren().size()) {
+                    // if the number of the PK columns doesn't match number of values,
+                    // it should not sort it in PK position.
+                    return null;
+                }
+
+                for (int j = 0; j < child.getChildren().size(); j++) {
+                    LiteralExpression literalExpression = (LiteralExpression) child.getChildren().get(j);
+                    inListColumnKeyValuePairList.get(j).addToLiteralExpressionList(literalExpression);
+                }
+            }
+        }
+        Collections.sort(inListColumnKeyValuePairList);
+        return inListColumnKeyValuePairList;
+    }
+
+    /**
+     * get a PK ordered Expression RowValueConstructor
+     * @param inListColumnKeyValuePairList the object stores RowKeyColumnExpression and List of LiteralExpression
+     * @param isStateless
+     * @param numberOfRows number of literalExpressions
+     * @return the new RowValueConstructorExpression with PK ordered expressions
+     */
+    public static List<Expression> getSortedRowValueConstructorExpressionList(
+            List<InListColumnKeyValuePair> inListColumnKeyValuePairList, boolean isStateless, int numberOfRows) {
+        List<Expression> l = new ArrayList<>();
+        //reconstruct columns
+        List<Expression> keyExpressions = new ArrayList<>();
+        for (int i = 0; i < inListColumnKeyValuePairList.size(); i++) {
+            keyExpressions.add(inListColumnKeyValuePairList.get(i).getRowKeyColumnExpression());
+        }
+        l.add(new RowValueConstructorExpression(keyExpressions,isStateless));
+
+        //reposition to corresponding values
+        List<List<Expression>> valueExpressionsList = new ArrayList<>();
+
+        for (int j = 0; j < inListColumnKeyValuePairList.size(); j++) {
+            List<LiteralExpression> valueList = inListColumnKeyValuePairList.get(j).getLiteralExpressionList();
+            for (int i = 0; i < numberOfRows; i++) {
+                if (j == 0) {
+                    valueExpressionsList.add(new ArrayList<Expression>());
+                }
+                valueExpressionsList.get(i).add(valueList.get(i));
+            }
+        }
+        for (List<Expression> valueExpressions: valueExpressionsList) {
+            l.add(new RowValueConstructorExpression(valueExpressions, isStateless));
+        }
+        return l;
+    }
+
+    public static class InListColumnKeyValuePair implements Comparable<InListColumnKeyValuePair> {
+        RowKeyColumnExpression rowKeyColumnExpression;
+        List<LiteralExpression> literalExpressionList;
+
+        public InListColumnKeyValuePair(RowKeyColumnExpression rowKeyColumnExpression) {
+            this.rowKeyColumnExpression = rowKeyColumnExpression;
+            this.literalExpressionList = new ArrayList<>();
+        }
+
+        public RowKeyColumnExpression getRowKeyColumnExpression() {
+            return this.rowKeyColumnExpression;
+        }
+
+        public void addToLiteralExpressionList(LiteralExpression literalExpression) {
+            this.literalExpressionList.add(literalExpression);
+        }
+
+        public List<LiteralExpression> getLiteralExpressionList() {
+            return this.literalExpressionList;
+        }
+
+        @Override
+        public int compareTo(InListColumnKeyValuePair o) {
+            return rowKeyColumnExpression.getPosition() - o.getRowKeyColumnExpression().getPosition();
+        }
     }
 }

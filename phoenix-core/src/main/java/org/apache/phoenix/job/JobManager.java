@@ -41,6 +41,8 @@ import javax.annotation.Nullable;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+
 /**
  * 
  * Thread pool executor that executes scans in parallel
@@ -169,17 +171,17 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
 
         public InstrumentedJobFutureTask(Runnable r, T t) {
             super(r, t);
-            this.taskSubmissionTime = System.currentTimeMillis();
+            this.taskSubmissionTime = EnvironmentEdgeManager.currentTimeMillis();
         }
 
         public InstrumentedJobFutureTask(Callable<T> c) {
             super(c);
-            this.taskSubmissionTime = System.currentTimeMillis();
+            this.taskSubmissionTime = EnvironmentEdgeManager.currentTimeMillis();
         }
         
         @Override
         public void run() {
-            this.taskExecutionStartTime = System.currentTimeMillis();
+            this.taskExecutionStartTime = EnvironmentEdgeManager.currentTimeMillis();
             super.run();
         }
         
@@ -264,7 +266,8 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         @Override
         protected void beforeExecute(Thread worker, Runnable task) {
             InstrumentedJobFutureTask instrumentedTask = (InstrumentedJobFutureTask)task;
-            long queueWaitTime = System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime();
+            long queueWaitTime = EnvironmentEdgeManager.currentTimeMillis() -
+                instrumentedTask.getTaskSubmissionTime();
             GLOBAL_TASK_QUEUE_WAIT_TIME.update(queueWaitTime);
             TaskExecutionMetricsHolder metrics = getRequestMetric(task);
             if (metrics != null) {
@@ -279,8 +282,10 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
             try {
                 super.afterExecute(instrumentedTask, t);
             } finally {
-                long taskExecutionTime = System.currentTimeMillis() - instrumentedTask.getTaskExecutionStartTime();
-                long endToEndTaskTime = System.currentTimeMillis() - instrumentedTask.getTaskSubmissionTime();
+                long taskExecutionTime = EnvironmentEdgeManager.currentTimeMillis() -
+                    instrumentedTask.getTaskExecutionStartTime();
+                long endToEndTaskTime = EnvironmentEdgeManager.currentTimeMillis() -
+                    instrumentedTask.getTaskSubmissionTime();
                 TaskExecutionMetricsHolder metrics = getRequestMetric(task);
                 if (metrics != null) {
                     metrics.getTaskExecutionTime().change(taskExecutionTime);

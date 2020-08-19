@@ -54,7 +54,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
-import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -842,7 +843,7 @@ public class OrphanViewTool extends Configured implements Tool {
                 }
             }
             Properties props = new Properties();
-            long scn = System.currentTimeMillis() - ageMs;
+            long scn = EnvironmentEdgeManager.currentTimeMillis() - ageMs;
             props.setProperty("CurrentSCN", Long.toString(scn));
             connection = ConnectionUtil.getInputConnection(configuration, props);
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);

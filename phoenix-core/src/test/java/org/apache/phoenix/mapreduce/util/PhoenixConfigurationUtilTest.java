@@ -31,6 +31,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -286,4 +287,29 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
 
     }
 
+    @Test
+    public void testTimeRangeOverride() {
+        final Configuration configuration = new Configuration();
+        Long startTime = 1L;
+        Long endTime = 2L;
+
+        PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
+        PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
+        Assert.assertEquals(startTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getIndexToolStartTime(configuration)));
+        Assert.assertEquals(endTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getCurrentScnValue(configuration)));
+
+    }
+
+    @Test
+    public void testLastVerifyTimeConfig() {
+        final Configuration configuration = new Configuration();
+        Long lastVerifyTime = 2L;
+
+        PhoenixConfigurationUtil.setIndexToolLastVerifyTime(configuration, lastVerifyTime);
+        Assert.assertEquals(lastVerifyTime.longValue(),
+                Long.parseLong(PhoenixConfigurationUtil.getIndexToolLastVerifyTime(configuration)));
+
+    }
 }

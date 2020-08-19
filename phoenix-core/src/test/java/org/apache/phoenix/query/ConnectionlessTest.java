@@ -75,7 +75,7 @@ public class ConnectionlessTest {
     }
     
     @BeforeClass
-    public static void verifyDriverRegistered() throws SQLException {
+    public static synchronized void verifyDriverRegistered() throws SQLException {
         assertTrue(DriverManager.getDriver(getUrl()) == PhoenixDriver.INSTANCE);
     }
     

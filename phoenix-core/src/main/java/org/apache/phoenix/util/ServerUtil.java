@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -408,26 +409,13 @@ public class ServerUtil {
 
     }
 
-    /**
-     * Returns true if HBase namespace exists, else returns false
-     * @param admin HbaseAdmin Object
-     * @param schemaName Phoenix schema name for which we check existence of the HBase namespace
-     * @return true if the HBase namespace exists, else returns false
-     * @throws SQLException If there is an exception checking the HBase namespace
-     */
-    public static boolean isHbaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
-        boolean namespaceExists = false;
-        try{
-            String[] hbaseNamespaces = admin.listNamespaces();
-            for(String namespace : hbaseNamespaces){
-                if(namespace.equals(schemaName)){
-                    namespaceExists = true;
-                    break;
-                }
-            }
-        } catch (IOException e) {
-            throw e;
+    public static <T> Throwable getExceptionFromFailedFuture(Future<T> f) {
+        Throwable t = null;
+        try {
+            f.get();
+        } catch (Exception e) {
+            t = e;
         }
-        return namespaceExists;
+        return t;
     }
 }

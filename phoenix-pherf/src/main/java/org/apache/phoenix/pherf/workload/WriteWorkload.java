@@ -48,6 +48,7 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.RowCalculator;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -177,7 +178,6 @@ public class WriteWorkload implements Workload {
         };
     }
 
-
     private synchronized void exec(DataLoadTimeSummary dataLoadTimeSummary,
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
         LOGGER.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
@@ -187,7 +187,7 @@ public class WriteWorkload implements Workload {
 
         // Write data
         List<Future<Info>> writeBatches = getBatches(dataLoadThreadTime, scenario);
-        waitForBatches(dataLoadTimeSummary, scenario, System.currentTimeMillis(), writeBatches);
+        waitForBatches(dataLoadTimeSummary, scenario, EnvironmentEdgeManager.currentTimeMillis(), writeBatches);
 
         // Update Phoenix Statistics
         if (this.generateStatistics == GeneratePhoenixStats.YES) {
@@ -243,7 +243,7 @@ public class WriteWorkload implements Workload {
             LOGGER.info("Executor (" + this.hashCode() + ") writes complete with row count ("
                     + writeInfo.getRowCount() + ") in Ms (" + writeInfo.getDuration() + ")");
         }
-        long testDuration = System.currentTimeMillis() - start;
+        long testDuration = EnvironmentEdgeManager.currentTimeMillis() - start;
         LOGGER.info("Writes completed with total row count (" + sumRows
                 + ") with total elapsed time of (" + testDuration
                 + ") ms and total CPU execution time of (" + sumDuration + ") ms");
@@ -263,14 +263,20 @@ public class WriteWorkload implements Workload {
                 PreparedStatement stmt = null;
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
-                    long logStartTime = System.currentTimeMillis();
-                    long maxDuration = WriteWorkload.this.writeParams == null ? Long.MAX_VALUE :
-                            WriteWorkload.this.writeParams.getExecutionDurationInMs();
+                    long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
+                    long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
+                        WriteWorkload.this.writeParams.getExecutionDurationInMs();
 
-                    last = start = System.currentTimeMillis();
+                    int logPerNRows = PherfConstants.LOG_PER_NROWS;
+                    String customizedLogPerNRows = connection.getClientInfo().
+                            getProperty(PherfConstants.LOG_PER_NROWS_NAME);
+                    if (customizedLogPerNRows!= null) {
+                        logPerNRows = Integer.valueOf(customizedLogPerNRows);
+                    }
+                    last = start = EnvironmentEdgeManager.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
                     stmt = connection.prepareStatement(sql);
-                    for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
+                    for (long i = rowCount; (i > 0) && ((EnvironmentEdgeManager.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
                         stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
                         if (useBatchApi) {
@@ -293,23 +299,23 @@ public class WriteWorkload implements Workload {
                                 }
                             }
                             connection.commit();
-                            duration = System.currentTimeMillis() - last;
+                            duration = EnvironmentEdgeManager.currentTimeMillis() - last;
                             LOGGER.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
                                     + " rows for this thread (" + this.hashCode() + ") in ("
                                     + duration + ") Ms");
 
-                            if (i % PherfConstants.LOG_PER_NROWS == 0 && i != 0) {
+                            if (i % logPerNRows == 0 && i != 0) {
                                 dataLoadThreadTime.add(tableName,
                                     Thread.currentThread().getName(), i,
-                                    System.currentTimeMillis() - logStartTime);
+                                    EnvironmentEdgeManager.currentTimeMillis() - logStartTime);
                             }
 
-                            logStartTime = System.currentTimeMillis();
+                            logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                             // Pause for throttling if configured to do so
                             Thread.sleep(threadSleepDuration);
                             // Re-compute the start time for the next batch
-                            last = System.currentTimeMillis();
+                            last = EnvironmentEdgeManager.currentTimeMillis();
                         }
                     }
                 } catch (SQLException e) {
@@ -339,7 +345,7 @@ public class WriteWorkload implements Workload {
 
                         try {
                             connection.commit();
-                            duration = System.currentTimeMillis() - start;
+                            duration = EnvironmentEdgeManager.currentTimeMillis() - start;
                             LOGGER.info("Writer ( " + Thread.currentThread().getName()
                                     + ") committed Final Batch. Duration (" + duration + ") Ms");
                             connection.close();
@@ -349,7 +355,7 @@ public class WriteWorkload implements Workload {
                         }
                     }
                 }
-                totalDuration = System.currentTimeMillis() - start;
+                totalDuration = EnvironmentEdgeManager.currentTimeMillis() - start;
                 return new Info(totalDuration, rowsCreated);
             }
         });

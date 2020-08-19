@@ -161,7 +161,7 @@ public class LocalTableState implements TableState {
             // needing to lookup the prior row values.
             if (requiresPriorRowState) {
                 // add the current state of the row. Uses listCells() to avoid a new array creation.
-                this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).listCells(), false);
+                this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations), false);
             }
         }
 

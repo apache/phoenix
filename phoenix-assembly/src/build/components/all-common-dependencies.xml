@@ -23,6 +23,14 @@
   <!-- All of our dependencies -->
   <dependencySets>
     <dependencySet>
+      <unpack>false</unpack>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>org.apache.phoenix:phoenix-hbase-compat-2.1.6</include>
+        <include>org.apache.phoenix:phoenix-hbase-compat-2.2.1</include>
+      </includes>
+    </dependencySet>
+    <dependencySet>
       <!-- Unpack all the dependencies to class files, since java doesn't support
         jar of jars for running -->
       <unpack>false</unpack>
@@ -46,7 +54,6 @@
         <include>org.cloudera.htrace:htrace-core</include>
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
-        <include>org.apache.calcite:calcite-avatica*</include>
 
         <!-- For omid TSO -->
         <include>org.apache.omid:omid-tso-server-hbase2.x</include>
@@ -94,8 +101,9 @@
       <!-- save these dependencies to the top-level -->
       <outputDirectory>/lib</outputDirectory>
       <includes>
-        <include>org.codehaus.jackson:jackson-core-asl</include>
-        <include>org.codehaus.jackson:jackson-mapper-asl</include>
+        <include>com.fasterxml.jackson.core:jackson-core</include>
+        <include>com.fasterxml.jackson.core:jackson-databind</include>
+        <include>com.fasterxml.jackson.core:jackson-annotations</include>
       </includes>
     </dependencySet>
   </dependencySets>

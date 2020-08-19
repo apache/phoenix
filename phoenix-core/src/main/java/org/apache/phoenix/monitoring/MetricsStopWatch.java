@@ -49,11 +49,20 @@ final class MetricsStopWatch {
             }
         }
     }
+
+    boolean isRunning() {
+        return isMetricsEnabled && stopwatch.isRunning();
+    }
     
     long getElapsedTimeInMs() {
         if (isMetricsEnabled) {
             return stopwatch.elapsedMillis();
         }
         return 0;
+    }
+
+    @com.google.common.annotations.VisibleForTesting
+    final boolean getMetricsEnabled(){
+        return isMetricsEnabled;
     }
 }

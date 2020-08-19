@@ -73,7 +73,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	}
     
     @Parameters(name="transactionProvider={0}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { {"TEPHRA"}, {"OMID"}, {null} }), 0);
     }
     
@@ -197,8 +197,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
                 queryPlan);
         } else {
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + Long.MIN_VALUE + ",51]"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + Long.MIN_VALUE + ",51] - ["+(saltBuckets.intValue()-1)+"," + Long.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + Short.MIN_VALUE + ",51]"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + Short.MIN_VALUE + ",51] - ["+(saltBuckets.intValue()-1)+"," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
                             queryPlan);
         }
 
@@ -238,9 +238,9 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         } else {
             physicalTableName = viewIndexPhysicalName;
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + (Long.MIN_VALUE+1) + ",'foo']\n"
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + (Long.MIN_VALUE+1) + ",'foo'] - ["+(saltBuckets.intValue()-1)+"," + (Long.MIN_VALUE+1) + ",'foo']\n"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + (Short.MIN_VALUE+1) + ",'foo'] - ["+(saltBuckets.intValue()-1)+"," + (Short.MIN_VALUE+1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));

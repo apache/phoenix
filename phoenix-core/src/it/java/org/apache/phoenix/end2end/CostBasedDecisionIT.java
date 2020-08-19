@@ -44,7 +44,7 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
     private final String testTable1000;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
@@ -245,7 +245,7 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
             String query = "DELETE FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
             // Use the idx2 plan with a wider PK slot span when stats are not available.
             verifyQueryPlan(query,
-                    "DELETE ROWS\n" +
+                    "DELETE ROWS CLIENT SELECT\n" +
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
                             "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
                             "CLIENT MERGE SORT");
@@ -263,7 +263,7 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
 
             // Use the idx2 plan that scans less data when stats become available.
             verifyQueryPlan(query,
-                    "DELETE ROWS\n" +
+                    "DELETE ROWS CLIENT SELECT\n" +
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,10] - [1,20]\n" +
                             "    SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)\n" +
                             "CLIENT MERGE SORT");

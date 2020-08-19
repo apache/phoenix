@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import com.google.common.base.Strings;
+import com.google.inject.Inject;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
@@ -121,10 +123,19 @@ public class IndexScrutinyTool extends Configured implements Tool {
             "If specified, uses Tenant connection for tenant view index scrutiny (optional)");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_SCRUTINY_[%s]_[%s]";
 
+    @Inject
+    Class<IndexScrutinyMapperForTest> mapperClass = null;
+
+    public IndexScrutinyTool(Class<IndexScrutinyMapperForTest> indexScrutinyMapperForTestClass) {
+        this.mapperClass = indexScrutinyMapperForTestClass;
+    }
+
+    public IndexScrutinyTool() { }
+
     /**
      * Which table to use as the source table
      */
-    public static enum SourceTable {
+    public enum SourceTable {
         DATA_TABLE_SOURCE, INDEX_TABLE_SOURCE,
         /**
          * Runs two separate jobs to iterate over both tables
@@ -132,7 +143,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         BOTH;
     }
 
-    public static enum OutputFormat {
+    public enum OutputFormat {
         FILE, TABLE
     }
 
@@ -212,10 +223,11 @@ public class IndexScrutinyTool extends Configured implements Tool {
         private long scrutinyExecuteTime;
         private long outputMaxRows; // per mapper
         private String tenantId;
+        Class<IndexScrutinyMapperForTest> mapperClass;
 
         public JobFactory(Connection connection, Configuration configuration, long batchSize,
                 boolean useSnapshot, long ts, boolean outputInvalidRows, OutputFormat outputFormat,
-                String basePath, long outputMaxRows, String tenantId) {
+                String basePath, long outputMaxRows, String tenantId, Class<IndexScrutinyMapperForTest> mapperClass) {
             this.outputInvalidRows = outputInvalidRows;
             this.outputFormat = outputFormat;
             this.basePath = basePath;
@@ -227,17 +239,18 @@ public class IndexScrutinyTool extends Configured implements Tool {
             this.tenantId = tenantId;
             this.ts = ts; // CURRENT_SCN to set
             scrutinyExecuteTime = EnvironmentEdgeManager.currentTimeMillis(); // time at which scrutiny was run.
-                                                              // Same for
+            // Same for
             // all jobs created from this factory
             PhoenixConfigurationUtil.setScrutinyExecuteTimestamp(configuration,
                 scrutinyExecuteTime);
             if (!Strings.isNullOrEmpty(tenantId)) {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
+            this.mapperClass = mapperClass;
         }
 
         public Job createSubmittableJob(String schemaName, String indexTable, String dataTable,
-                SourceTable sourceTable) throws Exception {
+                SourceTable sourceTable, Class<IndexScrutinyMapperForTest> mapperClass) throws Exception {
             Preconditions.checkArgument(SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                     || SourceTable.INDEX_TABLE_SOURCE.equals(sourceTable));
 
@@ -315,7 +328,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 }
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
-                FSUtils.setRootDir(configuration, rootDir);
+                CommonFSUtils.setRootDir(configuration, rootDir);
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,
@@ -327,10 +340,10 @@ public class IndexScrutinyTool extends Configured implements Tool {
                         SourceTable.DATA_TABLE_SOURCE.equals(sourceTable) ? pdataTable
                                 : pindexTable);
 
-            return configureSubmittableJob(job, outputPath);
+            return configureSubmittableJob(job, outputPath, mapperClass);
         }
 
-        private Job configureSubmittableJob(Job job, Path outputPath) throws Exception {
+        private Job configureSubmittableJob(Job job, Path outputPath, Class<IndexScrutinyMapperForTest> mapperClass) throws Exception {
             Configuration conf = job.getConfiguration();
             conf.setBoolean("mapreduce.job.user.classpath.first", true);
             HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
@@ -340,7 +353,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 job.setOutputFormatClass(TextOutputFormat.class);
                 FileOutputFormat.setOutputPath(job, outputPath);
             }
-            job.setMapperClass(IndexScrutinyMapper.class);
+            job.setMapperClass((mapperClass == null ? IndexScrutinyMapper.class : mapperClass));
             job.setNumReduceTasks(0);
             // Set the Output classes
             job.setMapOutputKeyClass(Text.class);
@@ -443,17 +456,17 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 outputFormat, outputMaxRows));
             JobFactory jobFactory =
                     new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
-                            outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId);
+                            outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId, mapperClass);
             // If we are running the scrutiny with both tables as the source, run two separate jobs,
             // one for each direction
             if (SourceTable.BOTH.equals(sourceTable)) {
                 jobs.add(jobFactory.createSubmittableJob(schemaName, indexTable, dataTable,
-                    SourceTable.DATA_TABLE_SOURCE));
+                    SourceTable.DATA_TABLE_SOURCE, mapperClass));
                 jobs.add(jobFactory.createSubmittableJob(schemaName, indexTable, dataTable,
-                    SourceTable.INDEX_TABLE_SOURCE));
+                    SourceTable.INDEX_TABLE_SOURCE, mapperClass));
             } else {
                 jobs.add(jobFactory.createSubmittableJob(schemaName, indexTable, dataTable,
-                    sourceTable));
+                    sourceTable, mapperClass));
             }
 
             if (!isForeground) {

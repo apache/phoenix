@@ -31,7 +31,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
@@ -87,7 +86,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
     
     @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                 { false, null, false }, { false, null, true },
                 { false, "TEPHRA", false }, { false, "TEPHRA", true },
@@ -193,6 +192,39 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                 
             }
         } 
+    }
+    
+    @Test
+    public void testUpsertIntoViewOnTableWithIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (ID VARCHAR PRIMARY KEY, V1 VARCHAR)";
+            conn.createStatement().execute(baseTableDDL);
+
+            // Create an Index on the base table
+            String tableIndex = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + tableIndex + 
+                " ON " + baseTable + " (V1)");
+
+            // Create a view on the base table
+            String viewDDL = "CREATE VIEW IF NOT EXISTS " + view 
+                    + " (V2 INTEGER) AS SELECT * FROM " + baseTable
+                    + " WHERE ID='a'";
+            conn.createStatement().execute(viewDDL);
+
+            String upsert = "UPSERT INTO " + view + " (ID, V1, V2) "
+                    + "VALUES ('a' ,'ab', 7)";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+            
+            ResultSet rs = conn.createStatement().executeQuery("SELECT ID, V1 from " + baseTable);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));         
+        }
     }
     
     @Test
@@ -665,7 +697,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       }
   }
 
-
   @Test
   public void testUpsertingDeletedRowShouldGiveProperDataWithIndexes() throws Exception {
       testUpsertingDeletedRowShouldGiveProperDataWithIndexes(false);
@@ -686,11 +717,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       try (Connection conn = getConnection()) {
             conn.createStatement().execute(
                 "create table " + fullTableName + " (id integer primary key, "
-                        + (multiCf ? columnFamily1 : "") + "f float, "
-                        + (multiCf ? columnFamily2 : "") + "s varchar)" + tableDDLOptions);
+                        + (multiCf ? columnFamily1 + "." : "") + "f float, "
+                        + (multiCf ? columnFamily2 + "." : "") + "s varchar)" + tableDDLOptions);
             conn.createStatement().execute(
                 "create " + (localIndex ? "LOCAL" : "") + " index " + indexName + " on " + fullTableName + " ("
-                        + (multiCf ? columnFamily1 : "") + "f) include ("+(multiCf ? columnFamily2 : "") +"s)");
+                        + (multiCf ? columnFamily1 + "." : "") + "f) include ("+(multiCf ? columnFamily2 + "." : "") +"s)");
             conn.createStatement().execute(
                 "upsert into " + fullTableName + " values (1, 0.5, 'foo')");
           conn.commit();
@@ -706,6 +737,49 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           assertEquals("foo", rs.getString(3));
       } 
   }
+
+    @Test
+    public void testUpsertingDeletedRowWithNullCoveredColumn() throws Exception {
+        testUpsertingDeletedRowWithNullCoveredColumn(false);
+    }
+
+    @Test
+    public void testUpsertingDeletedRowWithNullCoveredColumnMultiCfs() throws Exception {
+        testUpsertingDeletedRowWithNullCoveredColumn(true);
+    }
+
+    public void testUpsertingDeletedRowWithNullCoveredColumn(boolean multiCf) throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String columnFamily1 = "cf1";
+        String columnFamily2 = "cf2";
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        try (Connection conn = getConnection()) {
+            conn.createStatement()
+                    .execute("create table " + fullTableName + " (id integer primary key, "
+                            + (multiCf ? columnFamily1 + "." : "") + "f varchar, "
+                            + (multiCf ? columnFamily2 + "." : "") + "s varchar)"
+                            + tableDDLOptions);
+            conn.createStatement()
+                    .execute("create " + (localIndex ? "LOCAL" : "") + " index " + indexName
+                            + " on " + fullTableName + " (" + (multiCf ? columnFamily1 + "." : "")
+                            + "f) include (" + (multiCf ? columnFamily2 + "." : "") + "s)");
+            conn.createStatement()
+                    .execute("upsert into " + fullTableName + " values (1, 'foo', 'bar')");
+            conn.commit();
+            conn.createStatement().execute("delete from  " + fullTableName + " where id = 1");
+            conn.commit();
+            conn.createStatement()
+                    .execute("upsert into  " + fullTableName + " values (1, null, 'bar')");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + fullIndexName);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(2));
+            assertEquals(null, rs.getString(1));
+            assertEquals("bar", rs.getString(3));
+        }
+    }
 
   /**
    * PHOENIX-4988

@@ -89,11 +89,14 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.sun.istack.NotNull;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class DeleteCompiler {
     private static ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -195,6 +198,12 @@ public class DeleteCompiler {
                     // The data table is always the last one in the list if it's
                     // not chosen as the best of the possible plans.
                     dataTable = otherTableRefs.get(otherTableRefs.size()-1).getTable();
+                    if (!isMaintainedOnClient(table)) {
+                        // dataTable is a projected table and may not include all the indexed columns and so we need to get
+                        // the actual data table
+                        dataTable = PhoenixRuntime.getTable(connection,
+                                SchemaUtil.getTableName(dataTable.getSchemaName().getString(), dataTable.getTableName().getString()));
+                    }
                     scannedIndexMaintainer = IndexMaintainer.create(dataTable, table, connection);
                 }
                 maintainers = new IndexMaintainer[otherTableRefs.size()];
@@ -331,7 +340,7 @@ public class DeleteCompiler {
         private final MutationPlan firstPlan;
         private final QueryPlan dataPlan;
 
-        public MultiRowDeleteMutationPlan(QueryPlan dataPlan, @NotNull List<MutationPlan> plans) {
+        public MultiRowDeleteMutationPlan(QueryPlan dataPlan, @NonNull List<MutationPlan> plans) {
             Preconditions.checkArgument(!plans.isEmpty());
             this.plans = plans;
             this.firstPlan = plans.get(0);
@@ -486,19 +495,22 @@ public class DeleteCompiler {
             projectedColumns.add(column);
             aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
         }
-        // Project all non PK indexed columns so that we can do the proper index maintenance
+        // Project all non PK indexed columns so that we can do the proper index maintenance on the indexes for which
+        // mutations are generated on the client side. Indexed columns are needed to identify index rows to be deleted
         for (PTable index : table.getIndexes()) {
-            IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
-            // Go through maintainer as it handles functional indexes correctly
-            for (Pair<String,String> columnInfo : maintainer.getIndexedColumnInfo()) {
-                String familyName = columnInfo.getFirst();
-                if (familyName != null) {
-                    String columnName = columnInfo.getSecond();
-                    boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
-                    PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
-                    if(!projectedColumns.contains(column)) {
-                        projectedColumns.add(column);
-                        aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+            if (isMaintainedOnClient(index)) {
+                IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+                // Go through maintainer as it handles functional indexes correctly
+                for (Pair<String, String> columnInfo : maintainer.getIndexedColumnInfo()) {
+                    String familyName = columnInfo.getFirst();
+                    if (familyName != null) {
+                        String columnName = columnInfo.getSecond();
+                        boolean hasNoColumnFamilies = table.getColumnFamilies().isEmpty();
+                        PColumn column = hasNoColumnFamilies ? table.getColumnForColumnName(columnName) : table.getColumnFamily(familyName).getPColumnForColumnName(columnName);
+                        if (!projectedColumns.contains(column)) {
+                            projectedColumns.add(column);
+                            aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(hasNoColumnFamilies ? null : TableName.create(null, familyName), '"' + columnName + '"', null)));
+                        }
                     }
                 }
             }
@@ -522,7 +534,7 @@ public class DeleteCompiler {
         // that is being upserted for conflict detection purposes.
         // If we have immutable indexes, we'd increase the number of bytes scanned by executing
         // separate queries against each index, so better to drive from a single table in that case.
-        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasClientSideIndexes;
+        boolean runOnServer = isAutoCommit && !hasPreOrPostProcessing && !table.isTransactional() && !hasClientSideIndexes && allowServerMutations;
         HintNode hint = delete.getHint();
         if (runOnServer && !delete.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
             select = SelectStatement.create(select, HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE));
@@ -536,26 +548,8 @@ public class DeleteCompiler {
         queryPlans = Lists.newArrayList(!clientSideIndexes.isEmpty()
                 ? optimizer.getApplicablePlans(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe)
                 : optimizer.getBestPlan(dataPlan, statement, select, resolverToBe, Collections.<PColumn>emptyList(), parallelIteratorFactoryToBe));
-        // Filter out any local indexes that don't contain all indexed columns.
-        // We have to do this manually because local indexes are still used
-        // when referenced columns aren't in the index, so they won't be
-        // filtered by the optimizer.
-        queryPlans = new ArrayList<>(queryPlans);
-        Iterator<QueryPlan> iterator = queryPlans.iterator();
-        while (iterator.hasNext()) {
-            QueryPlan plan = iterator.next();
-            if (plan.getTableRef().getTable().getIndexType() == IndexType.LOCAL) {
-                if (!plan.getContext().getDataColumns().isEmpty()) {
-                    iterator.remove();
-                }
-            }            
-        }
-        if (queryPlans.isEmpty()) {
-            queryPlans = Collections.singletonList(dataPlan);
-        }
-        
+
         runOnServer &= queryPlans.get(0).getTableRef().getTable().getType() != PTableType.INDEX;
-        runOnServer &= allowServerMutations;
 
         // We need to have all indexed columns available in all immutable indexes in order
         // to generate the delete markers from the query. We also cannot have any filters
@@ -817,7 +811,7 @@ public class DeleteCompiler {
         public ExplainPlan getExplainPlan() throws SQLException {
             List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
             List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
-            planSteps.add("DELETE ROWS");
+            planSteps.add("DELETE ROWS SERVER SELECT");
             planSteps.addAll(queryPlanSteps);
             return new ExplainPlan(planSteps);
         }
@@ -953,7 +947,7 @@ public class DeleteCompiler {
         public ExplainPlan getExplainPlan() throws SQLException {
             List<String> queryPlanSteps =  bestPlan.getExplainPlan().getPlanSteps();
             List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
-            planSteps.add("DELETE ROWS");
+            planSteps.add("DELETE ROWS CLIENT SELECT");
             planSteps.addAll(queryPlanSteps);
             return new ExplainPlan(planSteps);
         }

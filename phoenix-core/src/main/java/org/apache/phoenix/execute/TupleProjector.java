@@ -68,7 +68,7 @@ import com.google.common.base.Preconditions;
 
 public class TupleProjector {    
     private static final String SCAN_PROJECTOR = "scanProjector";
-    
+
     private final KeyValueSchema schema;
     private final Expression[] expressions;
     private ValueBitSet valueSet;

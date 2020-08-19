@@ -44,7 +44,8 @@ public class TransactionUtil {
     public static final int MAX_TRANSACTIONS_PER_MILLISECOND = 1000000;
     // Constant used to empirically determine if a timestamp is a transactional or
     // non transactional timestamp (see TxUtils.MAX_NON_TX_TIMESTAMP)
-    private static final long MAX_NON_TX_TIMESTAMP = (long) (System.currentTimeMillis() * 1.1);
+    private static final long MAX_NON_TX_TIMESTAMP =
+        (long) (EnvironmentEdgeManager.currentTimeMillis() * 1.1);
     
     private TransactionUtil() {
         

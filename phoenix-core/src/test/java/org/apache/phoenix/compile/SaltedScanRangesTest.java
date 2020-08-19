@@ -81,7 +81,7 @@ public class SaltedScanRangesTest {
     }
 
     @Parameters(name="{0} {2}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.addAll(
                 foreach(new KeyRange[][]{{

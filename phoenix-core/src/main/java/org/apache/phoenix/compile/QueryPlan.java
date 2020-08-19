@@ -86,6 +86,8 @@ public interface QueryPlan extends StatementPlan {
     public boolean isDegenerate();
     
     public boolean isRowKeyOrdered();
+
+    boolean isApplicable();
     
     /**
      * 

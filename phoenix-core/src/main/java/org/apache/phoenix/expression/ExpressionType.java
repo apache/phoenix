@@ -191,6 +191,8 @@ public enum ExpressionType {
     SinFunction(SinFunction.class),
     CosFunction(CosFunction.class),
     TanFunction(TanFunction.class),
+    RowKeyBytesStringFunction(RowKeyBytesStringFunction.class),
+    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

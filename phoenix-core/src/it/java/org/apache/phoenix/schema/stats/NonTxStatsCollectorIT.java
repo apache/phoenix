@@ -30,7 +30,7 @@ public class NonTxStatsCollectorIT extends BaseStatsCollectorIT {
     }
 
     @Parameters(name = "mutable={0},transactionProvider={1},columnEncoded={2}")
-    public static Collection<Object[]> provideData() {
+    public static synchronized Collection<Object[]> provideData() {
         return Arrays.asList(
                 new Object[][] {
                     // Immutable, Column Encoded

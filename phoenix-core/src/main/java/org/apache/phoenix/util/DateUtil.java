@@ -47,7 +47,8 @@ import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
 
 import com.google.common.collect.Lists;
-import com.sun.istack.NotNull;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 
 @SuppressWarnings({ "serial", "deprecation" })
@@ -80,7 +81,7 @@ public class DateUtil {
     private DateUtil() {
     }
 
-    @NotNull
+    @NonNull
     public static PDataCodec getCodecFor(PDataType type) {
         PDataCodec codec = type.getCodec();
         if (codec != null) {

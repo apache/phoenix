@@ -46,7 +46,7 @@ public class NamespaceEnabledStatsCollectorIT extends BaseStatsCollectorIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         // enable name space mapping at global level on both client and server side
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());

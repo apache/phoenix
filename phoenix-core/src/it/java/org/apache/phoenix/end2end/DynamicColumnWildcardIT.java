@@ -70,7 +70,7 @@ public class DynamicColumnWildcardIT extends BaseTest {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB, "true");
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps));

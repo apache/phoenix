@@ -26,6 +26,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -45,6 +46,7 @@ import org.apache.phoenix.filter.SingleCFCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.SingleCQKeyValueComparisonFilter;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
@@ -54,9 +56,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -64,6 +66,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -86,7 +89,7 @@ public class WhereCompiler {
     }
 
     public static Expression compile(StatementContext context, FilterableStatement statement) throws SQLException {
-        return compile(context, statement, null, null);
+        return compile(context, statement, null, null, Optional.<byte[]>absent());
     }
 
     public static Expression compile(StatementContext context, ParseNode whereNode) throws SQLException {
@@ -104,8 +107,8 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
-        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), subqueryNodes);
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, Set<SubqueryParseNode> subqueryNodes, Optional<byte[]> minOffset) throws SQLException {
+        return compile(context, statement, viewWhere, Collections.<Expression>emptyList(), subqueryNodes, minOffset);
     }
 
     /**
@@ -118,7 +121,7 @@ public class WhereCompiler {
      * @throws ColumnNotFoundException if column name could not be resolved
      * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
      */    
-    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, Set<SubqueryParseNode> subqueryNodes) throws SQLException {
+    public static Expression compile(StatementContext context, FilterableStatement statement, ParseNode viewWhere, List<Expression> dynamicFilters, Set<SubqueryParseNode> subqueryNodes, Optional<byte[]> minOffset) throws SQLException {
         ParseNode where = statement.getWhere();
         if (subqueryNodes != null) { // if the subqueryNodes passed in is null, we assume there will be no sub-queries in the WHERE clause.
             SubqueryParseNodeVisitor subqueryVisitor = new SubqueryParseNodeVisitor(context, subqueryNodes);
@@ -154,14 +157,18 @@ public class WhereCompiler {
         }
         
         if (context.getCurrentTable().getTable().getType() != PTableType.PROJECTED && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY) {
-            expression = WhereOptimizer.pushKeyExpressionsToScan(context, statement, expression, extractedNodes);
+            Set<HintNode.Hint> hints = null;
+            if(statement.getHint() != null){
+                hints = statement.getHint().getHints();
+            }
+            expression = WhereOptimizer.pushKeyExpressionsToScan(context, hints, expression, extractedNodes, minOffset);
         }
         setScanFilter(context, statement, expression, whereCompiler.disambiguateWithFamily);
 
         return expression;
     }
     
-    private static class WhereExpressionCompiler extends ExpressionCompiler {
+    public static class WhereExpressionCompiler extends ExpressionCompiler {
         private boolean disambiguateWithFamily;
 
         WhereExpressionCompiler(StatementContext context) {
@@ -189,16 +196,37 @@ public class WhereCompiler {
         @Override
         protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
             ColumnRef ref = super.resolveColumn(node);
+            if (disambiguateWithFamily) {
+                return ref;
+            }
             PTable table = ref.getTable();
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we
             // just use that.
-            try {
-                if (!SchemaUtil.isPKColumn(ref.getColumn())) {
-                    table.getColumnForColumnName(ref.getColumn().getName().getString());
+            if (!SchemaUtil.isPKColumn(ref.getColumn())) {
+                if (!EncodedColumnsUtil.usesEncodedColumnNames(table)
+                    || ref.getColumn().isDynamic()) {
+                    try {
+                        table.getColumnForColumnName(ref.getColumn().getName().getString());
+                    } catch (AmbiguousColumnException e) {
+                        disambiguateWithFamily = true;
+                    }
+                } else {
+                    for (PColumnFamily columnFamily : table.getColumnFamilies()) {
+                        if (columnFamily.getName().equals(ref.getColumn().getFamilyName())) {
+                            continue;
+                        }
+                        try {
+                            table.getColumnForColumnQualifier(columnFamily.getName().getBytes(),
+                                ref.getColumn().getColumnQualifierBytes());
+                            // If we find the same qualifier name with different columnFamily,
+                            // then set disambiguateWithFamily to true
+                            disambiguateWithFamily = true;
+                            break;
+                        } catch (ColumnNotFoundException ignore) {
+                        }
+                    }
                 }
-            } catch (AmbiguousColumnException e) {
-                disambiguateWithFamily = true;
             }
             return ref;
          }

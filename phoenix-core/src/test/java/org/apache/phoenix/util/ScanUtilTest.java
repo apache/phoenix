@@ -129,7 +129,7 @@ public class ScanUtilTest {
         }
 
         @Parameters(name = "{0} {1} {2} {3} {4}")
-        public static Collection<Object> data() {
+        public static synchronized Collection<Object> data() {
             List<Object> testCases = Lists.newArrayList();
             // 1, Lower bound, all single keys, all inclusive.
             testCases.addAll(foreach(new KeyRange[][] {

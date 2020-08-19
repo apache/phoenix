@@ -53,7 +53,6 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -116,29 +115,37 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                     result = scanner.next();
                 }
                 if (result == null || result.isEmpty()) {
-                    Pair<RegionInfo, RegionInfo> mergeRegions =
-                            MetaTableAccessor.getRegionsFromMergeQualifier(ctx.getEnvironment().getConnection(),
+                    List<RegionInfo> mergeRegions =
+                            MetaTableAccessor.getMergeRegions(ctx.getEnvironment().getConnection(),
                                 region.getRegionInfo().getRegionName());
-                    if (mergeRegions == null || mergeRegions.getFirst() == null) return reader;
+                    if (mergeRegions == null || mergeRegions.isEmpty()){
+                        return reader;
+                    }
                     byte[] splitRow =
                             CellUtil.cloneRow(KeyValueUtil.createKeyValueFromKey(r.getSplitKey()));
                     // We need not change any thing in first region data because first region start key
                     // is equal to merged region start key. So returning same reader.
-                    if (Bytes.compareTo(mergeRegions.getFirst().getStartKey(), splitRow) == 0) {
-                        if (mergeRegions.getFirst().getStartKey().length == 0
-                                && region.getRegionInfo().getEndKey().length != mergeRegions
-                                        .getFirst().getEndKey().length) {
-                            childRegion = mergeRegions.getFirst();
+                    if (Bytes.compareTo(mergeRegions.get(0).getStartKey(), splitRow) == 0) {
+                        if (mergeRegions.get(0).getStartKey().length == 0
+                                 && region.getRegionInfo().getEndKey().length
+                                         != mergeRegions.get(0).getEndKey().length) {
+                            childRegion = mergeRegions.get(0);
                             regionStartKeyInHFile =
-                                    mergeRegions.getFirst().getStartKey().length == 0 ? new byte[mergeRegions
-                                            .getFirst().getEndKey().length] : mergeRegions.getFirst()
-                                            .getStartKey();
+                                    mergeRegions.get(0).getStartKey().length == 0
+                                            ? new byte[mergeRegions.get(0).getEndKey().length]
+                                            : mergeRegions.get(0).getStartKey();
                         } else {
                             return reader;
                         }
                     } else {
-                        childRegion = mergeRegions.getSecond();
-                        regionStartKeyInHFile = mergeRegions.getSecond().getStartKey();
+                        for (RegionInfo mergeRegion :
+                                mergeRegions.subList(1, mergeRegions.size())) {
+                            if (Bytes.compareTo(mergeRegion.getStartKey(), splitRow) == 0) {
+                                childRegion = mergeRegion;
+                                regionStartKeyInHFile = mergeRegion.getStartKey();
+                                break;
+                            }
+                        }
                     }
                     splitKey = KeyValueUtil.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
                         new byte[region.getRegionInfo().getEndKey().length] :
@@ -175,8 +182,6 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                         childRegion, regionStartKeyInHFile, splitKey,
                         childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID,
                         new AtomicInteger(0), region.getRegionInfo());
-            } catch (ClassNotFoundException e) {
-                throw new IOException(e);
             } catch (SQLException e) {
                 throw new IOException(e);
             } finally {
@@ -286,7 +291,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                     maintainers, store.getColumnFamilyDescriptor().getName(),env.getConfiguration());
             
 
-        } catch (ClassNotFoundException | SQLException e) {
+        } catch (SQLException e) {
             throw new IOException(e);
 
         }

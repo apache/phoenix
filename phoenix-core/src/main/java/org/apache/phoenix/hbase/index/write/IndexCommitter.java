@@ -22,8 +22,9 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 
 import com.google.common.collect.Multimap;
-import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+
+import java.io.IOException;
 
 /**
  * Write the index updates to the index tables
@@ -33,5 +34,5 @@ public interface IndexCommitter extends Stoppable {
   void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure);
 
   public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
-      throws IndexWriteException;
+      throws IOException;
 }

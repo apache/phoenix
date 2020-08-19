@@ -82,7 +82,7 @@ public class TableLogWriter implements LogWriter {
     }
 
     @Override
-    public void write(RingBufferEvent event) throws SQLException, IOException, ClassNotFoundException {
+    public void write(RingBufferEvent event) throws SQLException, IOException {
         if (isClosed()) {
             LOGGER.warn("Unable to commit query log as Log committer is already closed");
             return;

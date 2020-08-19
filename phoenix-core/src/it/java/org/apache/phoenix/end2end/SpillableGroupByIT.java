@@ -64,7 +64,7 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
     private int id;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(11);
         // Set a very small cache size to force plenty of spilling
         props.put(QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB,

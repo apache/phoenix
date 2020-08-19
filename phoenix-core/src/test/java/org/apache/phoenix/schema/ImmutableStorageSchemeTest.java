@@ -69,7 +69,7 @@ public class ImmutableStorageSchemeTest {
     byte serializationVersion;
     
     @Parameters(name="ImmutableStorageSchemeTest_immutableStorageScheme={0},serializationVersion={1}}") // name is used by failsafe as file name in reports
-    public static List<Object[]> data() {
+    public static synchronized List<Object[]> data() {
         return Arrays.asList(new Object[][] {
                 { SINGLE_CELL_ARRAY_WITH_OFFSETS,
                         IMMUTABLE_SERIALIZATION_VERSION },

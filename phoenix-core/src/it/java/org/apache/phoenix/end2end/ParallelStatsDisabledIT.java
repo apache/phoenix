@@ -19,7 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
@@ -55,13 +55,13 @@ import static org.junit.Assert.fail;
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @AfterClass
-    public static void freeResources() throws Exception {
+    public static synchronized void freeResources() throws Exception {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 

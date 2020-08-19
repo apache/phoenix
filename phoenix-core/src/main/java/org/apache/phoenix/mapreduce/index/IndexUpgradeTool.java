@@ -18,7 +18,7 @@
 package org.apache.phoenix.mapreduce.index;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.gson.Gson;
+import com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -26,7 +26,11 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -44,9 +48,12 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -55,10 +62,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -70,33 +77,43 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.logging.FileHandler;
 import java.util.logging.SimpleFormatter;
-import java.util.stream.Collectors;
 
-import static org.apache.phoenix.query.QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
+import static org.apache.phoenix.query.QueryServicesOptions.
+        GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN;
 
 public class IndexUpgradeTool extends Configured implements Tool {
 
     private static final Logger LOGGER = Logger.getLogger(IndexUpgradeTool.class.getName());
 
+    private static final String INDEX_REBUILD_OPTION_SHORT_OPT = "rb";
+    private static final String INDEX_TOOL_OPTION_SHORT_OPT = "tool";
+
     private static final Option OPERATION_OPTION = new Option("o", "operation",
             true,
-            "[Required]Operation to perform (upgrade/rollback)");
+            "[Required] Operation to perform (upgrade/rollback)");
     private static final Option TABLE_OPTION = new Option("tb", "table", true,
-            "[Required]Tables list ex. table1,table2");
+            "[Required] Tables list ex. table1,table2");
     private static final Option TABLE_CSV_FILE_OPTION = new Option("f", "file",
             true,
-            "[Optional]Tables list in a csv file");
+            "[Optional] Tables list in a csv file");
     private static final Option DRY_RUN_OPTION = new Option("d", "dry-run",
             false,
-            "[Optional]If passed this will output steps that will be executed");
+            "[Optional] If passed this will output steps that will be executed");
     private static final Option HELP_OPTION = new Option("h", "help",
             false, "Help");
     private static final Option LOG_FILE_OPTION = new Option("lf", "logfile",
             true,
-            "Log file path where the logs are written");
-    private static final Option INDEX_SYNC_REBUILD_OPTION = new Option("sr", "index-sync-rebuild",
+            "[Optional] Log file path where the logs are written");
+    private static final Option INDEX_REBUILD_OPTION = new Option(INDEX_REBUILD_OPTION_SHORT_OPT,
+            "index-rebuild",
             false,
-            "[Optional]Whether or not synchronously rebuild the indexes; default rebuild asynchronous");
+            "[Optional] Rebuild the indexes. Set -" + INDEX_TOOL_OPTION_SHORT_OPT +
+             " to pass options to IndexTool.");
+    private static final Option INDEX_TOOL_OPTION = new Option(INDEX_TOOL_OPTION_SHORT_OPT,
+            "index-tool",
+            true,
+            "[Optional] Options to pass to indexTool when rebuilding indexes. " +
+            "Set -" + INDEX_REBUILD_OPTION_SHORT_OPT + " to rebuild the index.");
 
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
@@ -106,14 +123,20 @@ public class IndexUpgradeTool extends Configured implements Tool {
     private HashMap<String, HashSet<String>> tablesAndIndexes = new HashMap<>();
     private HashMap<String, HashMap<String,IndexInfo>> rebuildMap = new HashMap<>();
     private HashMap<String, String> prop = new  HashMap<>();
+    private HashMap<String, String> emptyProp = new HashMap<>();
 
-    private boolean dryRun, upgrade, syncRebuild;
+    private boolean dryRun, upgrade, rebuild;
     private String operation;
     private String inputTables;
     private String logFile;
     private String inputFile;
+    private boolean isWaitComplete = false;
+    private String indexToolOpts;
 
     private boolean test = false;
+    private boolean failUpgradeTask = false;
+    private boolean failDowngradeTask = false;
+    private boolean hasFailure = false;
 
     public void setDryRun(boolean dryRun) {
         this.dryRun = dryRun;
@@ -133,9 +156,9 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
     public void setTest(boolean test) { this.test = test; }
 
-    public boolean getDryRun() {
-        return this.dryRun;
-    }
+    public boolean getIsWaitComplete() { return this.isWaitComplete; }
+
+    public boolean getDryRun() { return this.dryRun; }
 
     public String getInputTables() {
         return this.inputTables;
@@ -146,17 +169,31 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     public String getOperation() {
-        return operation;
+        return this.operation;
+    }
+
+    public boolean getIsRebuild() { return this.rebuild; }
+
+    public String getIndexToolOpts() { return this.indexToolOpts; }
+
+    @VisibleForTesting
+    public void setFailUpgradeTask(boolean failInitialTask) {
+        this.failUpgradeTask = failInitialTask;
+    }
+
+    public void setFailDowngradeTask(boolean failRollbackTask) {
+        this.failDowngradeTask = failRollbackTask;
     }
 
     public IndexUpgradeTool(String mode, String tables, String inputFile,
-            String outputFile, boolean dryRun, IndexTool indexTool) {
+            String outputFile, boolean dryRun, IndexTool indexTool, boolean rebuild) {
         this.operation = mode;
         this.inputTables = tables;
         this.inputFile = inputFile;
         this.logFile = outputFile;
         this.dryRun = dryRun;
         this.indexingTool = indexTool;
+        this.rebuild = rebuild;
     }
 
     public IndexUpgradeTool () { }
@@ -173,7 +210,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
         initializeTool(cmdLine);
         prepareToolSetup();
         executeTool();
-        return 0;
+        if (hasFailure) {
+            return -1;
+        } else {
+            return 0;
+        }
+
     }
 
     /**
@@ -187,7 +229,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser();
+        CommandLineParser parser = new PosixParser();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -218,6 +260,11 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     +TABLE_OPTION.getLongOpt() + " and " + TABLE_CSV_FILE_OPTION.getLongOpt()
                     + "; specify only one.");
         }
+        if ((cmdLine.hasOption(INDEX_TOOL_OPTION.getOpt()))
+                && !cmdLine.hasOption(INDEX_REBUILD_OPTION.getOpt())) {
+            throw new IllegalStateException("Index tool options should be passed in with "
+                    + INDEX_REBUILD_OPTION.getLongOpt());
+        }
         return cmdLine;
     }
 
@@ -244,9 +291,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
         LOG_FILE_OPTION.setOptionalArg(true);
         options.addOption(LOG_FILE_OPTION);
         options.addOption(HELP_OPTION);
-        INDEX_SYNC_REBUILD_OPTION.setOptionalArg(true);
-        options.addOption(INDEX_SYNC_REBUILD_OPTION);
-
+        INDEX_REBUILD_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_REBUILD_OPTION);
+        INDEX_TOOL_OPTION.setOptionalArg(true);
+        options.addOption(INDEX_TOOL_OPTION);
         return options;
     }
 
@@ -257,7 +305,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
         logFile = cmdLine.getOptionValue(LOG_FILE_OPTION.getOpt());
         inputFile = cmdLine.getOptionValue(TABLE_CSV_FILE_OPTION.getOpt());
         dryRun = cmdLine.hasOption(DRY_RUN_OPTION.getOpt());
-        syncRebuild = cmdLine.hasOption(INDEX_SYNC_REBUILD_OPTION.getOpt());
+        rebuild = cmdLine.hasOption(INDEX_REBUILD_OPTION.getOpt());
+        indexToolOpts = cmdLine.getOptionValue(INDEX_TOOL_OPTION.getOpt());
     }
 
     @VisibleForTesting
@@ -292,17 +341,44 @@ public class IndexUpgradeTool extends Configured implements Tool {
                 LOGGER.info("This is the beginning of the tool with dry run.");
             }
         } catch (IOException e) {
-            LOGGER.severe("Something went wrong "+e);
+            LOGGER.severe("Something went wrong " + e);
             System.exit(-1);
         }
+    }
+
+    private static void setRpcRetriesAndTimeouts(Configuration conf) {
+        long indexRebuildQueryTimeoutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_QUERY_TIMEOUT);
+        long indexRebuildRPCTimeoutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
+        long indexRebuildClientScannerTimeOutMs =
+                conf.getLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
+        int indexRebuildRpcRetriesCounter =
+                conf.getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
+                        QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER);
+
+        // Set phoenix and hbase level timeouts and rpc retries
+        conf.setLong(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, indexRebuildQueryTimeoutMs);
+        conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, indexRebuildRPCTimeoutMs);
+        conf.setLong(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
+                indexRebuildClientScannerTimeOutMs);
+        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, indexRebuildRpcRetriesCounter);
+    }
+
+    @VisibleForTesting
+    public static Connection getConnection(Configuration conf) throws SQLException {
+        setRpcRetriesAndTimeouts(conf);
+        return ConnectionUtil.getInputConnection(conf);
     }
 
     @VisibleForTesting
     public int executeTool() {
         Configuration conf = HBaseConfiguration.addHbaseResources(getConf());
 
-        try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
-
+        try (Connection conn = getConnection(conf)) {
             ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class)
                     .getQueryServices();
 
@@ -317,51 +393,176 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return -1;
     }
 
-    private int executeTool(Connection conn, ConnectionQueryServices queryServices,
+    private int executeTool(Connection conn,
+            ConnectionQueryServices queryServices,
             Configuration conf) {
-
-        LOGGER.info("Executing " + operation);
-        List<Integer> statusList = tablesAndIndexes.entrySet().parallelStream().map(entry -> {
+        ArrayList<String> immutableList = new ArrayList<>();
+        ArrayList<String> mutableList = new ArrayList<>();
+        for (Map.Entry<String, HashSet<String>> entry :tablesAndIndexes.entrySet()) {
             String dataTableFullName = entry.getKey();
-            HashSet<String> indexes = entry.getValue();
-
-            try (Admin admin = queryServices.getAdmin()) {
-
+            try {
                 PTable dataTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
-                LOGGER.fine("Executing " + operation + " for " + dataTableFullName);
-
-                boolean mutable = !(dataTable.isImmutableRows());
-                if (!mutable) {
-                    LOGGER.fine("Data table is immutable, waiting for "
-                            + (GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1)
-                            + " minutes for client cache to expire");
-                    if (!test) {
-                        Thread.sleep(
-                                (GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN + 1) * 60 * 1000);
-                    }
+                if (dataTable.isImmutableRows()) {
+                    //add to list where immutable tables are processed in a different function
+                    immutableList.add(dataTableFullName);
+                } else {
+                    mutableList.add(dataTableFullName);
                 }
+            } catch (SQLException e) {
+                LOGGER.severe("Something went wrong while getting the PTable "
+                        + dataTableFullName + " " + e);
+                return -1;
+            }
+        }
+        long startWaitTime = executeToolForImmutableTables(queryServices, immutableList);
+        executeToolForMutableTables(conn, queryServices, conf, mutableList);
+        enableImmutableTables(queryServices, immutableList, startWaitTime);
+        rebuildIndexes(conn, conf, immutableList);
+        if (hasFailure) {
+            return -1;
+        } else {
+            return 0;
+        }
+    }
+
+    private long executeToolForImmutableTables(ConnectionQueryServices queryServices,
+            List<String> immutableList) {
+        if (immutableList.isEmpty()) {
+            return 0;
+        }
+        LOGGER.info("Started " + operation + " for immutable tables");
+        List<String> failedTables = new ArrayList<String>();
+        for (String dataTableFullName : immutableList) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                LOGGER.info("Executing " + operation + " of " + dataTableFullName
+                        + " (immutable)");
+                disableTable(admin, dataTableFullName, indexes);
+                modifyTable(admin, dataTableFullName, indexes);
+            } catch (Throwable e) {
+                LOGGER.severe("Something went wrong while disabling "
+                        + "or modifying immutable table " + e);
+                handleFailure(queryServices, dataTableFullName, immutableList, failedTables);
+            }
+        }
+        immutableList.removeAll(failedTables);
+        long startWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        return startWaitTime;
+    }
+
+    private void executeToolForMutableTables(Connection conn,
+            ConnectionQueryServices queryServices,
+            Configuration conf,
+            ArrayList<String> mutableTables) {
+        if (mutableTables.isEmpty()) {
+            return;
+        }
+        LOGGER.info("Started " + operation + " for mutable tables");
+        List<String> failedTables = new ArrayList<>();
+        for (String dataTableFullName : mutableTables) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                LOGGER.info("Executing " + operation + " of " + dataTableFullName);
                 disableTable(admin, dataTableFullName, indexes);
                 modifyTable(admin, dataTableFullName, indexes);
                 enableTable(admin, dataTableFullName, indexes);
-                rebuildIndexes(conn, conf, dataTableFullName);
-            } catch (IOException | SQLException | InterruptedException e) {
-                LOGGER.severe("Something went wrong while executing " + operation + " steps " + e);
-                return -1;
+                LOGGER.info("Completed " + operation + " of " + dataTableFullName);
+            } catch (Throwable e) {
+                LOGGER.severe("Something went wrong while executing "
+                    + operation + " steps for "+ dataTableFullName + " " + e);
+                handleFailure(queryServices, dataTableFullName, mutableTables, failedTables);
             }
-            return 0;
-        }).collect(Collectors.toList());
-        return statusList.parallelStream().anyMatch(p -> p == -1) ? -1 : 0;
+        }
+        mutableTables.removeAll(failedTables);
+        // Opportunistically kick-off index rebuilds after upgrade operation
+        rebuildIndexes(conn, conf, mutableTables);
     }
 
-    private void modifyTable(Admin admin, String dataTableFullName, HashSet<String> indexes)
-            throws IOException {
-        if (upgrade) {
-            modifyIndexTable(admin, indexes);
-            modifyDataTable(admin, dataTableFullName);
-        } else {
-            modifyDataTable(admin, dataTableFullName);
-            modifyIndexTable(admin, indexes);
+    private void handleFailure(ConnectionQueryServices queryServices,
+            String dataTableFullName,
+            List<String> tableList,
+            List<String> failedTables) {
+        hasFailure = true;
+        LOGGER.info("Performing error handling to revert the steps taken during " + operation);
+        HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+        try (Admin admin = queryServices.getAdmin()) {
+            upgrade = !upgrade;
+            disableTable(admin, dataTableFullName, indexes);
+            modifyTable(admin, dataTableFullName, indexes);
+            enableTable(admin, dataTableFullName, indexes);
+            upgrade = !upgrade;
+
+            tablesAndIndexes.remove(dataTableFullName); //removing from the map
+            failedTables.add(dataTableFullName); //everything in failed tables will later be
+            // removed from the list
+
+            LOGGER.severe(dataTableFullName+" has been removed from the list as tool failed"
+                    + " to perform "+operation);
+        } catch (Throwable e) {
+            LOGGER.severe("Revert of the "+operation +" failed in error handling, "
+                    + "re-enabling tables and then throwing runtime exception");
+            LOGGER.severe("Confirm the state for "+getSubListString(tableList, dataTableFullName));
+            try {
+                enableTable(queryServices.getAdmin(), dataTableFullName, indexes);
+            } catch (Exception ex) {
+                throw new RuntimeException("Error re-enabling tables after rollback failure. " +
+                    "Original exception that caused the rollback: [" + e.toString() + " " + "]", ex);
+            }
+            throw new RuntimeException(e);
         }
+    }
+
+    private void enableImmutableTables(ConnectionQueryServices queryServices,
+            ArrayList<String> immutableList,
+            long startWaitTime) {
+        if (immutableList.isEmpty()) {
+            return;
+        }
+        while(true) {
+            long waitMore = getWaitMoreTime(startWaitTime);
+            if (waitMore <= 0) {
+                isWaitComplete = true;
+                break;
+            }
+            try {
+                // If the table is immutable, we need to wait for clients to purge
+                // their caches of table metadata
+                Thread.sleep(waitMore);
+                isWaitComplete = true;
+            } catch(InterruptedException e) {
+                LOGGER.warning("Sleep before starting index rebuild is interrupted. "
+                        + "Attempting to sleep again! " + e.getMessage());
+            }
+        }
+
+        for (String dataTableFullName: immutableList) {
+            try (Admin admin = queryServices.getAdmin()) {
+                HashSet<String> indexes = tablesAndIndexes.get(dataTableFullName);
+                enableTable(admin, dataTableFullName, indexes);
+            } catch (IOException | SQLException e) {
+                LOGGER.severe("Something went wrong while enabling immutable table " + e);
+                //removing to avoid any rebuilds after upgrade
+                tablesAndIndexes.remove(dataTableFullName);
+                immutableList.remove(dataTableFullName);
+                throw new RuntimeException("Manually enable the following tables "
+                        + getSubListString(immutableList, dataTableFullName)
+                        + " and run the index rebuild ", e);
+            }
+        }
+    }
+
+    private String getSubListString(List<String> tableList, String dataTableFullName) {
+        return StringUtils.join(",", tableList.subList(tableList.indexOf(dataTableFullName),
+                tableList.size()));
+    }
+
+    private long getWaitMoreTime(long startWaitTime) {
+        int waitTime = GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN+1;
+        long endWaitTime = EnvironmentEdgeManager.currentTimeMillis();
+        if(test || dryRun) {
+            return 0; //no wait
+        }
+        return (((waitTime) * 60000) - Math.abs(endWaitTime-startWaitTime));
     }
 
     private void disableTable(Admin admin, String dataTable, HashSet<String>indexes)
@@ -386,7 +587,24 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
-    private void enableTable(Admin admin, String dataTable, HashSet<String>indexes)
+    private void modifyTable(Admin admin, String dataTableFullName, HashSet<String> indexes)
+            throws IOException {
+        if (upgrade) {
+            modifyIndexTable(admin, indexes);
+            modifyDataTable(admin, dataTableFullName);
+            if (test && failUpgradeTask) {
+                throw new RuntimeException("Test requested upgrade failure");
+            }
+        } else {
+            modifyDataTable(admin, dataTableFullName);
+            modifyIndexTable(admin, indexes);
+            if (test && failDowngradeTask) {
+                throw new RuntimeException("Test requested downgrade failure");
+            }
+        }
+    }
+
+    private void enableTable(Admin admin, String dataTable, Set<String>indexes)
             throws IOException {
         if (!admin.isTableEnabled(TableName.valueOf(dataTable))) {
             if (!dryRun) {
@@ -408,14 +626,34 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
+    private void rebuildIndexes(Connection conn, Configuration conf, ArrayList<String> tableList) {
+        if (!upgrade || !rebuild) {
+            return;
+        }
+
+        for (String table: tableList) {
+            rebuildIndexes(conn, conf, table);
+        }
+    }
+
     private void rebuildIndexes(Connection conn, Configuration conf, String dataTableFullName) {
-        if (upgrade) {
-            prepareToRebuildIndexes(conn, dataTableFullName);
+        try {
+            HashMap<String, IndexInfo>
+                    rebuildMap = prepareToRebuildIndexes(conn, dataTableFullName);
+
+            //for rebuilding indexes in case of upgrade and if there are indexes on the table/view.
+            if (rebuildMap.isEmpty()) {
+                LOGGER.info("No indexes to rebuild for table " + dataTableFullName);
+                return;
+            }
             if(!test) {
                 indexingTool = new IndexTool();
+                indexingTool.setConf(conf);
             }
-            indexingTool.setConf(conf);
-            rebuildIndexes(dataTableFullName, indexingTool);
+            startIndexRebuilds(rebuildMap, indexingTool);
+        } catch (SQLException e) {
+            LOGGER.severe("Failed to prepare the map for index rebuilds " + e);
+            throw new RuntimeException("Failed to prepare the map for index rebuilds");
         }
     }
 
@@ -436,11 +674,19 @@ public class IndexUpgradeTool extends Configured implements Tool {
     }
 
     private void addCoprocessor(Admin admin, String tableName, TableDescriptorBuilder tableDescBuilder,
-            String coprocName) throws IOException {
+                                String coprocName) throws IOException {
+        addCoprocessor(admin, tableName, tableDescBuilder, coprocName,
+            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY, prop);
+    }
+
+    private void addCoprocessor(Admin admin, String tableName, TableDescriptorBuilder tableDescBuilder,
+            String coprocName,int priority, Map<String, String> propsToAdd) throws IOException {
         if (!admin.getDescriptor(TableName.valueOf(tableName)).hasCoprocessor(coprocName)) {
             if (!dryRun) {
-                tableDescBuilder.addCoprocessor(coprocName,
-                        null, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY, prop);
+                CoprocessorDescriptorBuilder coprocBuilder =
+                    CoprocessorDescriptorBuilder.newBuilder(coprocName);
+                coprocBuilder.setPriority(priority).setProperties(propsToAdd);
+                tableDescBuilder.setCoprocessor(coprocBuilder.build());
             }
             LOGGER.info("Loaded " + coprocName + " coprocessor on table " + tableName);
         } else {
@@ -466,7 +712,10 @@ public class IndexUpgradeTool extends Configured implements Tool {
             TableDescriptorBuilder indexTableDescBuilder = TableDescriptorBuilder
                     .newBuilder(admin.getDescriptor(TableName.valueOf(indexName)));
             if (upgrade) {
-                addCoprocessor(admin, indexName, indexTableDescBuilder, GlobalIndexChecker.class.getName());
+                //GlobalIndexChecker needs to be a "lower" priority than all the others so that it
+                //goes first. It also doesn't get the codec props the IndexRegionObserver needs
+                addCoprocessor(admin, indexName, indexTableDescBuilder, GlobalIndexChecker.class.getName(),
+                    QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY -1, emptyProp);
             } else {
                 removeCoprocessor(admin, indexName, indexTableDescBuilder, GlobalIndexChecker.class.getName());
             }
@@ -475,10 +724,13 @@ public class IndexUpgradeTool extends Configured implements Tool {
             }
         }
     }
-    private int rebuildIndexes(String dataTable, IndexTool indexingTool) {
-        for(Map.Entry<String, IndexInfo> indexMap : rebuildMap.get(dataTable).entrySet()) {
-            String index = indexMap.getKey();
-            IndexInfo indexInfo = indexMap.getValue();
+
+    private int startIndexRebuilds(HashMap<String, IndexInfo> indexInfos,
+            IndexTool indexingTool) {
+
+        for(Map.Entry<String, IndexInfo> entry : indexInfos.entrySet()) {
+            String index = entry.getKey();
+            IndexInfo indexInfo = entry.getValue();
             String indexName = SchemaUtil.getTableNameFromFullName(index);
             String tenantId = indexInfo.getTenantId();
             String baseTable = indexInfo.getBaseTable();
@@ -487,7 +739,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
                     + UUID.randomUUID().toString();
             String[] args = getIndexToolArgValues(schema, baseTable, indexName, outFile, tenantId);
-
             try {
                 LOGGER.info("Rebuilding index: " + String.join(",", args));
                 if (!dryRun) {
@@ -502,7 +753,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         return 0;
     }
 
-    private String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
+    public String[] getIndexToolArgValues(String schema, String baseTable, String indexName,
             String outFile, String tenantId) {
         String args[] = { "-s", schema, "-dt", baseTable, "-it", indexName,
                 "-direct", "-op", outFile };
@@ -511,8 +762,12 @@ public class IndexUpgradeTool extends Configured implements Tool {
             list.add("-tenant");
             list.add(tenantId);
         }
-        if (syncRebuild) {
-            list.add("-runfg");
+
+        if (!Strings.isNullOrEmpty(indexToolOpts)) {
+            String[] options = indexToolOpts.split("\\s+");
+            for (String opt : options) {
+                list.add(opt);
+            }
         }
         return list.toArray(new String[list.size()]);
     }
@@ -554,86 +809,86 @@ public class IndexUpgradeTool extends Configured implements Tool {
         }
     }
 
-    private void prepareToRebuildIndexes(Connection conn, String dataTableFullName) {
-        try {
-            Gson gson = new Gson();
-            HashMap<String, IndexInfo> rebuildIndexes = new HashMap<>();
-            HashSet<String> physicalIndexes = tablesAndIndexes.get(dataTableFullName);
+    private HashMap<String, IndexInfo> prepareToRebuildIndexes(Connection conn,
+            String dataTableFullName) throws SQLException {
 
-            String viewIndexPhysicalName = MetaDataUtil
-                    .getViewIndexPhysicalName(dataTableFullName);
-            boolean hasViewIndex =  physicalIndexes.contains(viewIndexPhysicalName);
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(dataTableFullName);
-            String tableName = SchemaUtil.getTableNameFromFullName(dataTableFullName);
+        HashMap<String, IndexInfo> indexInfos = new HashMap<>();
+        HashSet<String> physicalIndexes = tablesAndIndexes.get(dataTableFullName);
 
-            for (String physicalIndexName : physicalIndexes) {
-                if (physicalIndexName.equals(viewIndexPhysicalName)) {
-                    continue;
-                }
-                String indexTableName = SchemaUtil.getTableNameFromFullName(physicalIndexName);
-                String pIndexName = SchemaUtil.getTableName(schemaName, indexTableName);
-                IndexInfo indexInfo = new IndexInfo(schemaName, tableName,
-                        GLOBAL_INDEX_ID, pIndexName);
-                rebuildIndexes.put(physicalIndexName, indexInfo);
+        String viewIndexPhysicalName = MetaDataUtil
+                .getViewIndexPhysicalName(dataTableFullName);
+        boolean hasViewIndex =  physicalIndexes.contains(viewIndexPhysicalName);
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(dataTableFullName);
+        String tableName = SchemaUtil.getTableNameFromFullName(dataTableFullName);
+
+        for (String physicalIndexName : physicalIndexes) {
+            if (physicalIndexName.equals(viewIndexPhysicalName)) {
+                continue;
             }
-
-            if (hasViewIndex) {
-                String viewSql = "SELECT DISTINCT TABLE_NAME, TENANT_ID FROM "
-                        + "SYSTEM.CATALOG "
-                        + "WHERE COLUMN_FAMILY = \'" + dataTableFullName + "\' "
-                        + (!StringUtil.EMPTY_STRING.equals(schemaName) ? "AND TABLE_SCHEM = \'"
-                        + schemaName + "\' " : "")
-                        + "AND LINK_TYPE = "
-                        + PTable.LinkType.PHYSICAL_TABLE.getSerializedValue();
-
-                ResultSet rs = conn.createStatement().executeQuery(viewSql);
-
-                while (rs.next()) {
-                    String viewName = rs.getString(1);
-                    String tenantId = rs.getString(2);
-                    ArrayList<String> viewIndexes = findViewIndexes(conn, schemaName, viewName,
-                           tenantId);
-                    for (String viewIndex : viewIndexes) {
-                        IndexInfo indexInfo = new IndexInfo(schemaName, viewName,
-                               tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
-                        rebuildIndexes.put(viewIndex, indexInfo);
-                    }
-                }
-            }
-            //for rebuilding indexes in case of upgrade and if there are indexes on the table/view.
-            if (!rebuildIndexes.isEmpty()) {
-                rebuildMap.put(dataTableFullName, rebuildIndexes);
-                String json = gson.toJson(rebuildMap);
-                LOGGER.info("Index rebuild map " + json);
-            } else {
-                LOGGER.info("No indexes to rebuild for table " + dataTableFullName);
-            }
-
-        } catch (SQLException e) {
-            LOGGER.severe("Failed to prepare the map for index rebuilds " + e);
-            throw new RuntimeException("Failed to prepare the map for index rebuilds");
+            String indexTableName = SchemaUtil.getTableNameFromFullName(physicalIndexName);
+            String pIndexName = SchemaUtil.getTableName(schemaName, indexTableName);
+            IndexInfo indexInfo = new IndexInfo(schemaName, tableName, GLOBAL_INDEX_ID, pIndexName);
+            indexInfos.put(physicalIndexName, indexInfo);
         }
+
+        if (hasViewIndex) {
+            String viewSql = getViewSql(tableName, schemaName);
+
+            ResultSet rs = conn.createStatement().executeQuery(viewSql);
+            while (rs.next()) {
+                String viewFullName = rs.getString(1);
+                String viewName = SchemaUtil.getTableNameFromFullName(viewFullName);
+                String tenantId = rs.getString(2);
+                ArrayList<String> viewIndexes = findViewIndexes(conn, schemaName, viewName,
+                        tenantId);
+                for (String viewIndex : viewIndexes) {
+                    IndexInfo indexInfo = new IndexInfo(schemaName, viewName,
+                            tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
+                    indexInfos.put(viewIndex, indexInfo);
+                }
+            }
+        }
+        return indexInfos;
+    }
+
+    @VisibleForTesting
+    public static String getViewSql(String tableName, String schemaName) {
+        //column_family has the view name and column_name has the Tenant ID
+        return "SELECT DISTINCT COLUMN_FAMILY, COLUMN_NAME FROM "
+                + "SYSTEM.CHILD_LINK "
+                + "WHERE TABLE_NAME = \'" + tableName + "\'"
+                + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"
+                + schemaName + "\'" : "")
+                + " AND LINK_TYPE = "
+                + PTable.LinkType.CHILD_TABLE.getSerializedValue();
     }
 
     private ArrayList<String> findViewIndexes(Connection conn, String schemaName, String viewName,
             String tenantId) throws SQLException {
 
-        String viewIndexesSql = "SELECT DISTINCT COLUMN_FAMILY FROM "
-                + "SYSTEM.CATALOG "
-                + "WHERE TABLE_NAME = \'" + viewName + "\'"
-                + (!StringUtil.EMPTY_STRING.equals(schemaName) ? "AND TABLE_SCHEM = \'"
-                + schemaName + "\' " : "")
-                + "AND LINK_TYPE = " + PTable.LinkType.INDEX_TABLE.getSerializedValue()
-                + (tenantId != null ? " AND TENANT_ID = \'" + tenantId + "\'" : "");
+        String viewIndexesSql = getViewIndexesSql(viewName, schemaName, tenantId);
         ArrayList<String> viewIndexes = new ArrayList<>();
-        ResultSet
-                rs =
-                conn.createStatement().executeQuery(viewIndexesSql);
+        long stime = EnvironmentEdgeManager.currentTimeMillis();
+        ResultSet rs = conn.createStatement().executeQuery(viewIndexesSql);
+        long etime = EnvironmentEdgeManager.currentTimeMillis();
+        LOGGER.info(String.format("Query %s took %d ms ", viewIndexesSql, (etime - stime)));
         while(rs.next()) {
             String viewIndexName = rs.getString(1);
             viewIndexes.add(viewIndexName);
         }
         return viewIndexes;
+    }
+
+    @VisibleForTesting
+    public static String getViewIndexesSql(String viewName, String schemaName, String tenantId) {
+        return "SELECT DISTINCT COLUMN_FAMILY FROM "
+                + "SYSTEM.CATALOG "
+                + "WHERE TABLE_NAME = \'" + viewName + "\'"
+                + (!Strings.isNullOrEmpty(schemaName) ? " AND TABLE_SCHEM = \'"
+                + schemaName + "\'" : "")
+                + " AND LINK_TYPE = " + PTable.LinkType.INDEX_TABLE.getSerializedValue()
+                + (tenantId != null ?
+                    " AND TENANT_ID = \'" + tenantId + "\'" : " AND TENANT_ID IS NULL");
     }
 
     private class IndexInfo {
@@ -653,9 +908,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             return schemaName;
         }
 
-        public String getBaseTable() {
-            return baseTable;
-        }
+        public String getBaseTable() { return baseTable; }
 
         public String getTenantId() {
             return tenantId;

@@ -56,7 +56,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         HashMap<String, String> props = new HashMap<>();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         TaskRegionEnvironment =
@@ -138,7 +138,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             count = getUtility().countRows(indexHTable);
             assertEquals(0, count);
 
-            String data = "{IndexName:" + indexName + ", DisableBefore: true}";
+            String data = "{\"IndexName\":\"" + indexName + "\"}";
 
             // Run IndexRebuildTask
             TaskRegionObserver.SelfHealingTask task =
@@ -173,25 +173,30 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
     public static void waitForTaskState(Connection conn, PTable.TaskType taskType, String expectedTableName,
             PTable.TaskStatus expectedTaskStatus) throws InterruptedException,
             SQLException {
-        int maxTries = 100, nTries = 0;
+        int maxTries = 200, nTries = 0;
+        String taskStatus = "";
+        String taskData = "";
         do {
             Thread.sleep(2000);
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
+            String stmt = "SELECT * " +
                     " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "' AND " +
-                    PhoenixDatabaseMetaData.TASK_TYPE + " = " +
-                    taskType.getSerializedValue());
+                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
+                    taskType.getSerializedValue();
+            if (expectedTableName != null) {
+                stmt += " AND " + PhoenixDatabaseMetaData.TABLE_NAME + "='" + expectedTableName + "'";
+            }
 
-            String taskStatus = null;
+            ResultSet rs = conn.createStatement().executeQuery(stmt);
 
             while (rs.next()) {
                 taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
+                taskData = rs.getString(PhoenixDatabaseMetaData.TASK_DATA);
                 boolean matchesExpected = (expectedTaskStatus.toString().equals(taskStatus));
                 if (matchesExpected) {
                     return;
                 }
             }
         } while (++nTries < maxTries);
-        fail("Ran out of time waiting for task state to become " + expectedTaskStatus);
+        fail(String.format("Ran out of time waiting for current task state %s to become %s. TaskData: %s", taskStatus, expectedTaskStatus, taskData));
     }
 }

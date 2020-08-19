@@ -65,7 +65,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
     }
     
 	@Parameters(name="MutableIndexSplitIT_localIndex={0},multiTenant={1}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { 
                 { false, false },{ false, true },{true, false}, { true, true } });
     }
@@ -135,9 +135,12 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         List<RegionInfo> regionsOfUserTable = null;
         for(int i = 0; i <=1; i++) {
             boolean split = false;
-            for (int j = 0; j < 60 && !split; j++) {
+            for (int j = 0; j < 150 && !split; j++) {
                 try {
                     if (localIndex) {
+                        //With Hbase 2.2 the local index splits trigger longCompactions, and have
+                        //to wait for an RS_COMPACTED_FILES_DISCHARGER run before the second split
+                        //is successful
                         admin.split(TableName.valueOf(tableName),
                                 ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
                     } else {

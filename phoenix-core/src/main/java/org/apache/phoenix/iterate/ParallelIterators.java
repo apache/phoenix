@@ -37,6 +37,7 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -121,9 +122,11 @@ public class ParallelIterators extends BaseResultIterators {
                 
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    long startTime = System.currentTimeMillis();
+                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
+                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
+                            (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
+                            "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
                     PeekingResultIterator iterator = iteratorFactory.newIterator(context, tableResultItr, scan, physicalTableName, ParallelIterators.this.plan);
                     if (initFirstScanOnly) {

@@ -109,7 +109,7 @@ public class SkipScanFilterTest extends TestCase {
     }
 
     @Parameters(name="{0} {1} {3}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Variable length tests
         testCases.addAll(

@@ -51,7 +51,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.MultiMutation;
-import org.apache.phoenix.hbase.index.covered.data.LocalTable;
+import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -149,6 +149,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
 
         mockIndexMetaData = Mockito.mock(PhoenixIndexMetaData.class);
         Mockito.when(mockIndexMetaData.requiresPriorRowState((Mutation)Mockito.any())).thenReturn(true);
+        Mockito.when(mockIndexMetaData.getReplayWrite()).thenReturn(null);
         Mockito.when(mockIndexMetaData.getIndexMaintainers())
                 .thenReturn(Collections.singletonList(getTestIndexMaintainer()));
 
@@ -212,8 +213,13 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         mutation.addAll(put);
 
+        CachedLocalTable cachedLocalTable = CachedLocalTable.build(
+                Collections.singletonList(mutation),
+                this.mockIndexMetaData,
+                this.indexBuilder.getEnv().getRegion());
+
         Collection<Pair<Mutation, byte[]>> indexUpdates =
-                indexBuilder.getIndexUpdate(mutation, mockIndexMetaData);
+                indexBuilder.getIndexUpdate(mutation, mockIndexMetaData, cachedLocalTable);
         assertEquals(2, indexUpdates.size());
         assertContains(indexUpdates, 2, ROW, KeyValue.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 2);
@@ -254,8 +260,16 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         mutation.addAll(put);
 
         Collection<Pair<Mutation, byte[]>> indexUpdates = Lists.newArrayList();
-        for (Mutation m : IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation))) {
-            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData));
+        Collection<? extends Mutation> mutations =
+                IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation));
+
+        CachedLocalTable cachedLocalTable = CachedLocalTable.build(
+                mutations,
+                this.mockIndexMetaData,
+                this.indexBuilder.getEnv().getRegion());
+
+        for (Mutation m : mutations) {
+            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData, cachedLocalTable));
         }
         // 3 puts and 3 deletes (one to hide existing index row for VALUE_1, and two to hide index
         // rows for VALUE_2, VALUE_3)
@@ -287,9 +301,17 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         MultiMutation mutation = getMultipleVersionMutation(200);
         currentRowCells = mutation.getFamilyCellMap().get(FAM);
 
+        Collection<? extends Mutation> mutations =
+                IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation));
+
+        CachedLocalTable cachedLocalTable = CachedLocalTable.build(
+                mutations,
+                this.mockIndexMetaData,
+                this.indexBuilder.getEnv().getRegion());
+
         Collection<Pair<Mutation, byte[]>> indexUpdates = Lists.newArrayList();
         for (Mutation m : IndexManagementUtil.flattenMutationsByTimestamp(Collections.singletonList(mutation))) {
-            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData));
+            indexUpdates.addAll(indexBuilder.getIndexUpdate(m, mockIndexMetaData, cachedLocalTable));
         }
         assertNotEquals(0, indexUpdates.size());
     }

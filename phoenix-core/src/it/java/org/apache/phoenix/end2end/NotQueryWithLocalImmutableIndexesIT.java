@@ -31,7 +31,7 @@ public class NotQueryWithLocalImmutableIndexesIT extends NotQueryIT {
     }
 
     @Parameters(name = "localIndexDDL={0}")
-    public static Collection<Object> localIndexes() {
+    public static synchronized Collection<Object> localIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : LOCAL_INDEX_DDLS) {
             testCases.add(new Object[] { indexDDL, false });

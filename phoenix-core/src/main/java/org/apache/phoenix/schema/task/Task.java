@@ -21,10 +21,13 @@ import com.google.common.base.Strings;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.phoenix.coprocessor.tasks.DropChildViewsTask;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -35,10 +38,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 public class Task {
+    public static final Logger LOGGER = LoggerFactory.getLogger(Task.class);
     private static void mutateSystemTaskTable(PhoenixConnection conn, PreparedStatement stmt, boolean accessCheckEnabled)
             throws IOException {
         // we need to mutate SYSTEM.TASK with HBase/login user if access is enabled.
@@ -73,7 +76,8 @@ public class Task {
     }
 
     private static  PreparedStatement setValuesToAddTaskPS(PreparedStatement stmt, PTable.TaskType taskType,
-            String tenantId, String schemaName, String tableName) throws SQLException {
+            String tenantId, String schemaName, String tableName, String taskStatus, String data,
+            Integer priority, Timestamp startTs, Timestamp endTs) throws SQLException {
         stmt.setByte(1, taskType.getSerializedValue());
         if (tenantId != null) {
             stmt.setString(2, tenantId);
@@ -86,13 +90,6 @@ public class Task {
             stmt.setNull(3, Types.VARCHAR);
         }
         stmt.setString(4, tableName);
-        return stmt;
-    }
-
-    private static  PreparedStatement setValuesToAddTaskPS(PreparedStatement stmt, PTable.TaskType taskType,
-            String tenantId, String schemaName, String tableName, String taskStatus, String data,
-            Integer priority, Timestamp startTs, Timestamp endTs) throws SQLException {
-        stmt = setValuesToAddTaskPS(stmt, taskType, tenantId, schemaName, tableName);
         if (taskStatus != null) {
             stmt.setString(5, taskStatus);
         } else {
@@ -127,28 +124,10 @@ public class Task {
     }
 
     public static void addTask(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
-            String tableName, boolean accessCheckEnabled)
-            throws IOException {
-        PreparedStatement stmt = null;
-        try {
-            stmt = conn.prepareStatement("UPSERT INTO " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + " ( " +
-                    PhoenixDatabaseMetaData.TASK_TYPE + ", " +
-                    PhoenixDatabaseMetaData.TENANT_ID + ", " +
-                    PhoenixDatabaseMetaData.TABLE_SCHEM + ", " +
-                    PhoenixDatabaseMetaData.TABLE_NAME + " ) VALUES(?,?,?,?)");
-            stmt = setValuesToAddTaskPS(stmt, taskType, tenantId, schemaName, tableName);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-        mutateSystemTaskTable(conn, stmt, accessCheckEnabled);
-    }
-
-    public static void addTask(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
             String tableName, String taskStatus, String data, Integer priority, Timestamp startTs, Timestamp endTs,
             boolean accessCheckEnabled)
             throws IOException {
-        PreparedStatement stmt = null;
+        PreparedStatement stmt;
         try {
             stmt = conn.prepareStatement("UPSERT INTO " +
                     PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + " ( " +
@@ -163,6 +142,7 @@ public class Task {
                     PhoenixDatabaseMetaData.TASK_DATA +
                     " ) VALUES(?,?,?,?,?,?,?,?,?)");
             stmt = setValuesToAddTaskPS(stmt, taskType, tenantId, schemaName, tableName, taskStatus, data, priority, startTs, endTs);
+            LOGGER.info("Adding task " + taskType + "," +tableName + "," + taskStatus + "," + startTs, ","+endTs);
         } catch (SQLException e) {
             throw new IOException(e);
         }

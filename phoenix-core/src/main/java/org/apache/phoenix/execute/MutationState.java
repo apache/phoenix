@@ -22,6 +22,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
@@ -47,7 +48,6 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -79,12 +79,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableRef;
@@ -104,9 +105,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -131,7 +130,7 @@ public class MutationState implements SQLCloseable {
     private static final int MAX_COMMIT_RETRIES = 3;
 
     private final PhoenixConnection connection;
-    private final long maxSize;
+    private final int maxSize;
     private final long maxSizeBytes;
     private final long batchSize;
     private final long batchSizeBytes;
@@ -151,37 +150,42 @@ public class MutationState implements SQLCloseable {
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection) {
         this(maxSize, maxSizeBytes, connection, false, null);
     }
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection,
-            PhoenixTransactionContext txContext) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+           PhoenixTransactionContext txContext) {
         this(maxSize, maxSizeBytes, connection, false, txContext);
     }
 
     public MutationState(MutationState mutationState) {
-        this(mutationState.maxSize, mutationState.maxSizeBytes, mutationState.connection, true, mutationState
+        this(mutationState, mutationState.connection);
+    }
+
+    public MutationState(MutationState mutationState, PhoenixConnection connection) {
+        this(mutationState.maxSize, mutationState.maxSizeBytes, connection, true, mutationState
                 .getPhoenixTransactionContext());
     }
 
-    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, long sizeOffset) {
+    public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+           long sizeOffset) {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
     }
 
-    private MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, boolean subTask,
-            PhoenixTransactionContext txContext) {
+    private MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+            boolean subTask, PhoenixTransactionContext txContext) {
         this(maxSize, maxSizeBytes, connection, subTask, txContext, 0);
     }
 
-    private MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, boolean subTask,
-            PhoenixTransactionContext txContext, long sizeOffset) {
+    private MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
+            boolean subTask, PhoenixTransactionContext txContext, long sizeOffset) {
         this(maxSize, maxSizeBytes, connection, Maps.<TableRef, MultiRowMutationState> newHashMapWithExpectedSize(5),
                 subTask, txContext);
         this.sizeOffset = sizeOffset;
     }
 
-    MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection,
+    MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection,
             Map<TableRef, MultiRowMutationState> mutations, boolean subTask, PhoenixTransactionContext txContext) {
         this.maxSize = maxSize;
         this.maxSizeBytes = maxSizeBytes;
@@ -202,8 +206,8 @@ public class MutationState implements SQLCloseable {
         }
     }
 
-    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset, long maxSize,
-            long maxSizeBytes, PhoenixConnection connection) throws SQLException {
+    public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
+           int maxSize, long maxSizeBytes, PhoenixConnection connection) throws SQLException {
         this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
         if (!mutations.isEmpty()) {
             this.mutations.put(table, mutations);
@@ -217,7 +221,7 @@ public class MutationState implements SQLCloseable {
         return estimatedSize;
     }
 
-    public long getMaxSize() {
+    public int getMaxSize() {
         return maxSize;
     }
 
@@ -369,7 +373,8 @@ public class MutationState implements SQLCloseable {
         return false;
     }
 
-    public static MutationState emptyMutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+    public static MutationState emptyMutationState(int maxSize, long maxSizeBytes,
+                  PhoenixConnection connection) {
         MutationState state = new MutationState(maxSize, maxSizeBytes, connection,
                 Collections.<TableRef, MultiRowMutationState> emptyMap(), false, null);
         state.sizeOffset = 0;
@@ -378,18 +383,23 @@ public class MutationState implements SQLCloseable {
 
     private void throwIfTooBig() throws SQLException {
         if (numRows > maxSize) {
+            int mutationSize = numRows;
             resetState();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build().buildException();
+            throw new MaxMutationSizeExceededException(maxSize, mutationSize);
         }
         if (estimatedSize > maxSizeBytes) {
+            long mutationSizeByte = estimatedSize;
             resetState();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED).build()
-                    .buildException();
+            throw new MaxMutationSizeBytesExceededException(maxSizeBytes, mutationSizeByte);
         }
     }
 
     public long getUpdateCount() {
         return sizeOffset + numRows;
+    }
+
+    public int getNumRows() {
+        return numRows;
     }
 
     private void joinMutationState(TableRef tableRef, MultiRowMutationState srcRows,
@@ -773,8 +783,14 @@ public class MutationState implements SQLCloseable {
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
         PTable table = tableRef.getTable();
-        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(), table.getTableName()
-                .getString());
+
+        // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
+        // get the latest timestamp in order to upsert data with the correct server-side timestamp
+        // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
+        boolean hitServerForLatestTimestamp =
+                table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
+        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
+                table.getTableName().getString(), hitServerForLatestTimestamp);
         PTable resolvedTable = result.getTable();
         if (resolvedTable == null) { throw new TableNotFoundException(table.getSchemaName().getString(), table
                 .getTableName().getString()); }
@@ -972,25 +988,23 @@ public class MutationState implements SQLCloseable {
                     verifiedOrDeletedIndexMutations);
 
             // Phase 1: Send index mutations with the empty column value = "unverified"
-            sendMutations(unverifiedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr);
+            sendMutations(unverifiedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, false);
 
             // Phase 2: Send data table and other indexes
-            sendMutations(physicalTableMutationMap.entrySet().iterator(), span, indexMetaDataPtr);
+            sendMutations(physicalTableMutationMap.entrySet().iterator(), span, indexMetaDataPtr, false);
 
             // Phase 3: Send put index mutations with the empty column value = "verified" and/or delete index mutations
             try {
-                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr);
+                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, true);
             } catch (SQLException ex) {
-                // TODO: add a metric here
                 LOGGER.warn(
-                        "Ignoring exception that happened during setting index verified value to verified=TRUE "
-                                + verifiedOrDeletedIndexMutations.toString(),
+                        "Ignoring exception that happened during setting index verified value to verified=TRUE ",
                         ex);
             }
         }
     }
 
-    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, Span span, ImmutableBytesWritable indexMetaDataPtr)
+    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, Span span, ImmutableBytesWritable indexMetaDataPtr, boolean isVerifiedPhase)
             throws SQLException {
         while (mutationsIterator.hasNext()) {
             Entry<TableInfo, List<Mutation>> pair = mutationsIterator.next();
@@ -1010,6 +1024,7 @@ public class MutationState implements SQLCloseable {
             long mutationSizeBytes = 0;
             long mutationCommitTime = 0;
             long numFailedMutations = 0;
+            long numFailedPhase3Mutations = 0;
 
             long startTime = 0;
             boolean shouldRetryIndexedMutation = false;
@@ -1045,7 +1060,7 @@ public class MutationState implements SQLCloseable {
                     GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
                     mutationSizeBytes = calculateMutationSize(mutationList);
 
-                    startTime = System.currentTimeMillis();
+                    startTime = EnvironmentEdgeManager.currentTimeMillis();
                     child.addTimelineAnnotation("Attempt " + retryCount);
                     Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
                     while (itrListMutation.hasNext()) {
@@ -1117,7 +1132,7 @@ public class MutationState implements SQLCloseable {
                     child.stop();
                     child.stop();
                     shouldRetry = false;
-                    mutationCommitTime = System.currentTimeMillis() - startTime;
+                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
                     numFailedMutations = 0;
 
@@ -1129,7 +1144,7 @@ public class MutationState implements SQLCloseable {
                         estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSize(mutations);
                     }
                 } catch (Exception e) {
-                    mutationCommitTime = System.currentTimeMillis() - startTime;
+                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     long serverTimestamp = ServerUtil.parseServerTimestamp(e);
                     SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                     if (inferredE != null) {
@@ -1181,9 +1196,13 @@ public class MutationState implements SQLCloseable {
                     sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
                     numFailedMutations = uncommittedStatementIndexes.length;
                     GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
+                    if (isVerifiedPhase) {
+                        numFailedPhase3Mutations = numFailedMutations;
+                        GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
+                    }
                 } finally {
                     MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes,
-                            mutationCommitTime, numFailedMutations);
+                            mutationCommitTime, numFailedMutations, numFailedPhase3Mutations);
                     mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
                     try {
                         if (cache != null) cache.close();
@@ -1212,6 +1231,9 @@ public class MutationState implements SQLCloseable {
         while (mapIter.hasNext()) {
             Entry<TableInfo, List<Mutation>> pair = mapIter.next();
             TableInfo tableInfo = pair.getKey();
+            if (!tableInfo.getPTable().getType().equals(PTableType.INDEX)) {
+                continue;
+            }
             PTable logicalTable = tableInfo.getPTable();
             if (tableInfo.getOrigTableRef().getTable().isImmutableRows()
                     && IndexUtil.isGlobalIndexCheckerEnabled(connection,
@@ -1236,13 +1258,15 @@ public class MutationState implements SQLCloseable {
                         long timestamp = IndexRegionObserver.getMaxTimestamp(m);
 
                         // Phase 1 index mutations are set to unverified
+                        // Send entire mutation with the unverified status
+                        // Remove the empty column prepared by Index codec as we need to change its value
+                        IndexRegionObserver.removeEmptyColumn(m, emptyCF, emptyCQ);
                         ((Put) m).addColumn(emptyCF, emptyCQ, timestamp, IndexRegionObserver.UNVERIFIED_BYTES);
                         addToMap(unverifiedIndexMutations, tableInfo, m);
 
                         // Phase 3 mutations are verified
                         Put verifiedPut = new Put(m.getRow());
-                        verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
-                                IndexRegionObserver.VERIFIED_BYTES);
+                        verifiedPut.addColumn(emptyCF, emptyCQ, timestamp, IndexRegionObserver.VERIFIED_BYTES);
                         addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
                     } else {
                         addToMap(unverifiedIndexMutations, tableInfo, m);

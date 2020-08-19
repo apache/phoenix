@@ -35,7 +35,7 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
     static String table;
 
     @BeforeClass
-    public static void initTables() throws Exception {
+    public static synchronized void initTables() throws Exception {
         table = generateUniqueName();
         // Use phoenix test driver for setup
         try (Connection conn = DriverManager.getConnection(getUrl())) {

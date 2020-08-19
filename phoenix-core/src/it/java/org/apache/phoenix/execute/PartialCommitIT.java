@@ -86,7 +86,7 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
     private static final byte[] ROW_TO_FAIL_DELETE_BYTES = Bytes.toBytes("fail me delete");
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
         serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
@@ -101,7 +101,7 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
     private final String transactionProvider;
     
     @Parameters(name="PartialCommitIT_transactionProvider={0}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                  {"TEPHRA"},{"OMID"}}),0);
     }

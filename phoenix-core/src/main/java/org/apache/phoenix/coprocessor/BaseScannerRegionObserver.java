@@ -67,6 +67,15 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
+    // The number of index rows to be rebuild in one RPC call
+    public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
+    public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    // Index verification type done by the index tool
+    public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
+    public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
+    public static final String INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE =
+        "_IndexRebuildDisableLoggingVerifyType";
+
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
@@ -104,7 +113,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String PHYSICAL_DATA_TABLE_NAME = "_PhysicalDataTableName";
     public static final String EMPTY_COLUMN_FAMILY_NAME = "_EmptyCFName";
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
-    public static final String SCAN_LIMIT = "_ScanLimit";
+    public static final String INDEX_ROW_KEY = "_IndexRowKey";
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
@@ -160,11 +169,20 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         byte[] upperExclusiveRegionKey = region.getRegionInfo().getEndKey();
         boolean isStaleRegionBoundaries;
         if (isLocalIndex) {
+            // For local indexes we have to abort any scan that was open during a split.
+            // We detect that condition as follows:
+            // 1. The scanner's stop row has to always match the region's end key.
+            // 2. Phoenix sets the SCAN_ACTUAL_START_ROW attribute to the scan's original start row
+            //    We cannot directly compare that with the region's start key, but can enforce that
+            //    the original start row still falls within the new region.
             byte[] expectedUpperRegionKey =
                     scan.getAttribute(EXPECTED_UPPER_REGION_KEY) == null ? scan.getStopRow() : scan
                             .getAttribute(EXPECTED_UPPER_REGION_KEY);
-            isStaleRegionBoundaries = expectedUpperRegionKey != null &&
-                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
+
+            byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW);
+            isStaleRegionBoundaries = (expectedUpperRegionKey != null &&
+                    Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
+                    (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
             isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
                     ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||

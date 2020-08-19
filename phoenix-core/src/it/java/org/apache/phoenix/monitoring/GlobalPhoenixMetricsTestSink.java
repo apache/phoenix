@@ -28,7 +28,7 @@ public class GlobalPhoenixMetricsTestSink implements MetricsSink {
     // PhoenixMetricsIT tests verifies these metrics from this sink in a separate thread
     // GlobalPhoenixMetricsTestSink is invoked based on time defined in hadoop-metrics2.properties
     // This lock is to prevent concurrent access to metrics Iterable for these threads
-    static Object lock = new Object();
+    static final Object lock = new Object();
     static Iterable<AbstractMetric> metrics;
 
     @Override

@@ -53,7 +53,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -429,7 +429,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
-        verifySequenceValue(null, sequenceName, sequenceSchemaName,-9223372036854775807L);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName,Short.MIN_VALUE + 1);
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
@@ -1039,17 +1039,22 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn1.close();
     }
 
-    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion, RegionInfo toRegion, boolean move)
-            throws IOException {
-        Path root = FSUtils.getRootDir(conf);
+    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion,
+            RegionInfo toRegion, boolean move) throws IOException {
+        Path root = CommonFSUtils.getRootDir(conf);
 
-        Path seondRegion = new Path(FSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
-                + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
-        Path hfilePath = FSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next().getPath();
-        Path firstRegionPath = new Path(FSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
-                + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
-        FileSystem currentFileSystem = FSUtils.getCurrentFileSystem(conf);
-        assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath, move, conf));
+        Path seondRegion =
+                new Path(CommonFSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
+                        + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        Path hfilePath =
+                CommonFSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next()
+                        .getPath();
+        Path firstRegionPath =
+                new Path(CommonFSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
+                        + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        FileSystem currentFileSystem = CommonFSUtils.getCurrentFileSystem(conf);
+        assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath,
+            move, conf));
     }
 
     private int getCount(PhoenixConnection conn, String tableName, String columnFamily)

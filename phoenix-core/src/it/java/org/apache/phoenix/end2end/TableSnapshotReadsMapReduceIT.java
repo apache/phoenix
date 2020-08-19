@@ -79,7 +79,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private Configuration conf;
 
   @BeforeClass
-  public static void doSetup() throws Exception {
+  public static synchronized void doSetup() throws Exception {
       Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }

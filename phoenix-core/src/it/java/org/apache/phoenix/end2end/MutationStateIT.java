@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -37,6 +38,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -47,12 +50,15 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
 @RunWith(RunUntilFailure.class)
@@ -366,6 +372,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 e.getErrorCode());
             assertTrue(e.getMessage().contains(
                     SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getMessage()));
+            assertTrue(e.getMessage().contains(
+                    connectionProperties.getProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB)));
         }
 
         // set the max mutation size (bytes) to a low value
@@ -381,6 +389,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 e.getErrorCode());
             assertTrue(e.getMessage().contains(
                     SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getMessage()));
+            assertTrue(e.getMessage().contains(connectionProperties.getProperty
+                    (QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB)));
         }
     }
 
@@ -492,6 +502,52 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 }
             }
             htable.close();
+        }
+    }
+
+    @Rule
+    public ExpectedException exceptionRule = ExpectedException.none();
+
+    @Test
+    public void testDDLwithPendingMutations() throws Exception {
+        String tableName = generateUniqueName();
+        ensureTableCreated(getUrl(), tableName, TestUtil.PTSDB_NAME, null, null, null);
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, Boolean.toString(true));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // setting auto commit to false
+            conn.setAutoCommit(false);
+
+            // Run upsert queries but do not commit
+            PreparedStatement stmt =
+                    conn.prepareStatement("UPSERT INTO " + tableName
+                            + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
+            stmt.setString(1, "a");
+            stmt.execute();
+            // Create a ddl statement
+            String tableName2 = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName2 + " (V BIGINT PRIMARY KEY, K BIGINT)";
+            exceptionRule.expect(SQLException.class);
+            exceptionRule.expectMessage(
+                SQLExceptionCode.CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS.getMessage());
+            conn.createStatement().execute(ddl);
+        }
+    }
+
+    @Test
+    public void testNoPendingMutationsOnDDL() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, Boolean.toString(true));
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl =
+                    "create table " + tableName + " ( id1 UNSIGNED_INT not null primary key,"
+                            + "appId1 VARCHAR)";
+            conn.createStatement().execute(ddl);
+            // ensure table got created
+            Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+            assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
+            assertNotNull(PhoenixRuntime.getTableNoCache(conn, tableName));
         }
     }
 }

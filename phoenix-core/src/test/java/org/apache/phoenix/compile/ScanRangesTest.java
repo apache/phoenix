@@ -77,7 +77,7 @@ public class ScanRangesTest {
     }
 
     @Parameters(name="{0} {2}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // variable length test that demonstrates that null byte
         // must be added at end

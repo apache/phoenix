@@ -65,7 +65,7 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
     private String indexTableFullName;
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
     	Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
         		TestPhoenixIndexRpcSchedulerFactory.class.getName());
         Map<String, String> clientProps = Collections.emptyMap();

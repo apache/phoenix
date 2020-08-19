@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+  <version>5.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -40,11 +40,15 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.3.0</module>
+    <module>phoenix-hbase-compat-2.2.1</module>
+    <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
+    <module>phoenix-tools</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
 
@@ -58,7 +62,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>14</version>
+    <version>21</version>
   </parent>
 
   <scm>
@@ -68,79 +72,82 @@
   </scm>
 
   <properties>
+    <!-- The HBase compatibility module that that will be included in
+    the shaded JARs and the assembly -->
+    <hbase.profile>2.2</hbase.profile>
+
+    <!-- Hadoop and Hbase-thirdparty version -->
+    <!-- These are expected to be overridden to conform to cluster versions
+    along with hbase.version (defined in profiles) -->
+    <hadoop.version>3.0.3</hadoop.version>
+    <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
+
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}</top.dir>
 
-    <!-- Hadoop Versions -->
-    <hbase.version>2.0.1</hbase.version>
-    <hadoop.version>3.0.0</hadoop.version>
-
     <!-- Dependency versions -->
     <commons-cli.version>1.4</commons-cli.version>
-    <hive.version>3.0.0</hive.version>
-    <pig.version>0.13.0</pig.version>
-    <jackson.version>1.9.2</jackson.version>
+    <jackson.version>2.10.3</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.6.4</slf4j.version>
+    <slf4j.version>1.7.25</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
-    <commons-io.version>2.1</commons-io.version>
+    <commons-io.version>2.5</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
-    <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <sqlline.version>1.7.0</sqlline.version>
+    <commons-logging.version>1.2</commons-logging.version>
+    <sqlline.version>1.9.0</sqlline.version>
+    <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
-    <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
-    <jline.version>2.11</jline.version>
+    <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
-    <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
-    <jodatime.version>1.6</jodatime.version>
+    <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.12.0</avatica.version>
-    <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.15.0-incubating</tephra.version>
     <omid.version>1.0.1</omid.version>
-    <spark.version>2.4.0</spark.version>
-    <scala.version>2.11.8</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
-    <servlet.api.version>3.1.0</servlet.api.version>
+    <twill.version>0.8.0</twill.version>
+    <guice.version>4.0</guice.version>
+    <zookeeper.version>3.4.10</zookeeper.version>
+    <curator.version>4.0.0</curator.version>
+    <jcodings.version>1.0.18</jcodings.version>
+    <thrift.version>0.9.0</thrift.version>
     <!-- Test Dependencies -->
-    <mockito-all.version>1.8.5</mockito-all.version>
-    <junit.version>4.12</junit.version>
-    <bouncycastle.version>1.46</bouncycastle.version>
+    <mockito.version>1.10.19</mockito.version>
+    <junit.version>4.13</junit.version>
+    <hamcrest.version>1.3</hamcrest.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.22.2</maven-failsafe-plugin.version>
-
-    <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
-    <maven.assembly.version>2.5.2</maven.assembly.version>
+    <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
+    <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
+    <jacoco-maven-plugin.version>0.7.9</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <!-- Empty argument when code coverage is deactivated -->
+    <jacocoArgLine></jacocoArgLine>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-   <curator.version>4.0.0</curator.version>
-
+    <!-- JaCoCo thresholds which we can override in each sub-module if required -->
+    <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
+    <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
   </properties>
 
   <build>
@@ -148,12 +155,26 @@
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.0</version>
           <configuration>
             <source>1.8</source>
             <target>1.8</target>
           </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.antlr</groupId>
+          <artifactId>antlr3-maven-plugin</artifactId>
+          <version>${maven-antlr-eclipse-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>com.github.searls</groupId>
+          <artifactId>jasmine-maven-plugin</artifactId>
+          <version>1.3.1.6</version>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
           only. It has no influence on the Maven build itself. -->
@@ -184,7 +205,6 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-install-plugin</artifactId>
-          <version>2.5.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -193,7 +213,6 @@
         </plugin>
         <plugin>
           <artifactId>maven-assembly-plugin</artifactId>
-          <version>${maven.assembly.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.rat</groupId>
@@ -242,22 +261,24 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
-          <version>${maven-failsafe-plugin.version}</version>
+          <!-- Common settings for all executions -->
+          <configuration>
+            <encoding>UTF-8</encoding>
+            <forkCount>${numForkedIT}</forkCount>
+            <runOrder>alphabetical</runOrder>
+            <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+            <shutdown>kill</shutdown>
+            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+            <trimStackTrace>false</trimStackTrace>
+          </configuration>
           <executions>
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
                 <threadCount>20</threadCount-->
-                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <shutdown>kill</shutdown>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <argLine>@{jacocoArgLine} -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -268,11 +289,7 @@
             <execution>
               <id>ParallelStatsDisabledTest</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
                 <threadCount>20</threadCount-->
                 <!-- We're intermittantly hitting this assertion when running in parallel:
@@ -283,10 +300,7 @@
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
 	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
 		<!--enableAssertions>false</enableAssertions-->
-                <argLine>-Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <shutdown>kill</shutdown>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <argLine>@{jacocoArgLine} -Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -297,15 +311,9 @@
             <execution>
               <id>HBaseManagedTimeTests</id>
               <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
-                <shutdown>kill</shutdown>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -315,15 +323,9 @@
 	    <execution>
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
                  <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                 <shutdown>kill</shutdown>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
@@ -333,15 +335,9 @@
 <execution>
               <id>SplitSystemCatalogTests</id>
               <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
                  <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                  <groups>org.apache.phoenix.end2end.SplitSystemCatalogTests</groups>
-                 <shutdown>kill</shutdown>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
@@ -352,7 +348,25 @@
         </plugin>
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>${maven-dependency-plugin.version}</version>
+          <configuration>
+              <ignoredUnusedDeclaredDependencies>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.omid:omid-hbase-shims-hbase2.x
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.omid:omid-hbase-common-hbase2.x:jar
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.omid:omid-hbase-commit-table-hbase2.x
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.omid:omid-timestamp-storage-hbase2.x
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.slf4j:slf4j-log4j12
+                </ignoredUnusedDeclaredDependency>
+              </ignoredUnusedDeclaredDependencies>
+            </configuration>
           <executions>
             <execution>
               <id>create-mrapp-generated-classpath</id>
@@ -363,6 +377,18 @@
               <configuration>
                 <outputFile>${project.build.directory}/classes/mrapp-generated-classpath
                 </outputFile>
+                <ignoredUnusedDeclaredDependencies>
+                    org.apache.omid:*hbase2.x
+                </ignoredUnusedDeclaredDependencies>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-dependencies</id>
+              <goals>
+                <goal>analyze-only</goal>
+              </goals>
+              <configuration>
+                <failOnWarning>true</failOnWarning>
               </configuration>
             </execution>
           </executions>
@@ -370,7 +396,6 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.1.1</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -378,10 +403,58 @@
           <artifactId>maven-bundle-plugin</artifactId>
           <version>2.5.3</version>
         </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>1.6.0</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>check-hbase-compatibility</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <evaluateBeanshell>
+                 <condition>
+                   import java.util.regex.Pattern;
+                   import java.lang.Integer;
+
+                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                   versionMatcher = versionPattern.matcher("${hbase.version}");
+                   versionMatcher.find();
+
+                   hbaseMajor = Integer.parseInt(versionMatcher.group(1));
+                   hbaseMinor = Integer.parseInt(versionMatcher.group(2));
+                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
+
+                   hbaseMajor == 2 &amp;&amp; (
+                     ("${hbase.compat.version}".equals("2.1.6")
+                       &amp;&amp; hbaseMinor == 1
+                       &amp;&amp; hbasePatch &gt;=6)
+                     || ("${hbase.compat.version}".equals("2.2.1")
+                       &amp;&amp; hbaseMinor == 2
+                       &amp;&amp; hbasePatch &gt;=1)
+                     || ("${hbase.compat.version}".equals("2.3.0")
+                       &amp;&amp; hbaseMinor == 3
+                       &amp;&amp; hbasePatch &gt;=0)
+                   )
+                   </condition>
+                  </evaluateBeanshell>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
@@ -408,7 +481,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
-        <version>2.2.1</version>
         <executions>
           <execution>
             <id>attach-sources</id>
@@ -422,7 +494,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <version>2.9</version>
         <configuration>
           <quiet>true</quiet>
           <links>
@@ -442,21 +513,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>${maven-surefire-plugin.version}</version>
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
+          <trimStackTrace>false</trimStackTrace>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>2.4</version>
         <executions>
           <execution>
             <phase>prepare-package
@@ -470,7 +540,23 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
-        <version>3.7.1</version>
+        <dependencies>
+        <dependency>
+           <groupId>org.apache.maven.doxia</groupId>
+           <artifactId>doxia-module-markdown</artifactId>
+           <version>1.3</version>
+         </dependency>
+         <dependency>
+           <groupId>lt.velykis.maven.skins</groupId>
+           <artifactId>reflow-velocity-tools</artifactId>
+           <version>1.0.0</version>
+         </dependency>
+         <dependency>
+           <groupId>org.apache.velocity</groupId>
+           <artifactId>velocity</artifactId>
+           <version>1.7</version>
+         </dependency>
+       </dependencies>
       </plugin>
       <plugin>
         <groupId>org.apache.rat</groupId>
@@ -490,20 +576,11 @@
             <!-- Exclude SQL files from rat. Sqlline 1.1.9 doesn't work with
                  comments on the first line of a file. -->
             <exclude>examples/*.sql</exclude>
-            <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
-            <!-- Not our code -->
-            <exclude>python/requests-kerberos/**</exclude>
-            <exclude>python/phoenixdb/phoenixdb/avatica/proto/*</exclude>
-            <exclude>python/phoenixdb/*.rst</exclude>
-            <exclude>python/phoenixdb/ci/**</exclude>
-            <exclude>python/phoenixdb/doc/*.rst</exclude>
-            <exclude>python/phoenixdb/doc/conf.py</exclude>
-            <exclude>python/phoenixdb/doc/Makefile</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -527,40 +604,164 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-pherf</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-tools</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-tracing-webapp</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <!-- Intra-project test dependencies -->
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
         <version>${project.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
       </dependency>
+
+      <!-- Hadoop Dependencies -->
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-flume</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-common</artifactId>
+        <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.htrace</groupId>
+            <artifactId>htrace-core4</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-kafka</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-core</artifactId>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-pig</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs-client</artifactId>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-spark</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-yarn-api</artifactId>
+        <version>${hadoop.version}</version>
+      </dependency>
+
+      <!-- These are referenced indirectly -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-queryserver</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-distcp</artifactId>
+        <version>${hadoop.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-queryserver-client</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-auth</artifactId>
+        <exclusions>
+          <exclusion>
+            <groupId>net.minidev</groupId>
+            <artifactId>json-smart</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.minidev</groupId>
+            <artifactId>accessors-smart</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+        </exclusions>
+        <version>${hadoop.version}</version>
+      </dependency>
+      <!-- Only for shading in phoenix-server - remove ? -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-annotations</artifactId>
+        <version>${hadoop.version}</version>
+      </dependency>
+
+      <!-- Hadoop test Dependencies -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minicluster</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <optional>true</optional>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <type>test-jar</type>
+        <classifier>tests</classifier>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.htrace</groupId>
+            <artifactId>htrace-core4</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <!-- These are to fix Hadoop minicluster dependency issues -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-app</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
       </dependency>
 
       <!-- HBase dependencies -->
@@ -571,37 +772,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-testing-util</artifactId>
-        <version>${hbase.version}</version>
-        <scope>test</scope>
-        <optional>true</optional>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jruby</groupId>
-            <artifactId>jruby-complete</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-hdfs</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-it</artifactId>
-        <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jruby</groupId>
-            <artifactId>jruby-complete</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-protocol</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-protocol-shaded</artifactId>
         <version>${hbase.version}</version>
       </dependency>
       <dependency>
@@ -621,46 +797,24 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-common</artifactId>
-        <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-client</artifactId>
         <version>${hbase.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-client</artifactId>
+        <artifactId>hbase-endpoint</artifactId>
         <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-server</artifactId>
         <version>${hbase.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-http</artifactId>
-        <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-server</artifactId>
-        <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-hadoop-compat</artifactId>
-        <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>xom</groupId>
+            <artifactId>xom</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -671,8 +825,6 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-hadoop-compat</artifactId>
         <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -681,111 +833,52 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-hadoop2-compat</artifactId>
+        <artifactId>hbase-zookeeper</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.hbase.thirdparty</groupId>
+        <artifactId>hbase-shaded-miscellaneous</artifactId>
+        <version>${hbase.thirdparty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase.thirdparty</groupId>
+        <artifactId>hbase-shaded-protobuf</artifactId>
+        <version>${hbase.thirdparty.version}</version>
+      </dependency>
+
+      <!-- HBase test dependencies -->
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-it</artifactId>
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
-      </dependency>
-
-      <!-- Hadoop Dependencies -->
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-common</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-annotations</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-mapreduce-client-core</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-minicluster</artifactId>
-        <version>${hadoop.version}</version>
-        <optional>true</optional>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-minicluster</artifactId>
-        <version>${hadoop.version}</version>
-        <scope>test</scope>
-      </dependency>
-
-      <!-- Required for mini-cluster since hbase built against old version of hadoop -->
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-auth</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-mapreduce-client-common</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-hdfs</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-hdfs</artifactId>
-        <version>${hadoop.version}</version>
-        <type>test-jar</type> <!-- this does not work which is typical for maven.-->
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-minikdc</artifactId>
-        <version>${hadoop.version}</version>
-      </dependency>
-
-      <!-- General Dependencies -->
-      <dependency>
-        <groupId>org.apache.pig</groupId>
-        <artifactId>pig</artifactId>
-        <version>${pig.version}</version>
-        <classifier>h2</classifier>
         <exclusions>
           <exclusion>
-            <groupId>org.xerial.snappy</groupId>
-            <artifactId>snappy-java</artifactId>
+            <groupId>org.jruby</groupId>
+            <artifactId>jruby-complete</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite.avatica</groupId>
-        <artifactId>avatica</artifactId>
-        <version>${avatica.version}</version>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-common</artifactId>
+        <version>${hbase.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite.avatica</groupId>
-        <artifactId>avatica-core</artifactId>
-        <version>${avatica.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite.avatica</groupId>
-        <artifactId>avatica-server</artifactId>
-        <version>${avatica.version}</version>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-server</artifactId>
+        <version>${hbase.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
       </dependency>
 
       <!-- Transaction dependencies -->
+      <!-- Tephra -->
       <dependency>
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-api</artifactId>
@@ -804,22 +897,29 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
           </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
-        <type>test-jar</type>
-        <version>${tephra.version}</version>
-        <scope>test</scope>
-        <exclusions>
           <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -828,14 +928,51 @@
         <artifactId>tephra-hbase-compat-2.0</artifactId>
         <version>${tephra.version}</version>
       </dependency>
+
+      <!-- Omid -->
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-common-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-client-hbase2.x</artifactId>
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
+            </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-client-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
+         </exclusion>
+         <exclusion>
+           <groupId>org.testng</groupId>
+           <artifactId>testng</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -845,8 +982,28 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+          <artifactId>omid-hbase-client-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -856,10 +1013,45 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-          <groupId>org.testng</groupId>
-          <artifactId>testng</artifactId>
-        </exclusion>
-      </exclusions>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-daemon</groupId>
+            <artifactId>commons-daemon</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
@@ -868,28 +1060,165 @@
         <type>test-jar</type>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-daemon</groupId>
+            <artifactId>commons-daemon</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.inject</groupId>
+            <artifactId>guice</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-transaction-client</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-commit-table</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-common</artifactId>
+        <version>${omid.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-framework</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
 
+      <!-- Fix omid dependency scopes -->
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-testing-util</artifactId>
+        <version>${hbase.version}</version>
+        <scope>test</scope>
+      </dependency>
 
-      <!-- Make sure we have all the antlr dependencies -->
+      <!-- Other dependencies -->
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+        <version>${zookeeper.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+        <version>${zookeeper.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.antlr</groupId>
         <artifactId>antlr-runtime</artifactId>
         <version>${antlr.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>jline</groupId>
-        <artifactId>jline</artifactId>
-        <version>2.11</version>
-      </dependency>
-      <dependency>
-        <groupId>sqlline</groupId>
-        <artifactId>sqlline</artifactId>
-        <version>${sqlline.version}</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -897,15 +1226,9 @@
         <version>${guava.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.flume</groupId>
-        <artifactId>flume-ng-core</artifactId>
-        <version>${flume.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.xerial.snappy</groupId>
-            <artifactId>snappy-java</artifactId>
-          </exclusion>
-        </exclusions>
+        <groupId>com.google.inject</groupId>
+        <artifactId>guice</artifactId>
+        <version>${guice.version}</version>
       </dependency>
       <dependency>
         <groupId>com.github.stephenc.findbugs</groupId>
@@ -918,49 +1241,29 @@
         <version>${jcip-annotations.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.google.code.findbugs</groupId>
+        <artifactId>jsr305</artifactId>
+        <version>${jsr305.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.iq80.snappy</groupId>
         <artifactId>snappy</artifactId>
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
         <version>${jackson.version}</version>
-        <scope>compile</scope>
       </dependency>
       <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-annotations</artifactId>
         <version>${jackson.version}</version>
-        <scope>compile</scope>
       </dependency>
       <dependency>
-        <groupId>com.google.code.findbugs</groupId>
-        <artifactId>jsr305</artifactId>
-        <version>2.0.1</version>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-jaxrs</artifactId>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
         <version>${jackson.version}</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-xc</artifactId>
-        <version>${jackson.version}</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>${junit.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-all</artifactId>
-        <version>${mockito-all.version}</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
@@ -968,24 +1271,9 @@
         <version>${protobuf-java.version}</version>
       </dependency>
       <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-cli</groupId>
-        <artifactId>commons-cli</artifactId>
-        <version>${commons-cli.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-logging</groupId>
-        <artifactId>commons-logging</artifactId>
-        <version>${commons-logging.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.htrace</groupId>
@@ -1013,6 +1301,21 @@
         <version>${commons-lang.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-configuration2</artifactId>
+        <version>${commons-configuration2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>${commons-io.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-cli</groupId>
+        <artifactId>commons-cli</artifactId>
+        <version>${commons-cli.version}</version>
+      </dependency>
+      <dependency>
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${jodatime.version}</version>
@@ -1028,50 +1331,105 @@
         <version>${i18n-util.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-http</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-util</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-security</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-server</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlet</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-webapp</artifactId>
-        <version>${jetty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>javax.servlet</groupId>
-        <artifactId>javax.servlet-api</artifactId>
-        <version>${servlet.api.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.bouncycastle</groupId>
-        <artifactId>bcprov-jdk16</artifactId>
-        <version>${bouncycastle.version}</version>
-        <scope>test</scope>
-      </dependency>
-       <dependency>
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jruby.joni</groupId>
+        <artifactId>joni</artifactId>
+        <version>${joni.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.twill</groupId>
+        <artifactId>twill-zookeeper</artifactId>
+        <version>${twill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.twill</groupId>
+        <artifactId>twill-common</artifactId>
+        <version>${twill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.twill</groupId>
+        <artifactId>twill-discovery-api</artifactId>
+        <version>${twill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.twill</groupId>
+        <artifactId>twill-discovery-core</artifactId>
+        <version>${twill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jruby.jcodings</groupId>
+        <artifactId>jcodings</artifactId>
+        <version>${jcodings.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+        <version>${thrift.version}</version>
+        <exclusions>
+           <exclusion>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>${commons-logging.version}</version>
+    </dependency>
+
+      <!-- Other test dependencies -->
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>${mockito.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.hamcrest</groupId>
+        <artifactId>hamcrest-core</artifactId>
+        <version>${hamcrest.version}</version>
+        <scope>test</scope>
+      </dependency>
+
+       <!-- Runtime dependencies -->
+       <dependency>
+         <groupId>log4j</groupId>
+         <artifactId>log4j</artifactId>
+         <version>${log4j.version}</version>
+         <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-log4j12</artifactId>
+        <version>${slf4j.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>sqlline</groupId>
+        <artifactId>sqlline</artifactId>
+        <version>${sqlline.version}</version>
+        <scope>runtime</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -1097,7 +1455,6 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-gpg-plugin</artifactId>
-            <version>1.6</version>
             <executions>
               <execution>
                 <id>sign-artifacts</id>
@@ -1111,22 +1468,141 @@
         </plugins>
       </build>
     </profile>
+    <!-- See BUILDING.md for profile selection-->
+    <!-- The dependencies should be defined only in phoenix-core
+    ,but maven doesn't seem to support that -->
     <profile>
-      <id>spark16</id>
+      <!-- must be identical to phoenix-hbase-compat-2.1.6 profile -->
+      <id>phoenix-hbase-compat-2.1.6-default</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
       <properties>
-        <spark.version>1.6.1</spark.version>
-        <scala.version>2.10.4</scala.version>
-        <scala.binary.version>2.10</scala.binary.version>
+        <hbase.profile>2.1</hbase.profile>
+        <hbase.compat.version>2.1.6</hbase.compat.version>
+        <hbase.version>2.1.9</hbase.version>
       </properties>
     </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.1.6</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.1</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.1</hbase.profile>
+        <hbase.compat.version>2.1.6</hbase.compat.version>
+        <hbase.version>2.1.9</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.2.1</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.2</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.2</hbase.profile>
+        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <hbase.version>2.2.5</hbase.version>
+        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
+        <hadoop.version>3.1.2</hadoop.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.3.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.3</hbase.profile>
+        <hbase.compat.version>2.3.0</hbase.compat.version>
+        <hbase.version>2.3.0</hbase.version>
+        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
+        <hadoop.version>3.1.2</hadoop.version>
+        <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>codecoverage</id>
+      <activation>
+        <property>
+            <name>!skip.code-coverage</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+                <configuration>
+                  <propertyName>jacocoArgLine</propertyName>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>check</id>
+                <phase>verify</phase>
+                <goals>
+                    <goal>check</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <rule>
+                      <element>BUNDLE</element>
+                      <limits>
+                        <limit>
+                          <counter>INSTRUCTION</counter>
+                          <value>COVEREDRATIO</value>
+                          <minimum>${jacoco.instruction.coverage.percentage}</minimum>
+                        </limit>
+                        <limit>
+                          <counter>BRANCH</counter>
+                          <value>COVEREDRATIO</value>
+                          <minimum>${jacoco.branch.coverage.percentage}</minimum>
+                        </limit>
+                      </limits>
+                    </rule>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
-
   <reporting>
       <plugins>
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
               <artifactId>maven-project-info-reports-plugin</artifactId>
-              <version>3.0.0</version>
           </plugin>
           <plugin>
               <groupId>org.codehaus.mojo</groupId>

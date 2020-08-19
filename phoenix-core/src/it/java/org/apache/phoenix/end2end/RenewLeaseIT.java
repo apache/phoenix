@@ -49,7 +49,7 @@ public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
     private final static String TABLE_NAME = generateUniqueName();
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put("hbase.coprocessor.region.classes", SleepingRegionObserver.class.getName());
         Map<String,String> clientProps = Maps.newHashMapWithExpectedSize(1);

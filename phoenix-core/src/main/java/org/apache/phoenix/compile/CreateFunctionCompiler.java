@@ -40,30 +40,46 @@ public class CreateFunctionCompiler {
         final StatementContext context = new StatementContext(statement);
         final MetaDataClient client = new MetaDataClient(connectionToBe);
         
-        return new BaseMutationPlan(context, create.getOperation()) {
+        return new CreateFunctionMutationPlan(context, create, client, connection);
+    }
 
-            @Override
-            public MutationState execute() throws SQLException {
-                try {
-                    return client.createFunction(create);
-                } finally {
-                    if (client.getConnection() != connection) {
-                        client.getConnection().close();
-                    }
+    private static class CreateFunctionMutationPlan extends BaseMutationPlan {
+
+        private final StatementContext context;
+        private final CreateFunctionStatement create;
+        private final MetaDataClient client;
+        private final PhoenixConnection connection;
+
+        private CreateFunctionMutationPlan(StatementContext context, CreateFunctionStatement create,
+                MetaDataClient client, PhoenixConnection connection) {
+            super(context, create.getOperation());
+            this.context = context;
+            this.create = create;
+            this.client = client;
+            this.connection = connection;
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+            try {
+                return client.createFunction(create);
+            } finally {
+                if (client.getConnection() != connection) {
+                    client.getConnection().close();
                 }
             }
+        }
 
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("CREATE"
-                        + (create.getFunctionInfo().isReplace() ? " OR REPLACE" : "")
-                        + " FUNCTION"));
-            }
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+            return new ExplainPlan(Collections.singletonList("CREATE"
+              + (create.getFunctionInfo().isReplace() ? " OR REPLACE" : "")
+              + " FUNCTION"));
+        }
 
-            @Override
-            public StatementContext getContext() {
-                return context;
-            }
-        };
+        @Override
+        public StatementContext getContext() {
+            return context;
+        }
     }
 }

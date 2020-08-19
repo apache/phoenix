@@ -361,8 +361,6 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                     indexTableNames.add(indexTableName);
                 }
             }
-        } catch (ClassNotFoundException e) {
-            throw new IOException(e);
         } catch (SQLException e) {
             throw new IOException(e);
         } finally {
@@ -467,7 +465,10 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
     public static void doBatchWithRetries(MutateCommand mutateCommand,
             IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)
             throws IOException {
-        incrementPendingDisableCounter(iwe, connection);
+        if (!PhoenixIndexMetaData.isIndexRebuild(
+                mutateCommand.getMutationList().get(0).getAttributesMap())) {
+            incrementPendingDisableCounter(iwe, connection);
+        }
         int maxTries = config.getInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
             HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
         long pause = config.getLong(HConstants.HBASE_CLIENT_PAUSE,
@@ -492,7 +493,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 return;
             } catch (IOException e) {
                 SQLException inferredE = ServerUtil.parseLocalOrRemoteServerException(e);
-                if (inferredE == null || inferredE.getErrorCode() != SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
+                if (inferredE != null && inferredE.getErrorCode() != SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
                     // If this call is from phoenix client, we also need to check if SQLException
                     // error is INDEX_METADATA_NOT_FOUND or not
                     // if it's not an INDEX_METADATA_NOT_FOUND, throw exception,
@@ -507,8 +508,11 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 throw new IOException(e);
             }
         }
-        // max retries hit - disable the index
-        handleIndexWriteFailureFromClient(iwe, connection);
+        if (!PhoenixIndexMetaData.isIndexRebuild(
+                mutateCommand.getMutationList().get(0).getAttributesMap())) {
+            // max retries hit - disable the index
+            handleIndexWriteFailureFromClient(iwe, connection);
+        }
         throw new DoNotRetryIOException(iwe); // send failure back to client
     }
 

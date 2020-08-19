@@ -46,7 +46,7 @@ import static org.junit.Assert.fail;
 public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         HBaseTestingUtility hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);

@@ -49,7 +49,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-
 import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -90,6 +89,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -2524,13 +2524,13 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             sql="select * from "+testTableName+" t where ((t.pk1 >=2 and t.pk1<5) or (t.pk1 >=7 and t.pk1 <9)) and ((t.pk3 >= 4 and t.pk3 <6) or (t.pk3 >= 8 and t.pk3 <9))";
             queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
             scan = queryPlan.getContext().getScan();
-            assertTrue(scan.getFilter() instanceof FilterList);
-            FilterList filterList = (FilterList)scan.getFilter();
+            /**
+             * This sql use skipScan, and all the whereExpressions are in SkipScanFilter,
+             * so there is no other RowKeyComparisonFilter needed.
+             */
+            assertTrue(scan.getFilter() instanceof SkipScanFilter);
 
-            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
-            assertEquals(filterList.getFilters().size(),2);
-            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
-            rowKeyRanges = ((SkipScanFilter)(filterList.getFilters().get(0))).getSlots();
+            rowKeyRanges = ((SkipScanFilter)(scan.getFilter())).getSlots();
             assertEquals(
                     Arrays.asList(
                         Arrays.asList(
@@ -2547,22 +2547,6 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                     );
             assertArrayEquals(scan.getStartRow(), PInteger.INSTANCE.toBytes(2));
             assertArrayEquals(scan.getStopRow(), PInteger.INSTANCE.toBytes(9));
-
-            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
-            RowKeyComparisonFilter rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
-            Expression pk3Expression =  new ColumnRef(queryPlan.getTableRef(), queryPlan.getTableRef().getTable().getColumnForColumnName("PK3").getPosition()).newColumnExpression();
-            assertEquals(
-                      TestUtil.rowKeyFilter(
-                            TestUtil.or(
-                                    TestUtil.and(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk3Expression, 4),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk3Expression, 6)),
-                                    TestUtil.and(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk3Expression, 8),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk3Expression, 9))
-                                    )
-                              ),
-                     rowKeyComparisonFilter);
 
             //case 5: pk1 or data column
             sql="select * from "+testTableName+" t where ((t.pk1 >=2) or (t.data >= 4 and t.data <9))";
@@ -2693,4 +2677,362 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testLastPkColumnIsVariableLengthAndDescBug5307() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String sql =  "CREATE TABLE t1 (\n" +
+                    "OBJECT_VERSION VARCHAR NOT NULL,\n" +
+                    "LOC VARCHAR,\n" +
+                    "CONSTRAINT PK PRIMARY KEY (OBJECT_VERSION DESC))";
+            conn.createStatement().execute(sql);
+
+            byte[] startKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            byte[] endKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            ByteUtil.nextKey(endKey, endKey.length);
+            sql = "SELECT /*+ RANGE_SCAN */ OBJ.OBJECT_VERSION, OBJ.LOC from t1 AS OBJ "+
+                    "where OBJ.OBJECT_VERSION in ('1111','2222')";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = queryPlan.getContext().getScan();
+            assertArrayEquals(startKey, scan.getStartRow());
+            assertArrayEquals(endKey, scan.getStopRow());
+
+            sql =  "CREATE TABLE t2 (\n" +
+                    "OBJECT_ID VARCHAR NOT NULL,\n" +
+                    "OBJECT_VERSION VARCHAR NOT NULL,\n" +
+                    "LOC VARCHAR,\n" +
+                    "CONSTRAINT PK PRIMARY KEY (OBJECT_ID, OBJECT_VERSION DESC))";
+            conn.createStatement().execute(sql);
+
+            startKey = ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj1", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("2222", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY);
+            /**
+             * For following sql, queryPlan would use SkipScan and is regarded as PointLookup,
+             * so the endKey is computed as {@link SchemaUtil#VAR_BINARY_SCHEMA},see {@link ScanRanges#create}.
+             */
+            endKey =  ByteUtil.concat(
+                    PVarchar.INSTANCE.toBytes("obj3", SortOrder.ASC),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes("1111", SortOrder.DESC),
+                    QueryConstants.DESC_SEPARATOR_BYTE_ARRAY,
+                    QueryConstants.SEPARATOR_BYTE_ARRAY);
+
+            sql = "SELECT OBJ.OBJECT_ID, OBJ.OBJECT_VERSION, OBJ.LOC from t2 AS OBJ "+
+                    "where (OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) in (('obj1', '2222'),('obj2', '1111'),('obj3', '1111'))";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            FilterList filterList = (FilterList)scan.getFilter();
+            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+            assertEquals(filterList.getFilters().size(),2);
+            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+            RowKeyComparisonFilter rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
+            assertTrue(rowKeyComparisonFilter.toString().equals(
+                    "(OBJECT_ID, OBJECT_VERSION) IN ([111,98,106,49,0,205,205,205,205],[111,98,106,50,0,206,206,206,206],[111,98,106,51,0,206,206,206,206])"));
+
+            assertTrue(queryPlan.getContext().getScanRanges().isPointLookup());
+            assertArrayEquals(startKey, scan.getStartRow());
+            assertArrayEquals(endKey, scan.getStopRow());
+        }
+        finally {
+            if(conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testRVCClipBug5753() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+
+            String sql = "CREATE TABLE "+tableName+" (" +
+                         " pk1 INTEGER NOT NULL , " +
+                         " pk2 INTEGER NOT NULL, " +
+                         " pk3 INTEGER NOT NULL, " +
+                         " pk4 INTEGER NOT NULL, " +
+                         " pk5 INTEGER NOT NULL, " +
+                         " pk6 INTEGER NOT NULL, " +
+                         " pk7 INTEGER NOT NULL, " +
+                         " pk8 INTEGER NOT NULL, " +
+                         " v INTEGER, CONSTRAINT PK PRIMARY KEY(pk1,pk2,pk3 desc,pk4,pk5,pk6 desc,pk7,pk8))";;
+
+            stmt.execute(sql);
+
+            List<List<KeyRange>> rowKeyRanges = null;
+            RowKeyComparisonFilter rowKeyComparisonFilter = null;
+            QueryPlan queryPlan = null;
+            Scan scan = null;
+
+            sql = "SELECT  /*+ RANGE_SCAN */ * FROM  "+ tableName +
+                  " WHERE (pk1, pk2) IN ((2, 3), (2, 4)) AND pk3 = 5";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof RowKeyComparisonFilter);
+            rowKeyComparisonFilter = (RowKeyComparisonFilter)scan.getFilter();
+            assertTrue(rowKeyComparisonFilter.toString().equals(
+                    "((PK1, PK2) IN ([128,0,0,2,128,0,0,3],[128,0,0,2,128,0,0,4]) AND PK3 = 5)"));
+            assertArrayEquals(
+                    scan.getStartRow(),
+                    ByteUtil.concat(
+                            PInteger.INSTANCE.toBytes(2),
+                            PInteger.INSTANCE.toBytes(3),
+                            PInteger.INSTANCE.toBytes(5, SortOrder.DESC)));
+            assertArrayEquals(
+                    scan.getStopRow(),
+                    ByteUtil.concat(
+                            PInteger.INSTANCE.toBytes(2),
+                            PInteger.INSTANCE.toBytes(4),
+                            ByteUtil.nextKey(PInteger.INSTANCE.toBytes(5, SortOrder.DESC))));
+
+            sql = "select * from " + tableName +
+                    " where (pk1 >=1 and pk1<=2) and (pk2>=2 and pk2<=3) and (pk3,pk4) < (3,5)";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof FilterList);
+            FilterList filterList = (FilterList)scan.getFilter();
+
+            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+            assertEquals(filterList.getFilters().size(),2);
+            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(filterList.getFilters().get(0))).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(1),
+                                    true,
+                                    PInteger.INSTANCE.toBytes(2),
+                                    true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(2),
+                                    true,
+                                    PInteger.INSTANCE.toBytes(3),
+                                    true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(3, SortOrder.DESC),
+                                    true,
+                                    KeyRange.UNBOUND,
+                                    false))
+                    ),
+                    rowKeyRanges);
+            assertArrayEquals(
+                    scan.getStartRow(),
+                    ByteUtil.concat(
+                            PInteger.INSTANCE.toBytes(1),
+                            PInteger.INSTANCE.toBytes(2),
+                            PInteger.INSTANCE.toBytes(3, SortOrder.DESC)));
+            assertArrayEquals(
+                    scan.getStopRow(),
+                    ByteUtil.concat(
+                    PInteger.INSTANCE.toBytes(2),
+                    PInteger.INSTANCE.toBytes(4)));
+
+            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+            rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
+            assertTrue(rowKeyComparisonFilter.toString().equals(
+                    "(TO_INTEGER(PK3), PK4) < (TO_INTEGER(TO_INTEGER(3)), 5)"));
+
+            /**
+             * RVC is singleKey
+             */
+            sql = "select * from " + tableName +
+                    " where (pk1 >=1 and pk1<=2) and (pk2>=2 and pk2<=3) and (pk3,pk4) in ((3,4),(4,5)) and "+
+                    " (pk5,pk6,pk7) in ((5,6,7),(6,7,8)) and pk8 > 8";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof FilterList);
+            filterList = (FilterList)scan.getFilter();
+
+            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+            assertEquals(filterList.getFilters().size(),2);
+            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(filterList.getFilters().get(0))).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(1),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(2),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(2),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(3),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(4, SortOrder.DESC),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(4, SortOrder.DESC),
+                                        true),
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(3, SortOrder.DESC),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(3, SortOrder.DESC),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(4),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(4),
+                                        true),
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(5),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(5),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(5),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(5),
+                                        true),
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(6),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(6),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(7, SortOrder.DESC),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(7, SortOrder.DESC),
+                                        true),
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(6, SortOrder.DESC),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(6, SortOrder.DESC),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(7),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(7),
+                                        true),
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(8),
+                                        true,
+                                        PInteger.INSTANCE.toBytes(8),
+                                        true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                        PInteger.INSTANCE.toBytes(9),
+                                        true,
+                                        KeyRange.UNBOUND,
+                                        false))
+                    ),
+                    rowKeyRanges);
+            assertArrayEquals(
+                    scan.getStartRow(),
+                    ByteUtil.concat(
+                            PInteger.INSTANCE.toBytes(1),
+                            PInteger.INSTANCE.toBytes(2),
+                            PInteger.INSTANCE.toBytes(4, SortOrder.DESC),
+                            PInteger.INSTANCE.toBytes(4),
+                            PInteger.INSTANCE.toBytes(5),
+                            PInteger.INSTANCE.toBytes(7, SortOrder.DESC),
+                            PInteger.INSTANCE.toBytes(7),
+                            PInteger.INSTANCE.toBytes(9)));
+            assertArrayEquals(
+                    scan.getStopRow(),
+                    ByteUtil.concat(
+                    PInteger.INSTANCE.toBytes(2),
+                    PInteger.INSTANCE.toBytes(3),
+                    PInteger.INSTANCE.toBytes(3, SortOrder.DESC),
+                    PInteger.INSTANCE.toBytes(5),
+                    PInteger.INSTANCE.toBytes(6),
+                    PInteger.INSTANCE.toBytes(6, SortOrder.DESC),
+                    PInteger.INSTANCE.toBytes(9)));
+
+            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+            rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
+            assertTrue(rowKeyComparisonFilter.toString().equals(
+                    "((PK3, PK4) IN ([127,255,255,251,128,0,0,5],[127,255,255,252,128,0,0,4])"+
+                    " AND (PK5, PK6, PK7) IN ([128,0,0,5,127,255,255,249,128,0,0,7],[128,0,0,6,127,255,255,248,128,0,0,8]))"));
+            /**
+             * RVC is not singleKey
+             */
+            sql = "select * from " + tableName +
+                  " where (pk1 >=1 and pk1<=2) and (pk2>=2 and pk2<=3) and (pk3,pk4) < (3,4) and "+
+                  " (pk5,pk6,pk7) < (5,6,7) and pk8 > 8";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(scan.getFilter() instanceof FilterList);
+            filterList = (FilterList)scan.getFilter();
+
+            assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+            assertEquals(filterList.getFilters().size(),2);
+            assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+            rowKeyRanges = ((SkipScanFilter)(filterList.getFilters().get(0))).getSlots();
+            assertEquals(
+                    Arrays.asList(
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(1),
+                                    true,
+                                    PInteger.INSTANCE.toBytes(2),
+                                    true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(2),
+                                    true,
+                                    PInteger.INSTANCE.toBytes(3),
+                                    true)),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(3, SortOrder.DESC),
+                                    true,
+                                    KeyRange.UNBOUND,
+                                    false)),
+                        Arrays.asList(KeyRange.EVERYTHING_RANGE),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    KeyRange.UNBOUND,
+                                    false,
+                                    PInteger.INSTANCE.toBytes(5),
+                                    true)),
+                        Arrays.asList(KeyRange.EVERYTHING_RANGE),
+                        Arrays.asList(KeyRange.EVERYTHING_RANGE),
+                        Arrays.asList(
+                                KeyRange.getKeyRange(
+                                    PInteger.INSTANCE.toBytes(9),
+                                    true,
+                                    KeyRange.UNBOUND,
+                                    false))
+                    ),
+                    rowKeyRanges);
+            assertArrayEquals(
+                    scan.getStartRow(),
+                    ByteUtil.concat(
+                            PInteger.INSTANCE.toBytes(1),
+                            PInteger.INSTANCE.toBytes(2),
+                            PInteger.INSTANCE.toBytes(3, SortOrder.DESC)));
+            assertArrayEquals(
+                    scan.getStopRow(),
+                    ByteUtil.concat(
+                    PInteger.INSTANCE.toBytes(2),
+                    PInteger.INSTANCE.toBytes(4)));
+
+            assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+            rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
+            assertTrue(rowKeyComparisonFilter.toString().equals(
+                    "((TO_INTEGER(PK3), PK4) < (TO_INTEGER(TO_INTEGER(3)), 4) AND "+
+                    "(PK5, TO_INTEGER(PK6), PK7) < (5, TO_INTEGER(TO_INTEGER(6)), 7))"));
+        }
+    }
 }

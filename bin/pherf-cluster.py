@@ -22,6 +22,8 @@
 # This script is intended for use where HBase/Phoenix is loaded from HBase classpath
 # therefore HBASE_DIR environment variable needs to be configured for this script to execute
 
+from __future__ import print_function
+from phoenix_utils import tryDecode
 import os
 import subprocess
 import sys
@@ -48,17 +50,17 @@ elif os.name == 'nt':
     hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
     hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
 if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
     sys.exit(-1)
 
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, _, v) = x.partition('=')
+        (k, _, v) = tryDecode(x).partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
+if 'JAVA_HOME' in hbase_env:
     java_home = hbase_env['JAVA_HOME']
 
 if java_home:
@@ -66,7 +68,7 @@ if java_home:
 else:
     java = 'java'
 
-print "HBASE_DIR environment variable is currently set to: " + hbase_path
+print("HBASE_DIR environment variable is currently set to: " + hbase_path)
 
 # Get the HBase classpath
 hbasecp, stderr = subprocess.Popen(hbase_path + "/bin/hbase classpath",
@@ -74,10 +76,9 @@ hbasecp, stderr = subprocess.Popen(hbase_path + "/bin/hbase classpath",
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE).communicate()
 
-java_cmd = java +' -cp "' + hbasecp + os.pathsep + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
+java_cmd = java +' -cp "' + tryDecode(hbasecp) + os.pathsep + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
-exitcode = subprocess.call(java_cmd, shell=True)
-sys.exit(exitcode)
+os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)

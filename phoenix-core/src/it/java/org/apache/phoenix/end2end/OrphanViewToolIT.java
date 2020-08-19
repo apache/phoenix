@@ -122,12 +122,12 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="OrphanViewToolIT_multiTenant={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList(false, true);
     }
 
     @AfterClass
-    public static void cleanUp() {
+    public static synchronized void cleanUp() {
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
             File file = new File(filePath + OrphanViewTool.fileName[i]);
             if (file.exists()) {

@@ -134,9 +134,9 @@ public class TestCoveredColumnIndexCodec {
     }
 
     @Override
-    public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean preMutationStateOnly)
+    public List<Cell> getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean preMutationStateOnly)
         throws IOException {
-      return r;
+      return r.listCells();
     }
 
   }

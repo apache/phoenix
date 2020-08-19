@@ -32,7 +32,7 @@ import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.Properties;
 
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;

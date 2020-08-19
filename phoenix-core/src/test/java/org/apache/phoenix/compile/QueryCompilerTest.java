@@ -4877,6 +4877,66 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testLocalIndexRegionPruning() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" + 
+                    "    A CHAR(1) NOT NULL,\n" + 
+                    "    B CHAR(1) NOT NULL,\n" + 
+                    "    C CHAR(1) NOT NULL,\n" + 
+                    "    D CHAR(1),\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        A,\n" + 
+                    "        B,\n" + 
+                    "        C\n" + 
+                    "    )\n" + 
+                    ") SPLIT ON ('A','C','E','G','I')");
+
+            conn.createStatement().execute("CREATE LOCAL INDEX IDX ON T(D)");
+
+            // un-pruned, need to scan all six regions
+            String query = "SELECT * FROM T WHERE D = 'C'";
+            PhoenixStatement statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            QueryPlan plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            assertEquals(6, plan.getScans().size());
+
+            // fixing first part of the key, can limit scanning to two regions
+            query = "SELECT * FROM T WHERE A = 'A' AND D = 'C'";
+            statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            assertEquals(2, plan.getScans().size());
+
+            // same with skipscan filter
+            query = "SELECT * FROM T WHERE A IN ('A', 'C') AND D = 'C'";
+            statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            assertEquals(3, plan.getScans().size());
+
+            // two parts of key fixed, need to scan a single region only
+            query = "SELECT * FROM T WHERE A = 'A' AND B = 'A' AND D = 'C'";
+            statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            assertEquals(1, plan.getScans().size());
+
+            // same with skipscan filter
+            query = "SELECT * FROM T WHERE A IN ('A', 'C') AND B = 'A' AND D = 'C'";
+            statement = conn.createStatement().unwrap(PhoenixStatement.class);
+            plan = statement.optimizeQuery(query);
+            assertEquals("IDX", plan.getContext().getCurrentTable().getTable().getName().getString());
+            plan.iterator();
+            assertEquals(2, plan.getScans().size());
+        }
+    }
+
+    @Test
     public void testSmallScanForPointLookups() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(new Properties());
         createTestTable(getUrl(), "CREATE TABLE FOO(\n" +

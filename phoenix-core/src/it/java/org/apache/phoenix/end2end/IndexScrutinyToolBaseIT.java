@@ -16,6 +16,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyMapperForTest;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
@@ -41,7 +42,7 @@ import static org.junit.Assert.assertTrue;
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
 
-    @BeforeClass public static void doSetup() throws Exception {
+    @BeforeClass public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMap();
         //disable major compactions
         serverProps.put(HConstants.MAJOR_COMPACTION_PERIOD, "0");
@@ -54,7 +55,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
     }
 
     protected List<Job> runScrutiny(String[] cmdArgs) throws Exception {
-        IndexScrutinyTool scrutiny = new IndexScrutinyTool();
+        IndexScrutinyTool scrutiny = new IndexScrutinyTool(IndexScrutinyMapperForTest.class);
         Configuration conf = new Configuration(getUtility().getConfiguration());
         scrutiny.setConf(conf);
         int status = scrutiny.run(cmdArgs);

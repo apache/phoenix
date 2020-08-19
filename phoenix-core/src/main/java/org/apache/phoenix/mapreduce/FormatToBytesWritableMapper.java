@@ -140,7 +140,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
 
             initColumnIndexes();
-        } catch (SQLException | ClassNotFoundException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 

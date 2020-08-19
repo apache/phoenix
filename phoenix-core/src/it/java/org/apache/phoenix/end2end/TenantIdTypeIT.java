@@ -87,7 +87,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters( name = "TenantIdTypeIT_datatype={0}" ) // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> testCases = Lists.newArrayList();
         testCases.add(new Object[] { "INTEGER", "2147483647", "2147483646" });
         testCases.add(new Object[] { "UNSIGNED_INT", "2147483647", "2147483646" });

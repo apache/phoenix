@@ -138,7 +138,7 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProps();
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
@@ -173,7 +173,7 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(
                 Arrays.asList(new Object[][] { 
                     // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
@@ -600,7 +600,7 @@ public class MutableIndexFailureIT extends BaseTest {
                             Cell firstCell = entry.getValue().get(0);
                             long indexId = MetaDataUtil.getViewIndexIdDataType().getCodec().decodeLong(firstCell.getRowArray(), firstCell.getRowOffset() + regionStartKeyLen, SortOrder.getDefault());
                             // Only throw for first local index as the test may have multiple local indexes
-                            if (indexId == Long.MIN_VALUE) {
+                            if (indexId == Short.MIN_VALUE) {
                                 throwException = true;
                                 break;
                             }
@@ -623,7 +623,6 @@ public class MutableIndexFailureIT extends BaseTest {
                  connection.createStatement().execute(
                         "DROP INDEX IF EXISTS " + "B_" + FAIL_INDEX_NAME + " ON "
                              + fullTableName);
-             } catch (ClassNotFoundException e) {
              } catch (SQLException e) {
              }
          }

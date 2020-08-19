@@ -30,18 +30,26 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.*;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
+
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getCurrentScnValue;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getDisableLoggingVerifyType;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolDataTableName;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolIndexTableName;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolLastVerifyTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolStartTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * {@link InputFormat} implementation from Phoenix for building index
@@ -60,20 +68,23 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     }
 
     @Override
-    protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
+    protected QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {
         Preconditions.checkNotNull(context);
         if (queryPlan != null) {
             return queryPlan;
         }
         final String txnScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
-        final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
+        final String currentScnValue = getCurrentScnValue(configuration);
+        final String startTimeValue = getIndexToolStartTime(configuration);
         final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
+        final String lastVerifyTime = getIndexToolLastVerifyTime(configuration);
+
         final Properties overridingProps = new Properties();
-        if(txnScnValue==null && currentScnValue!=null) {
+        if (txnScnValue==null && currentScnValue!=null) {
             overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
         }
-        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
+        if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null) {
             overridingProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         String dataTableFullName = getIndexToolDataTableName(configuration);
@@ -82,14 +93,29 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps)) {
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             Long scn = (currentScnValue != null) ? Long.valueOf(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
+            setCurrentScnValue(configuration, scn);
+
+            Long startTime = (startTimeValue == null) ? 0L : Long.valueOf(startTimeValue);
             PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
             ServerBuildIndexCompiler compiler =
                     new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
             MutationPlan plan = compiler.compile(indexTable);
             Scan scan = plan.getContext().getScan();
-
+            Long lastVerifyTimeValue = lastVerifyTime == null ? 0L : Long.valueOf(lastVerifyTime);
             try {
-                scan.setTimeRange(0, scn);
+                scan.setTimeRange(startTime, scn);
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
+                // Serialize page row size only if we're overriding, else use server side value
+                String rebuildPageRowSize =
+                        configuration.get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+                if (rebuildPageRowSize != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
+                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                }
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_RETRY_VERIFY, Bytes.toBytes(lastVerifyTimeValue));
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE,
+                    getDisableLoggingVerifyType(configuration).toBytes());
             } catch (IOException e) {
                 throw new SQLException(e);
             }

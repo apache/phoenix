@@ -40,14 +40,21 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
   /**
    * @param failures the tables to which the index write did not succeed
    */
-  public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures, boolean disableIndexOnFailure) {
-    super(disableIndexOnFailure);
-    this.failures = failures;
+  public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures,
+          boolean disableIndexOnFailure) {
+      super(disableIndexOnFailure);
+      this.failures = failures;
+  }
+
+  public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures,
+          boolean disableIndexOnFailure, Throwable cause) {
+      super(cause, disableIndexOnFailure);
+      this.failures = failures;
   }
 
   /**
-   * This constructor used to rematerialize this exception when receiving
-   * an rpc exception from the server
+   * This constructor used to rematerialize this exception when receiving an rpc exception from the
+   * server
    * @param message detail message
    */
   public MultiIndexWriteFailureException(String message) {

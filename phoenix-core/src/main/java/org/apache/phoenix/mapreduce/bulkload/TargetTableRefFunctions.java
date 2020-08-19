@@ -21,10 +21,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.codehaus.jackson.map.ObjectMapper;
-
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
+import org.apache.phoenix.util.JacksonUtil;
 
 /**
   * Utility functions to get/put json.
@@ -37,8 +36,7 @@ public class TargetTableRefFunctions {
          @Override
          public String apply(TargetTableRef input) {
              try {
-                 ObjectMapper mapper = new ObjectMapper();
-                 return mapper.writeValueAsString(input);
+                 return JacksonUtil.getObjectWriter().writeValueAsString(input);
              } catch (IOException e) {
                  throw new RuntimeException(e);
              }
@@ -51,8 +49,7 @@ public class TargetTableRefFunctions {
          @Override
          public TargetTableRef apply(String json) {
              try {
-                 ObjectMapper mapper = new ObjectMapper();
-                 return mapper.readValue(json, TargetTableRef.class);
+                 return JacksonUtil.getObjectReader(TargetTableRef.class).readValue(json);
              } catch (IOException e) {
                  throw new RuntimeException(e);
              }
@@ -69,8 +66,7 @@ public class TargetTableRefFunctions {
                  for(TargetTableRef table : input) {
                      tableNames.add(table.getPhysicalName());
                  }
-                 ObjectMapper mapper = new ObjectMapper();
-                 return mapper.writeValueAsString(tableNames);
+                 return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
              } catch (IOException e) {
                  throw new RuntimeException(e);
              }
@@ -87,8 +83,7 @@ public class TargetTableRefFunctions {
                 for(TargetTableRef table : input) {
                     tableNames.add(table.getLogicalName());
                 }
-                ObjectMapper mapper = new ObjectMapper();
-                return mapper.writeValueAsString(tableNames);
+                return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -102,8 +97,7 @@ public class TargetTableRefFunctions {
          @Override
          public List<String> apply(String json) {
              try {
-                 ObjectMapper mapper = new ObjectMapper();
-                 return mapper.readValue(json, ArrayList.class);
+                 return JacksonUtil.getObjectReader(ArrayList.class).readValue(json);
              } catch (IOException e) {
                  throw new RuntimeException(e);
              }

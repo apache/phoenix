@@ -94,7 +94,7 @@ public class SystemCatalogUpgradeIT extends BaseTest {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixUpgradeCountingDriver.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

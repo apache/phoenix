@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import java.util.Objects;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
@@ -56,9 +58,13 @@ public class SequenceKey implements Comparable<SequenceKey> {
 
     @Override
     public int compareTo(SequenceKey that) {
-        int c = this.tenantId == that.getTenantId() ? 0 : this.tenantId == null ? -1 : that.getTenantId() == null ? 1 : this.tenantId.compareTo(that.getTenantId());
+        int c = Objects.equals(this.tenantId, that.getTenantId()) ? 0
+          : this.tenantId == null ? -1 : that.getTenantId() == null ? 1
+          : this.tenantId.compareTo(that.getTenantId());
         if (c == 0) {
-            c = this.schemaName == that.getSchemaName() ? 0 : this.schemaName == null ? -1 : that.getSchemaName() == null ? 1 : this.schemaName.compareTo(that.getSchemaName());
+            c = Objects.equals(this.schemaName, that.getSchemaName()) ? 0
+              : this.schemaName == null ? -1 : that.getSchemaName() == null ? 1
+              : this.schemaName.compareTo(that.getSchemaName());
             if (c == 0) {
                 return sequenceName.compareTo(that.getSequenceName());
             }

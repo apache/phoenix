@@ -19,6 +19,8 @@ package org.apache.phoenix.coprocessor.tasks;
 
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -31,6 +33,8 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Properties;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 
 /**
  * Task runs periodically to clean up task of child views whose parent is dropped
@@ -58,9 +62,12 @@ public class DropChildViewsTask extends BaseTask {
                     taskRecord.getSchemaName(), taskRecord.getTableName(), true);
             if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
                 ViewUtil.dropChildViews(env, taskRecord.getTenantIdBytes(),
-                        taskRecord.getSchemaNameBytes(), taskRecord.getTableNameBytes());
+                        taskRecord.getSchemaNameBytes(), taskRecord.getTableNameBytes(),
+                        SchemaUtil.getPhysicalTableName(
+                                SYSTEM_CHILD_LINK_NAME_BYTES,
+                                env.getConfiguration()).getName());
                 return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
-            } else if (System.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
+            } else if (EnvironmentEdgeManager.currentTimeMillis() < timeMaxInterval + timestamp.getTime()) {
                 // skip this task as it has not been expired and its parent table has not been dropped yet
                 LOGGER.info("Skipping a child view drop task. " +
                         "The parent table has not been dropped yet : " +

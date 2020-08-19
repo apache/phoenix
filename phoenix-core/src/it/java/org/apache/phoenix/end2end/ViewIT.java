@@ -53,7 +53,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
@@ -83,12 +82,14 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
@@ -102,6 +103,8 @@ public class ViewIT extends SplitSystemCatalogIT {
 
     private static volatile CountDownLatch latch1 = null;
     private static volatile CountDownLatch latch2 = null;
+    private static volatile boolean throwExceptionInChildLinkPreHook = false;
+    private static volatile boolean slowDownAddingChildLink = false;
 
     public ViewIT(String transactionProvider, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder();
@@ -119,7 +122,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
             { "TEPHRA", false }, { "TEPHRA", true },
             { "OMID", false }, 
@@ -127,7 +130,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         NUM_SLAVES_BASE = 6;
         Map<String, String> props = Collections.emptyMap();
         boolean splitSystemCatalog = (driver == null);
@@ -139,10 +142,20 @@ public class ViewIT extends SplitSystemCatalogIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
+            // splitSystemCatalog is incompatible with the balancer chore
+            getUtility().getHBaseCluster().getMaster().balanceSwitch(false);
             splitSystemCatalog();
         }
     }
-    
+
+    @After
+    public void cleanup() {
+        latch1 = null;
+        latch2 = null;
+        throwExceptionInChildLinkPreHook = false;
+        slowDownAddingChildLink = false;
+    }
+
     public static class TestMetaDataRegionObserver extends BaseMetaDataEndpointObserver {
         
         @Override
@@ -166,6 +179,16 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
 
         @Override
+        public void preCreateViewAddChildLink(
+                final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+                final String tableName) throws IOException {
+            if (throwExceptionInChildLinkPreHook) {
+                throw new IOException();
+            }
+            processTable(tableName);
+        }
+
+        @Override
         public void preDropTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
                 String tenantId, String tableName, TableName physicalTableName,
                 TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes)
@@ -180,8 +203,8 @@ public class ViewIT extends SplitSystemCatalogIT {
                 // DoNotRetryIOException tells HBase not to retry this mutation
                 // multiple times
                 throw new DoNotRetryIOException();
-            } else if (tableName.startsWith(SLOW_VIEWNAME_PREFIX)) {
-                // simulate a slow write to SYSTEM.CATALOG
+            } else if (tableName.startsWith(SLOW_VIEWNAME_PREFIX) || slowDownAddingChildLink) {
+                // simulate a slow write to SYSTEM.CATALOG or SYSTEM.CHILD_LINK
                 if (latch1 != null) {
                     latch1.countDown();
                 }
@@ -399,7 +422,72 @@ public class ViewIT extends SplitSystemCatalogIT {
                     "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER " + fullIndexName1 + " [1,100] - [2,109]\n" + 
                     "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
         }
-    }    
+    }
+
+    @Test
+    public void testCreateChildViewWithBaseTableLocalIndex() throws Exception {
+        testCreateChildViewWithBaseTableIndex(true);
+    }
+
+    @Test
+    public void testCreateChildViewWithBaseTableGlobalIndex() throws Exception {
+        testCreateChildViewWithBaseTableIndex(false);
+    }
+
+    public void testCreateChildViewWithBaseTableIndex(boolean localIndex) throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String indexName = "I_" + generateUniqueName();
+        String fullChildViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql =
+                    "CREATE TABLE " + fullTableName
+                            + " (ID INTEGER NOT NULL PRIMARY KEY, HOST VARCHAR(10), FLAG BOOLEAN)";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE VIEW " + fullViewName
+                            + " (COL1 INTEGER, COL2 INTEGER, COL3 INTEGER, COL4 INTEGER) AS SELECT * FROM "
+                            + fullTableName + " WHERE ID > 5";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE " + (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + "(HOST)";
+            conn.createStatement().execute(sql);
+            sql =
+                    "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullViewName
+                            + " WHERE COL1 > 2";
+            conn.createStatement().execute(sql);
+            // Sanity upserts in baseTable, view, child view
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (1, 'host1', TRUE)");
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (5, 'host5', FALSE)");
+            conn.createStatement()
+                    .executeUpdate("upsert into " + fullTableName + " values (7, 'host7', TRUE)");
+            conn.commit();
+            // View is not updateable
+            try {
+                conn.createStatement().executeUpdate("upsert into " + fullViewName
+                        + " (ID, HOST, FLAG, COL1) values (7, 'host7', TRUE, 1)");
+                fail();
+            } catch (Exception e) {
+            }
+            // Check view inherits index, but child view doesn't
+            PTable table = PhoenixRuntime.getTable(conn, fullViewName);
+            assertEquals(1, table.getIndexes().size());
+            table = PhoenixRuntime.getTable(conn, fullChildViewName);
+            assertEquals(0, table.getIndexes().size());
+
+            ResultSet rs =
+                    conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("select count(*) from " + fullViewName);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+        }
+    }
 
     @Test
     public void testCreateViewDefinesPKColumn() throws Exception {
@@ -702,9 +790,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                     queryPlan);
         } else {
             assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [" + Long.MIN_VALUE + ",51]"
+                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [" + Short.MIN_VALUE + ",51]"
                     : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0,"
-                            + Long.MIN_VALUE + ",51] - [" + (saltBuckets.intValue() - 1) + "," + Long.MIN_VALUE
+                            + Short.MIN_VALUE + ",51] - [" + (saltBuckets.intValue() - 1) + "," + Short.MIN_VALUE
                             + ",51]\nCLIENT MERGE SORT",
                     queryPlan);
         }
@@ -746,10 +834,10 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertEquals(
                     saltBuckets == null
                             ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " ["
-                                    + (Long.MIN_VALUE + 1) + ",'foo']\n" + "    SERVER FILTER BY FIRST KEY ONLY"
+                                    + (Short.MIN_VALUE + 1) + ",'foo']\n" + "    SERVER FILTER BY FIRST KEY ONLY"
                             : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName
-                                    + " [0," + (Long.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets.intValue() - 1)
-                                    + "," + (Long.MIN_VALUE + 1) + ",'foo']\n"
+                                    + " [0," + (Short.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets.intValue() - 1)
+                                    + "," + (Short.MIN_VALUE + 1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         }
@@ -811,6 +899,12 @@ public class ViewIT extends SplitSystemCatalogIT {
                 }
             });
 
+            // When dropping a table, we check the parent->child links in the SYSTEM.CHILD_LINK
+            // table and check that cascade is set, if it isn't, we throw an exception (see
+            // ViewUtil.hasChildViews). After PHOENIX-4810, we first send a client-server RPC to add
+            // parent->child links to SYSTEM.CHILD_LINK and then add metadata for the view in
+            // SYSTEM.CATALOG, so we must delay link creation so that the drop table does not fail
+            slowDownAddingChildLink = true;
             // create the view in a separate thread (which will take some time
             // to complete)
             Future<Exception> future =
@@ -818,6 +912,9 @@ public class ViewIT extends SplitSystemCatalogIT {
             // wait till the thread makes the rpc to create the view
             latch1.await();
             tableDdl = "DROP TABLE " + fullTableName;
+
+            // Revert this flag since we don't want to wait in preDropTable
+            slowDownAddingChildLink = false;
             // drop table goes through first and so the view creation should fail
             conn.createStatement().execute(tableDdl);
             latch2.countDown();
@@ -831,10 +928,35 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Test
+    public void testChildLinkCreationFailThrowsException() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+            String fullViewName1 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+            // create base table
+            String tableDdl = "CREATE TABLE " + fullTableName
+                    + "  (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+            conn.createStatement().execute(tableDdl);
+
+            // Throw an exception in ChildLinkMetaDataEndpoint while adding parent->child links
+            // to simulate a failure
+            throwExceptionInChildLinkPreHook = true;
+            // create a view
+            String ddl = "CREATE VIEW " + fullViewName1 + " (v2 VARCHAR) AS SELECT * FROM "
+                    + fullTableName + " WHERE k = 6";
+            try {
+                conn.createStatement().execute(ddl);
+                fail("Should have thrown an exception");
+            } catch(SQLException sqlE) {
+                assertEquals("Expected a different Error code",
+                        SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK.getErrorCode(),
+                        sqlE.getErrorCode());
+            }
+        }
+    }
+
+    @Test
     public void testConcurrentAddSameColumnDifferentType() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            latch1 = null;
-            latch2 = null;
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
             String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -894,8 +1016,6 @@ public class ViewIT extends SplitSystemCatalogIT {
     @Test
     public void testConcurrentAddDifferentColumn() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            latch1 = null;
-            latch2 = null;
             String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
             String fullViewName1 = SLOW_VIEWNAME_PREFIX + "_" + generateUniqueName();
             String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());

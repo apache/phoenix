@@ -32,10 +32,10 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -49,6 +49,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.TaskType;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +61,7 @@ import org.slf4j.LoggerFactory;
 
 public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskRegionObserver.class);
+    public static final String TASK_DETAILS = "TaskDetails";
 
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(TaskType.values().length);
     private long timeInterval = QueryServicesOptions.DEFAULT_TASK_HANDLING_INTERVAL_MS;
@@ -194,7 +196,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                                     Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
                                             taskRecord.getSchemaName(), taskRecord.getTableName(),
                                             taskType, taskRecord.getTenantId(), null).get(0);
-                            if (taskRecord.getStatus() != null && Arrays.stream(excludeStates).anyMatch(taskRecord.getStatus()::equals)) {
+                            if (taskRecord.getStatus() != null && !taskRecord.getStatus().equals(PTable.TaskStatus.CREATED.toString())) {
                                 continue;
                             }
 
@@ -250,10 +252,9 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
             if (Strings.isNullOrEmpty(data)) {
                 data = "{}";
             }
-            JsonParser jsonParser = new JsonParser();
-            JsonObject jsonObject = jsonParser.parse(data).getAsJsonObject();
-            jsonObject.addProperty("TaskDetails", taskStatus);
-            data = jsonObject.toString();
+            JsonNode jsonNode = JacksonUtil.getObjectReader().readTree(data);
+            ((ObjectNode) jsonNode).put(TASK_DETAILS, taskStatus);
+            data = jsonNode.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
             Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),

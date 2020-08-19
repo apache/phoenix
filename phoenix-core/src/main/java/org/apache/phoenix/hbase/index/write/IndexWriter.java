@@ -131,25 +131,6 @@ public class IndexWriter implements Stoppable {
     this.writer = committer;
     this.failurePolicy = policy;
   }
-  
-  /**
-   * Write the mutations to their respective table.
-   * <p>
-   * This method is blocking and could potentially cause the writer to block for a long time as we
-   * write the index updates. When we return depends on the specified {@link IndexCommitter}.
-   * <p>
-   * If update fails, we pass along the failure to the installed {@link IndexFailurePolicy}, which
-   * then decides how to handle the failure.
-   * @param indexUpdates Updates to write
- * @param clientVersion version of the client
- * @throws IOException 
-   */
-    public void writeAndHandleFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-                                      boolean allowLocalUpdates, int clientVersion) throws IOException {
-    // convert the strings to htableinterfaces to which we can talk and group by TABLE
-    Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-    writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
-  }
 
   /**
    * see {@link #writeAndHandleFailure(Collection)}.
@@ -182,29 +163,11 @@ public class IndexWriter implements Stoppable {
    * @param clientVersion version of the client
    * @throws IOException
    */
-  public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
+  public void writeAndHandleFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
+                                    boolean allowLocalUpdates, int clientVersion) throws IOException {
       // convert the strings to htableinterfaces to which we can talk and group by TABLE
       Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-      writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates, clientVersion);
       writeAndHandleFailure(toWrite, allowLocalUpdates, clientVersion);
-  }
-
-  /**
-   * see {@link #writeAndKillYourselfOnFailure(Collection)}.
-   * @param toWrite
-   * @throws IOException
-   */
-  public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-                                            boolean allowLocalUpdates, int clientVersion) throws IOException {
-    try {
-      write(toWrite, allowLocalUpdates, clientVersion);
-      if (LOGGER.isTraceEnabled()) {
-        LOGGER.trace("Done writing all index updates!\n\t" + toWrite);
-      }
-    } catch (Exception e) {
-      this.failurePolicy.handleFailure(toWrite, e);
-    }
   }
 
   /**
@@ -222,7 +185,7 @@ public class IndexWriter implements Stoppable {
    * @throws IndexWriteException if we cannot successfully write to the index. Whether or not we
    *           stop early depends on the {@link IndexCommitter}.
    */
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, int clientVersion) throws IndexWriteException {
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, int clientVersion) throws IOException {
     	write(resolveTableReferences(toWrite), false, clientVersion);
     }
 
@@ -236,7 +199,7 @@ public class IndexWriter implements Stoppable {
    * @throws IndexWriteException
    */
   public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
-	      throws IndexWriteException {
+	      throws IOException {
 	  this.writer.write(toWrite, allowLocalUpdates, clientVersion);
   }
 

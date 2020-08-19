@@ -79,7 +79,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     }
 	
 	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
                 { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
                 { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },

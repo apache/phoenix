@@ -40,7 +40,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -82,12 +82,12 @@ public class TestPerRegionIndexWriteCache {
   public TestName testName = new TestName();
 
   @BeforeClass
-  public static void startDfs() throws Exception {
+  public static synchronized void startDfs() throws Exception {
       miniDfs = TEST_UTIL.startMiniDFSCluster(1);
   }
 
   @AfterClass
-  public static void stopDfs() throws Exception {
+  public static synchronized void stopDfs() throws Exception {
       if (miniDfs != null) {
           miniDfs.shutdown();
           miniDfs = null;
@@ -102,7 +102,7 @@ public class TestPerRegionIndexWriteCache {
 
       FileSystem newFS = miniDfs.getFileSystem();
       RegionInfo hri = RegionInfoBuilder.newBuilder(tableName).setStartKey(null).setEndKey(null).setSplit(false).build();
-      Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName);
+      Path basedir = CommonFSUtils.getTableDir(hbaseRootDir, tableName);
       Random rn = new Random();
       tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), getClass().getSimpleName());

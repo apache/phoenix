@@ -33,7 +33,7 @@ import org.junit.Test;
 public class TraceSpanReceiverTest {
 
   @BeforeClass
-  public static void setup() throws Exception{
+  public static synchronized void setup() throws Exception{
   }
 
   /**

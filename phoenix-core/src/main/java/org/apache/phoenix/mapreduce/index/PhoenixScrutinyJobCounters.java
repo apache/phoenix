@@ -35,6 +35,10 @@ public enum PhoenixScrutinyJobCounters {
      */
     BAD_COVERED_COL_VAL_COUNT,
     /**
+     * Number of rows in source that have expired while scrutiny was comparing them with target
+     */
+    EXPIRED_ROW_COUNT,
+    /**
      * Number of batches processed
      */
     BATCHES_PROCESSED_COUNT;

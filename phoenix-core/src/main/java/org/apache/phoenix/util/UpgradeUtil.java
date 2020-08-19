@@ -42,6 +42,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -666,7 +668,7 @@ public class UpgradeUtil {
         Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         try {
             LOGGER.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
-            Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+            Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                     PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -685,7 +687,7 @@ public class UpgradeUtil {
                 // This is needed as a fix for https://issues.apache.org/jira/browse/PHOENIX-1401 
                 if (oldTable.getTimeStamp() == MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_0) {
                     byte[] oldSeqNum = PLong.INSTANCE.toBytes(oldTable.getSequenceNumber());
-                    Cell seqNumKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+                    Cell seqNumKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                             PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -779,7 +781,7 @@ public class UpgradeUtil {
                             if (!success) {
                                 if (!committed) { // Try to recover by setting salting back to off, as we haven't successfully committed anything
                                     // Don't use Delete here as we'd never be able to change it again at this timestamp.
-                                    Cell unsaltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey, 
+                                    Cell unsaltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
                                             PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                                             PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
@@ -1210,7 +1212,7 @@ public class UpgradeUtil {
 			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
             while (rs.next()) {
             	String tenantId = rs.getString("TENANT_ID");
-				if (prevTenantId != tenantId) {
+				if (!java.util.Objects.equals(prevTenantId, tenantId)) {
 					prevTenantId = tenantId;
 					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
             		metaConn = new PhoenixConnection(oldMetaConnection, props); 
@@ -1360,28 +1362,37 @@ public class UpgradeUtil {
             syncUpdateCacheFreqForIndexesOfTable(table, stmt);
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            try (Table childLinkTable = newConn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalName(
-                            PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                            newConn.getQueryServices().getProps())
-                            .getName())) {
-                ViewUtil.findAllRelatives(childLinkTable, tenantId,
-                        table.getSchemaName().getBytes(), table.getTableName().getBytes(),
-                        LinkType.CHILD_TABLE, childViewsResult);
+            for (int i=0; i<2; i++) {
+                try (Table sysCatOrSysChildLinkTable = newConn.getQueryServices()
+                        .getTable(SchemaUtil.getPhysicalName(
+                                i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                                newConn.getQueryServices().getProps())
+                                .getName())) {
+                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId,
+                            table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                            LinkType.CHILD_TABLE, childViewsResult);
 
-                // Iterate over the chain of child views
-                for (TableInfo tableInfo: childViewsResult.getLinks()) {
-                    PTable view;
-                    String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
-                            tableInfo.getTableName());
-                    try {
-                        view = PhoenixRuntime.getTable(newConn, viewName);
-                    } catch (TableNotFoundException e) {
-                        // Ignore
-                        LOGGER.warn("Error getting PTable for view: " + viewName);
-                        continue;
+                    // Iterate over the chain of child views
+                    for (TableInfo tableInfo: childViewsResult.getLinks()) {
+                        PTable view;
+                        String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
+                                tableInfo.getTableName());
+                        try {
+                            view = PhoenixRuntime.getTable(newConn, viewName);
+                        } catch (TableNotFoundException e) {
+                            // Ignore
+                            LOGGER.warn("Error getting PTable for view: " + viewName);
+                            continue;
+                        }
+                        syncUpdateCacheFreqForIndexesOfTable(view, stmt);
                     }
-                    syncUpdateCacheFreqForIndexesOfTable(view, stmt);
+                    break;
+                } catch (TableNotFoundException ex) {
+                    // try again with SYSTEM.CATALOG in case the schema is old
+                    if (i == 1) {
+                        // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                        throw ex;
+                    }
                 }
             }
             stmt.executeBatch();
@@ -1717,7 +1728,7 @@ public class UpgradeUtil {
 
     private static void upgradeDescVarLengthRowKeys(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String schemaName, String tableName, boolean isTable, boolean bypassUpgrade) throws SQLException {
         TableName physicalName = TableName.valueOf(SchemaUtil.getTableName(schemaName, tableName));
-        long currentTime = System.currentTimeMillis();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         String snapshotName = physicalName + "_" + currentTime;
         Admin admin = null;
         if (isTable && !bypassUpgrade) {
@@ -2123,14 +2134,23 @@ public class UpgradeUtil {
             LOGGER.info(String.format("teanantId %s..", conn.getTenantId()));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
-            try (Table childLinkTable =
-                    conn.getQueryServices()
-                            .getTable(SchemaUtil.getPhysicalName(
-                                PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, readOnlyProps)
-                                    .getName())) {
-                byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
-                ViewUtil.findAllRelatives(childLinkTable, tenantId, schemaName.getBytes(),
-                    tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+
+            for (int i=0; i<2; i++) {
+                try (Table sysCatOrSysChildLinkTable = conn.getQueryServices()
+                        .getTable(SchemaUtil.getPhysicalName(
+                                i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                                readOnlyProps).getName())) {
+                    byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
+                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId, schemaName.getBytes(),
+                            tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+                    break;
+                } catch (TableNotFoundException ex) {
+                    // try again with SYSTEM.CATALOG in case the schema is old
+                    if (i == 1) {
+                        // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                        throw ex;
+                    }
+                }
             }
 
             // Upgrade the data or main table
@@ -2300,7 +2320,7 @@ public class UpgradeUtil {
         for (TableInfo viewInfo : viewInfoList) {
             tenantId = viewInfo.getTenantId()!=null ? Bytes.toString(viewInfo.getTenantId()) : null;
             String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(), viewInfo.getTableName());
-            if (prevTenantId != tenantId) {
+            if (!java.util.Objects.equals(prevTenantId, tenantId)) {
                 if (tenantId != null) {
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                 } else {
@@ -2419,7 +2439,7 @@ public class UpgradeUtil {
     public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
         String tableString = SYSTEM_CATALOG_NAME;
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
-        String date = formatter.format(new Date(System.currentTimeMillis()));
+        String date = formatter.format(new Date(EnvironmentEdgeManager.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
         return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
     }

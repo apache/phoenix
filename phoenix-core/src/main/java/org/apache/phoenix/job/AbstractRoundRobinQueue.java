@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.job;
 
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -66,12 +68,12 @@ public abstract class AbstractRoundRobinQueue<E> extends AbstractQueue<E>
     @Override
     public boolean offer(E o, long timeout, TimeUnit unit) throws InterruptedException {
         boolean taken = false;
-        long endAt = System.currentTimeMillis() + unit.toMillis(timeout);
+        long endAt = EnvironmentEdgeManager.currentTimeMillis() + unit.toMillis(timeout);
         synchronized(lock) {
-            long waitTime = endAt - System.currentTimeMillis();
+            long waitTime = endAt - EnvironmentEdgeManager.currentTimeMillis();
             while (!(taken = offer(o)) && waitTime > 0) {
                 this.lock.wait(waitTime);
-                waitTime = endAt - System.currentTimeMillis();
+                waitTime = endAt - EnvironmentEdgeManager.currentTimeMillis();
             }
         }
         return taken;
@@ -129,12 +131,12 @@ public abstract class AbstractRoundRobinQueue<E> extends AbstractQueue<E>
 
     @Override
     public E poll(long timeout, TimeUnit unit) throws InterruptedException {
-        long endAt = System.currentTimeMillis() + unit.toMillis(timeout);
+        long endAt = EnvironmentEdgeManager.currentTimeMillis() + unit.toMillis(timeout);
         synchronized(lock) {
-            long waitTime = endAt - System.currentTimeMillis();
+            long waitTime = endAt - EnvironmentEdgeManager.currentTimeMillis();
             while (this.size == 0 && waitTime > 0) {
                 this.lock.wait(waitTime);
-                waitTime = endAt - System.currentTimeMillis();
+                waitTime = endAt - EnvironmentEdgeManager.currentTimeMillis();
             }
             return poll();
         }

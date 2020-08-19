@@ -52,7 +52,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class RangeScanIT extends BaseQueryIT {
     
     @Parameters(name="RangeScanIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return BaseQueryIT.allIndexes();
     }
 

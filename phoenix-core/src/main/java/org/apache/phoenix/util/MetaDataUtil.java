@@ -23,15 +23,9 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
+import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -58,7 +52,9 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -67,21 +63,10 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -103,7 +88,7 @@ public class MetaDataUtil {
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final String VIEW_INDEX_SEQUENCE_NAME_PREFIX = "_ID_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
-    private static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+    public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
     public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
     public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
@@ -121,7 +106,33 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
 
-    public static boolean areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
+    public static class ClientServerCompatibility {
+
+        private int errorCode;
+        private boolean isCompatible;
+
+        ClientServerCompatibility() {
+            this.errorCode = 0;
+        }
+
+        public int getErrorCode() {
+            return this.errorCode;
+        }
+
+        void setErrorCode(int errorCode) {
+            this.errorCode = errorCode;
+        }
+
+        public boolean getIsCompatible() {
+            return this.isCompatible;
+        }
+
+        void setCompatible(boolean isCompatible) {
+            this.isCompatible = isCompatible;
+        }
+    }
+
+    public static ClientServerCompatibility areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
         // As of 3.0, we allow a client and server to differ for the minor version.
         // Care has to be taken to upgrade the server before the client, as otherwise
         // the client may call expressions that don't yet exist on the server.
@@ -131,12 +142,24 @@ public class MetaDataUtil {
     }
 
     // Default scope for testing
-    static boolean areClientAndServerCompatible(int serverVersion, int clientMajorVersion, int clientMinorVersion) {
+    @VisibleForTesting
+    static ClientServerCompatibility areClientAndServerCompatible(int serverVersion, int clientMajorVersion, int clientMinorVersion) {
         // A server and client with the same major and minor version number must be compatible.
         // So it's important that we roll the PHOENIX_MAJOR_VERSION or PHOENIX_MINOR_VERSION
         // when we make an incompatible change.
-        return VersionUtil.encodeMinPatchVersion(clientMajorVersion, clientMinorVersion) <= serverVersion && // Minor major and minor cannot be ahead of server
-                VersionUtil.encodeMaxMinorVersion(clientMajorVersion) >= serverVersion; // Major version must at least be up to server version
+        ClientServerCompatibility compatibility = new ClientServerCompatibility();
+        if (VersionUtil.encodeMinPatchVersion(clientMajorVersion, clientMinorVersion) > serverVersion) { // Client major and minor cannot be ahead of server
+            compatibility.setErrorCode(SQLExceptionCode.OUTDATED_JARS.getErrorCode());
+            compatibility.setCompatible(false);
+            return compatibility;
+        } else if (VersionUtil.encodeMaxMinorVersion(clientMajorVersion) < serverVersion) { // Client major version must at least be up to server major version
+            compatibility.setErrorCode(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode());
+            compatibility.setCompatible(false);
+            return compatibility;
+        }
+        compatibility.setCompatible(true);
+        return compatibility;
+
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.
@@ -761,12 +784,10 @@ public class MetaDataUtil {
      * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        ClusterConnection hcon = null;
-
-        try {
-            hcon = (ClusterConnection)ConnectionFactory.createConnection(conf);
+        try (ClusterConnection hcon =
+                (ClusterConnection) ConnectionFactory.createConnection(conf)) {
             List<HRegionLocation> locations = hcon.locateRegions(
-                org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
+              org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
 
             for (HRegionLocation loc : locations) {
                 try {
@@ -783,17 +804,9 @@ public class MetaDataUtil {
                 }
             }
         } catch (IOException ex) {
-            LOGGER.warn("tableRegionsOnline failed due to:" + ex);
+            LOGGER.warn("tableRegionsOnline failed due to:", ex);
             return false;
-        } finally {
-            if (hcon != null) {
-                try {
-                    hcon.close();
-                } catch (IOException ignored) {
-                }
-            }
         }
-
         return true;
     }
 
@@ -904,10 +917,16 @@ public class MetaDataUtil {
         byte[] physicalTableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(view.getPhysicalName().getString()));
         return SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, physicalTableSchemaName, physicalTableName);
     }
-    
-	public static List<Mutation> removeChildLinks(List<Mutation> catalogMutations) {
-		List<Mutation> childLinks = Lists.newArrayList();
-		Iterator<Mutation> iter = catalogMutations.iterator();
+
+    /**
+     * Extract mutations of link type {@link PTable.LinkType#CHILD_TABLE} from the list of mutations.
+     * The child link mutations will be sent to SYSTEM.CHILD_LINK and other mutations to SYSTEM.CATALOG
+     * @param metadataMutations total list of mutations
+     * @return list of mutations pertaining to parent-child links
+     */
+	public static List<Mutation> removeChildLinkMutations(List<Mutation> metadataMutations) {
+		List<Mutation> childLinkMutations = Lists.newArrayList();
+		Iterator<Mutation> iter = metadataMutations.iterator();
 		while (iter.hasNext()) {
 			Mutation m = iter.next();
 			for (Cell kv : m.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES)) {
@@ -918,12 +937,12 @@ public class MetaDataUtil {
 						&& ((Bytes.compareTo(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength(),
 								LinkType.CHILD_TABLE.getSerializedValueAsByteArray(), 0,
 								LinkType.CHILD_TABLE.getSerializedValueAsByteArray().length) == 0))) {
-					childLinks.add(m);
+					childLinkMutations.add(m);
 					iter.remove();
 				}
 			}
 		}
-		return childLinks;
+		return childLinkMutations;
 	}
 
 	public static IndexType getIndexType(List<Mutation> tableMetaData, KeyValueBuilder builder,
@@ -931,6 +950,23 @@ public class MetaDataUtil {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
                 value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
         return null;
+    }
+
+	/**
+     * Retrieve the viewIndexId datatype from create request.
+     *
+     * @see MetaDataEndpointImpl#createTable(com.google.protobuf.RpcController,
+     *      org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest,
+     *      com.google.protobuf.RpcCallback)
+     */
+    public static PDataType<?> getIndexDataType(List<Mutation> tableMetaData,
+            KeyValueBuilder builder, ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+                PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES, builder, value)) {
+            return PDataType.fromTypeId(
+                    PInteger.INSTANCE.getCodec().decodeInt(value, SortOrder.getDefault()));
+        }
+        return getLegacyViewIndexIdDataType();
     }
 
     public static PColumn getColumn(int pkCount, byte[][] rowKeyMetaData, PTable table) throws ColumnFamilyNotFoundException, ColumnNotFoundException {
@@ -946,5 +982,44 @@ public class MetaDataUtil {
             col = table.getPKColumn(new String(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
         }
         return col;
+    }
+
+    public static void deleteFromStatsTable(PhoenixConnection connection,
+                                            PTable table, List<byte[]> physicalTableNames,
+                                            List<MetaDataProtocol.SharedTableState> sharedTableStates)
+            throws SQLException {
+        boolean isAutoCommit = connection.getAutoCommit();
+        try {
+            connection.setAutoCommit(true);
+            Set<String> physicalTablesSet = new HashSet<>();
+            Set<String> columnFamilies  = new HashSet<>();
+            physicalTablesSet.add(table.getPhysicalName().getString());
+            for(byte[] physicalTableName:physicalTableNames) {
+                physicalTablesSet.add(Bytes.toString(physicalTableName));
+            }
+            for(MetaDataProtocol.SharedTableState s: sharedTableStates) {
+                physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
+            }
+            StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
+            Iterator itr = physicalTablesSet.iterator();
+            while(itr.hasNext()) {
+                buf.append("'" + itr.next() + "',");
+            }
+            buf.setCharAt(buf.length() - 1, ')');
+            if(table.getIndexType()==IndexType.LOCAL) {
+                buf.append(" AND COLUMN_FAMILY IN(");
+                if (table.getColumnFamilies().isEmpty()) {
+                    buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
+                } else {
+                    for(PColumnFamily cf : table.getColumnFamilies()) {
+                        buf.append("'" + cf.getName().getString() + "',");
+                    }
+                }
+                buf.setCharAt(buf.length() - 1, ')');
+            }
+            connection.createStatement().execute(buf.toString());
+        } finally {
+            connection.setAutoCommit(isAutoCommit);
+        }
     }
 }

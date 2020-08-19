@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compat.hbase.OffsetCell;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
@@ -604,102 +605,7 @@ public class IndexUtil {
         while (itr.hasNext()) {
             final Cell cell = itr.next();
             // TODO: Create DelegateCell class instead
-            Cell newCell = new Cell() {
-
-                @Override
-                public byte[] getRowArray() {
-                    return cell.getRowArray();
-                }
-
-                @Override
-                public int getRowOffset() {
-                    return cell.getRowOffset() + offset;
-                }
-
-                @Override
-                public short getRowLength() {
-                    return (short) (cell.getRowLength() - offset);
-                }
-
-                @Override
-                public byte[] getFamilyArray() {
-                    return cell.getFamilyArray();
-                }
-
-                @Override
-                public int getFamilyOffset() {
-                    return cell.getFamilyOffset();
-                }
-
-                @Override
-                public byte getFamilyLength() {
-                    return cell.getFamilyLength();
-                }
-
-                @Override
-                public byte[] getQualifierArray() {
-                    return cell.getQualifierArray();
-                }
-
-                @Override
-                public int getQualifierOffset() {
-                    return cell.getQualifierOffset();
-                }
-
-                @Override
-                public int getQualifierLength() {
-                    return cell.getQualifierLength();
-                }
-
-                @Override
-                public long getTimestamp() {
-                    return cell.getTimestamp();
-                }
-
-                @Override
-                public byte getTypeByte() {
-                    return cell.getTypeByte();
-                }
-
-                @Override public long getSequenceId() {
-                    return cell.getSequenceId();
-                }
-
-                @Override
-                public byte[] getValueArray() {
-                    return cell.getValueArray();
-                }
-
-                @Override
-                public int getValueOffset() {
-                    return cell.getValueOffset();
-                }
-
-                @Override
-                public int getValueLength() {
-                    return cell.getValueLength();
-                }
-
-                @Override
-                public byte[] getTagsArray() {
-                    return cell.getTagsArray();
-                }
-
-                @Override
-                public int getTagsOffset() {
-                    return cell.getTagsOffset();
-                }
-
-                @Override
-                public int getTagsLength() {
-                    return cell.getTagsLength();
-                }
-
-                @Override
-                public Type getType() {
-                    return cell.getType();
-                }
-            };
+            Cell newCell = new OffsetCell(cell, offset);
             itr.set(newCell);
         }
     }
@@ -911,7 +817,7 @@ public class IndexUtil {
         return false;
     }
 
-    private static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
+    public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
         boolean addedEmptyColumn = false;
         Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
         while (iterator.hasNext()) {
@@ -957,6 +863,13 @@ public class IndexUtil {
         } catch (TableNotFoundException e) {
             // This index table must be being deleted. No need to set the scan attributes
             return;
+        }
+        // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
+        // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
+        if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+            indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
         }
         if (!dataTable.getIndexes().contains(indexTable)) {
             return;

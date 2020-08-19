@@ -35,7 +35,7 @@ import com.google.common.collect.Maps;
 public class OrderByWithServerClientSpoolingDisabledIT extends OrderByIT {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // make sure disabling server side spooling has no affect on correctness(existing orderby
         // IT)

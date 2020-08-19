@@ -31,7 +31,7 @@ public class NotQueryWithGlobalImmutableIndexesIT extends NotQueryIT {
     }
 
     @Parameters(name = "globalIndexDDL={0}")
-    public static Collection<Object> globalIndexes() {
+    public static synchronized Collection<Object> globalIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : GLOBAL_INDEX_DDLS) {
             testCases.add(new Object[] { indexDDL, false });

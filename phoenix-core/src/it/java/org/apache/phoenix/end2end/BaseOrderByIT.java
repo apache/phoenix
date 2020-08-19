@@ -36,6 +36,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import com.google.common.collect.Lists;
@@ -934,6 +935,48 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
             queryBuilder.setOrderByClause("SCORE DESC NULLS LAST");
             rs = executeQuery(conn, queryBuilder);
             assertResultSet(rs, new Object[][]{{"6"},{"5"},{"4"},{"3"},{"2"},{"1"},{null}});
+        }
+    }
+
+    @Test
+    public void testOrderByNullable() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String sql = "CREATE TABLE IF NOT EXISTS us_population (state CHAR(2) NOT NULL," +
+                    "city VARCHAR NOT NULL, population BIGINT CONSTRAINT my_pk PRIMARY KEY" +
+                    " (state, city))";
+            conn.createStatement().execute(sql);
+
+            sql = "select ORDINAL_POSITION from SYSTEM.CATALOG where TABLE_NAME = 'US_POPULATION'";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            int expected = 0;
+            while (rs.next()){
+                expected += 1;
+            }
+
+            QueryBuilder queryBuilder = new QueryBuilder()
+                    .setSelectColumns(Lists.newArrayList("*"))
+                    .setFullTableName("SYSTEM.CATALOG")
+                    .setWhereClause("TABLE_NAME = 'US_POPULATION'")
+                    .setOrderByClause("ORDINAL_POSITION");
+            rs = executeQuery(conn, queryBuilder);
+            int linesCount = 0;
+            while (rs.next()){
+                linesCount += 1;
+            }
+            assertEquals(expected, linesCount);
+
+            queryBuilder = new QueryBuilder()
+                    .setSelectColumns(Lists.newArrayList("COLUMN_NAME"))
+                    .setFullTableName("SYSTEM.CATALOG")
+                    .setWhereClause("TABLE_NAME = 'US_POPULATION'")
+                    .setOrderByClause("ORDINAL_POSITION");
+            rs = executeQuery(conn, queryBuilder);
+            linesCount = 0;
+            while (rs.next()){
+                linesCount += 1;
+            }
+            assertEquals(expected, linesCount);
         }
     }
 

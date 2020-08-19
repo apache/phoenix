@@ -21,13 +21,13 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.LinkedList;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.MinMaxPriorityQueue;
 
 public class PhoenixQueues {

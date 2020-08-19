@@ -65,7 +65,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private static final long largeGpWidth = 2 * 1000 * 1000L;
 
     @BeforeClass
-    public static void createTables() throws Exception {
+    public static synchronized void createTables() throws Exception {
         tableA = generateUniqueName();
         initDataAndStats(tableA, 20L);
         tableB = generateUniqueName();

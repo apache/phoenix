@@ -38,6 +38,10 @@ public class SQLExceptionInfo {
     public static final String FAMILY_NAME = "familyName";
     public static final String COLUMN_NAME = "columnName";
     public static final String FUNCTION_NAME = "functionName";
+    public static final String MAX_MUTATION_SIZE = "maxMutationSize";
+    public static final String MUTATION_SIZE = "mutationSize";
+    public static final String MAX_MUTATION_SIZE_BYTES = "maxMutationSizeBytes";
+    public static final String MUTATION_SIZE_BYTES = "mutationSizeBytes";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -47,6 +51,10 @@ public class SQLExceptionInfo {
     private final String familyName;
     private final String columnName;
     private final String functionName;
+    private final int maxMutationSize;
+    private final int mutationSize;
+    private final long maxMutationSizeBytes;
+    private final long mutationSizeBytes;
 
     public static class Builder {
 
@@ -58,6 +66,10 @@ public class SQLExceptionInfo {
         private String familyName;
         private String columnName;
         private String functionName;
+        private int maxMutationSize;
+        private int mutationSize;
+        private long maxMutationSizeBytes;
+        private long mutationSizeBytes;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -97,6 +109,27 @@ public class SQLExceptionInfo {
             this.functionName = functionName;
             return this;
         }
+
+        public Builder setMaxMutationSize(int maxMutationSize) {
+            this.maxMutationSize = maxMutationSize;
+            return this;
+        }
+
+        public Builder setMutationSize(int mutationSize) {
+            this.mutationSize = mutationSize;
+            return this;
+        }
+
+        public Builder setMaxMutationSizeBytes(long maxMutationSizeBytes) {
+            this.maxMutationSizeBytes = maxMutationSizeBytes;
+            return this;
+        }
+
+        public Builder setMutationSizeBytes(long mutationSizeBytes) {
+            this.mutationSizeBytes = mutationSizeBytes;
+            return this;
+        }
+
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
         }
@@ -116,6 +149,10 @@ public class SQLExceptionInfo {
         familyName = builder.familyName;
         columnName = builder.columnName;
         functionName = builder.functionName;
+        maxMutationSize = builder.maxMutationSize;
+        mutationSize = builder.mutationSize;
+        maxMutationSizeBytes = builder.maxMutationSizeBytes;
+        mutationSizeBytes = builder.mutationSizeBytes;
     }
 
     @Override
@@ -142,6 +179,14 @@ public class SQLExceptionInfo {
             builder.append(" ").append(TABLE_NAME).append("=").append(columnDisplayName);
         } else if (schemaName != null) {
             builder.append(" ").append(SCHEMA_NAME).append("=").append(columnDisplayName);
+        }
+        if (maxMutationSize != 0) {
+            builder.append(" ").append(MAX_MUTATION_SIZE).append("=").append(maxMutationSize);
+            builder.append(" ").append(MUTATION_SIZE).append("=").append(mutationSize);
+        } else if (maxMutationSizeBytes != 0) {
+            builder.append(" ").append(MAX_MUTATION_SIZE_BYTES).append("=").
+                    append(maxMutationSizeBytes);
+            builder.append(" ").append(MUTATION_SIZE_BYTES).append("=").append(mutationSizeBytes);
         }
         return builder.toString();
     }
@@ -180,6 +225,22 @@ public class SQLExceptionInfo {
 
     public String getMessage() {
         return message;
+    }
+
+    public int getMaxMutationSize() {
+        return maxMutationSize;
+    }
+
+    public int getMutationSize() {
+        return mutationSize;
+    }
+
+    public long getMaxMutationSizeBytes() {
+        return maxMutationSizeBytes;
+    }
+
+    public long getMutationSizeBytes() {
+        return mutationSizeBytes;
     }
 
 }

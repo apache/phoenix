@@ -19,6 +19,7 @@
 #
 ############################################################################
 
+from __future__ import print_function
 import os
 import fnmatch
 import subprocess
@@ -40,6 +41,14 @@ def find(pattern, classPaths):
                     return os.path.join(root, name)
                 
     return ""
+
+def tryDecode(input):
+    """ Python 2/3 compatibility hack
+    """
+    try:
+        return input.decode()
+    except:
+        return input
 
 def findFileInPathWithoutRecursion(pattern, path):
     if not os.path.exists(path):
@@ -65,10 +74,10 @@ def findClasspath(command_name):
         # We don't have this command, so we can't get its classpath
         return ''
     command = "%s%s" %(command_path, ' classpath')
-    return subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read()
+    return tryDecode(subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read())
 
 def setPath():
-    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
+    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
     PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
     PHOENIX_LOADBALANCER_JAR_PATTERN = "phoenix-load-balancer-*[!t][!e][!s][!t][!s].jar"
@@ -133,18 +142,18 @@ def setPath():
 
     global hadoop_classpath
     if (os.name != 'nt'):
-        hadoop_classpath = findClasspath('hadoop')
+        hadoop_classpath = findClasspath('hadoop').rstrip()
     else:
-        hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '')
+        hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '').rstrip()
 
     global hadoop_common_jar_path
-    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
+    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*").rstrip()
 
     global hadoop_common_jar
     hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
 
     global hadoop_hdfs_jar_path
-    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
+    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*").rstrip()
 
     global hadoop_hdfs_jar
     hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
@@ -204,7 +213,7 @@ def shell_quote(args):
     else:
         # pipes module isn't available on Windows
         import pipes
-        return " ".join([pipes.quote(v) for v in args])
+        return " ".join([pipes.quote(tryDecode(v)) for v in args])
 
 def common_sqlline_args(parser):
     parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', default='true')
@@ -213,19 +222,19 @@ def common_sqlline_args(parser):
 
 if __name__ == "__main__":
     setPath()
-    print "phoenix_class_path:", phoenix_class_path
-    print "hbase_conf_dir:", hbase_conf_dir
-    print "hbase_conf_path:", hbase_conf_path
-    print "current_dir:", current_dir
-    print "phoenix_jar_path:", phoenix_jar_path
-    print "phoenix_client_jar:", phoenix_client_jar
-    print "phoenix_test_jar_path:", phoenix_test_jar_path
-    print "hadoop_common_jar_path:", hadoop_common_jar_path
-    print "hadoop_common_jar:", hadoop_common_jar
-    print "hadoop_hdfs_jar_path:", hadoop_hdfs_jar_path
-    print "hadoop_hdfs_jar:", hadoop_hdfs_jar
-    print "testjar:", testjar
-    print "phoenix_queryserver_jar:", phoenix_queryserver_jar
-    print "phoenix_loadbalancer_jar:", phoenix_loadbalancer_jar
-    print "phoenix_thin_client_jar:", phoenix_thin_client_jar
-    print "hadoop_classpath:", hadoop_classpath 
+    print("phoenix_class_path:", phoenix_class_path)
+    print("hbase_conf_dir:", hbase_conf_dir)
+    print("hbase_conf_path:", hbase_conf_path)
+    print("current_dir:", current_dir)
+    print("phoenix_jar_path:", phoenix_jar_path)
+    print("phoenix_client_jar:", phoenix_client_jar)
+    print("phoenix_test_jar_path:", phoenix_test_jar_path)
+    print("hadoop_common_jar_path:", hadoop_common_jar_path)
+    print("hadoop_common_jar:", hadoop_common_jar)
+    print("hadoop_hdfs_jar_path:", hadoop_hdfs_jar_path)
+    print("hadoop_hdfs_jar:", hadoop_hdfs_jar)
+    print("testjar:", testjar)
+    print("phoenix_queryserver_jar:", phoenix_queryserver_jar)
+    print("phoenix_loadbalancer_jar:", phoenix_loadbalancer_jar)
+    print("phoenix_thin_client_jar:", phoenix_thin_client_jar)
+    print("hadoop_classpath:", hadoop_classpath)

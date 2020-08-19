@@ -72,6 +72,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
@@ -227,14 +228,14 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               WriterLength wl = new WriterLength();
               Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputdir, tableName);
               Path familydir = new Path(tableOutputPath, Bytes.toString(family));
-            
+
               // phoenix-2216: start : fetching the configuration properties that were set to the table.
               // create a map from column family to the compression algorithm for the table.
               final Map<byte[], Algorithm> compressionMap = createFamilyCompressionMap(conf,tableName);
               final Map<byte[], BloomType> bloomTypeMap = createFamilyBloomTypeMap(conf,tableName);
               final Map<byte[], Integer> blockSizeMap = createFamilyBlockSizeMap(conf,tableName);
               // phoenix-2216: end
-            
+
               String dataBlockEncodingStr = conf.get(DATABLOCK_ENCODING_OVERRIDE_CONF_KEY);
               final Map<byte[], DataBlockEncoding> datablockEncodingMap = createFamilyDataBlockEncodingMap(conf,tableName);
               final DataBlockEncoding overriddenEncoding;
@@ -243,7 +244,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               } else {
                   overriddenEncoding = null;
               }
-            
+
               Algorithm compression = compressionMap.get(family);
               compression = compression == null ? defaultCompression : compression;
               BloomType bloomType = bloomTypeMap.get(family);
@@ -259,14 +260,17 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                                         .withCompression(compression)
                                         .withChecksumType(HStore.getChecksumType(conf))
                                         .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
-                                        .withBlockSize(blockSize);
-              contextBuilder.withDataBlockEncoding(encoding);
+                                        .withBlockSize(blockSize)
+                                        .withDataBlockEncoding(encoding);
+              CompatUtil.withComparator(contextBuilder, CellComparatorImpl.COMPARATOR);
               HFileContext hFileContext = contextBuilder.build();
-                                        
-              wl.writer = new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), fs)
-                .withOutputDir(familydir).withBloomType(bloomType)
-                .withComparator(CellComparatorImpl.COMPARATOR)
-                .withFileContext(hFileContext).build();
+
+                StoreFileWriter.Builder storeFileWriterBuilder =
+                        new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), fs)
+                                .withOutputDir(familydir).withBloomType(bloomType)
+                                .withFileContext(hFileContext);
+              CompatUtil.withComparator(storeFileWriterBuilder, CellComparatorImpl.COMPARATOR);
+              wl.writer = storeFileWriterBuilder.build();
 
               // join and put it in the writers map .
               // phoenix-2216: start : holds a map of writers where the 

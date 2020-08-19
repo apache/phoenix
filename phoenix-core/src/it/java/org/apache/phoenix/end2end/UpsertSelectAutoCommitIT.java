@@ -46,7 +46,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="UpsertSelectAutoCommitIT_allowServerSideMutations={0}") // name is used by failsafe as file name in reports
-    public static Object[] data() {
+    public static synchronized Object[] data() {
         return new Object[] {"true", "false"};
     }
 

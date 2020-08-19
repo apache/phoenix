@@ -199,6 +199,8 @@ public interface QueryConstants {
             VIEW_TYPE + " UNSIGNED_TINYINT,\n" +
             VIEW_INDEX_ID + " BIGINT,\n" +
             VIEW_INDEX_ID_DATA_TYPE + " INTEGER,\n" +
+            PHOENIX_TTL + " BIGINT,\n" +
+            PHOENIX_TTL_HWM + " BIGINT,\n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +
@@ -399,5 +401,6 @@ public interface QueryConstants {
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            STORE_NULLS + "=" + Boolean.TRUE;
 }

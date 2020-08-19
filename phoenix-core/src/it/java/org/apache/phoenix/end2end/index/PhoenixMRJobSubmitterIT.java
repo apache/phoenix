@@ -43,7 +43,7 @@ public class PhoenixMRJobSubmitterIT extends BaseUniqueNamesOwnClusterIT {
   private static String REQUEST_INDEX_REBUILD_SQL = "ALTER INDEX %s ON %s REBUILD ASYNC";
 
   @BeforeClass
-  public static void setUp() throws Exception {
+  public static synchronized void setUp() throws Exception {
     setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
 
   }

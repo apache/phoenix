@@ -43,9 +43,9 @@ import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
-import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -147,6 +147,15 @@ public final class PhoenixConfigurationUtil {
 
     public static final String DISABLED_INDEXES = "phoenix.mr.index.disabledIndexes";
 
+    public static final String VERIFY_INDEX = "phoenix.mr.index.verifyIndex";
+
+    public static final String ONLY_VERIFY_INDEX = "phoenix.mr.index.onlyVerifyIndex";
+
+    public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
+
+    public static final String DISABLE_LOGGING_TYPE = "phoenix.mr.index" +
+        ".IndexDisableLoggingType";
+
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
 
@@ -157,6 +166,9 @@ public final class PhoenixConfigurationUtil {
     public static final String RESTORE_DIR_KEY = "phoenix.tableSnapshot.restore.dir";
 
     public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
+    private static final String INDEX_TOOL_END_TIME = "phoenix.mr.index.endtime";
+    private static final String INDEX_TOOL_START_TIME = "phoenix.mr.index.starttime";
+    private static final String INDEX_TOOL_LAST_VERIFY_TIME = "phoenix.mr.index.last.verify.time";
 
     public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
 
@@ -272,6 +284,39 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(restoreDir);
         configuration.set(RESTORE_DIR_KEY, restoreDir);
+    }
+
+    public static void setIndexToolStartTime(Configuration configuration, Long startTime) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(startTime);
+        configuration.set(INDEX_TOOL_START_TIME, Long.toString(startTime));
+    }
+
+    public static void setIndexToolLastVerifyTime(Configuration configuration, Long lastVerifyTime) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(lastVerifyTime);
+        configuration.set(INDEX_TOOL_LAST_VERIFY_TIME, Long.toString(lastVerifyTime));
+    }
+
+    public static void setCurrentScnValue(Configuration configuration, Long scn) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(scn);
+        configuration.set(CURRENT_SCN_VALUE, Long.toString(scn));
+    }
+
+    public static String getIndexToolStartTime(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_START_TIME);
+    }
+
+    public static String getCurrentScnValue(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(CURRENT_SCN_VALUE);
+    }
+
+    public static String getIndexToolLastVerifyTime(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_LAST_VERIFY_TIME);
     }
     
     public static List<String> getUpsertColumnNames(final Configuration configuration) {
@@ -562,6 +607,27 @@ public final class PhoenixConfigurationUtil {
         configuration.set(DISABLED_INDEXES, indexName);
     }
 
+    public static void setVerifyIndex(Configuration configuration, boolean verify) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(VERIFY_INDEX, verify);
+    }
+
+    public static void setOnlyVerifyIndex(Configuration configuration, boolean verify) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(ONLY_VERIFY_INDEX, verify);
+    }
+
+    public static void setIndexVerifyType(Configuration configuration, IndexTool.IndexVerifyType verifyType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
+    }
+
+    public static void setDisableLoggingVerifyType(Configuration configuration,
+                                                   IndexTool.IndexDisableLoggingType disableLoggingType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(DISABLE_LOGGING_TYPE, disableLoggingType.getValue());
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -685,6 +751,28 @@ public final class PhoenixConfigurationUtil {
     public static String getDisableIndexes(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(DISABLED_INDEXES);
+    }
+
+    public static boolean getVerifyIndex(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(VERIFY_INDEX, false);
+    }
+
+    public static boolean getOnlyVerifyIndex(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(ONLY_VERIFY_INDEX, false);
+    }
+
+    public static IndexTool.IndexVerifyType getIndexVerifyType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
+        return IndexTool.IndexVerifyType.fromValue(value);
+    }
+
+    public static IndexTool.IndexVerifyType getDisableLoggingVerifyType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String value = configuration.get(DISABLE_LOGGING_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
+        return IndexTool.IndexVerifyType.fromValue(value);
     }
 
     public static boolean getSplitByStats(final Configuration configuration) {

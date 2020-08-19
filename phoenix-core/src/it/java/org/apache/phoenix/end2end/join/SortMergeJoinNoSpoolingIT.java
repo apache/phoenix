@@ -44,12 +44,12 @@ public class SortMergeJoinNoSpoolingIT extends SortMergeJoinNoIndexIT {
 
     @Parameters(name = "SortMergeJoinNoSpoolingIT_{index}") // name is used by failsafe as file name
                                                             // in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return SortMergeJoinNoIndexIT.data();
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.CLIENT_JOIN_SPOOLING_ENABLED_ATTRIB,
             Boolean.toString(Boolean.FALSE));

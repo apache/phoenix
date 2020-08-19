@@ -53,7 +53,7 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
     }
     
     @Parameters(name="isNamespaceEnabled = {0}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { true },{ false }
            });

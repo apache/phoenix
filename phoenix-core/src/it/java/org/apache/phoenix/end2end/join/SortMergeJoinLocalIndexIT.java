@@ -48,7 +48,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     }
 
     @Parameters(name="SortMergeJoinLocalIndexIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {

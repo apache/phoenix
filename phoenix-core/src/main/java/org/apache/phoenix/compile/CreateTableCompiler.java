@@ -207,25 +207,9 @@ public class CreateTableCompiler {
         }
         final MetaDataClient client = new MetaDataClient(connection);
         final PTable parent = parentToBe;
-        
-        return new BaseMutationPlan(context, operation) {
 
-            @Override
-            public MutationState execute() throws SQLException {
-                try {
-                    return client.createTable(finalCreate, splits, parent, viewStatement, viewType, MetaDataUtil.getViewIndexIdDataType(), viewColumnConstants, isViewColumnReferenced);
-                } finally {
-                    if (client.getConnection() != connection) {
-                        client.getConnection().close();
-                    }
-                }
-            }
-
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("CREATE TABLE"));
-            }
-        };
+        return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
+            viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, connection);
     }
     
     public static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
@@ -363,5 +347,52 @@ public class CreateTableCompiler {
             return SortOrder.getDefault();
         }
         
+    }
+
+    private class CreateTableMutationPlan extends BaseMutationPlan {
+
+        private final MetaDataClient client;
+        private final CreateTableStatement finalCreate;
+        private final byte[][] splits;
+        private final PTable parent;
+        private final String viewStatement;
+        private final ViewType viewType;
+        private final byte[][] viewColumnConstants;
+        private final BitSet isViewColumnReferenced;
+        private final PhoenixConnection connection;
+
+        private CreateTableMutationPlan(StatementContext context, MetaDataClient client,
+                CreateTableStatement finalCreate, byte[][] splits, PTable parent,
+                String viewStatement, ViewType viewType, byte[][] viewColumnConstants,
+                BitSet isViewColumnReferenced, PhoenixConnection connection) {
+            super(context, CreateTableCompiler.this.operation);
+            this.client = client;
+            this.finalCreate = finalCreate;
+            this.splits = splits;
+            this.parent = parent;
+            this.viewStatement = viewStatement;
+            this.viewType = viewType;
+            this.viewColumnConstants = viewColumnConstants;
+            this.isViewColumnReferenced = isViewColumnReferenced;
+            this.connection = connection;
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+            try {
+                return client.createTable(finalCreate, splits, parent, viewStatement,
+                    viewType, MetaDataUtil.getViewIndexIdDataType(), viewColumnConstants,
+                    isViewColumnReferenced);
+            } finally {
+                if (client.getConnection() != connection) {
+                    client.getConnection().close();
+                }
+            }
+        }
+
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+            return new ExplainPlan(Collections.singletonList("CREATE TABLE"));
+        }
     }
 }
