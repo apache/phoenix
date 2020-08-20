@@ -106,6 +106,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         "phoenix.index.mr.log.beyond.max.lookback.errors";
     public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
     private static boolean ignoreIndexRebuildForTesting  = false;
+    private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
+
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
     private byte[] indexRowKeyforReadRepair;
     private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
@@ -122,9 +124,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
-                                     final RegionCoprocessorEnvironment env) throws IOException {
+            final RegionCoprocessorEnvironment env,
+            final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env);
         this.env = env;
+        this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKeyforReadRepair != null) {
             setReturnCodeForSingleRowRebuild();
@@ -812,6 +816,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         indexScan.setCacheBlocks(false);
         try (ResultScanner resultScanner = indexHTable.getScanner(indexScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
+                ungroupedAggregateRegionObserver.checkForRegionClosing();
                 if (!verifySingleIndexRow(result, indexKeyToMutationMap, mostRecentIndexRowKeys, oldIndexRowsToBeDeletedList,
                         verificationPhaseResult, isBeforeRebuild)) {
                     invalidIndexRows.put(result.getRow(), indexKeyToMutationMap.get(result.getRow()));
@@ -879,12 +884,14 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 indexUpdates.addAll(mutationList);
                 batchSize += mutationList.size();
                 if (batchSize >= maxBatchSize) {
+                    ungroupedAggregateRegionObserver.checkForRegionClosing();
                     indexHTable.batch(indexUpdates);
                     batchSize = 0;
                     indexUpdates = new ArrayList<Mutation>(maxBatchSize);
                 }
             }
             if (batchSize > 0) {
+                ungroupedAggregateRegionObserver.checkForRegionClosing();
                 indexHTable.batch(indexUpdates);
             }
             batchSize = 0;
@@ -893,12 +900,14 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 indexUpdates.add(mutation);
                 batchSize ++;
                 if (batchSize >= maxBatchSize) {
+                    ungroupedAggregateRegionObserver.checkForRegionClosing();
                     indexHTable.batch(indexUpdates);
                     batchSize = 0;
                     indexUpdates = new ArrayList<Mutation>(maxBatchSize);
                 }
             }
             if (batchSize > 0) {
+                ungroupedAggregateRegionObserver.checkForRegionClosing();
                 indexHTable.batch(indexUpdates);
             }
             if (verify) {
@@ -1309,6 +1318,12 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     return false;
                 }
                 do {
+                    /*
+                        If region is closing and there are large number of rows being verified/rebuilt with IndexTool,
+                        not having this check will impact/delay the region closing -- affecting the availability
+                        as this method holds the read lock on the region.
+                    * */
+                    ungroupedAggregateRegionObserver.checkForRegionClosing();
                     List<Cell> row = new ArrayList<Cell>();
                     hasMore = localScanner.nextRaw(row);
                     if (!row.isEmpty()) {
@@ -1412,6 +1427,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 // collect row keys that have been modified in the given time-range
                 // up to the size of page to build skip scan filter
                 do {
+                    ungroupedAggregateRegionObserver.checkForRegionClosing();
                     hasMoreIncr = scanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
