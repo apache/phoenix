@@ -795,6 +795,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         indexScan.setCacheBlocks(false);
         try (ResultScanner resultScanner = indexHTable.getScanner(indexScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
+                ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                 KeyRange keyRange = PVarbinary.INSTANCE.getKeyRange(result.getRow());
                 if (!keys.contains(keyRange)) {
                     continue;
@@ -1279,6 +1280,12 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     return false;
                 }
                 do {
+                    /**
+                        If region is closing and there are large number of rows being verified/rebuilt with IndexTool,
+                        not having this check will impact/delay the region closing -- affecting the availability
+                        as this method holds the read lock on the region.
+                    * */
+                    ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                     List<Cell> row = new ArrayList<Cell>();
                     hasMore = localScanner.nextRaw(row);
                     if (!row.isEmpty()) {
@@ -1404,6 +1411,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 // collect row keys that have been modified in the given time-range
                 // up to the size of page to build skip scan filter
                 do {
+                    ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                     hasMoreIncr = scanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
