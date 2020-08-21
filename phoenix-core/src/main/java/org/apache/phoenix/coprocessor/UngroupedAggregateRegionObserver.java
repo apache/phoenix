@@ -352,7 +352,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
-   public static class MutationList extends ArrayList<Mutation> {
+    public static class MutationList extends ArrayList<Mutation> {
         private long byteSize = 0l;
         public MutationList() {
             super();
@@ -1103,13 +1103,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if (oldCoproc) {
                 return new IndexerRegionScanner(scanner, region, scan, env, this);
             } else {
-                return new IndexRebuildRegionScanner(scanner, region, scan, env);
+                return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
             }
         }
         if (oldCoproc) {
             return new IndexerRegionScanner(innerScanner, region, scan, env, this);
         } else {
-            return new IndexRebuildRegionScanner(innerScanner, region, scan, env);
+            return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
         }
     }
     
