@@ -62,7 +62,7 @@ public class CompatBaseScannerRegionObserver implements RegionObserver {
         //to "look behind" delete markers on SCN queries
     }
 
-    public long getMaxLookbackInMillis(Configuration conf){
+    public static long getMaxLookbackInMillis(Configuration conf){
         //config param is in seconds, switch to millis
         return conf.getLong(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;
