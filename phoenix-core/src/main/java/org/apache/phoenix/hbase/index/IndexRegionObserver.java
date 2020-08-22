@@ -685,7 +685,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
      * unverified status. In phase 2, data table mutations are applied. In phase 3, the status for an index table row is
      * either set to "verified" or the row is deleted.
      */
-    private void preparePreIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
+    private boolean preparePreIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
                                           MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                           BatchMutateContext context,
                                           Collection<? extends Mutation> pendingMutations,
@@ -699,13 +699,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
                 current = NullSpan.INSTANCE;
             }
             current.addTimelineAnnotation("Built index updates, doing preStep");
-            // Handle local index updates
-            for (IndexMaintainer indexMaintainer : maintainers) {
-                if (indexMaintainer.isLocalIndex()) {
-                    handleLocalIndexUpdates(c, miniBatchOp, pendingMutations, indexMetaData);
-                    break;
-                }
-            }
             // The rest of this method is for handling global index updates
             context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
             prepareIndexMutations(context, maintainers, now);
@@ -713,6 +706,9 @@ public class IndexRegionObserver extends BaseRegionObserver {
             context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
             int updateCount = 0;
             for (IndexMaintainer indexMaintainer : maintainers) {
+                if (indexMaintainer.isLocalIndex()) {
+                    continue;
+                }
                 updateCount++;
                 byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
                 byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
@@ -734,6 +730,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
                 }
             }
             TracingUtils.addAnnotation(current, "index update count", updateCount);
+            return updateCount != 0;
         }
     }
 
@@ -779,11 +776,22 @@ public class IndexRegionObserver extends BaseRegionObserver {
         return true;
     }
 
-    private void preparePostIndexMutations(BatchMutateContext context, long now, PhoenixIndexMetaData indexMetaData,
-                                           String tableName)
+    private void preparePostIndexMutations(ObserverContext<RegionCoprocessorEnvironment> c,
+                                           MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                           BatchMutateContext context,
+                                           Collection<? extends Mutation> pendingMutations,
+                                           long now,
+                                           PhoenixIndexMetaData indexMetaData)
             throws Throwable {
         context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
+        // Handle local index updates
+        for (IndexMaintainer indexMaintainer : maintainers) {
+            if (indexMaintainer.isLocalIndex()) {
+                handleLocalIndexUpdates(c, miniBatchOp, pendingMutations, indexMetaData);
+                break;
+            }
+        }
         // Check if we need to skip post index update for any of the rows
         for (IndexMaintainer indexMaintainer : maintainers) {
             byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
@@ -820,6 +828,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
                             rowLock.release();
                         }
                         context.rowLocks.clear();
+                        String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
                         throw new IOException("One of the concurrent mutations does not have all indexed columns. " +
                                 "The batch needs to be retried " + tableName);
                     }
@@ -861,30 +870,27 @@ public class IndexRegionObserver extends BaseRegionObserver {
             return;
         }
         long start = EnvironmentEdgeManager.currentTimeMillis();
-        preparePreIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
+        boolean hasGlobalIndex = preparePreIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
         metricSource.updateIndexPrepareTime(EnvironmentEdgeManager.currentTimeMillis() - start);
-        // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
-        // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
-        // can be prepared in less than one millisecond
-        if (!context.rowLocks.isEmpty() && now == EnvironmentEdgeManager.currentTimeMillis()) {
-            Thread.sleep(1);
-            LOG.debug("slept 1ms for " + c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+        if (hasGlobalIndex) {
+            // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
+            // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
+            // can be prepared in less than one millisecond
+            if (!context.rowLocks.isEmpty() && now == EnvironmentEdgeManager.currentTimeMillis()) {
+                Thread.sleep(1);
+                LOG.debug("slept 1ms for " + c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+            }
+            // Release the locks before making RPC calls for index updates
+            for (RowLock rowLock : context.rowLocks) {
+                rowLock.release();
+            }
+            // Do the first phase index updates
+            doPre(c, context, miniBatchOp);
+            // Acquire the locks again before letting the region proceed with data table updates
+            context.rowLocks.clear();
+            lockRows(context);
         }
-        // Release the locks before making RPC calls for index updates
-        for (RowLock rowLock : context.rowLocks) {
-            rowLock.release();
-        }
-        // Do the first phase index updates
-        doPre(c, context, miniBatchOp);
-        // Acquire the locks again before letting the region proceed with data table updates
-        List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(context.rowLocks.size());
-        for (RowLock rowLock : context.rowLocks) {
-            rowLocks.add(lockManager.lockRow(rowLock.getRowKey(), rowLockWaitDuration));
-        }
-        context.rowLocks.clear();
-        context.rowLocks = rowLocks;
-        preparePostIndexMutations(context, now, indexMetaData,
-                c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+        preparePostIndexMutations(c, miniBatchOp, context, mutations, now, indexMetaData);
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
         }
