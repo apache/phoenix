@@ -18,8 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -40,7 +38,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.AfterClass;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -60,7 +57,6 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 
 @NeedsOwnMiniClusterTest
 public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Log LOG = LogFactory.getLog(MaxLookbackIT.class);
     private static final int MAX_LOOKBACK_AGE = 15;
     private static final int ROWS_POPULATED = 2;
     public static final int WAIT_AFTER_TABLE_CREATION_MILLIS = 1;
