@@ -112,25 +112,58 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         Connection conn = getConnection();
         conn.setAutoCommit(true);
 
-        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT) SPLIT ON (2000)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT) SPLIT ON (4000)");
         conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(rand() * 4000, rand())");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(rand() * 8000, rand())");
 
-        ResultSet rs;
-        for (int i=0; i<15; i++) {
-            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT rand() * 4000, rand() FROM " + tableName);
+        for (int i=0; i<16; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT rand() * 8000, rand() FROM " + tableName);
+            assertEquals(getCountViaIndex(conn, tableName, null), getCountViaIndex(conn, tableName, indexName));
+        }
+    }
 
-            rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+    @Test
+    public void testLocalIndexConsistencyWithGlobalMix() throws Exception {
+        if (isNamespaceMapped) {
+            return;
+        }
+        String tableName = schemaName + "." + generateUniqueName();
+        String localIndexNames[] = {"L_" + generateUniqueName(), "L_" + generateUniqueName()};
+        String globalIndexNames[] = {"G_" + generateUniqueName(), "G_" + generateUniqueName()};
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT, v3 FLOAT, v4 FLOAT) SPLIT ON (4000)");
+
+        int idx=1;
+        for (String indexName : localIndexNames) {
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v" + idx++ +")");
+        }
+        for (String indexName : globalIndexNames) {
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v" + idx++ +")");
+        }
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(rand() * 8000, rand())");
+
+        for (int i=0; i<16; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT rand() * 8000, rand() FROM " + tableName);
+
+            int count = getCountViaIndex(conn, tableName, null);
+            for (String indexName : localIndexNames) {
+                assertEquals(count, getCountViaIndex(conn, tableName, indexName));
+            }
+
+            for (String indexName : globalIndexNames) {
+                assertEquals(count, getCountViaIndex(conn, tableName, indexName));
+            }
+        }
+    }
+
+    private int getCountViaIndex(Connection conn, String tableName, String indexName) throws SQLException {
+        String hint = indexName == null ? "NO_INDEX" : "INDEX(" + tableName + " " + indexName + ")";
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ " + hint + " */ COUNT(*) FROM " + tableName)) {
             rs.next();
-            int indexCount = rs.getInt(1);
-            rs.close();
-
-            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName);
-            rs.next();
-            int tableCount = rs.getInt(1);
-            rs.close();
-
-            assertEquals(indexCount, tableCount);
+            return rs.getInt(1);
         }
     }
 
