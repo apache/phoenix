@@ -32,6 +32,8 @@ import java.sql.SQLException;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 
 public class MetaDataClientTest extends BaseConnectionlessQueryTest {
 
@@ -83,4 +85,9 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testMetaDataProtocolVersion() {
+        assertEquals(String.format("%d.%d.%s", PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, "x"),
+                MetaDataProtocol.getVersion(System.currentTimeMillis()));
+    }
 }
