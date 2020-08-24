@@ -30,7 +30,6 @@ pipeline {
     stages {
         stage('MatrixBuild') {
             matrix {
-                agent any
 
                 axes {
                     axis {
@@ -70,8 +69,8 @@ pipeline {
                         }
                         post {
                             always {
-                               junit '**/target/surefire-reports/TEST-*.xml'
-                               junit '**/target/failsafe-reports/TEST-*.xml'
+                                junit '**/target/surefire-reports/TEST-*.xml'
+                                junit '**/target/failsafe-reports/TEST-*.xml'
                             }
                         }
                     }
@@ -95,6 +94,9 @@ pipeline {
 <hr/>
 """
                        )
+                    }
+                    cleanup {
+                        deleteDir()
                     }
                 }
             }
