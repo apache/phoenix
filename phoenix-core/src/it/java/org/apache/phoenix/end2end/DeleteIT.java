@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -743,17 +745,36 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     public void testServerSideDeleteAutoCommitOn() throws Exception {
         testDeleteCount(true, null);
     }
-    
+
     @Test
     public void testClientSideDeleteCountAutoCommitOff() throws Exception {
         testDeleteCount(false, null);
     }
-    
+
     @Test
     public void testClientSideDeleteAutoCommitOn() throws Exception {
         testDeleteCount(true, 1000);
     }
 
+    @Test
+    public void testDeleteWithIndexAutoCommitOnWithoutSCN() throws Exception {
+        testDeleteCountWithIndex(true,  false);
+    }
+
+    @Test
+    public void testDeleteWithIndexAutoCommitOnWithSCN() throws Exception {
+        testDeleteCountWithIndex(true, true);
+    }
+
+    @Test
+    public void testDeleteWithIndexAutoCommitOffWithoutSCN() throws Exception {
+        testDeleteCountWithIndex(false,  false);
+    }
+
+    @Test
+    public void testDeleteWithIndexAutoCommitOffWithSCN() throws Exception {
+        testDeleteCountWithIndex(false, true);
+    }
     @Test
     public void testPointDeleteWithMultipleImmutableIndexes() throws Exception {
         testPointDeleteWithMultipleImmutableIndexes(false);
@@ -818,7 +839,59 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         }
 
     }
-    
+
+    private void testDeleteCountWithIndex(boolean autoCommit, boolean scn) throws Exception {
+        String tableName = generateUniqueName();
+        String tableDDL = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
+        String indexName = generateUniqueName();
+        String indexDDL = "CREATE INDEX IF NOT EXISTS " + indexName + " ON " + tableName + "(v1)";
+        int numRecords = 1010;
+        long ts = 0;
+        Properties props = new Properties();
+        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS,
+                allowServerSideMutations);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(tableDDL);
+            conn.createStatement().execute(indexDDL);
+            Statement stmt = conn.createStatement();
+            if (scn) {
+                for (int i = 0; i < numRecords/2 ; i++) {
+                    stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+                }
+                conn.commit();
+                ts = EnvironmentEdgeManager.currentTimeMillis();
+                for (int i = numRecords/2; i < numRecords ; i++) {
+                    stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+                }
+            } else {
+                for (int i = 0; i < numRecords ; i++) {
+                    stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+                }
+            }
+            conn.commit();
+            if (scn) {
+                conn.close();
+                props.setProperty("CurrentSCN", Long.toString(ts));
+                conn = DriverManager.getConnection(getUrl(), props);
+            }
+            conn.setAutoCommit(autoCommit);
+            String delete = "DELETE FROM " + tableName + " WHERE (pk1) <= (" + numRecords + ")";
+            try (PreparedStatement pstmt = conn.prepareStatement(delete)) {
+                int numberOfDeletes = pstmt.executeUpdate();
+                if (scn) {
+                    assertEquals(numRecords/2, numberOfDeletes);
+                } else {
+                    assertEquals( numRecords, numberOfDeletes);
+                }
+                if (!autoCommit) {
+                    conn.commit();
+                }
+            }
+        } finally {
+            conn.close();
+        }
+    }
 
     @Test
     public void testClientSideDeleteShouldNotFailWhenSameColumnPresentInMultipleIndexes()

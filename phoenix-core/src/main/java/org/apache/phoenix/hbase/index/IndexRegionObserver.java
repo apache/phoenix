@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index;
 
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.getTimestamp;
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 
 import java.io.IOException;
@@ -529,7 +530,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
             return;
         }
         // Retrieve the current row states from the data table
-        getCurrentRowStates(c, context);
+        getCurrentRowStates(c, context, now);
         applyPendingPutMutations(miniBatchOp, context, now);
         applyPendingDeleteMutations(miniBatchOp, context);
     }
@@ -581,7 +582,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
      * Retrieve the the last committed data row state.
      */
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-                                     BatchMutateContext context) throws IOException {
+                                     BatchMutateContext context, long ts) throws IOException {
         Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
         for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get()));
@@ -591,6 +592,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
         scanRanges.initializeScan(scan);
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
         scan.setFilter(skipScanFilter);
+        scan.setTimeRange(0, ts);
         context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
         try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
             boolean more = true;
@@ -854,10 +856,12 @@ public class IndexRegionObserver extends BaseRegionObserver {
          * Exclusively lock all rows so we get a consistent read
          * while determining the index updates
          */
-        long now;
         populateRowsToLock(miniBatchOp, context);
         lockRows(context);
-        now = EnvironmentEdgeManager.currentTimeMillis();
+        long now = EnvironmentEdgeManager.currentTimeMillis();
+        if (now > getTimestamp(firstMutation)) {
+            now = getTimestamp(firstMutation);
+        }
         // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
         // concurrent updates
         populatePendingRows(context);
