@@ -17,9 +17,7 @@
  */
 
 pipeline {
-    agent {
-        label 'Hadoop'
-    }
+    agent none
 
     options {
         buildDiscarder(logRotator(daysToKeepStr: '30'))
@@ -30,7 +28,9 @@ pipeline {
     stages {
         stage('MatrixBuild') {
             matrix {
-                agent any
+                agent {
+                    label 'Hadoop'
+                }
 
                 axes {
                     axis {
@@ -52,12 +52,12 @@ pipeline {
 
                     stage('BuildAndTest') {
                         steps {
-                            sh "mvn clean verify -B"
+                            sh "mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B"
                         }
                         post {
                             always {
-                               junit '**/target/surefire-reports/TEST-*.xml'
-                               junit '**/target/failsafe-reports/TEST-*.xml'
+                                junit '**/target/surefire-reports/TEST-*.xml'
+                                junit '**/target/failsafe-reports/TEST-*.xml'
                             }
                         }
                     }
@@ -81,6 +81,9 @@ pipeline {
 <hr/>
 """
                        )
+                    }
+                    cleanup {
+                        deleteDir()
                     }
                 }
             }
