@@ -17,9 +17,7 @@
  */
 
 pipeline {
-    agent {
-        label 'Hadoop'
-    }
+    agent none
 
     options {
         buildDiscarder(logRotator(daysToKeepStr: '30'))
@@ -30,6 +28,9 @@ pipeline {
     stages {
         stage('MatrixBuild') {
             matrix {
+                agent {
+                    label 'Hadoop'
+                }
 
                 axes {
                     axis {
