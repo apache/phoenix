@@ -21,7 +21,6 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(daysToKeepStr: '30'))
-        timeout(time: 6, unit: 'HOURS')
         timestamps()
     }
 
@@ -51,8 +50,14 @@ pipeline {
                 stages {
 
                     stage('BuildAndTest') {
+                        options {
+                            timeout(time: 5, unit: 'HOURS')
+                        }
                         steps {
-                            sh "mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B"
+                            sh """#!/bin/bash
+                                ulimit -S -u 60000
+                                mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
+                            """
                         }
                         post {
                             always {
