@@ -21,7 +21,6 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(daysToKeepStr: '30'))
-        timeout(time: 6, unit: 'HOURS')
         timestamps()
     }
 
@@ -51,6 +50,9 @@ pipeline {
                 stages {
 
                     stage('RebuildHBase') {
+                        options {
+                            timeout(time: 30, unit: 'MINUTES')
+                        }
                         environment {
                             HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dhbase.profile=${HBASE_PROFILE} -Dartifact=org.apache.phoenix:phoenix-core -Dexpression=hbase.version -q -DforceStdout").trim()
                         }
@@ -65,8 +67,14 @@ pipeline {
                     }
 
                     stage('BuildAndTest') {
+                        options {
+                            timeout(time: 5, unit: 'HOURS')
+                        }
                         steps {
-                            sh "mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B"
+                            sh """#!/bin/bash
+                                ulimit -S -u 60000
+                                mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
+                            """
                         }
                         post {
                             always {
