@@ -26,15 +26,18 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.PreparedStatement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -43,27 +46,39 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
 
 
 public class InListIT extends ParallelStatsDisabledIT {
     private static final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
-    String tableName;
-    String descViewName;
-    String ascViewName;
+    private static boolean isInitialized = false;
+    private static String tableName = generateUniqueName();
+    private static String tableName2 = generateUniqueName();
+    private static String descViewName = generateUniqueName();
+    private static String ascViewName = generateUniqueName();
+    private static String viewName1 = generateUniqueName();
+    private static String viewName2 = generateUniqueName();
+    private static String prefix = generateUniqueName();
 
     @Before
     public void setup() throws Exception {
-        tableName = generateUniqueName();
-        descViewName = generateUniqueName();
-        ascViewName = generateUniqueName();
-        buildSchema(tableName, generateUniqueName(), true);
-        buildSchema(generateUniqueName(), generateUniqueName(), false);
+        if(isInitialized){
+            return;
+        }
+        initializeTables();
+        isInitialized = true;
+    }
+
+    @After
+    public void cleanUp() throws SQLException {
+        deleteTenantData(descViewName);
+        deleteTenantData(viewName1);
+        deleteTenantData(viewName2);
+        deleteTenantData(ascViewName);
+        deleteTenantData(tableName);
+        deleteTenantData(tableName2);
     }
 
     @Test
@@ -163,7 +178,7 @@ public class InListIT extends ParallelStatsDisabledIT {
      * @return  the table or view name that should be used to access the created table
      */
     private static String initializeAndGetTable(Connection baseConn, Connection conn, boolean isMultiTenant, PDataType pkType, int saltBuckets) throws SQLException {
-        String tableName = generateUniqueName() + "in_test" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ? "_multi" : "_single");
+        String tableName = getTableName(isMultiTenant, pkType, saltBuckets);
         String tableDDL = createTableDDL(tableName, pkType, saltBuckets, isMultiTenant);
         baseConn.createStatement().execute(tableDDL);
 
@@ -179,6 +194,12 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
     }
 
+    private static String getTableName(boolean isMultiTenant, PDataType pkType, int saltBuckets) {
+        return prefix+"init_in_test_" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ?
+            "_multi" :
+            "_single");
+    }
+
     private static final String TENANT_ID = "ABC";
     private static final String TENANT_URL = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + TENANT_ID;
 
@@ -189,15 +210,51 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     private static final List<String> HINTS = Arrays.asList("/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
 
+    private  void initializeTables() throws Exception {
+        buildSchema(tableName, viewName1, true);
+        buildSchema(tableName2, viewName2, false);
+        for (boolean isMultiTenant : TENANCIES) {
+            Connection baseConn = DriverManager.getConnection(getUrl());
+            Connection conn = isMultiTenant ? DriverManager.getConnection(TENANT_URL) : baseConn;
+
+            try {
+                // test each combination of types and salting
+                for (PDataType pkType : INTEGER_TYPES) {
+                    for (int saltBuckets : SALT_BUCKET_NUMBERS) {
+                        // use a different table with a unique name for each variation
+                        String tableName =
+                            initializeAndGetTable(baseConn, conn, isMultiTenant, pkType,
+                                saltBuckets);
+
+                        // upsert the given data
+                        for (String upsertBody : DEFAULT_UPSERT_BODIES) {
+                            conn.createStatement()
+                                .execute("UPSERT INTO " + tableName + " " + upsertBody);
+                        }
+                        conn.commit();
+                    }
+                }
+            }
+
+            // clean up the connections used
+            finally {
+                baseConn.close();
+                if (!conn.isClosed()) {
+                    conn.close();
+                }
+
+            }
+        }
+    }
+
     /**
      * Tests the given where clause against the given upserts by comparing against the list of
      * expected result strings.
-     * @param upsertBodies  list of upsert bodies with the form "(pk1, pk2, ..., nonPk) VALUES (1, 7, ..., "row1")
-     *                      excludes the "UPSERT INTO table_name " segment so that table name can vary
      * @param whereClause  the where clause to test. Should only refer to the pks upserted.
      * @param expecteds  a complete list of all of the expected result row names
      */
-    private void testWithIntegerTypesWithVariedSaltingAndTenancy(List<String> upsertBodies, String whereClause, List<String> expecteds) throws SQLException {
+    private void testWithIntegerTypesWithVariedSaltingAndTenancy(String whereClause,
+        List<String> expecteds) throws SQLException {
         // test single and multitenant tables
         for(boolean isMultiTenant : TENANCIES) {
             Connection baseConn = DriverManager.getConnection(getUrl());
@@ -209,13 +266,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                 for(PDataType pkType : INTEGER_TYPES) {
                     for(int saltBuckets : SALT_BUCKET_NUMBERS) {
                         // use a different table with a unique name for each variation
-                        String tableName = initializeAndGetTable(baseConn, conn, isMultiTenant, pkType, saltBuckets);
-
-                        // upsert the given data
-                        for(String upsertBody : upsertBodies) {
-                            conn.createStatement().execute("UPSERT INTO " + tableName + " " + upsertBody);
-                        }
-                        conn.commit();
+                        String tableName = getTableName(isMultiTenant, pkType, saltBuckets);
 
                         for(String hint : HINTS) {
                             String context = "where: " + whereClause + ", type: " + pkType + ", salt buckets: "
@@ -271,7 +322,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 3, 4, 5), (1, 2, 4, 5, 3))";
         List<String> expecteds = Collections.<String>emptyList();
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -279,7 +330,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 3, 4, 5), (1, 2, 4, 5, 6))";
         List<String> expecteds = singletonList("row1");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -287,7 +338,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3, pk4) IN ((2, 3, 4, 5), (1, 2, 4, 5))";
         List<String> expecteds = Arrays.asList("row1", "row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -295,7 +346,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk2, pk3, pk4, pk5) IN ((2, 3, 4, 5), (2, 4, 5, 6))";
         List<String> expecteds = singletonList("row1");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -303,7 +354,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk4, pk5) IN ((1, 2, 4, 5), (6, 5, 3, 2))";
         List<String> expecteds = singletonList("row4");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -311,7 +362,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE pk1 != 2 AND (pk3, pk4, pk5) IN ((6, 4, 5), (5, 6, 4))";
         List<String> expecteds = Collections.<String>emptyList();
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -319,7 +370,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE pk1 = 2 AND (pk2, pk3, pk4, pk5) IN ((2, 4, 5, 6), (3, 4, 5, 6))";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -327,7 +378,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE pk1 = 2 AND (pk2, pk3) IN ((3, 6), (5, 4))";
         List<String> expecteds = singletonList("row3");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -335,7 +386,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE pk2 = 2 AND (pk3, pk4, pk5) IN ((4, 5, 6), (5, 6, 4))";
         List<String> expecteds = singletonList("row1");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -343,7 +394,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE pk1 = 2 AND (pk3, pk4, pk5) IN ((4, 5, 6), (5, 6, 4))";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -351,7 +402,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk4 = 3";
         List<String> expecteds = Collections.<String>emptyList();
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -359,7 +410,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3, pk4) IN ((1, 2, 4, 5), (2, 3, 4, 5)) AND pk5 = 6";
         List<String> expecteds = Arrays.asList("row1", "row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -367,7 +418,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk4 = 4";
         List<String> expecteds = singletonList("row3");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -375,7 +426,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk2, pk3, pk4) IN ((3, 4, 5), (3, 6, 4)) AND pk5 = 5";
         List<String> expecteds = singletonList("row3");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -383,7 +434,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 4), (2, 3, 6)) AND pk5 = 5";
         List<String> expecteds = singletonList("row3");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -391,7 +442,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND pk2 = 4";
         List<String> expecteds = Collections.<String>emptyList();
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -399,7 +450,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3, pk4, pk5) IN ((1, 2, 4, 5, 6), (2, 3, 4, 5, 6)) AND pk1 = 2";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -407,7 +458,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((1, 2, 4), (2, 3, 6)) AND pk3 = 4";
         List<String> expecteds = singletonList("row1");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -415,7 +466,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk3, pk4, pk5) IN ((4, 5, 6), (4, 3, 2)) AND pk5 = 2";
         List<String> expecteds = singletonList("row4");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -423,7 +474,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND (pk2, pk3) IN ((4, 4), (4, 6))";
         List<String> expecteds = Collections.<String>emptyList();
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -431,7 +482,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2, pk3) IN ((2, 3, 6), (2, 3, 4)) AND (pk3, pk4, pk5) IN ((4, 5, 6), (4, 3, 2))";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test public void testOverlappingRVCWithMiddleColumn() throws Exception {
@@ -439,7 +490,7 @@ public class InListIT extends ParallelStatsDisabledIT {
             "WHERE pk2=3 and (pk1, pk2, pk3, pk4) IN ((2, 3, 6, 6), (2, 3, 4, 5)) ";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause,
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause,
             expecteds);
     }
 
@@ -448,7 +499,7 @@ public class InListIT extends ParallelStatsDisabledIT {
             "WHERE (pk2,pk3) in ((3,4)) and (pk1, pk2, pk3, pk4) IN ((2, 3, 6, 6), (2, 3, 4, 5)) ";
         List<String> expecteds = singletonList("row2");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause,
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause,
             expecteds);
     }
 
@@ -457,7 +508,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk1, pk2) IN ((1, 2), (2, 3)) AND (pk2, pk3) IN ((3, 4), (3, 6))";
         List<String> expecteds = Arrays.asList("row2", "row3");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy( whereClause, expecteds);
     }
 
     @Test
@@ -465,7 +516,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         String whereClause = "WHERE (pk3, pk4) IN ((4, 5), (4, 3)) AND (pk4, pk5) IN ((3, 2), (4, 5))";
         List<String> expecteds = singletonList("row4");
 
-        testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);
+        testWithIntegerTypesWithVariedSaltingAndTenancy(whereClause, expecteds);
     }
 
     @Test
@@ -683,6 +734,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                 ResultSet rs = stmt.executeQuery("SELECT ID2 FROM " + tenantView);
                 assertTrue(rs.next());
                 assertEquals("000000000000500", rs.getString(1));
+                stmt.execute("DELETE FROM " + tenantView);
             }
         }
     }
@@ -887,6 +939,12 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(2, 2))");
             queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
             assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+        }
+    }
+
+    private void deleteTenantData(String tenantView) throws SQLException {
+        try (Connection tenantConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
+            tenantConn.createStatement().execute("DELETE FROM " + tenantView);
         }
     }
 
