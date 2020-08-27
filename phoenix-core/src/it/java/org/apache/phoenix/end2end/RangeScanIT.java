@@ -56,8 +56,8 @@ public class RangeScanIT extends BaseQueryIT {
         return BaseQueryIT.allIndexes();
     }
 
-    public RangeScanIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public RangeScanIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
     
     @Test

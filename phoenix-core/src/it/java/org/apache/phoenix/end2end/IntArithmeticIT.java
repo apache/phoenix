@@ -47,8 +47,8 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class IntArithmeticIT extends BaseQueryIT {
 
-    public IntArithmeticIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public IntArithmeticIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
     
     @Parameters(name="IntArithmeticIT_{index}") // name is used by failsafe as file name in reports
@@ -70,6 +70,7 @@ public class IntArithmeticIT extends BaseQueryIT {
         }
     }
 
+    
     @Test
     public void testSelectWithSubtractionExpression() throws Exception {
         String query = "SELECT entity_id, x_integer - 4 FROM " + tableName + " where  x_integer - 4 = 0";

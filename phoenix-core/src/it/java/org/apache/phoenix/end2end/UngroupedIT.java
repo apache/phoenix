@@ -39,14 +39,19 @@ import java.util.Properties;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.MethodSorters;
+import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@RunWith(Parameterized.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class UngroupedIT extends BaseQueryIT {
 
-    public UngroupedIT(String idxDdl, boolean columnEncoded)
-            throws Exception {
-        super(idxDdl, columnEncoded, false);
+    public UngroupedIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
 
     @Parameters(name="UngroupedIT_{index}") // name is used by failsafe as file name in reports
@@ -102,110 +107,9 @@ public class UngroupedIT extends BaseQueryIT {
         }
     }
 
-    @Test
-    public void testPointInTimeUngroupedAggregation() throws Exception {
-        // Override value that was set at creation time
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        String updateStmt =
-                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
-                        + "    A_STRING) " + "VALUES (?, ?, ?)";
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW5);
-        stmt.setString(3, null);
-        stmt.execute();
-        stmt.setString(3, C_VALUE);
-        stmt.execute();
-        stmt.setString(2, ROW7);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.commit();
-        upsertConn.close();
-        long upsert1Time = System.currentTimeMillis();
-        long timeDelta = 100;
-        Thread.sleep(timeDelta);
-
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.close();
-        
-        long queryTime = upsert1Time + timeDelta / 2;
-        String query =
-                "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
-        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        statement.setString(2, B_VALUE);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertFalse(rs.next());
-        conn.close();
-    }
-
-    @Test
-    public void testPointInTimeUngroupedLimitedAggregation() throws Exception {
-        String updateStmt =
-                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
-                        + "    A_STRING) " + "VALUES (?, ?, ?)";
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, C_VALUE);
-        stmt.execute();
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        stmt.setString(3, B_VALUE);
-        stmt.execute();
-        stmt.setString(3, B_VALUE);
-        stmt.execute();
-        upsertConn.close();
-        long upsert1Time = System.currentTimeMillis();
-        long timeDelta = 100;
-        Thread.sleep(timeDelta);
-        
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        stmt = upsertConn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.setString(3, E_VALUE);
-        stmt.execute();
-        upsertConn.close();
-
-        long queryTime = upsert1Time + timeDelta / 2;
-        String query =
-                "SELECT count(1) FROM " + tableName
-                        + " WHERE organization_id=? and a_string = ? LIMIT 3";
-        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
-        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        statement.setString(2, B_VALUE);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(4, rs.getLong(1)); // LIMIT applied at end, so all rows would be counted
-        assertFalse(rs.next());
-        conn.close();
-    }
     
     @Test
-    public void testSumOverNullIntegerColumn() throws Exception {
+    public void zTestSumOverNullIntegerColumn() throws Exception {
         String query = "SELECT sum(a_integer) FROM " + tableName + " a";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

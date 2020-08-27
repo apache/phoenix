@@ -43,24 +43,27 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.MethodSorters;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class CaseStatementIT extends BaseQueryIT {
 
-    public CaseStatementIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public CaseStatementIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
     
     @Parameters(name="CaseStatementIT_{index}") // name is used by failsafe as file name in reports
     public static synchronized Collection<Object> data() {
         return BaseQueryIT.allIndexes();
-    }    
+    }
     
     @Test
     public void testSimpleCaseStatement() throws Exception {
@@ -248,7 +251,7 @@ public class CaseStatementIT extends BaseQueryIT {
     }
 
     @Test
-    public void testUnfoundSingleColumnCaseStatement() throws Exception {
+    public void zTestUnfoundSingleColumnCaseStatement() throws Exception {
         String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and CASE WHEN a_integer = 0 or a_integer != 0 THEN 1 ELSE 0 END = 0";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
