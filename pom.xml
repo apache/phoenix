@@ -1512,7 +1512,7 @@
       <properties>
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>2.1.9</hbase.version>
+        <hbase.version>2.1.10</hbase.version>
       </properties>
     </profile>
     <profile>

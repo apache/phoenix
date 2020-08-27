@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -51,6 +52,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,6 +83,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -149,6 +152,11 @@ public abstract class BasePermissionsIT extends BaseTest {
     BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
+    }
+
+    @BeforeClass
+    public static void skipHBase21() {
+        assumeFalse(VersionInfo.getVersion().startsWith("2.1"));
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
