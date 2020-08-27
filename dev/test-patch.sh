@@ -340,6 +340,7 @@ setup () {
     ERR=`$GREP -A 5 'Compilation failure' $PATCH_DIR/trunkJavacWarnings.txt`
     echo "Trunk compilation is broken?
     {code}$ERR{code}"
+    cat $PATCH_DIR/trunkJavacWarnings.txt
     cleanupAndExit 1
   fi
 #  mv target/checkstyle-result.xml $PATCH_DIR/trunkCheckstyle.xml
