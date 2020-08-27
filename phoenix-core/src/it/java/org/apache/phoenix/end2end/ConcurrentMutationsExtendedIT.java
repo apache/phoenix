@@ -271,7 +271,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         verifyIndexTable(tableName, indexName, conn);
     }
 
-    @Test @Repeat(5)
+    @Test
     public void testConcurrentUpserts() throws Exception {
         int nThreads = 4;
         final int batchSize = 200;
