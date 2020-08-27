@@ -35,6 +35,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -51,19 +52,17 @@ public class PointInTimeQueryIT extends BaseQueryIT {
 
     @Parameters(name="PointInTimeQueryIT_{index},columnEncoded={1}")
     public static synchronized Collection<Object> data() {
-        List<Object> testCases = Lists.newArrayList();
-        for (String indexDDL : INDEX_DDLS) {
-            for (boolean columnEncoded : new boolean[]{false,true}) {
-                testCases.add(new Object[] { indexDDL, columnEncoded });
-            }
-        }
-        return testCases;
+        return BaseQueryIT.allIndexesWithEncodedAndKeepDeleted();
     }
     
-    public PointInTimeQueryIT(String idxDdl, boolean columnEncoded)
+    public PointInTimeQueryIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells)
             throws Exception {
         // These queries fail without KEEP_DELETED_CELLS=true
-        super(idxDdl, columnEncoded, false);
+
+        super(indexDDL, columnEncoded, keepDeletedCells);
+        // For this class we specifically want to run each test method with fresh tables
+        // it is expected to be slow
+        initTables(indexDDL, columnEncoded, keepDeletedCells);
     }
 
     @Test
@@ -81,33 +80,33 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement stmt = conn.prepareStatement(updateStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW7);
-        stmt.setString(3, null);
-        stmt.execute();
-        
-        // Delete row 
-        stmt = conn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW5);
-        stmt.execute();
-        conn.commit();
-        conn.close();
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            PreparedStatement stmt = conn.prepareStatement(updateStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW7);
+            stmt.setString(3, null);
+            stmt.execute();
+            
+            // Delete row 
+            stmt = conn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW5);
+            stmt.execute();
+            conn.commit();
+        }
         long firstDeleteTime = System.currentTimeMillis();
         long timeDelta = 100; 
         Thread.sleep(timeDelta); 
         
         // Delete row at timestamp 3. This should not be seen by the query executing
         // Remove column value at ts + 1 (i.e. equivalent to setting the value to null)
-        Connection futureConn = DriverManager.getConnection(getUrl());
-        stmt = futureConn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW6);
-        stmt.execute();
-        futureConn.commit();
-        futureConn.close();
+        try (Connection futureConn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = futureConn.prepareStatement("delete from " + tableName + " where organization_id=? and entity_id=?");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW6);
+            stmt.execute();
+            futureConn.commit();
+        }
         
         // query at a time which is beyong deleteTime1 but before the time at which above delete
         // happened
@@ -115,15 +114,15 @@ public class PointInTimeQueryIT extends BaseQueryIT {
 
         String query = "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime)); // Execute at timestamp 2
-        conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        statement.setString(2, B_VALUE);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(2, rs.getLong(1));
-        assertFalse(rs.next());
-        conn.close();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setString(2, B_VALUE);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
+            assertFalse(rs.next());
+        }
     }
     
     @Test
@@ -131,49 +130,53 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         // Override value that was set at creation time
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
-            "upsert into " + tableName +
-            " (" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_INTEGER) " +
-            "VALUES (?, ?, ?)";
-        upsertConn.setAutoCommit(true); // Test auto commit
-        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW4);
-        stmt.setInt(3, 5);
-        stmt.execute(); // should commit too
-        upsertConn.close();
+                "upsert into " + tableName +
+                " (" +
+                "    ORGANIZATION_ID, " +
+                "    ENTITY_ID, " +
+                "    A_INTEGER) " +
+                "VALUES (?, ?, ?)";
+        
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+
+            upsertConn.setAutoCommit(true); // Test auto commit
+            PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW4);
+            stmt.setInt(3, 5);
+            stmt.execute(); // should commit too
+        }
         long upsert1Time = System.currentTimeMillis();
         long timeDelta = 100;
         Thread.sleep(timeDelta);
         
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW4);
-        stmt.setInt(3, 9);
-        stmt.execute(); // should commit too
-        upsertConn.close();
+        try(Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW4);
+            stmt.setInt(3, 9);
+            stmt.execute(); // should commit too
+            upsertConn.close();
+        }
         
         long queryTime = upsert1Time + timeDelta / 2;
         String query = "SELECT organization_id, a_string AS a FROM " + tableName + " WHERE organization_id=? and a_integer = 5";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(tenantId, rs.getString(1));
-        assertEquals(A_VALUE, rs.getString("a"));
-        assertTrue(rs.next());
-        assertEquals(tenantId, rs.getString(1));
-        assertEquals(B_VALUE, rs.getString(2));
-        assertFalse(rs.next());
-        conn.close();
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString(1));
+            assertEquals(A_VALUE, rs.getString("a"));
+            assertTrue(rs.next());
+            assertEquals(tenantId, rs.getString(1));
+            assertEquals(B_VALUE, rs.getString(2));
+            assertFalse(rs.next());
+            conn.close();
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -182,54 +185,216 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         // Override value that was set at creation time
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
         String upsertStmt =
-            "upsert into " + tableName +
-            " (" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_INTEGER) " +
-            "VALUES (?, ?, ?)";
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW1);
-        stmt.setInt(3, 6);
-        stmt.execute(); // should commit too
-        upsertConn.close();
+                "upsert into " + tableName +
+                " (" +
+                "    ORGANIZATION_ID, " +
+                "    ENTITY_ID, " +
+                "    A_INTEGER) " +
+                "VALUES (?, ?, ?)";
+        try(Connection upsertConn = DriverManager.getConnection(url, props)) {
+
+            upsertConn.setAutoCommit(true); // Test auto commit
+            // Insert all rows at ts
+            PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW1);
+            stmt.setInt(3, 6);
+            stmt.execute(); // should commit too
+            upsertConn.close();
+        }
         long upsert1Time = System.currentTimeMillis();
         long timeDelta = 100;
         Thread.sleep(timeDelta);
 
         url = getUrl();
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW1);
-        stmt.setInt(3, 0);
-        stmt.execute(); // should commit too
-        upsertConn.close();
+        try(Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            // Insert all rows at ts
+            PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW1);
+            stmt.setInt(3, 0);
+            stmt.execute(); // should commit too
+            upsertConn.close();
+        }
         
         long queryTime = upsert1Time + timeDelta  / 2;
         String query = "SELECT a_integer,b_string FROM " + tableName + " WHERE organization_id=? and a_integer <= 5 limit 2";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        List<List<Object>> expectedResultsA = Lists.newArrayList(
-                Arrays.<Object>asList(2, C_VALUE),
-                Arrays.<Object>asList( 3, E_VALUE));
-        List<List<Object>> expectedResultsB = Lists.newArrayList(
-                Arrays.<Object>asList( 5, C_VALUE),
-                Arrays.<Object>asList(4, B_VALUE));
-        // Since we're not ordering and we may be using a descending index, we don't
-        // know which rows we'll get back.
-        assertOneOfValuesEqualsResultSet(rs, expectedResultsA,expectedResultsB);
-       conn.close();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            ResultSet rs = statement.executeQuery();
+            List<List<Object>> expectedResultsA = Lists.newArrayList(
+                    Arrays.<Object>asList(2, C_VALUE),
+                    Arrays.<Object>asList( 3, E_VALUE));
+            List<List<Object>> expectedResultsB = Lists.newArrayList(
+                    Arrays.<Object>asList( 5, C_VALUE),
+                    Arrays.<Object>asList(4, B_VALUE));
+            // Since we're not ordering and we may be using a descending index, we don't
+            // know which rows we'll get back.
+            assertOneOfValuesEqualsResultSet(rs, expectedResultsA,expectedResultsB);
+            conn.close();
+        }
+    }
+
+    @Test
+    public void TestPointInTimeGroupedAggregation() throws Exception {
+        String updateStmt =
+                "upsert into " + tableName + " VALUES ('" + tenantId + "','" + ROW5 + "','"
+                        + C_VALUE + "')";
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            Statement stmt = upsertConn.createStatement();
+            stmt.execute(updateStmt); // should commit too
+            upsertConn.close();
+        }
+        
+        long upsert1Time = System.currentTimeMillis();
+        long timeDelta = 100;
+        Thread.sleep(timeDelta);
+
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            updateStmt = "upsert into " + tableName + " VALUES (?, ?, ?)";
+            // Insert all rows at ts
+            PreparedStatement pstmt = upsertConn.prepareStatement(updateStmt);
+            pstmt.setString(1, tenantId);
+            pstmt.setString(2, ROW5);
+            pstmt.setString(3, E_VALUE);
+            pstmt.execute(); // should commit too
+            upsertConn.close();
+        }
+        
+        long queryTime = upsert1Time + timeDelta / 2;
+        String query =
+                "SELECT a_string, count(1) FROM " + tableName + " WHERE organization_id='"
+                        + tenantId + "' GROUP BY a_string";
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(A_VALUE, rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals(B_VALUE, rs.getString(1));
+            assertEquals(3, rs.getLong(2));
+            assertTrue(rs.next());
+            assertEquals(C_VALUE, rs.getString(1));
+            assertEquals(2, rs.getInt(2));
+            assertFalse(rs.next());
+            conn.close();
+        }
     }
     
+    @Test
+    public void TestPointInTimeUngroupedAggregation() throws Exception {
+        // Override value that was set at creation time
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String updateStmt =
+                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
+                        + "    A_STRING) " + "VALUES (?, ?, ?)";
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            // Insert all rows at ts
+            PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW5);
+            stmt.setString(3, null);
+            stmt.execute();
+            stmt.setString(3, C_VALUE);
+            stmt.execute();
+            stmt.setString(2, ROW7);
+            stmt.setString(3, E_VALUE);
+            stmt.execute();
+            upsertConn.commit();
+            upsertConn.close();
+        }
+        long upsert1Time = System.currentTimeMillis();
+        long timeDelta = 100;
+        Thread.sleep(timeDelta);
+
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW6);
+            stmt.setString(3, E_VALUE);
+            stmt.execute();
+            upsertConn.close();
+        }
+        
+        long queryTime = upsert1Time + timeDelta / 2;
+        String query =
+                "SELECT count(1) FROM " + tableName + " WHERE organization_id=? and a_string = ?";
+        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setString(2, B_VALUE);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
+            assertFalse(rs.next());
+            conn.close();
+        }
+    }
+
+    @Test
+    public void TestPointInTimeUngroupedLimitedAggregation() throws Exception {
+        String updateStmt =
+                "upsert into " + tableName + " (" + "    ORGANIZATION_ID, " + "    ENTITY_ID, "
+                        + "    A_STRING) " + "VALUES (?, ?, ?)";
+        String url = getUrl();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW6);
+            stmt.setString(3, C_VALUE);
+            stmt.execute();
+            stmt.setString(3, E_VALUE);
+            stmt.execute();
+            stmt.setString(3, B_VALUE);
+            stmt.execute();
+            stmt.setString(3, B_VALUE);
+            stmt.execute();
+            upsertConn.close();
+        }
+        long upsert1Time = System.currentTimeMillis();
+        long timeDelta = 100;
+        Thread.sleep(timeDelta);
+        
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
+            upsertConn.setAutoCommit(true); // Test auto commit
+            PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW6);
+            stmt.setString(3, E_VALUE);
+            stmt.execute();
+            upsertConn.close();
+        }
+        long queryTime = upsert1Time + timeDelta / 2;
+        String query =
+                "SELECT count(1) FROM " + tableName
+                        + " WHERE organization_id=? and a_string = ? LIMIT 3";
+        // Specify CurrentSCN on URL with extra stuff afterwards (which should be ignored)
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setString(1, tenantId);
+            statement.setString(2, B_VALUE);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4, rs.getLong(1)); // LIMIT applied at end, so all rows would be counted
+            assertFalse(rs.next());
+            conn.close();
+        }
+    }
 }

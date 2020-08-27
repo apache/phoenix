@@ -41,8 +41,10 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.MethodSorters;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -50,10 +52,11 @@ import com.google.common.collect.Lists;
 
 
 @RunWith(Parameterized.class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class GroupByIT extends BaseQueryIT {
 
-    public GroupByIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public GroupByIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
     
     @Parameters(name="GroupByIT_{index}") // name is used by failsafe as file name in reports
@@ -207,7 +210,7 @@ public class GroupByIT extends BaseQueryIT {
     }
 
     @Test
-    public void testGroupByWithIntegerDivision1() throws Exception {
+    public void zTestGroupByWithIntegerDivision1() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
@@ -240,7 +243,7 @@ public class GroupByIT extends BaseQueryIT {
     }
 
     @Test
-    public void testGroupByWithIntegerDivision2() throws Exception {
+    public void zTestGroupByWithIntegerDivision2() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String table = generateUniqueName();
@@ -272,54 +275,6 @@ public class GroupByIT extends BaseQueryIT {
         assertEquals(6.77, rs.getDouble(3), 0.1);
     }
     
-    @Test
-    public void testPointInTimeGroupedAggregation() throws Exception {
-        String updateStmt =
-                "upsert into " + tableName + " VALUES ('" + tenantId + "','" + ROW5 + "','"
-                        + C_VALUE + "')";
-        String url = getUrl();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        Statement stmt = upsertConn.createStatement();
-        stmt.execute(updateStmt); // should commit too
-        upsertConn.close();
-        
-        long upsert1Time = System.currentTimeMillis();
-        long timeDelta = 100;
-        Thread.sleep(timeDelta);
-
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        updateStmt = "upsert into " + tableName + " VALUES (?, ?, ?)";
-        // Insert all rows at ts
-        PreparedStatement pstmt = upsertConn.prepareStatement(updateStmt);
-        pstmt.setString(1, tenantId);
-        pstmt.setString(2, ROW5);
-        pstmt.setString(3, E_VALUE);
-        pstmt.execute(); // should commit too
-        upsertConn.close();
-        
-        long queryTime = upsert1Time + timeDelta / 2;
-        String query =
-                "SELECT a_string, count(1) FROM " + tableName + " WHERE organization_id='"
-                        + tenantId + "' GROUP BY a_string";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(queryTime));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        Statement statement = conn.createStatement();
-        ResultSet rs = statement.executeQuery(query);
-        assertTrue(rs.next());
-        assertEquals(A_VALUE, rs.getString(1));
-        assertEquals(4, rs.getInt(2));
-        assertTrue(rs.next());
-        assertEquals(B_VALUE, rs.getString(1));
-        assertEquals(3, rs.getLong(2));
-        assertTrue(rs.next());
-        assertEquals(C_VALUE, rs.getString(1));
-        assertEquals(2, rs.getInt(2));
-        assertFalse(rs.next());
-        conn.close();
-    }
 
     @SuppressWarnings("unchecked")
     @Test

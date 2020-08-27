@@ -51,8 +51,8 @@ public class AggregateQueryIT extends BaseQueryIT {
         return BaseQueryIT.allIndexes();
     }
     
-    public AggregateQueryIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public AggregateQueryIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
 
     @Test

@@ -26,15 +26,15 @@ import com.google.common.collect.Lists;
 
 public class NotQueryWithGlobalImmutableIndexesIT extends NotQueryIT {
 
-    public NotQueryWithGlobalImmutableIndexesIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded);
+    public NotQueryWithGlobalImmutableIndexesIT(String indexDDL, boolean columnEncoded, boolean keepDeleted) throws Exception {
+        super(indexDDL, columnEncoded, keepDeleted);
     }
 
     @Parameters(name = "globalIndexDDL={0}")
     public static synchronized Collection<Object> globalIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : GLOBAL_INDEX_DDLS) {
-            testCases.add(new Object[] { indexDDL, false });
+            testCases.add(new Object[] { indexDDL, false, false });
         }
         return testCases;
     }

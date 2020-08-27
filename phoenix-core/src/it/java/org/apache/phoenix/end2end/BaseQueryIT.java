@@ -26,9 +26,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.AfterParam;
+import org.junit.runners.Parameterized.BeforeParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,15 +81,14 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             INDEX_DDLS[i++] = s;
         }
     }
-    protected Date date;
-    private String indexDDL;
-    private String tableDDLOptions;
-    protected String tableName;
-    protected String indexName;
+    protected static Date date;
+    protected static String tableName;
+    protected static String indexName;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseQueryIT.class);
 
-    public BaseQueryIT(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
+    @BeforeParam
+    public static final void initTables(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
@@ -95,9 +97,9 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             if (optionBuilder.length() > 0) optionBuilder.append(",");
             optionBuilder.append("KEEP_DELETED_CELLS=true");
         }
-        this.tableDDLOptions = optionBuilder.toString();
+        String tableDDLOptions = optionBuilder.toString();
         try {
-            this.tableName =
+            tableName =
                     initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
                         date = new Date(System.currentTimeMillis()), null, getUrl(),
                         tableDDLOptions);
@@ -105,25 +107,51 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             LOGGER.error("Exception when creating aTable ", e);
             throw e;
         }
-        this.indexName = generateUniqueName();
+        indexName = generateUniqueName();
         if (idxDdl.length() > 0) {
-            this.indexDDL =
+            String indexDDL =
                     String.format(idxDdl, indexName, tableName);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-                conn.createStatement().execute(this.indexDDL);
+                conn.createStatement().execute(indexDDL);
             } catch (Exception e) {
                 LOGGER.error("Exception while creating index: " + indexDDL, e);
                 throw e;
             }
         }
+
+    }
+
+    public BaseQueryIT(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) {
+        //logic moved to initTables
     }
 
     public static Collection<Object> allIndexes() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
             for (boolean columnEncoded : new boolean[]{false}) {
-                testCases.add(new Object[] { indexDDL, columnEncoded });
+                testCases.add(new Object[] { indexDDL, columnEncoded, false});
+            }
+        }
+        return testCases;
+    }
+    
+    public static Collection<Object> allIndexesWithEncoded() {
+        List<Object> testCases = Lists.newArrayList();
+        for (String indexDDL : INDEX_DDLS) {
+            for (boolean columnEncoded : new boolean[]{false, true}) {
+                testCases.add(new Object[] { indexDDL, columnEncoded, false});
+            }
+        }
+        return testCases;
+    }
+    
+    //We don't actually need keepDeletedCells, the coprocessor will handle it for us
+    public static Collection<Object> allIndexesWithEncodedAndKeepDeleted() {
+        List<Object> testCases = Lists.newArrayList();
+        for (String indexDDL : INDEX_DDLS) {
+            for (boolean columnEncoded : new boolean[]{false, true}) {
+                testCases.add(new Object[] { indexDDL, columnEncoded, false});
             }
         }
         return testCases;
