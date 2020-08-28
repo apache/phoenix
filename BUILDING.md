@@ -89,6 +89,14 @@ generated at /target/site/jacoco/index.html
 To skip code coverage analysis
 `$ mvn verify -Dskip.code-coverage`
 
+Running OWASP Dependency-Check
+------------------------------
+
+To run OWASP Dependency-Check (https://owasp.org/www-project-dependency-check/)
+`$ mvn verify -DskipTests -Dowasp-check`
+
+The report is generated in target/dependency-check-report.html
+
 Findbugs
 --------
 
