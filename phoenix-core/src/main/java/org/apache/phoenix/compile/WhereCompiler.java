@@ -146,9 +146,7 @@ public class WhereCompiler {
             throw TypeMismatchException.newException(PBoolean.INSTANCE, expression.getDataType(), expression.toString());
         }
         if (viewWhere != null) {
-            WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
-            Expression viewExpression = viewWhere.accept(viewWhereCompiler);
-            expression = AndExpression.create(Lists.newArrayList(expression, viewExpression));
+            expression = optimizedViewWhere(context, expression, where, viewWhere);
         }
         if (!dynamicFilters.isEmpty()) {
             List<Expression> filters = Lists.newArrayList(expression);
@@ -167,7 +165,17 @@ public class WhereCompiler {
 
         return expression;
     }
-    
+
+    private static Expression optimizedViewWhere(StatementContext context, Expression expression, ParseNode where, ParseNode viewWhere) throws SQLException {
+        WhereExpressionCompiler viewWhereCompiler = new WhereExpressionCompiler(context, true);
+        ParseNode optimizedViewWhere = ViewWhereOptimizer.optimizedViewWhereClause(context, where, viewWhere);
+        if (optimizedViewWhere != null) {
+            return optimizedViewWhere.accept(viewWhereCompiler);
+        } else {
+            Expression viewExpression = viewWhere.accept(viewWhereCompiler);
+            return AndExpression.create(Lists.newArrayList(expression, viewExpression));
+        }
+    }
     public static class WhereExpressionCompiler extends ExpressionCompiler {
         private boolean disambiguateWithFamily;
 
