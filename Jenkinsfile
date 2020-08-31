@@ -27,8 +27,13 @@ pipeline {
     stages {
         stage('MatrixBuild') {
             matrix {
+
                 agent {
-                    label 'Hadoop'
+                    dockerfile {
+                        dir 'dev/docker'
+                        filename 'Dockerfile.multibranch'
+                        label 'Hadoop'
+                    }
                 }
 
                 axes {
@@ -36,11 +41,6 @@ pipeline {
                         name 'HBASE_PROFILE'
                         values '2.1', '2.2', '2.3'
                     }
-                }
-
-                tools {
-                    maven "Maven (latest)"
-                    jdk "JDK 1.8 (latest)"
                 }
 
                 environment {
@@ -72,7 +72,7 @@ pipeline {
                         }
                         steps {
                             sh """#!/bin/bash
-                                ulimit -S -u 60000
+                                ulimit -a
                                 mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
                             """
                         }
@@ -86,6 +86,7 @@ pipeline {
                 }
 
                 post {
+
                     always {
                         emailext(
                             subject: "Apache-Phoenix | ${BRANCH_NAME} | HBase ${HBASE_PROFILE} | Build ${BUILD_DISPLAY_NAME} ${currentBuild.currentResult}",
@@ -104,6 +105,7 @@ pipeline {
 """
                        )
                     }
+
                     cleanup {
                         deleteDir()
                     }
