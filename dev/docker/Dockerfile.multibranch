@@ -1,0 +1,4 @@
+FROM apache/yetus:0.12.0
+
+RUN groupadd --non-unique -g 910 jenkins || true
+RUN useradd -g 910 -u 910 -m jenkins || true
