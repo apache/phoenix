@@ -498,7 +498,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             try {
                 this.user = User.getCurrent();
             } catch (IOException e) {
-                throw new RuntimeException("Couldn't get the current user!!");
+                throw new RuntimeException("Couldn't get the current user!!", e);
             }
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
