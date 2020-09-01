@@ -21,8 +21,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
@@ -44,13 +46,11 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 
-import java.util.HashMap;
-
 public class CachedLocalTable implements LocalHBaseState {
 
-    private final HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells;
+    private final Map<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells;
 
-    private CachedLocalTable(HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells) {
+    private CachedLocalTable(Map<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells) {
         this.rowKeyPtrToCells = rowKeyPtrToCells;
     }
 
@@ -86,7 +86,7 @@ public class CachedLocalTable implements LocalHBaseState {
     }
 
     @VisibleForTesting
-    public static CachedLocalTable build(HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells) {
+    public static CachedLocalTable build(Map<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells) {
         return new CachedLocalTable(rowKeyPtrToCells);
     }
 
@@ -111,12 +111,17 @@ public class CachedLocalTable implements LocalHBaseState {
             Collection<? extends Mutation> dataTableMutationsWithSameRowKeyAndTimestamp,
             PhoenixIndexMetaData indexMetaData,
             Region region) throws IOException {
-        List<IndexMaintainer> indexTableMaintainers = indexMetaData.getIndexMaintainers();
         Set<KeyRange> keys = new HashSet<KeyRange>(dataTableMutationsWithSameRowKeyAndTimestamp.size());
         for (Mutation mutation : dataTableMutationsWithSameRowKeyAndTimestamp) {
+          if (indexMetaData.requiresPriorRowState(mutation)) {
             keys.add(PVarbinary.INSTANCE.getKeyRange(mutation.getRow()));
+          }
+        }
+        if (keys.isEmpty()) {
+            return new CachedLocalTable(Collections.<ImmutableBytesPtr, List<Cell>>emptyMap());
         }
 
+        List<IndexMaintainer> indexTableMaintainers = indexMetaData.getIndexMaintainers();
         Set<ColumnReference> getterColumnReferences = Sets.newHashSet();
         for (IndexMaintainer indexTableMaintainer : indexTableMaintainers) {
             getterColumnReferences.addAll(
@@ -149,7 +154,7 @@ public class CachedLocalTable implements LocalHBaseState {
             scan.setFilter(skipScanFilter);
         }
 
-        HashMap<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
+        Map<ImmutableBytesPtr, List<Cell>> rowKeyPtrToCells =
                 new HashMap<ImmutableBytesPtr, List<Cell>>();
         try (RegionScanner scanner = region.getScanner(scan)) {
             boolean more = true;
