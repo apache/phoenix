@@ -79,7 +79,7 @@ Running the tests
 All Unit tests  
 `$ mvn clean test`
 
-All Unit Tests and Integration tests
+All Unit Tests and Integration tests (takes a few hours)
 `$ mvn clean verify`
 
 The verify maven target will also run dependency:analyze-only, which checks if the dependencies 
@@ -89,19 +89,20 @@ generated at /target/site/jacoco/index.html
 To skip code coverage analysis
 `$ mvn verify -Dskip.code-coverage`
 
-Running OWASP Dependency-Check
-------------------------------
+Running project reports
+-----------------------
 
-To run OWASP Dependency-Check (https://owasp.org/www-project-dependency-check/)
-`$ mvn verify -DskipTests -Dowasp-check`
+Phoenix currently supports generating the standard set of Maven Project Info Reports, as well as
+Spotbugs, Apache Creadur RAT, OWASP Dependency-Check, and Jacoco Code Coverage reports.
 
-The report is generated in target/dependency-check-report.html
+To run all available reports (takes a few hours)
+`$ mvn clean verify site -Dspotbugs.site`
 
-Findbugs
---------
+To run OWASP, RAT and Spotbugs, but not Jacoco (takes ~10 minutes)
+`$ mvn clean compile test-compile site -Dspotbugs.site`
 
-Findbugs report is generated in /target/site  
-`$ mvn site`
+The reports are accessible via `target/site/index.html`, under the main project,
+as well as each of the subprojects. (not every project has all reports)
 
 Generate Apache Web Site
 ------------------------
