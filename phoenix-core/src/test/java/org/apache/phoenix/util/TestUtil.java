@@ -157,7 +157,7 @@ import com.google.common.collect.Lists;
 
 public class TestUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(TestUtil.class);
-    
+
     private static final Long ZERO = new Long(0);
     public static final String DEFAULT_SCHEMA_NAME = "S";
     public static final String DEFAULT_DATA_TABLE_NAME = "T";
@@ -902,7 +902,7 @@ public class TestUtil {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
         s.setRaw(true);;
-        s.setMaxVersions();
+        s.readAllVersions();
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
@@ -910,7 +910,9 @@ public class TestUtil {
                 Cell current = null;
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
-                    System.out.println(current);
+                    System.out.println(current + " column= " +
+                        Bytes.toString(CellUtil.cloneQualifier(current)) +
+                        " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
                 }
             }
         }

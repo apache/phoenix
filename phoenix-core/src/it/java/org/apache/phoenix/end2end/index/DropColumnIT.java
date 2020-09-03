@@ -34,7 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -50,7 +50,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -203,7 +202,11 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 Result result = results.next();
                 assertNotNull(result);
                 
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(), result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted",
+                    Cell.Type.DeleteColumn,
+                    result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dataCq).get
+                    (0).getType());
+
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the global index table
@@ -213,7 +216,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
-                assertEquals("data table column value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, globalIndexCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted",
+                    Cell.Type.DeleteColumn,
+                    result.getColumnCells(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                        globalIndexCq).get(0).getType());
                 assertNull(results.next());
                 
                 // key value for v2 should have been deleted from the local index table
@@ -224,8 +230,10 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 results = table.getScanner(scan);
                 result = results.next();
                 assertNotNull(result);
-                assertEquals("data table col"
-                        + "umn value should have been deleted", KeyValue.Type.DeleteColumn.getCode(),  result.getColumnCells(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, localIndexCq).get(0).getTypeByte());
+                assertEquals("data table column value should have been deleted",
+                    Cell.Type.DeleteColumn,
+                    result.getColumnCells(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES,
+                        localIndexCq).get(0).getType());
                 assertNull(results.next()); 
             }
             else {

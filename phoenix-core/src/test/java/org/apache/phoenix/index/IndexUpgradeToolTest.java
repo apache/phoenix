@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.QueryServices;
@@ -38,6 +39,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -98,6 +100,7 @@ public class IndexUpgradeToolTest {
 
     @Test
     public void testIfOptionsArePassedToIndexTool() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!upgrade) {
             return;
         }
@@ -127,6 +130,7 @@ public class IndexUpgradeToolTest {
 
     @Test
     public void testMalformedSpacingOptionsArePassedToIndexTool() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!upgrade) {
             return;
         }

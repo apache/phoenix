@@ -28,4 +28,9 @@ public class HbaseCompatCapabilities {
     //but in 2.3 and later we have the preSoreScannerOpen hook that overrides that behavior
     public static boolean isLookbackBeyondDeletesSupported() { return true; }
 
+    //HBase 2.1 does not have HBASE-22710, which is necessary for raw scan skip scan and
+    // AllVersionsIndexRebuild filters to
+    // show all versions properly. HBase 2.2.5+ and HBase 2.3.0+ have this fix.
+    public static boolean isRawFilterSupported() { return true; }
+
 }

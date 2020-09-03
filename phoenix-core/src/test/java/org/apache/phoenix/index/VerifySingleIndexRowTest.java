@@ -20,29 +20,31 @@ package org.apache.phoenix.index;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.EnvironmentEdge;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.*;
+import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -56,18 +58,13 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.Properties;
+import java.util.*;
 
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
@@ -81,9 +78,9 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public static final String SECOND_VALUE = "SECOND_VALUE";
     public static final String
             CREATE_TABLE_DDL = "CREATE TABLE IF NOT EXISTS %s (FIRST_ID BIGINT NOT NULL, "
-                        + "SECOND_ID BIGINT NOT NULL, FIRST_VALUE VARCHAR(20), "
-                        + "SECOND_VALUE INTEGER "
-                        + "CONSTRAINT PK PRIMARY KEY(FIRST_ID, SECOND_ID)) COLUMN_ENCODED_BYTES=0";
+            + "SECOND_ID BIGINT NOT NULL, FIRST_VALUE VARCHAR(20), "
+            + "SECOND_VALUE INTEGER "
+            + "CONSTRAINT PK PRIMARY KEY(FIRST_ID, SECOND_ID)) COLUMN_ENCODED_BYTES=0";
 
     public static final String
             CREATE_INDEX_DDL = "CREATE INDEX %s ON %s (SECOND_VALUE) INCLUDE (FIRST_VALUE)";
@@ -139,7 +136,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     Delete delete = null;
     PhoenixConnection pconn;
     IndexToolVerificationResult.PhaseResult actualPR;
-    public Map<byte[], List<Mutation>> indexKeyToMutationMapLocal;
+    public Map<byte[], List<Mutation>> indexKeyToMutationMap = null;
+    Set<byte[]> mostRecentIndexRowKeys;
     private IndexMaintainer indexMaintainer;
 
     @Before
@@ -227,7 +225,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private void upsertCompleteRow(int key1, int key2, String val1
-    , int val2) throws SQLException, IOException {
+            , int val2) throws SQLException, IOException {
         try(Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
             PreparedStatement
                     ps = conn.prepareStatement(String.format(COMPLETE_ROW_UPSERT, dataTableFullName));
@@ -249,9 +247,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
         for (Cell kv : elem.getSecond()) {
             Cell cell =
-                    CellUtil.createCell(CellUtil.cloneRow(kv), CellUtil.cloneFamily(kv), CellUtil.cloneQualifier(kv),
-                            mutationTS, kv.getTypeByte(), CellUtil.cloneValue(kv));
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                CellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(CellUtil.cloneRow(kv)).
+                    setFamily(CellUtil.cloneFamily(kv)).
+                    setQualifier(CellUtil.cloneQualifier(kv)).
+                    setTimestamp(mutationTS).
+                    setType(kv.getType()).
+                    setValue(CellUtil.cloneValue(kv)).build();
+            if (cell.getType().equals(Cell.Type.Put)) {
                 if (put == null ) {
                     put = new Put(key);
                 }
@@ -260,7 +262,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 if (delete == null) {
                     delete = new Delete(key);
                 }
-                delete.addDeleteMarker(cell);
+                delete.add(cell);
             }
         }
     }
@@ -268,51 +270,52 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     private void initializeRebuildScannerAttributes() {
         when(rebuildScanner.setIndexTableTTL(Matchers.anyInt())).thenCallRealMethod();
         when(rebuildScanner.setIndexMaintainer(Matchers.<IndexMaintainer>any())).thenCallRealMethod();
-        when(rebuildScanner.setIndexKeyToMutationMap(Matchers.<Map>any())).thenCallRealMethod();
+        when(rebuildScanner.setMaxLookBackInMills(Matchers.anyLong())).thenCallRealMethod();
         rebuildScanner.setIndexTableTTL(HConstants.FOREVER);
         indexMaintainer = pIndexTable.getIndexMaintainer(pDataTable, pconn);
         rebuildScanner.setIndexMaintainer(indexMaintainer);
+        // set the maxLookBack to infinite to avoid the compaction
+        rebuildScanner.setMaxLookBackInMills(Long.MAX_VALUE);
     }
 
     private void initializeGlobalMockitoSetup() throws IOException {
         //setup
         when(GlobalIndexRegionScanner.getIndexRowKey(indexMaintainer, put)).thenCallRealMethod();
-        when(rebuildScanner.prepareIndexMutations(put, delete)).thenCallRealMethod();
-        when(rebuildScanner.verifySingleIndexRow(Matchers.<Result>any(),
-                Matchers.<IndexToolVerificationResult.PhaseResult>any())).thenCallRealMethod();
+        when(rebuildScanner.prepareIndexMutations(put, delete, indexKeyToMutationMap, mostRecentIndexRowKeys)).thenCallRealMethod();
+        when(rebuildScanner.verifySingleIndexRow(Matchers.<Result>any(), Matchers.<Map>any(),
+            Matchers.<Set>any(), Matchers.<List>any(),
+                Matchers.<IndexToolVerificationResult.PhaseResult>any(), Matchers.anyBoolean())).thenCallRealMethod();
         doNothing().when(rebuildScanner)
                 .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
-                Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
-                        Matchers.<byte[]>any(), Matchers.<byte[]>any());
+                        Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
+                        Matchers.<byte[]>any(), Matchers.<byte[]>any(), Matchers.anyBoolean(),
+                    Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
         doNothing().when(rebuildScanner)
                 .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
-                Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString());
+                        Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
+                    Matchers.anyBoolean(),
+                    Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
 
         //populate the local map to use to create actual mutations
-        indexKeyToMutationMapLocal = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-        rebuildScanner.setIndexKeyToMutationMap(indexKeyToMutationMapLocal);
-        rebuildScanner.prepareIndexMutations(put, delete);
-
-        //populate map to use in test code
-        Map<byte[], List<Mutation>> indexKeyToMutationMap = Maps.newTreeMap((Bytes.BYTES_COMPARATOR));
-        rebuildScanner.setIndexKeyToMutationMap(indexKeyToMutationMap);
-        rebuildScanner.prepareIndexMutations(put, delete);
+        indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        rebuildScanner.prepareIndexMutations(put, delete, indexKeyToMutationMap, mostRecentIndexRowKeys);
     }
 
     private byte[] getValidRowKey() {
-        return indexKeyToMutationMapLocal.entrySet().iterator().next().getKey();
+        return indexKeyToMutationMap.entrySet().iterator().next().getKey();
     }
 
     @Test
     public void testVerifySingleIndexRow_validIndexRowCount_nonZero() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getValidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.VALID_EXACT_MATCH);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
@@ -320,12 +323,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public void testVerifySingleIndexRow_validIndexRowCount_moreActual() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getValidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.VALID_MORE_MUTATIONS);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
@@ -333,12 +337,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public void testVerifySingleIndexRow_allMix() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getValidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.VALID_MIX_MUTATIONS);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
@@ -346,85 +351,91 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     public void testVerifySingleIndexRow_allUnverified() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getValidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.VALID_NEW_UNVERIFIED_MUTATIONS);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
     @Test
     public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
         IndexToolVerificationResult.PhaseResult
-                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0);
+                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0,0,0);
         try {
             for (Map.Entry<byte[], List<Mutation>>
-                    entry : indexKeyToMutationMapLocal.entrySet()) {
+                    entry : indexKeyToMutationMap.entrySet()) {
                 initializeLocalMockitoSetup(entry, TestType.EXPIRED);
                 expireThisRow();
                 //test code
-                rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+                rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                    mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-                assertTrue(actualPR.equals(expectedPR));
+                assertEquals(actualPR, expectedPR);
             }
         } finally {
             EnvironmentEdgeManager.reset();
         }
     }
-    @Ignore
+
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_cellValue() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        expectedPR.setIndexHasExtraCellsCount(1);
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.INVALID_CELL_VALUE);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
-    @Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_emptyCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.INVALID_EMPTY_CELL);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_diffColumn() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
+        expectedPR.setIndexHasExtraCellsCount(1);
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.INVALID_COLUMN);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
-    @Ignore
     @Test
     public void testVerifySingleIndexRow_invalidIndexRowCount_extraCell() throws IOException {
         IndexToolVerificationResult.PhaseResult expectedPR = getInvalidPhaseResult();
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.INVALID_EXTRA_CELL);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
-            assertTrue(actualPR.equals(expectedPR));
+            assertEquals(actualPR, expectedPR);
         }
     }
 
@@ -433,48 +444,154 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         when(indexRow.getRow()).thenReturn(Bytes.toBytes(1));
         exceptionRule.expect(DoNotRetryIOException.class);
         exceptionRule.expectMessage(IndexRebuildRegionScanner.NO_EXPECTED_MUTATION);
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
-    }
-
-    @Test
-    public void testVerifySingleIndexRow_actualMutations_null() throws IOException {
-        byte [] validRowKey = getValidRowKey();
-        when(indexRow.getRow()).thenReturn(validRowKey);
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(null);
-        exceptionRule.expect(DoNotRetryIOException.class);
-        exceptionRule.expectMessage(IndexRebuildRegionScanner.ACTUAL_MUTATION_IS_NULL_OR_EMPTY);
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+        rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+            mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
     }
 
     @Test
     public void testVerifySingleIndexRow_validIndexRowCount_extraCell() throws IOException {
         for (Map.Entry<byte[], List<Mutation>>
-                entry : indexKeyToMutationMapLocal.entrySet()) {
+                entry : indexKeyToMutationMap.entrySet()) {
             initializeLocalMockitoSetup(entry, TestType.VALID_EXTRA_CELL);
             //test code
-            rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+            rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap,
+                mostRecentIndexRowKeys, Collections.emptyList(), actualPR, true);
 
             assertEquals(1, actualPR.getIndexHasExtraCellsCount());
         }
     }
 
+    // Test the major compaction on index table only.
+    // There is at least one expected mutation within maxLookBack that has its matching one in the actual list.
+    // However there are some expected mutations outside of maxLookBack, which matching ones in actual list may be compacted away.
+    // We will report such row as a valid row.
     @Test
-    public void testVerifySingleIndexRow_actualMutations_empty() throws IOException {
-        byte [] validRowKey = getValidRowKey();
-        when(indexRow.getRow()).thenReturn(validRowKey);
-        actualMutationList = new ArrayList<>();
-        when(rebuildScanner.prepareActualIndexMutations(indexRow)).thenReturn(actualMutationList);
-        exceptionRule.expect(DoNotRetryIOException.class);
-        exceptionRule.expectMessage(IndexRebuildRegionScanner.ACTUAL_MUTATION_IS_NULL_OR_EMPTY);
-        rebuildScanner.verifySingleIndexRow(indexRow, actualPR);
+    public void testVerifySingleIndexRow_compactionOnIndexTable_atLeastOneExpectedMutationWithinMaxLookBack() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
+        String dataRowKey = "k1";
+        byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
+        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(1);
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+
+        List<Mutation> expectedMutations = new ArrayList<>();
+        List<Mutation> actualMutations = new ArrayList<>();
+        // change the maxLookBack from infinite to some interval, which allows to simulate the mutation beyond the maxLookBack window.
+        long maxLookbackInMills = 10 * 1000;
+        rebuildScanner.setMaxLookBackInMills(maxLookbackInMills);
+
+        Put put = new Put(indexRowKey1Bytes);
+        Cell cell = getNewCell(indexRowKey1Bytes,
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                QueryConstants.EMPTY_COLUMN_BYTES,
+                EnvironmentEdgeManager.currentTimeMillis(),
+                Cell.Type.Put,
+                IndexRegionObserver.VERIFIED_BYTES);
+        put.add(cell);
+        // This mutation is beyond maxLookBack, so add it to expectedMutations only.
+        expectedMutations.add(put);
+
+        // advance the time of maxLookBack, so last mutation will be outside of maxLookBack,
+        // next mutation will be within maxLookBack
+        injectEdge.incrementValue(maxLookbackInMills);
+        put =  new Put(indexRowKey1Bytes);
+        cell = getNewCell(indexRowKey1Bytes,
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                QueryConstants.EMPTY_COLUMN_BYTES,
+                EnvironmentEdgeManager.currentTimeMillis(),
+                Cell.Type.Put,
+                IndexRegionObserver.VERIFIED_BYTES);
+        put.add(cell);
+        // This mutation is in both expectedMutations and actualMutations, as it is within the maxLookBack, so it will not get chance to be compacted away
+        expectedMutations.add(put);
+        actualMutations.add(put);
+        Result actualMutationsScanResult = Result.create(Arrays.asList(cell));
+
+        Map<byte[], List<Mutation>> indexKeyToMutationMap = Maps.newTreeMap((Bytes.BYTES_COMPARATOR));
+        indexKeyToMutationMap.put(indexRowKey1Bytes, expectedMutations);
+        when(rebuildScanner.prepareActualIndexMutations(any(Result.class))).thenReturn(actualMutations);
+        when(indexRow.getRow()).thenReturn(indexRowKey1Bytes);
+        injectEdge.incrementValue(1);
+        IndexToolVerificationResult.PhaseResult actualPR = new IndexToolVerificationResult.PhaseResult();
+        // Report this validation as a success
+        assertTrue(rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap, mostRecentIndexRowKeys, Collections.EMPTY_LIST, actualPR, false));
+        // validIndexRowCount = 1
+        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0);
+        assertEquals(actualPR, expectedPR);
+    }
+
+    // Test the major compaction on index table only.
+    // All expected mutations are beyond the maxLookBack, and there are no matching ones in the actual list because of major compaction.
+    // We will report such row as an invalid beyond maxLookBack row.
+    @Test
+    public void testVerifySingleIndexRow_compactionOnIndexTable_noExpectedMutationWithinMaxLookBack() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
+        String dataRowKey = "k1";
+        byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
+        List<Mutation> expectedMutations = new ArrayList<>();
+        List<Mutation> actualMutations = new ArrayList<>();
+        // change the maxLookBack from infinite to some interval, which allows to simulate the mutation beyond the maxLookBack window.
+        long maxLookbackInMills = 10 * 1000;
+        rebuildScanner.setMaxLookBackInMills(maxLookbackInMills);
+
+        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(1);
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+
+        Put put = new Put(indexRowKey1Bytes);
+        Cell cell = getNewCell(indexRowKey1Bytes,
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                QueryConstants.EMPTY_COLUMN_BYTES,
+                EnvironmentEdgeManager.currentTimeMillis(),
+                Cell.Type.Put,
+                VERIFIED_BYTES);
+        put.add(cell);
+        // This mutation is beyond maxLookBack, so add it to expectedMutations only.
+        expectedMutations.add(put);
+
+        injectEdge.incrementValue(maxLookbackInMills);
+        put =  new Put(indexRowKey1Bytes);
+        cell = getNewCell(indexRowKey1Bytes,
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                QueryConstants.EMPTY_COLUMN_BYTES,
+                EnvironmentEdgeManager.currentTimeMillis(),
+                Cell.Type.Put,
+                UNVERIFIED_BYTES);
+        put.add(cell);
+        // This mutation is actualMutations only, as it is an unverified put
+        actualMutations.add(put);
+        Result actualMutationsScanResult = Result.create(Arrays.asList(cell));
+
+        Map<byte[], List<Mutation>> indexKeyToMutationMap = Maps.newTreeMap((Bytes.BYTES_COMPARATOR));
+        indexKeyToMutationMap.put(indexRowKey1Bytes, expectedMutations);
+        mostRecentIndexRowKeys = new TreeSet<>(Bytes.BYTES_COMPARATOR);
+        when(rebuildScanner.prepareActualIndexMutations(any(Result.class))).thenReturn(actualMutations);
+        when(indexRow.getRow()).thenReturn(indexRowKey1Bytes);
+
+        injectEdge.incrementValue(1);
+        IndexToolVerificationResult.PhaseResult actualPR = new IndexToolVerificationResult.PhaseResult();
+        // Report this validation as a failure
+        assertFalse(rebuildScanner.verifySingleIndexRow(indexRow, indexKeyToMutationMap, mostRecentIndexRowKeys, new ArrayList<Mutation>(), actualPR, true));
+        // beyondMaxLookBackInvalidIndexRowCount = 1
+        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(0, 0, 0, 0, 0, 1, 0, 0);
+        assertEquals(actualPR, expectedPR);
+    }
+
+    private static byte[] generateIndexRowKey(String dataRowKey, String dataVal){
+        List<Byte> idxKey = new ArrayList<>();
+        if (dataVal != null && !dataVal.isEmpty())
+            idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(dataVal)));
+        idxKey.add(QueryConstants.SEPARATOR_BYTE);
+        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(dataRowKey)));
+        return com.google.common.primitives.Bytes.toArray(idxKey);
     }
 
     private IndexToolVerificationResult.PhaseResult getValidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(1,0,0,0,0, 0);
+        return new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0);
     }
 
     private IndexToolVerificationResult.PhaseResult getInvalidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1, 0, 0);
+        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1, 0, 0, 0, 0);
     }
 
     private void initializeLocalMockitoSetup(Map.Entry<byte[], List<Mutation>> entry,
@@ -489,7 +606,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private List<Mutation> buildActualIndexMutationsList(TestType testType) {
         List<Mutation> actualMutations = new ArrayList<>();
-        actualMutations.addAll(indexKeyToMutationMapLocal.get(indexRow.getRow()));
+        actualMutations.addAll(indexKeyToMutationMap.get(indexRow.getRow()));
         if(testType.equals(TestType.EXPIRED)) {
             return actualMutations;
         }
@@ -530,9 +647,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
             for (Mutation m : newActualMutations) {
                 if (m instanceof Put) {
                     List<Cell> origList = m.getFamilyCellMap().firstEntry().getValue();
-                    Cell newCell =
-                            CellUtil.createCell(m.getRow(), CellUtil.cloneFamily(origList.get(0)),
-                                    Bytes.toBytes("EXTRACOL"), m.getTimestamp(), KeyValue.Type.Put.getCode(),
+                    Cell newCell = getNewCell(m.getRow(), CellUtil.cloneFamily(origList.get(0)),
+                                    Bytes.toBytes("EXTRACOL"), m.getTimestamp(), Cell.Type.Put,
                                     Bytes.toBytes("asdfg"));
                     byte[] fam = CellUtil.cloneFamily(origList.get(0));
                     m.getFamilyCellMap().get(fam).add(newCell);
@@ -557,8 +673,13 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 infiltrateCell(c, newCellList, testType);
             }
             familyCellMap.put(fam, newCellList);
-            m.setFamilyCellMap(familyCellMap);
-            newActualMutations.add(m);
+            Mutation newM;
+            if (m instanceof Put) {
+                newM = new Put(m.getRow(), m.getTimestamp(), familyCellMap);
+            } else {
+                newM = new Delete(m.getRow(), m.getTimestamp(), familyCellMap);
+            }
+            newActualMutations.add(newM);
         }
         return newActualMutations;
     }
@@ -568,11 +689,10 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         Cell emptyCell;
         switch(e) {
         case INVALID_COLUMN:
-            newCell =
-                    CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
+            newCell = getNewCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
                             Bytes.toBytes(UNEXPECTED_COLUMN),
-                            EnvironmentEdgeManager.currentTimeMillis(),
-                            KeyValue.Type.Put.getCode(), Bytes.toBytes("zxcv"));
+                            c.getTimestamp(),
+                            Cell.Type.Put, Bytes.toBytes("zxcv"));
             newCellList.add(newCell);
             newCellList.add(c);
             break;
@@ -589,9 +709,9 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         case INVALID_EMPTY_CELL:
             if (CellUtil.matchingQualifier(c, EMPTY_COLUMN_BYTES)) {
                 newCell =
-                        CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
+                        getNewCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
                                 CellUtil.cloneQualifier(c), c.getTimestamp(),
-                                KeyValue.Type.Delete.getCode(), VERIFIED_BYTES);
+                                Cell.Type.Delete, VERIFIED_BYTES);
                 newCellList.add(newCell);
             } else {
                 newCellList.add(c);
@@ -607,16 +727,16 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private Cell getVerifiedEmptyCell(Cell c) {
-        return CellUtil.createCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
+        return getNewCell(CellUtil.cloneRow(c), CellUtil.cloneFamily(c),
                 indexMaintainer.getEmptyKeyValueQualifier(),
-                EnvironmentEdgeManager.currentTimeMillis(),
-                KeyValue.Type.Put.getCode(), VERIFIED_BYTES);
+                c.getTimestamp(),
+                Cell.Type.Put, VERIFIED_BYTES);
     }
 
     private Cell getCellWithPut(Cell c) {
-        return CellUtil.createCell(CellUtil.cloneRow(c),
+        return getNewCell(CellUtil.cloneRow(c),
                 CellUtil.cloneFamily(c), Bytes.toBytes(INCLUDED_COLUMN),
-                c.getTimestamp(), KeyValue.Type.Put.getCode(),
+                c.getTimestamp(), Cell.Type.Put,
                 Bytes.toBytes("zxcv"));
     }
 
@@ -630,8 +750,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         Mutation m = new Delete(orig.getRow());
         List<Cell> origList = orig.getFamilyCellMap().firstEntry().getValue();
         ts = ts == null ? EnvironmentEdgeManager.currentTimeMillis() : ts;
-        Cell c = getNewPutCell(orig, origList, ts, KeyValue.Type.DeleteFamilyVersion);
-        Cell empty = getEmptyCell(orig, origList, ts, KeyValue.Type.Put, true);
+        Cell c = getNewPutCell(orig, origList, ts, Cell.Type.DeleteFamilyVersion);
+        Cell empty = getEmptyCell(orig, origList, ts, Cell.Type.Put, true);
         byte[] fam = CellUtil.cloneFamily(origList.get(0));
         List<Cell> famCells = Lists.newArrayList();
         m.getFamilyCellMap().put(fam, famCells);
@@ -649,8 +769,8 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
         List<Cell> origList = orig.getFamilyCellMap().firstEntry().getValue();
         ts = ts == null ? EnvironmentEdgeManager.currentTimeMillis() : ts;
-        Cell c = getNewPutCell(orig, origList, ts, KeyValue.Type.Put);
-        Cell empty = getEmptyCell(orig, origList, ts, KeyValue.Type.Put, false);
+        Cell c = getNewPutCell(orig, origList, ts, Cell.Type.Put);
+        Cell empty = getEmptyCell(orig, origList, ts, Cell.Type.Put, false);
         byte[] fam = CellUtil.cloneFamily(origList.get(0));
         List<Cell> famCells = Lists.newArrayList();
         m.getFamilyCellMap().put(fam, famCells);
@@ -659,16 +779,24 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         return m;
     }
 
-    private Cell getEmptyCell(Mutation orig, List<Cell> origList, Long ts, KeyValue.Type type,
+    private Cell getEmptyCell(Mutation orig, List<Cell> origList, Long ts, Cell.Type type,
             boolean verified) {
-        return CellUtil.createCell(orig.getRow(), CellUtil.cloneFamily(origList.get(0)),
+        return getNewCell(orig.getRow(), CellUtil.cloneFamily(origList.get(0)),
                 indexMaintainer.getEmptyKeyValueQualifier(),
-                ts, type.getCode(), verified ? VERIFIED_BYTES : UNVERIFIED_BYTES);
+                ts, type, verified ? VERIFIED_BYTES : UNVERIFIED_BYTES);
     }
 
-    private Cell getNewPutCell(Mutation orig, List<Cell> origList, Long ts, KeyValue.Type type) {
-        return CellUtil.createCell(orig.getRow(),
+    private Cell getNewPutCell(Mutation orig, List<Cell> origList, Long ts, Cell.Type type) {
+        return getNewCell(orig.getRow(),
                 CellUtil.cloneFamily(origList.get(0)), Bytes.toBytes(INCLUDED_COLUMN),
-                ts, type.getCode(), Bytes.toBytes("asdfg"));
+                ts, type, Bytes.toBytes("asdfg"));
+    }
+
+    private Cell getNewCell(byte[] row, byte[] family, byte[] qualifier,
+                            long timestamp, Cell.Type type, byte[] value) {
+      return CellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(row).
+          setFamily(family).setQualifier(qualifier).
+          setTimestamp(timestamp).setType(type).
+          setValue(value).build();
     }
 }
