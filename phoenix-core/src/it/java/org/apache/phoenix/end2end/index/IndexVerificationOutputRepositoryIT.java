@@ -19,8 +19,6 @@ package org.apache.phoenix.end2end.index;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -31,12 +29,15 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,6 +52,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.DEFAULT_LOG_TTL;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.INVALID_ROW;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_AFTER_VALUE;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_BEFORE_VALUE;
@@ -89,21 +93,23 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
             long scanMaxTs = EnvironmentEdgeManager.currentTimeMillis();
             outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs,
                 indexRowTs, expectedErrorMessage, expectedValue, actualValue,
-                scanMaxTs, tableNameBytes, true);
+                scanMaxTs, tableNameBytes, true,
+                INVALID_ROW);
             //now increment the scan time by 1 and do it again
             outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs,
                 indexRowTs, expectedErrorMessage, expectedValue, actualValue,
-                scanMaxTs +1, tableNameBytes, false);
+                scanMaxTs +1, tableNameBytes, false,
+                INVALID_ROW);
             //make sure we only get the first row back
             IndexVerificationOutputRow expectedRow = buildVerificationRow(dataRowKey, indexRowKey, dataRowTs,
                 indexRowTs, expectedErrorMessage, expectedValue, actualValue,
-                scanMaxTs, tableNameBytes, indexNameBytes, PHASE_BEFORE_VALUE);
+                scanMaxTs, tableNameBytes, indexNameBytes, PHASE_BEFORE_VALUE, INVALID_ROW);
             verifyOutputRow(outputRepository, scanMaxTs, indexNameBytes, expectedRow);
             //make sure we get the second row back
             IndexVerificationOutputRow secondExpectedRow = buildVerificationRow(dataRowKey,
                 indexRowKey, dataRowTs,
                 indexRowTs, expectedErrorMessage, expectedValue, actualValue,
-                scanMaxTs + 1, tableNameBytes, indexNameBytes, PHASE_AFTER_VALUE);
+                scanMaxTs + 1, tableNameBytes, indexNameBytes, PHASE_AFTER_VALUE, INVALID_ROW);
             verifyOutputRow(outputRepository, scanMaxTs+1, indexNameBytes, secondExpectedRow);
         }
 
@@ -113,21 +119,25 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
     public void testTTLOnOutputTable() throws SQLException, IOException {
         String mockString = "mock_value";
         byte[] mockStringBytes = Bytes.toBytes(mockString);
+
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(
+                OUTPUT_TABLE_NAME_BYTES);
+
             IndexVerificationOutputRepository
                     outputRepository =
                     new IndexVerificationOutputRepository(mockStringBytes, conn);
+
             outputRepository.createOutputTable(conn);
-            ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
-            customClock.setValue(1);
-            EnvironmentEdgeManager.injectEdge(customClock);
             TestUtil.assertTableHasTtl(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+            ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
+            customClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customClock);
             outputRepository.logToIndexToolOutputTable(mockStringBytes, mockStringBytes,
                     1, 2, mockString, mockStringBytes, mockStringBytes,
-                    EnvironmentEdgeManager.currentTimeMillis(), mockStringBytes, true);
-            Table hTable =
-                conn.unwrap(PhoenixConnection.class).getQueryServices().
-                    getTable(OUTPUT_TABLE_NAME_BYTES);
+                    EnvironmentEdgeManager.currentTimeMillis(), mockStringBytes, true,
+                INVALID_ROW);
+            customClock.incrementValue(1L);
             Assert.assertEquals(1, TestUtil.getRowCount(hTable, false));
 
             customClock.incrementValue(1000*(DEFAULT_LOG_TTL+5));
@@ -145,7 +155,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.BEFORE;
         boolean expectedBefore = false;
         boolean expectedAfter = true;
-        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter, INVALID_ROW);
     }
 
     @Test
@@ -153,7 +163,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.AFTER;
         boolean expectedBefore = true;
         boolean expectedAfter = false;
-        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter, INVALID_ROW);
     }
 
     @Test
@@ -161,7 +171,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.BOTH;
         boolean expectedBefore = false;
         boolean expectedAfter = false;
-        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter, INVALID_ROW);
     }
 
     @Test
@@ -169,16 +179,46 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
         boolean expectedBefore = true;
         boolean expectedAfter = true;
-        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter, INVALID_ROW);
     }
 
-    public void verifyDisableLogging(IndexTool.IndexDisableLoggingType disableLoggingVerifyType, boolean expectedBefore, boolean expectedAfter) throws SQLException, IOException {
+    @Test
+    public void testDisableLoggingBeyondMaxLookback() throws SQLException, IOException {
+        IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
+        boolean expectedBefore = false;
+        boolean expectedAfter = false;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter,
+            BEYOND_MAX_LOOKBACK_INVALID, false);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter,
+            BEYOND_MAX_LOOKBACK_MISSING, false);
+
+        expectedBefore = true;
+        expectedAfter = true;
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter,
+            BEYOND_MAX_LOOKBACK_INVALID, true);
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter,
+            BEYOND_MAX_LOOKBACK_MISSING, true);
+    }
+
+    public void verifyDisableLogging(IndexTool.IndexDisableLoggingType disableLoggingVerifyType,
+                                     boolean expectedBefore, boolean expectedAfter,
+                                     IndexVerificationErrorType errorType) throws SQLException, IOException {
+        verifyDisableLogging(disableLoggingVerifyType, expectedBefore, expectedAfter, errorType,
+            true);
+    }
+
+    public void verifyDisableLogging(IndexTool.IndexDisableLoggingType disableLoggingVerifyType,
+                                     boolean expectedBefore, boolean expectedAfter,
+                                     IndexVerificationErrorType errorType,
+                                     boolean shouldLogBeyondMaxLookback) throws SQLException,
+        IOException {
         Table mockOutputTable = Mockito.mock(Table.class);
         Table mockIndexTable = Mockito.mock(Table.class);
         when(mockIndexTable.getName()).thenReturn(TableName.valueOf("testDisableLoggingIndexName"));
         IndexVerificationOutputRepository outputRepository =
             new IndexVerificationOutputRepository(mockOutputTable,
                 mockIndexTable, disableLoggingVerifyType);
+        outputRepository.setShouldLogBeyondMaxLookback(shouldLogBeyondMaxLookback);
         byte[] dataRowKey = Bytes.toBytes("dataRowKey");
         byte[] indexRowKey = Bytes.toBytes("indexRowKey");
         long dataRowTs = EnvironmentEdgeManager.currentTimeMillis();
@@ -190,9 +230,9 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         byte[] tableName = Bytes.toBytes("testDisableLoggingTableName");
 
         outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs
-            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, true);
+            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, true, errorType);
         outputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs
-            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, false);
+            , errorMsg, expectedValue, actualValue, scanMaxTs, tableName, false, errorType);
         int expectedRowsLogged = 0;
         if (expectedBefore && expectedAfter) {
             expectedRowsLogged = 2;
@@ -220,7 +260,8 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
                                                             long scanMaxTs,
                                                             byte[] tableNameBytes,
                                                             byte[] indexNameBytes,
-                                                            byte[] phaseBeforeValue) {
+                                                            byte[] phaseBeforeValue,
+                                                            IndexVerificationErrorType errorType) {
         IndexVerificationOutputRow.IndexVerificationOutputRowBuilder builder =
             new IndexVerificationOutputRow.IndexVerificationOutputRowBuilder();
         return builder.setDataTableRowKey(dataRowKey).
@@ -237,6 +278,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
             setDataTableName(Bytes.toString(tableNameBytes)).
             setIndexTableName(Bytes.toString(indexNameBytes)).
             setPhaseValue(phaseBeforeValue).
+            setErrorType(errorType).
             build();
     }
 
@@ -277,5 +319,19 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
         conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
             dataTableName + " (val1) include (val2, val3)");
         conn.commit();
+    }
+
+    @After
+    public void dropOutputTable() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Admin admin = queryServices.getAdmin();
+            TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME_BYTES);
+            if (admin.tableExists(outputTableName)) {
+                admin.disableTable(outputTableName);
+                admin.deleteTable(outputTableName);
+            }
+        }
+        EnvironmentEdgeManager.reset();
     }
 }

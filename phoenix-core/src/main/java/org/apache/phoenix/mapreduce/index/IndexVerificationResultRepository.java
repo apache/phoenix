@@ -49,8 +49,8 @@ public class IndexVerificationResultRepository implements AutoCloseable {
 
     public static final String RUN_STATUS_SKIPPED = "Skipped";
     public static final String RUN_STATUS_EXECUTED = "Executed";
-    private Table resultHTable;
-    private Table indexHTable;
+    private Table resultTable;
+    private Table indexTable;
     public static final String ROW_KEY_SEPARATOR = "|";
     public static final byte[] ROW_KEY_SEPARATOR_BYTE = Bytes.toBytes(ROW_KEY_SEPARATOR);
     public final static String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
@@ -95,14 +95,33 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     public final static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT =
         "AfterRebuildInvalidIndexRowCount";
     public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT);
+    public final static String BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT =
+        "BeforeRebuildBeyondMaxLookBackMissingIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT);
+    public final static String BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT =
+        "BeforeRebuildBeyondMaxLookBackInvalidIndexRowCount";
+    public final static byte[] BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT);
+
+    public final static String AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT =
+        "AfterRebuildBeyondMaxLookBackMissingIndexRowCount";
+    public final static byte[] AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT);
+    public final static String AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT =
+        "AfterRebuildBeyondMaxLookBackInvalidIndexRowCount";
+    public final static byte[] AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT);
+
+     public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS = "BeforeRebuildInvalidIndexRowCountCozExtraCells";
+     public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS);
+     public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "BeforeRebuildInvalidIndexRowCountCozMissingCells";
+     public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
+
     public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS = "AfterRebuildInvalidIndexRowCountCozExtraCells";
     public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS);
     public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "AfterRebuildInvalidIndexRowCountCozMissingCells";
     public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
-    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS = "BeforeRebuildInvalidIndexRowCountCozExtraCells";
-    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS);
-    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "BeforeRebuildInvalidIndexRowCountCozMissingCells";
-    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
 
     /***
      * Only usable for read / create methods. To write use setResultTable and setIndexTable first
@@ -112,14 +131,14 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     }
 
     public IndexVerificationResultRepository(Connection conn, byte[] indexNameBytes) throws SQLException {
-        resultHTable = getTable(conn, RESULT_TABLE_NAME_BYTES);
-        indexHTable = getTable(conn, indexNameBytes);
+        resultTable = getTable(conn, RESULT_TABLE_NAME_BYTES);
+        indexTable = getTable(conn, indexNameBytes);
     }
 
     public IndexVerificationResultRepository(byte[] indexName,
                                              HTableFactory hTableFactory) throws IOException {
-        resultHTable = hTableFactory.getTable(new ImmutableBytesPtr(RESULT_TABLE_NAME_BYTES));
-        indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
+        resultTable = hTableFactory.getTable(new ImmutableBytesPtr(RESULT_TABLE_NAME_BYTES));
+        indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
     }
 
     public void createResultTable(Connection connection) throws IOException, SQLException {
@@ -134,7 +153,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 TableDescriptorBuilder.newBuilder(resultTableName).
                     setColumnFamily(columnDescriptor).build();
             admin.createTable(tableDescriptor);
-            resultHTable = admin.getConnection().getTable(resultTableName);
+            resultTable = admin.getConnection().getTable(resultTableName);
         }
     }
     private static byte[] generatePartialResultTableRowKey(long ts, byte[] indexTableName) {
@@ -189,7 +208,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     public void logToIndexToolResultTable(IndexToolVerificationResult verificationResult,
                                           IndexTool.IndexVerifyType verifyType, byte[] region, boolean skipped) throws IOException {
         long scanMaxTs = verificationResult.getScanMaxTs();
-        byte[] rowKey = generateResultTableRowKey(scanMaxTs, indexHTable.getName().toBytes(),
+        byte[] rowKey = generateResultTableRowKey(scanMaxTs, indexTable.getName().toBytes(),
             region, verificationResult.getStartRow(),
             verificationResult.getStopRow());
         Put put = new Put(rowKey);
@@ -209,6 +228,10 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildMissingIndexRowCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildInvalidIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getBefore().getBeyondMaxLookBackMissingIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getBefore().getBeyondMaxLookBackInvalidIndexRowCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getBeforeIndexHasExtraCellsCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES,
@@ -229,12 +252,16 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 Bytes.toBytes(Long.toString(verificationResult.getAfterRebuildMissingIndexRowCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getAfterRebuildInvalidIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getAfter().getBeyondMaxLookBackMissingIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getAfter().getBeyondMaxLookBackInvalidIndexRowCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getAfterIndexHasExtraCellsCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getAfterIndexHasMissingCellsCount())));
         }
-        resultHTable.put(put);
+        resultTable.put(put);
     }
 
     public Table getTable(Connection conn, byte[] tableName) throws SQLException {
@@ -248,8 +275,8 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         byte[] stopRowKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(startRowKey);
         IndexToolVerificationResult verificationResult = new IndexToolVerificationResult(ts);
         Scan scan = new Scan();
-        scan.withStartRow(startRowKey);
-        scan.withStopRow(stopRowKey);
+        scan.setStartRow(startRowKey);
+        scan.setStopRow(stopRowKey);
         return aggregateVerificationResult(htable, verificationResult, scan);
     }
 
@@ -305,27 +332,28 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     }
 
     public void close() throws IOException {
-        if (resultHTable != null) {
-            resultHTable.close();
+        if (resultTable != null) {
+            resultTable.close();
         }
-        if (indexHTable != null) {
-            indexHTable.close();
+        if (indexTable != null) {
+            indexTable.close();
         }
     }
 
     public void setResultTable(Table resultTable) {
-        this.resultHTable = resultTable;
+        this.resultTable = resultTable;
     }
 
     public void setIndexTable(Table indexTable) {
-        this.indexHTable = indexTable;
+        this.indexTable = indexTable;
     }
 
     public IndexToolVerificationResult getVerificationResult(Long ts, Scan scan, Region region, byte[] indexTableName) throws IOException {
         byte [] rowKey = generateResultTableRowKey(ts,
                 indexTableName, region.getRegionInfo().getRegionName(),
                 scan.getStartRow(), scan.getStopRow());
-         return getVerificationResult(resultHTable, rowKey, scan);
+         return getVerificationResult(resultTable, rowKey, scan);
+
     }
 }
 

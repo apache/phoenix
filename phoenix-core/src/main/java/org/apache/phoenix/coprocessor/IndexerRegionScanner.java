@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
@@ -35,11 +36,9 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.KeyValue;
-
-import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
@@ -51,16 +50,20 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
+import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
@@ -78,15 +81,31 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexerRegionScanner.class);
     protected Map<byte[], Put> indexKeyToDataPutMap;
-    protected IndexVerificationResultRepository verificationResultRepository;
+    protected UngroupedAggregateRegionObserver.MutationList mutations;
+    private boolean partialRebuild = false;
+    private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
 
     IndexerRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
-            final RegionCoprocessorEnvironment env) throws IOException {
+                          final RegionCoprocessorEnvironment env,
+                          UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env);
-        indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-        verificationResult = new IndexToolVerificationResult(scan);
-        verificationResultRepository =
-                new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+        pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
+                new ThreadPoolBuilder("IndexVerify",
+                        env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
+                        DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
+                        INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+        this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
+        if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) == null) {
+            partialRebuild = true;
+        }
+        if (verify) {
+            indexKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+            verificationResult = new IndexToolVerificationResult(scan);
+            verificationResultRepository =
+                    new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+        } else {
+            mutations = new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
+        }
     }
 
     @Override
@@ -101,13 +120,16 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     public void close() throws IOException {
         innerScanner.close();
         try {
-            verificationResultRepository.logToIndexToolResultTable(verificationResult,
-                    IndexTool.IndexVerifyType.ONLY, region.getRegionInfo().getRegionName());
+            if (verify) {
+                verificationResultRepository.logToIndexToolResultTable(verificationResult,
+                        IndexTool.IndexVerifyType.ONLY, region.getRegionInfo().getRegionName());
+            }
         } finally {
             this.pool.stop("IndexerRegionScanner is closing");
-            hTableFactory.shutdown();
-            indexHTable.close();
-            verificationResultRepository.close();
+            if (verify) {
+                verificationResultRepository.close();
+            }
+            super.close();
         }
     }
 
@@ -142,6 +164,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                     // get a value back from index if it has already expired between our rebuild and
                     // verify
 
+                    // or if cell timestamp is beyond maxlookback
                     if (isTimestampBeforeTTL(indexTableTTL, currentTime, expectedCell.getTimestamp())) {
                         continue;
                     }
@@ -154,6 +177,12 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                 }
                 // Check all columns
                 if (!CellUtil.matchingValue(actualCell, expectedCell) || actualCell.getTimestamp() != ts) {
+                    if(isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, actualCell.getTimestamp())) {
+                        verificationPhaseResult
+                                .setBeyondMaxLookBackInvalidIndexRowCount(verificationPhaseResult
+                                        .getBeyondMaxLookBackInvalidIndexRowCount()+1);
+                        continue;
+                    }
                     return false;
                 }
                 cellCount++;
@@ -204,12 +233,22 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         }
         // Check if any expected rows from index(which we didn't get) are beyond max look back and have been compacted away
         if (!perTaskDataKeyToDataPutMap.isEmpty()) {
-                verificationPhaseResult.setMissingIndexRowCount(
-                        verificationPhaseResult.getMissingIndexRowCount() + perTaskDataKeyToDataPutMap.size());
+            for (Entry<byte[], Put> entry : perTaskDataKeyToDataPutMap.entrySet()) {
+                Put put = entry.getValue();
+                long ts = getMaxTimestamp(put);
+                long currentTime = EnvironmentEdgeManager.currentTime();
+                if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, ts)) {
+                    verificationPhaseResult.
+                            setBeyondMaxLookBackMissingIndexRowCount(verificationPhaseResult.getBeyondMaxLookBackMissingIndexRowCount() + 1);
+                } else {
+                    verificationPhaseResult.setMissingIndexRowCount(
+                            verificationPhaseResult.getMissingIndexRowCount() + 1);
+                }
+            }
         }
     }
 
-    private void addVerifyTask(final List<KeyRange> keys, final Map<byte[], Put> perTaskDataKeyToDataPutMap,
+    private void addVerifyTask(TaskBatch<Boolean> tasks, final List<KeyRange> keys, final Map<byte[], Put> perTaskDataKeyToDataPutMap,
             final IndexToolVerificationResult.PhaseResult verificationPhaseResult) {
         tasks.add(new Task<Boolean>() {
             @Override
@@ -230,7 +269,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
 
     private void parallelizeIndexVerify(IndexToolVerificationResult.PhaseResult verificationPhaseResult) throws IOException {
         int taskCount = (indexKeyToDataPutMap.size() + rowCountPerTask - 1) / rowCountPerTask;
-        tasks = new TaskBatch<>(taskCount);
+        TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
 
         List<Map<byte[], Put>> dataPutMapList = new ArrayList<>(taskCount);
         List<IndexToolVerificationResult.PhaseResult> verificationPhaseResultList = new ArrayList<>(taskCount);
@@ -247,7 +286,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             keys.add(PVarbinary.INSTANCE.getKeyRange(entry.getKey()));
             perTaskDataKeyToDataPutMap.put(entry.getValue().getRow(), entry.getValue());
             if (keys.size() == rowCountPerTask) {
-                addVerifyTask(keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
+                addVerifyTask(tasks, keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
                 keys = new ArrayList<>(rowCountPerTask);
                 perTaskDataKeyToDataPutMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
                 dataPutMapList.add(perTaskDataKeyToDataPutMap);
@@ -256,7 +295,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             }
         }
         if (keys.size() > 0) {
-            addVerifyTask(keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
+            addVerifyTask(tasks, keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
         }
         Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
         try {
@@ -292,6 +331,26 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         verificationResult.add(nextVerificationResult);
     }
 
+    private void setMutationAttributes(Mutation m, byte[] uuidValue) {
+        m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
+        m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
+        m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
+        // Since we're replaying existing mutations, it makes no sense to write them to the wal
+        m.setDurability(Durability.SKIP_WAL);
+    }
+
+    private byte[] commitIfReady(byte[] uuidValue, UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
+        if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutationList, blockingMemstoreSize);
+            uuidValue = ServerCacheClient.generateId();
+            mutationList.clear();
+        }
+        return uuidValue;
+    }
+
     @Override
     public boolean next(List<Cell> results) throws IOException {
         Cell lastCell = null;
@@ -299,43 +358,79 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         region.startRegionOperation();
         try {
             synchronized (innerScanner) {
+                byte[] uuidValue = ServerCacheClient.generateId();
                 do {
                     List<Cell> row = new ArrayList<>();
                     hasMore = innerScanner.nextRaw(row);
                     if (!row.isEmpty()) {
-                        lastCell = row.get(0);
+                        lastCell = row.get(0); // lastCell is any cell from the last visited row
                         Put put = null;
+                        Delete del = null;
                         for (Cell cell : row) {
-                            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                            if (cell.getType().equals(Cell.Type.Put)) {
+                                if (!partialRebuild && familyMap != null && !isColumnIncluded(cell)) {
+                                    continue;
+                                }
                                 if (put == null) {
                                     put = new Put(CellUtil.cloneRow(cell));
                                 }
                                 put.add(cell);
                             } else {
-                                throw new DoNotRetryIOException("Scan without raw found a deleted cell");
+                                if (del == null) {
+                                    del = new Delete(CellUtil.cloneRow(cell));
+                                }
+                                del.add(cell);
                             }
                         }
+                        if (put == null && del == null) {
+                            continue;
+                        }
+                        if (!verify) {
+                            if (put != null) {
+                                setMutationAttributes(put, uuidValue);
+                                mutations.add(put);
+                            }
+                            if (del != null) {
+                                setMutationAttributes(del, uuidValue);
+                                mutations.add(del);
+                            }
+                            uuidValue = commitIfReady(uuidValue, mutations);
+                        } else {
+                            indexKeyToDataPutMap
+                                    .put(getIndexRowKey(indexMaintainer, put), put);
+                        }
                         rowCount++;
-                        indexKeyToDataPutMap
-                                .put(getIndexRowKey(indexMaintainer, put), put);
+
                     }
                 } while (hasMore && rowCount < pageSizeInRows);
-                verifyIndex();
+                if (verify) {
+                    verifyIndex();
+                } else if (!mutations.isEmpty()) {
+                    ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+                    ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+                    mutations.clear();
+                }
             }
         } catch (IOException e) {
             LOGGER.error(String.format("IOException during rebuilding: %s", Throwables.getStackTraceAsString(e)));
             throw e;
         } finally {
             region.closeRegionOperation();
-            indexKeyToDataPutMap.clear();
+            if (verify) {
+                indexKeyToDataPutMap.clear();
+            } else {
+                mutations.clear();
+            }
         }
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
         final Cell aggKeyValue;
         if (lastCell == null) {
-            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
+                SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes,0, rowCountBytes.length);
         } else {
-            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY,
+            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell),
+                SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         }
         results.add(aggKeyValue);

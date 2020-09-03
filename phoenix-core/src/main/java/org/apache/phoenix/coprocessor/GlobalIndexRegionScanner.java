@@ -19,6 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -31,43 +32,47 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.parallel.TaskRunner;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
-import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.ServerUtil;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
 
-import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 
 public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
 
     public static final String NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY = "index.verify.threads.max";
-    public static final int DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS = 17;
-    public static final String INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY = "index.verify.threads.max";
+    public static final int DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS = 16;
+    public static final String INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY = "index.verify.row.count.per.task";
     public static final int DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK = 2048;
     public static final String NO_EXPECTED_MUTATION = "No expected mutation";
     public static final String ACTUAL_MUTATION_IS_NULL_OR_EMPTY = "actualMutationList is null or empty";
+    public static final String ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK = "Missing index row beyond maxLookBack";
     public static final String ERROR_MESSAGE_MISSING_INDEX_ROW = "Missing index row";
 
     protected long pageSizeInRows = Long.MAX_VALUE;
     protected int rowCountPerTask;
     protected boolean hasMore;
     protected int maxBatchSize;
+    protected final long maxBatchSizeBytes;
+    protected final long blockingMemstoreSize;
+    protected final byte[] clientVersionBytes;
+    protected boolean useProto = true;
     protected byte[] indexMetaData;
     protected Scan scan;
     protected RegionScanner innerScanner;
@@ -75,14 +80,18 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected IndexMaintainer indexMaintainer;
     protected Table indexHTable;
     protected TaskRunner pool;
-    protected TaskBatch<Boolean> tasks;
     protected String exceptionMessage;
     protected HTableFactory hTableFactory;
     protected int indexTableTTL;
-    protected IndexToolVerificationResult verificationResult;
+    protected long maxLookBackInMills;
+    protected IndexToolVerificationResult verificationResult = null;
+    protected IndexVerificationResultRepository verificationResultRepository = null;
+    protected Map<byte[], NavigableSet<byte[]>> familyMap;
+    protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
+    protected boolean verify = false;
 
     public GlobalIndexRegionScanner(RegionScanner innerScanner, final Region region, final Scan scan,
-            final RegionCoprocessorEnvironment env) throws IOException {
+                                    final RegionCoprocessorEnvironment env) throws IOException {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) != null) {
@@ -97,6 +106,14 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+        maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+        blockingMemstoreSize = UngroupedAggregateRegionObserver.getBlockingMemstoreSize(region, config);
+        clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        familyMap = scan.getFamilyMap();
+        if (familyMap.isEmpty()) {
+            familyMap = null;
+        }
         indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
         if (indexMetaData == null) {
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
@@ -106,17 +123,31 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         this.scan = scan;
         this.innerScanner = innerScanner;
         this.region = region;
+        byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
+        if (valueBytes != null) {
+            verifyType = IndexTool.IndexVerifyType.fromValue(valueBytes);
+            if (verifyType != IndexTool.IndexVerifyType.NONE) {
+                verify = true;
+            }
+        }
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
-        pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
-                new ThreadPoolBuilder("IndexVerify",
-                        env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
-                        DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
-                        INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+        indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        maxLookBackInMills = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(config);
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+        if (indexHTable != null) {
+            indexHTable.close();
+        }
+        if (hTableFactory != null) {
+            this.hTableFactory.shutdown();
+        }
     }
 
     public static class SimpleValueGetter implements ValueGetter {
@@ -180,6 +211,14 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return tsToCheck < (currentTime - tableTTL * 1000);
     }
 
+    protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
+            long currentTime, long tsToCheck) {
+        if (!CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
+            return false;
+        }
+        return tsToCheck < (currentTime - maxLookBackInMills);
+    }
+
     protected static long getMaxTimestamp(Pair<Put, Delete> pair) {
         Put put = pair.getFirst();
         long ts1 = 0;
@@ -191,6 +230,19 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (del != null) {
             ts1 = getMaxTimestamp(del);
         }
-        return (ts1 > ts2) ? ts1 : ts2;
+        return Math.max(ts1, ts2);
+    }
+
+    protected boolean isColumnIncluded(Cell cell) {
+        byte[] family = CellUtil.cloneFamily(cell);
+        if (!familyMap.containsKey(family)) {
+            return false;
+        }
+        NavigableSet<byte[]> set = familyMap.get(family);
+        if (set == null || set.isEmpty()) {
+            return true;
+        }
+        byte[] qualifier = CellUtil.cloneQualifier(cell);
+        return set.contains(qualifier);
     }
 }

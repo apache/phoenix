@@ -19,8 +19,6 @@ package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -33,7 +31,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -43,7 +41,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
-import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
@@ -51,16 +48,14 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -71,8 +66,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
-import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 
 /**
  * An MR job to verify that the index table is in sync with the data table.
@@ -124,9 +117,9 @@ public class IndexScrutinyTool extends Configured implements Tool {
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_SCRUTINY_[%s]_[%s]";
 
     @Inject
-    Class<IndexScrutinyMapperForTest> mapperClass = null;
+    Class<? extends IndexScrutinyMapper> mapperClass = null;
 
-    public IndexScrutinyTool(Class<IndexScrutinyMapperForTest> indexScrutinyMapperForTestClass) {
+    public IndexScrutinyTool(Class<? extends IndexScrutinyMapper> indexScrutinyMapperForTestClass) {
         this.mapperClass = indexScrutinyMapperForTestClass;
     }
 
@@ -140,7 +133,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         /**
          * Runs two separate jobs to iterate over both tables
          */
-        BOTH;
+        BOTH
     }
 
     public enum OutputFormat {
@@ -215,19 +208,20 @@ public class IndexScrutinyTool extends Configured implements Tool {
     class JobFactory {
         Connection connection;
         Configuration configuration;
-        private boolean useSnapshot;
-        private long ts;
-        private boolean outputInvalidRows;
-        private OutputFormat outputFormat;
-        private String basePath;
-        private long scrutinyExecuteTime;
-        private long outputMaxRows; // per mapper
-        private String tenantId;
-        Class<IndexScrutinyMapperForTest> mapperClass;
+        private final boolean useSnapshot;
+        private final long ts;
+        private final boolean outputInvalidRows;
+        private final OutputFormat outputFormat;
+        private final String basePath;
+        private final long scrutinyExecuteTime;
+        private final long outputMaxRows; // per mapper
+        private final String tenantId;
+        Class<? extends IndexScrutinyMapper> mapperClass;
 
         public JobFactory(Connection connection, Configuration configuration, long batchSize,
                 boolean useSnapshot, long ts, boolean outputInvalidRows, OutputFormat outputFormat,
-                String basePath, long outputMaxRows, String tenantId, Class<IndexScrutinyMapperForTest> mapperClass) {
+                String basePath, long outputMaxRows, String tenantId,
+                          Class<? extends IndexScrutinyMapper> mapperClass) {
             this.outputInvalidRows = outputInvalidRows;
             this.outputFormat = outputFormat;
             this.basePath = basePath;
@@ -250,7 +244,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         }
 
         public Job createSubmittableJob(String schemaName, String indexTable, String dataTable,
-                SourceTable sourceTable, Class<IndexScrutinyMapperForTest> mapperClass) throws Exception {
+                SourceTable sourceTable, Class<? extends IndexScrutinyMapper> mapperClass) throws Exception {
             Preconditions.checkArgument(SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                     || SourceTable.INDEX_TABLE_SOURCE.equals(sourceTable));
 
@@ -329,6 +323,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
                 CommonFSUtils.setRootDir(configuration, rootDir);
+                Path restoreDir = new Path(CommonFSUtils.getRootDir(configuration), "restore-dir");
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,
@@ -343,7 +338,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
             return configureSubmittableJob(job, outputPath, mapperClass);
         }
 
-        private Job configureSubmittableJob(Job job, Path outputPath, Class<IndexScrutinyMapperForTest> mapperClass) throws Exception {
+        private Job configureSubmittableJob(Job job, Path outputPath, Class<? extends IndexScrutinyMapper> mapperClass) throws Exception {
             Configuration conf = job.getConfiguration();
             conf.setBoolean("mapreduce.job.user.classpath.first", true);
             HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
@@ -421,6 +416,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
                             ? Long.parseLong(cmdLine.getOptionValue(TIMESTAMP.getOpt()))
                             : EnvironmentEdgeManager.currentTimeMillis() - 60000;
 
+            validateTimestamp(configuration, ts);
+
             if (indexTable != null) {
                 if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
                     throw new IllegalArgumentException(String
@@ -445,8 +442,12 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 outputConfiguration.unset(PhoenixRuntime.TENANT_ID_ATTRIB);
                 try (Connection outputConn = ConnectionUtil.getOutputConnection(outputConfiguration)) {
                     outputConn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
+                    outputConn.createStatement().
+                        execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
                     outputConn.createStatement()
                             .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
+                    outputConn.createStatement().
+                        execute(IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
                 }
             }
 
@@ -510,6 +511,18 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 throw new RuntimeException("Failed to close connection");
             }
         }
+    }
+
+    private void validateTimestamp(Configuration configuration, long ts) {
+        long maxLookBackAge = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
+        if (maxLookBackAge != CompatBaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
+            long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
+            if (ts < minTimestamp){
+                throw new IllegalArgumentException("Index scrutiny can't look back past the configured" +
+                    "max lookback age: " + maxLookBackAge / 1000 + " seconds");
+            }
+        }
+
     }
 
     @VisibleForTesting

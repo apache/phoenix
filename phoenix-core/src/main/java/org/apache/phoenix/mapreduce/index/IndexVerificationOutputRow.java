@@ -18,11 +18,13 @@
 package org.apache.phoenix.mapreduce.index;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType;
 
 import java.util.Arrays;
 import java.util.Objects;
 
 public class IndexVerificationOutputRow {
+    public static final String SCAN_MAX_TIMESTAMP = "ScanMaxTimestamp: ";
     private String dataTableName;
     private String indexTableName;
     private Long scanMaxTimestamp;
@@ -34,13 +36,14 @@ public class IndexVerificationOutputRow {
     private byte[] expectedValue;
     private byte[] actualValue;
     private byte[] phaseValue;
+    private IndexVerificationErrorType errorType;
 
     private IndexVerificationOutputRow(String dataTableName, String indexTableName,
                                        byte[] dataTableRowKey, Long scanMaxTimestamp,
                                       byte[] indexTableRowKey,
                                        long dataTableRowTimestamp, long indexTableRowTimestamp,
                                       String errorMessage, byte[] expectedValue, byte[] actualValue,
-                                      byte[] phaseValue) {
+                                      byte[] phaseValue, IndexVerificationErrorType errorType) {
         this.dataTableName = dataTableName;
         this.indexTableName = indexTableName;
         this.scanMaxTimestamp = scanMaxTimestamp;
@@ -52,6 +55,7 @@ public class IndexVerificationOutputRow {
         this.expectedValue = expectedValue;
         this.actualValue = actualValue;
         this.phaseValue = phaseValue;
+        this.errorType = errorType;
     }
 
     public String getDataTableName() {
@@ -118,7 +122,8 @@ public class IndexVerificationOutputRow {
             Objects.equals(errorMessage, otherRow.getErrorMessage()) &&
             Arrays.equals(expectedValue, otherRow.getExpectedValue()) &&
             Arrays.equals(actualValue, otherRow.getActualValue()) &&
-            Arrays.equals(phaseValue, otherRow.getPhaseValue());
+            Arrays.equals(phaseValue, otherRow.getPhaseValue()) &&
+            Objects.equals(errorType, otherRow.getErrorType());
     }
 
     @Override
@@ -130,18 +135,24 @@ public class IndexVerificationOutputRow {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("DataTableName: ").append(dataTableName).append(",");
-        sb.append("IndexTableName: ").append(indexTableName).append(",");
-        sb.append("ScanMaxTimestamp: ").append(scanMaxTimestamp).append(",");
-        sb.append("DataTableRowKey: ").append(Bytes.toString(dataTableRowKey)).append(",");
-        sb.append("IndexTableRowKey: ").append(Bytes.toString(indexTableRowKey)).append(",");
-        sb.append("DataTableRowTimestamp: ").append(dataTableRowTimestamp).append(",");
-        sb.append("IndexTableRowTimestamp: ").append(indexTableRowTimestamp).append(",");
-        sb.append("ErrorMessage: ").append(errorMessage).append(",");
-        sb.append("ExpectedValue: ").append(Bytes.toString(expectedValue)).append(",");
-        sb.append("ActualValue: ").append(Bytes.toString(actualValue)).append(",");
-        sb.append("PhaseValue: ").append(Bytes.toString(phaseValue));
+        sb.append(IndexVerificationOutputRepository.DATA_TABLE_NAME + ": ").append(dataTableName).append(",");
+        sb.append(IndexVerificationOutputRepository.INDEX_TABLE_NAME + ": ").append(indexTableName).append(",");
+        sb.append(SCAN_MAX_TIMESTAMP).append(": ").append(scanMaxTimestamp).append(",");
+        sb.append(IndexVerificationOutputRepository.DATA_TABLE_ROW_KEY + ": ").append(Bytes.toString(dataTableRowKey)).append(",");
+        sb.append(IndexVerificationOutputRepository.INDEX_TABLE_ROW_KEY + ": ").append(Bytes.toString(indexTableRowKey)).append(",");
+        sb.append(IndexVerificationOutputRepository.DATA_TABLE_TS + ": ").append(dataTableRowTimestamp).append(",");
+        sb.append(IndexVerificationOutputRepository.INDEX_TABLE_TS + ": ").append(indexTableRowTimestamp).append(",");
+        sb.append(IndexVerificationOutputRepository.ERROR_MESSAGE + ": ").append(errorMessage).append(",");
+        sb.append(IndexVerificationOutputRepository.EXPECTED_VALUE + ": ").append(Bytes.toString(expectedValue)).append(",");
+        sb.append(IndexVerificationOutputRepository.ACTUAL_VALUE + ": ").append(Bytes.toString(actualValue)).append(
+            ",");
+        sb.append(IndexVerificationOutputRepository.VERIFICATION_PHASE + ": ").append(Bytes.toString(phaseValue));
+        sb.append(IndexVerificationOutputRepository.ERROR_TYPE + ": " ).append(Objects.toString(errorType));
         return sb.toString();
+    }
+
+    public IndexVerificationErrorType getErrorType() {
+        return errorType;
     }
 
     public static class IndexVerificationOutputRowBuilder {
@@ -156,6 +167,7 @@ public class IndexVerificationOutputRow {
         private byte[] expectedValue;
         private byte[] actualValue;
         private byte[] phaseValue;
+        private IndexVerificationErrorType errorType;
 
         public IndexVerificationOutputRowBuilder setDataTableName(String dataTableName) {
             this.dataTableName = dataTableName;
@@ -212,10 +224,15 @@ public class IndexVerificationOutputRow {
             return this;
         }
 
+        public IndexVerificationOutputRowBuilder setErrorType(IndexVerificationErrorType errorType) {
+            this.errorType = errorType;
+            return this;
+        }
+
         public IndexVerificationOutputRow build() {
             return new IndexVerificationOutputRow(dataTableName, indexTableName, dataTableRowKey,
                 scanMaxTimestamp, indexTableRowKey, dataTableRowTimestamp, indexTableRowTimestamp,
-                errorMessage, expectedValue, actualValue, phaseValue);
+                errorMessage, expectedValue, actualValue, phaseValue, errorType);
         }
     }
 }

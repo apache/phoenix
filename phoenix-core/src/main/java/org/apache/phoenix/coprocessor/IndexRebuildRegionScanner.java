@@ -21,33 +21,37 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTE
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.EXTRA_CELLS;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.INVALID_ROW;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.MISSING_ROW;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -60,31 +64,30 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
-import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
+import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
+import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
-import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
-import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.IndexUtil;
@@ -93,93 +96,83 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.Maps;
 
 public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
-    private final long maxBatchSizeBytes;
-    private final long blockingMemstoreSize;
-    private final byte[] clientVersionBytes;
-    private boolean useProto = true;
-    private byte[] indexRowKey;
-    private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
+
+    public static final String PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS =
+        "phoenix.index.mr.log.beyond.max.lookback.errors";
+    public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
+    private static boolean ignoreIndexRebuildForTesting  = false;
+    private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
+
+    public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
+    private byte[] indexRowKeyforReadRepair;
     private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
-    private boolean verify = false;
-    private Map<byte[], List<Mutation>> indexKeyToMutationMap;
-    private Map<byte[], Pair<Put, Delete>> dataKeyToMutationMap;
-    private UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
-    protected UngroupedAggregateRegionObserver.MutationList mutations;
-    private boolean isBeforeRebuilt = true;
-    private boolean partialRebuild = false;
     private int singleRowRebuildReturnCode;
-    private Map<byte[], NavigableSet<byte[]>> familyMap;
     private byte[][] viewConstants;
-    private IndexVerificationOutputRepository verificationOutputRepository;
-    protected IndexVerificationResultRepository verificationResultRepository;
+    private IndexVerificationOutputRepository verificationOutputRepository = null;
     private boolean skipped = false;
     private boolean shouldVerifyCheckDone = false;
+    final private RegionCoprocessorEnvironment env;
+    private byte[][] indexRegionEndKeys;
     private byte[] nextStartKey;
     private boolean hasMoreIncr = false;
     private long minTimestamp = 0;
 
     @VisibleForTesting
     public IndexRebuildRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
-                              final RegionCoprocessorEnvironment env,
-                              UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
+            final RegionCoprocessorEnvironment env,
+            final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env);
-        final Configuration config = env.getConfiguration();
-        if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) == null) {
-            partialRebuild = true;
-        }
-        maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
-        mutations = new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
-        blockingMemstoreSize = UngroupedAggregateRegionObserver.getBlockingMemstoreSize(region, config);
-        clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
-        indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-        if (indexMetaData == null) {
-            useProto = false;
-        }
-        familyMap = scan.getFamilyMap();
-        if (familyMap.isEmpty()) {
-            familyMap = null;
-        }
+        this.env = env;
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
-        indexRowKey = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
-        if (indexRowKey != null) {
+        indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
+        if (indexRowKeyforReadRepair != null) {
             setReturnCodeForSingleRowRebuild();
             pageSizeInRows = 1;
+            return;
         }
-        byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
-        if (valueBytes != null) {
-            verifyType = IndexTool.IndexVerifyType.fromValue(valueBytes);
-            if (verifyType != IndexTool.IndexVerifyType.NONE) {
-                verify = true;
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-                byte[] disableLoggingValueBytes =
-                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
-                if (disableLoggingValueBytes != null) {
-                    disableLoggingVerifyType =
-                        IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
-                }
-                verificationOutputRepository =
-                    new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
-                        , hTableFactory, disableLoggingVerifyType);
-                verificationResult = new IndexToolVerificationResult(scan);
-                verificationResultRepository =
-                    new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
-                indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-                dataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-                pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
-                        new ThreadPoolBuilder("IndexVerify",
-                                env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
-                                DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
-                                INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
-                nextStartKey = null;
-                minTimestamp = scan.getTimeRange().getMin();
+        try(org.apache.hadoop.hbase.client.Connection connection =
+                    HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
+            indexRegionEndKeys = connection.getRegionLocator(indexHTable.getName()).getEndKeys();
+        }
+        pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
+                new ThreadPoolBuilder("IndexVerify",
+                        env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
+                        DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
+                        INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
+
+        if (verify) {
+            boolean shouldLogBeyondMaxLookbackInvalidRows;
+            byte[] scanParamShouldLogBeyondMaxLookbackInvalidRows =
+                scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE);
+            if (scanParamShouldLogBeyondMaxLookbackInvalidRows != null) {
+                shouldLogBeyondMaxLookbackInvalidRows =
+                    Boolean.parseBoolean(Bytes.toString(scanParamShouldLogBeyondMaxLookbackInvalidRows));
+            } else {
+                shouldLogBeyondMaxLookbackInvalidRows =
+                    env.getConfiguration().getBoolean(PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS,
+                    DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS);
             }
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+            byte[] disableLoggingValueBytes =
+                    scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE);
+            if (disableLoggingValueBytes != null) {
+                disableLoggingVerifyType =
+                        IndexTool.IndexDisableLoggingType.fromValue(disableLoggingValueBytes);
+            }
+            verificationOutputRepository =
+                new IndexVerificationOutputRepository(indexMaintainer.getIndexTableName()
+                    , hTableFactory, disableLoggingVerifyType);
+            verificationOutputRepository.setShouldLogBeyondMaxLookback(shouldLogBeyondMaxLookbackInvalidRows);
+            verificationResult = new IndexToolVerificationResult(scan);
+            verificationResultRepository =
+                new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
+            nextStartKey = null;
+            minTimestamp = scan.getTimeRange().getMin();
         }
     }
 
@@ -188,7 +181,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             byte[] indexRowKey, Scan scan, Region region, IndexMaintainer indexMaintainer,
             IndexVerificationResultRepository verificationResultRepository, boolean shouldVerifyCheckDone) throws IOException {
         this.verifyType = verifyType;
-        this.indexRowKey = indexRowKey;
+        this.indexRowKeyforReadRepair = indexRowKey;
         this.scan = scan;
         this.region = region;
         this.indexMaintainer = indexMaintainer;
@@ -198,11 +191,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     private boolean shouldVerify() throws IOException {
-        //In case of read repair, proceed with rebuild
-        //All other types of rebuilds/verification should be incrementally performed if appropriate param is passed
+        // In case of read repair, proceed with rebuild
+        // All other types of rebuilds/verification should be incrementally performed if appropriate param is passed
         byte[] lastVerifyTimeValue = scan.getAttribute(UngroupedAggregateRegionObserver.INDEX_RETRY_VERIFY);
         Long lastVerifyTime = lastVerifyTimeValue == null ? 0 : Bytes.toLong(lastVerifyTimeValue);
-        if(indexRowKey != null || lastVerifyTime == 0 || shouldVerifyCheckDone) {
+        if(indexRowKeyforReadRepair != null || lastVerifyTime == 0 || shouldVerifyCheckDone) {
             return true;
         }
 
@@ -229,7 +222,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 for (Cell cell : row) {
                     put.add(cell);
                 }
-                if (checkIndexRow(indexRowKey, put)) {
+                if (checkIndexRow(indexRowKeyforReadRepair, put)) {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
                 } else {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
@@ -251,44 +244,32 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     @Override
     public void close() throws IOException {
         innerScanner.close();
-        if (verify) {
-            try {
-                if (verificationResultRepository != null) {
-                    verificationResultRepository.logToIndexToolResultTable(verificationResult,
-                        verifyType, region.getRegionInfo().getRegionName(), skipped);
-                }
-            } finally {
-                this.pool.stop("IndexRebuildRegionScanner is closing");
-                hTableFactory.shutdown();
-                indexHTable.close();
-                if (verificationResultRepository != null) {
-                    verificationResultRepository.close();
-                }
-                if (verificationOutputRepository != null) {
-                    verificationOutputRepository.close();
-                }
+        try {
+            if (indexRowKeyforReadRepair != null) {
+                return;
             }
+            if (verify) {
+                try {
+                    if (verificationResultRepository != null) {
+                        verificationResultRepository.logToIndexToolResultTable(verificationResult,
+                            verifyType, region.getRegionInfo().getRegionName(), skipped);
+                    }
+                } finally {
+                    this.pool.stop("IndexRebuildRegionScanner is closing");
+                    if (verificationResultRepository != null) {
+                        verificationResultRepository.close();
+                    }
+                    if (verificationOutputRepository != null) {
+                        verificationOutputRepository.close();
+                    }
+                }
+            } else {
+                this.pool.stop("IndexRebuildRegionScanner is closing");
+            }
+        } finally {
+            super.close();
         }
-    }
 
-    private void setMutationAttributes(Mutation m, byte[] uuidValue) {
-        m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
-        m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
-        m.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, clientVersionBytes);
-        // Since we're replaying existing mutations, it makes no sense to write them to the wal
-        m.setDurability(Durability.SKIP_WAL);
-    }
-
-    private byte[] commitIfReady(byte[] uuidValue, UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
-        if (ServerUtil.readyToCommit(mutationList.size(), mutationList.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutationList, blockingMemstoreSize);
-            uuidValue = ServerCacheClient.generateId();
-            mutationList.clear();
-        }
-        return uuidValue;
     }
 
     @VisibleForTesting
@@ -304,8 +285,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     @VisibleForTesting
-    public int setIndexKeyToMutationMap(Map<byte[], List<Mutation>> newTreeMap) {
-        this.indexKeyToMutationMap = newTreeMap;
+    public long setMaxLookBackInMills(long maxLookBackInMills) {
+        this.maxLookBackInMills = maxLookBackInMills;
         return 0;
     }
 
@@ -319,17 +300,19 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-            String errorMsg) throws IOException {
-        logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs, errorMsg, null, null);
+            String errorMsg, boolean isBeforeRebuild,
+            IndexVerificationOutputRepository.IndexVerificationErrorType errorType) throws IOException {
+        logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs, errorMsg, null,
+            null, isBeforeRebuild, errorType);
     }
 
     @VisibleForTesting
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs, long indexRowTs,
-            String errorMsg, byte[] expectedVaue, byte[] actualValue)
-            throws IOException {
+            String errorMsg, byte[] expectedVaue, byte[] actualValue, boolean isBeforeRebuild,
+                                          IndexVerificationOutputRepository.IndexVerificationErrorType errorType) throws IOException {
         verificationOutputRepository.logToIndexToolOutputTable(dataRowKey, indexRowKey, dataRowTs, indexRowTs,
                 errorMsg, expectedVaue, actualValue, scan.getTimeRange().getMax(),
-                region.getRegionInfo().getTable().getName(), isBeforeRebuilt);
+                region.getRegionInfo().getTable().getName(), isBeforeRebuild, errorType);
     }
 
     private static Cell getCell(Mutation m, byte[] family, byte[] qualifier) {
@@ -345,13 +328,13 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         return null;
     }
 
-    private boolean isMatchingMutation(Mutation expected, Mutation actual, int iteration,  IndexToolVerificationResult.PhaseResult verificationPhaseResult) throws IOException {
+    private void logMismatch(Mutation expected, Mutation actual, int iteration, IndexToolVerificationResult.PhaseResult verificationPhaseResult, boolean isBeforeRebuild) throws IOException {
         if (getTimestamp(expected) != getTimestamp(actual)) {
             String errorMsg = "Not matching timestamp";
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
             logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                    errorMsg, null, null);
-            return false;
+                    errorMsg, null, null, isBeforeRebuild, INVALID_ROW);
+            return;
         }
         int expectedCellCount = 0;
         for (List<Cell> cells : expected.getFamilyCellMap().values()) {
@@ -364,19 +347,21 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = getCell(actual, family, qualifier);
                 if (actualCell == null ||
-                        !CellUtil.matchingType(expectedCell, actualCell)) {
+                        expectedCell.getType().equals(actualCell.getType())) {
                     byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
                     String errorMsg = "Missing cell (in iteration " + iteration + ") " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
-                    logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual), errorMsg);
-                    verificationPhaseResult.setIndexHasMissingCellsCount(verificationPhaseResult.getIndexHasMissingCellsCount()+1);
-                    return false;
+                    logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected),
+                        getTimestamp(actual), errorMsg, isBeforeRebuild, INVALID_ROW);
+                    verificationPhaseResult.setIndexHasMissingCellsCount(verificationPhaseResult.getIndexHasMissingCellsCount() + 1);
+                    return;
                 }
                 if (!CellUtil.matchingValue(actualCell, expectedCell)) {
                     String errorMsg = "Not matching value (in iteration " + iteration + ") for " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
                     byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
                     logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                            errorMsg, CellUtil.cloneValue(expectedCell), CellUtil.cloneValue(actualCell));
-                    return false;
+                            errorMsg, CellUtil.cloneValue(expectedCell),
+                        CellUtil.cloneValue(actualCell), isBeforeRebuild, INVALID_ROW);
+                    return;
                 }
             }
         }
@@ -391,8 +376,42 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             String errorMsg = "Index has extra cells (in iteration " + iteration + ")";
             byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
             logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected), getTimestamp(actual),
-                    errorMsg);
-            verificationPhaseResult.setIndexHasExtraCellsCount(verificationPhaseResult.getIndexHasExtraCellsCount()+1);
+                    errorMsg, isBeforeRebuild, EXTRA_CELLS);
+            verificationPhaseResult.setIndexHasExtraCellsCount(verificationPhaseResult.getIndexHasExtraCellsCount() + 1);
+        }
+    }
+
+    private boolean isMatchingMutation(Mutation expected, Mutation actual) {
+        if (getTimestamp(expected) != getTimestamp(actual)) {
+            return false;
+        }
+        int expectedCellCount = 0;
+        for (List<Cell> cells : expected.getFamilyCellMap().values()) {
+            if (cells == null) {
+                continue;
+            }
+            for (Cell expectedCell : cells) {
+                expectedCellCount++;
+                byte[] family = CellUtil.cloneFamily(expectedCell);
+                byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
+                Cell actualCell = getCell(actual, family, qualifier);
+                if (actualCell == null ||
+                        !expectedCell.getType().equals(actualCell.getType())) {
+                    return false;
+                }
+                if (!CellUtil.matchingValue(actualCell, expectedCell)) {
+                    return false;
+                }
+            }
+        }
+        int actualCellCount = 0;
+        for (List<Cell> cells : actual.getFamilyCellMap().values()) {
+            if (cells == null) {
+                continue;
+            }
+            actualCellCount += cells.size();
+        }
+        if (expectedCellCount != actualCellCount) {
             return false;
         }
         return true;
@@ -440,18 +459,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private boolean isDeleteFamily(Mutation mutation) {
         for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.DeleteFamily) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean isDeleteFamilyVersion(Mutation mutation) {
-        for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
-            for (Cell cell : cells) {
-                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.DeleteFamilyVersion) {
+                if (cell.getType().equals(Cell.Type.DeleteFamily)) {
                     return true;
                 }
             }
@@ -464,7 +472,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : indexRow.rawCells()) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType().equals(Cell.Type.Put)) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -473,37 +481,14 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         return getMutationsWithSameTS(put, del);
     }
 
-    private void updateUnverifiedIndexRowCounters(Put actual,
+    private void updateUnverifiedIndexRowCounters(Put actual, long expectedTs, List<Mutation> oldIndexRowsToBeDeletedList,
                                                   IndexToolVerificationResult.PhaseResult verificationPhaseResult) {
-        // We are given an index row and need to check if this index row is unverified. However, before doing
-        // that we need to check if this index row is the most recent version. To do that, we need to check its data
-        // table row first.
-        // Get the data row key from the index row key
-        byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(actual.getRow()), viewConstants);
-        // Get the data table row mutations using the data row key
-        Pair<Put, Delete> putDeletePair = dataKeyToMutationMap.get(dataKey);
-        Put put = putDeletePair.getFirst();
-        if (put == null) {
-            // The data table row does not exist, so there is nothing to do
-            return;
-        }
-        Delete del = putDeletePair.getSecond();
-        if (del != null && getMaxTimestamp(del) >= getTimestamp(put)) {
-            // The data table row is deleted, i.e., the most recent mutation is delete. So there is nothing to do
-            return;
-        }
-        // Get the index row key from the data table row and check if the given index row has the same row key
-        byte[] indexRowKey = getIndexRowKey(indexMaintainer, put);
-        if (Bytes.compareTo(actual.getRow(), 0, actual.getRow().length,
-                indexRowKey, 0, indexRowKey.length) != 0) {
-            return;
-        }
         // Get the empty column of the given index row
         List<Cell> cellList = actual.get(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 indexMaintainer.getEmptyKeyValueQualifier());
@@ -525,6 +510,13 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         }
         // The empty column value is neither "verified" or "unverified". This must be a row from the old design
         verificationPhaseResult.setOldIndexRowCount(verificationPhaseResult.getOldIndexRowCount() + 1);
+        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
+            long actualTs = getTimestamp(actual);
+            if (actualTs > expectedTs) {
+                oldIndexRowsToBeDeletedList.add(indexMaintainer.buildRowDeleteMutation(actual.getRow(),
+                        IndexMaintainer.DeleteType.SINGLE_VERSION, actualTs));
+            }
+        }
     }
 
     /**
@@ -578,12 +570,12 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         while (iterator.hasNext()) {
             Mutation mutation = iterator.next();
             if ((mutation instanceof Put && !isVerified((Put) mutation)) ||
-                    (mutation instanceof Delete && isDeleteFamilyVersion(mutation))) {
+                    (mutation instanceof Delete && !isDeleteFamily(mutation))) {
                 iterator.remove();
             } else {
-                if (previous != null && getTimestamp(previous) == getTimestamp(mutation) &&
-                        ((previous instanceof Put && mutation instanceof Put) ||
-                                previous instanceof Delete && mutation instanceof Delete)) {
+                if (((previous instanceof Put && mutation instanceof Put) ||
+                                previous instanceof Delete && mutation instanceof Delete) &&
+                        isMatchingMutation(previous, mutation)) {
                     iterator.remove();
                 } else {
                     previous = mutation;
@@ -660,9 +652,12 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
      */
 
     @VisibleForTesting
-    public boolean verifySingleIndexRow(Result indexRow, IndexToolVerificationResult.PhaseResult verificationPhaseResult)
+    public boolean verifySingleIndexRow(Result indexRow, Map<byte[], List<Mutation>> perTaskIndexKeyToMutationMap,
+                                        Set<byte[]> mostRecentIndexRowKeys, List<Mutation> oldIndexRowsToBeDeletedList,
+                                        IndexToolVerificationResult.PhaseResult verificationPhaseResult,
+                                        boolean isBeforeRebuild)
             throws IOException {
-        List<Mutation> expectedMutationList = indexKeyToMutationMap.get(indexRow.getRow());
+        List<Mutation> expectedMutationList = perTaskIndexKeyToMutationMap.get(indexRow.getRow());
         if (expectedMutationList == null) {
             throw new DoNotRetryIOException(NO_EXPECTED_MUTATION);
         }
@@ -672,24 +667,26 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         }
         Collections.sort(expectedMutationList, MUTATION_TS_DESC_COMPARATOR);
         Collections.sort(actualMutationList, MUTATION_TS_DESC_COMPARATOR);
-        if (verifyType == IndexTool.IndexVerifyType.ONLY) {
-            if (actualMutationList.get(0) instanceof Put) {
+        if (isBeforeRebuild) {
+            Mutation m = actualMutationList.get(0);
+            if (m instanceof Put && mostRecentIndexRowKeys.contains(m.getRow())) {
                 // We do check here only the latest version as older versions will always be unverified before
                 // newer versions are inserted.
-                updateUnverifiedIndexRowCounters((Put) actualMutationList.get(0), verificationPhaseResult);
+                updateUnverifiedIndexRowCounters((Put) m, getTimestamp(expectedMutationList.get(0)), oldIndexRowsToBeDeletedList, verificationPhaseResult);
             }
+        }
+        if (verifyType == IndexTool.IndexVerifyType.ONLY) {
             repairActualMutationList(actualMutationList, expectedMutationList);
         }
         cleanUpActualMutationList(actualMutationList);
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         int actualIndex = 0;
         int expectedIndex = 0;
-        int matchingCount = 0;
         int expectedSize = expectedMutationList.size();
         int actualSize = actualMutationList.size();
         Mutation expected = null;
         Mutation previousExpected;
-        Mutation actual;
+        Mutation actual = null;
         while (expectedIndex < expectedSize && actualIndex <actualSize) {
             previousExpected = expected;
             expected = expectedMutationList.get(expectedIndex);
@@ -707,7 +704,8 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 if (previousExpected instanceof Delete) {
                     // Between an expected delete and put, there can be one or more deletes due to
                     // concurrent mutations or data table write failures. Skip all of them if any
-                    while (getTimestamp(actual) > getTimestamp(expected) && (actual instanceof Delete)) {
+                    // There cannot be any actual delete mutation between two expected put mutations.
+                    while (getTimestamp(actual) >= getTimestamp(expected) && actual instanceof Delete) {
                         actualIndex++;
                         if (actualIndex == actualSize) {
                             break;
@@ -721,10 +719,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 if (actual instanceof Delete) {
                     break;
                 }
-                if (isMatchingMutation(expected, actual, expectedIndex, verificationPhaseResult)) {
+                if (isMatchingMutation(expected, actual)) {
                     expectedIndex++;
                     actualIndex++;
-                    matchingCount++;
                     continue;
                 }
             } else { // expected instanceof Delete
@@ -744,122 +741,238 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         (actual instanceof Delete && isDeleteFamily(actual))) {
                     expectedIndex++;
                     actualIndex++;
-                    matchingCount++;
                     continue;
                 }
             }
-            if (matchingCount > 0) {
-                break;
+            break;
+        }
+
+        if (expectedIndex == expectedSize ){
+            // every expected mutation has its matching one in the actual list.
+            verificationPhaseResult.setValidIndexRowCount(verificationPhaseResult.getValidIndexRowCount() + 1);
+            return true;
+        }
+
+        if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, getTimestamp(expectedMutationList.get(expectedIndex)))){
+            if (expectedIndex > 0) {
+                // if current expected index mutation is beyond max look back window, we only need to make sure its latest
+                // mutation is a matching one, as an SCN query is required.
+                verificationPhaseResult.
+                        setValidIndexRowCount(verificationPhaseResult.getValidIndexRowCount() + 1);
+                return true;
+            }
+
+            // All expected mutations are beyond the maxLookBack window, none of them can find its matching one in actual list
+            // It may be caused by real bug or compaction on the index table.
+            // We report it as a failure, so "before" option can trigger the index rebuild for this row.
+            // This repair is required, when there is only one index row for a given data table row and the timestamp of that row
+            // can be beyond maxLookBack.
+            verificationPhaseResult.
+                    setBeyondMaxLookBackInvalidIndexRowCount(verificationPhaseResult.getBeyondMaxLookBackInvalidIndexRowCount() + 1);
+            byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
+            String errorMsg = String.format("Expect %1$s mutations but got %2$s (beyond maxLookBack)",
+                    expectedSize,
+                    actualSize);
+            logToIndexToolOutputTable(dataKey, indexRow.getRow(),
+                    getTimestamp(expectedMutationList.get(expectedIndex)),
+                    0, errorMsg, isBeforeRebuild, BEYOND_MAX_LOOKBACK_INVALID);
+            return false;
+        }
+        else {
+            if (actualIndex < actualSize && actual instanceof Put  &&  expected instanceof Put){
+                logMismatch(expected, actual, expectedIndex, verificationPhaseResult, isBeforeRebuild);
+            }
+            else {
+                byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
+                String errorMsg = "Not matching index row";
+                logToIndexToolOutputTable(dataKey, indexRow.getRow(),
+                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg, isBeforeRebuild,
+                    INVALID_ROW);
             }
             verificationPhaseResult.setInvalidIndexRowCount(verificationPhaseResult.getInvalidIndexRowCount() + 1);
             return false;
         }
-        if ((expectedIndex != expectedSize) || actualIndex != actualSize) {
-            if (matchingCount > 0) {
-                if (verifyType != IndexTool.IndexVerifyType.ONLY) {
-                    // We do not consider this as a verification issue but log it for further information.
-                    // This may happen due to compaction
-                    byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
-                    String errorMsg = "Expected to find " + expectedMutationList.size() + " mutations but got "
-                            + actualMutationList.size();
-                    logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                            getTimestamp(expectedMutationList.get(0)),
-                            getTimestamp(actualMutationList.get(0)), errorMsg);
-                }
-            } else {
-                byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
-                String errorMsg = "Not matching index row";
-                logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg);
-                verificationPhaseResult.setInvalidIndexRowCount(verificationPhaseResult.getInvalidIndexRowCount() + 1);
-                return false;
-            }
-        }
-        verificationPhaseResult.setValidIndexRowCount(verificationPhaseResult.getValidIndexRowCount() + 1);
-        return true;
     }
 
-    private void verifyIndexRows(List<KeyRange> keys,
-            IndexToolVerificationResult.PhaseResult verificationPhaseResult) throws IOException {
-        List<KeyRange> invalidKeys = new ArrayList<>();
+    private void verifyIndexRows(Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                 Set<byte[]> mostRecentIndexRowKeys, List<Mutation> oldIndexRowsToBeDeletedList,
+                                 IndexToolVerificationResult.PhaseResult verificationPhaseResult,
+                                 boolean isBeforeRebuild) throws IOException {
+        List<KeyRange> keys = new LinkedList<KeyRange>();
+        for (byte[] indexKey: indexKeyToMutationMap.keySet()) {
+            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
+        }
+        Map<byte[], List<Mutation>> invalidIndexRows = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
-        /*
-        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
-        */
+        boolean useSkipScanFilter = HbaseCompatCapabilities.isRawFilterSupported();
+        if (useSkipScanFilter) {
+            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+            indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+        }
+
         indexScan.setRaw(true);
-        indexScan.setMaxVersions();
+        indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
         try (ResultScanner resultScanner = indexHTable.getScanner(indexScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
                 ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-                KeyRange keyRange = PVarbinary.INSTANCE.getKeyRange(result.getRow());
-                if (!keys.contains(keyRange)) {
-                    continue;
+                //if we couldn't use skip scan filter, we're scanning through a mix of rows we
+                //want to verify and those we don't, so we have to check first
+                if (!useSkipScanFilter) {
+                    KeyRange keyRange = PVarbinary.INSTANCE.getKeyRange(result.getRow());
+                    if (!keys.remove(keyRange)) {
+                        continue;
+                    }
                 }
-                if (!verifySingleIndexRow(result, verificationPhaseResult)) {
-                    invalidKeys.add(keyRange);
+                if (!verifySingleIndexRow(result, indexKeyToMutationMap, mostRecentIndexRowKeys, oldIndexRowsToBeDeletedList,
+                        verificationPhaseResult, isBeforeRebuild)) {
+                    invalidIndexRows.put(result.getRow(), indexKeyToMutationMap.get(result.getRow()));
                 }
-                keys.remove(keyRange);
+                indexKeyToMutationMap.remove(result.getRow());
             }
         } catch (Throwable t) {
             ServerUtil.throwIOException(indexHTable.getName().toString(), t);
         }
+        List<byte[]> expiredIndexRows = new ArrayList<>();
         // Check if any expected rows from index(which we didn't get) are already expired due to TTL
         // TODO: metrics for expired rows
-        if (!keys.isEmpty()) {
-            Iterator<KeyRange> itr = keys.iterator();
-            long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-            while(itr.hasNext()) {
-                KeyRange keyRange = itr.next();
-                byte[] key = keyRange.getLowerRange();
-                List<Mutation> mutationList = indexKeyToMutationMap.get(key);
-                if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(mutationList.get(mutationList.size() - 1)))) {
-                    itr.remove();
-                    verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
-                }
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        for (Map.Entry<byte[], List<Mutation>> entry: indexKeyToMutationMap.entrySet()) {
+            List<Mutation> mutationList = entry.getValue();
+            if (isTimestampBeforeTTL(indexTableTTL, currentTime, getTimestamp(mutationList.get(mutationList.size() - 1)))) {
+                verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount() + 1);
+                expiredIndexRows.add(entry.getKey());
             }
         }
-        if (keys.size() > 0) {
-            for (KeyRange keyRange : keys) {
-                String errorMsg = "Missing index row";
-                byte[] key = keyRange.getLowerRange();
-                List<Mutation> mutationList = indexKeyToMutationMap.get(key);
-                if (mutationList.get(mutationList.size() - 1) instanceof Delete) {
-                    continue;
-                }
-                byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(keyRange.getLowerRange()), viewConstants);
-                logToIndexToolOutputTable(dataKey,
-                        keyRange.getLowerRange(),
-                        getMaxTimestamp(dataKeyToMutationMap.get(dataKey)),
-                        getTimestamp(mutationList.get(mutationList.size() - 1)), errorMsg);
+        // Remove the expired rows from indexKeyToMutationMap
+        for (byte[] indexKey : expiredIndexRows) {
+            indexKeyToMutationMap.remove(indexKey);
+        }
+        // Count and log missing rows
+        for (Map.Entry<byte[], List<Mutation>> entry: indexKeyToMutationMap.entrySet()) {
+            byte[] indexKey = entry.getKey();
+            List<Mutation> mutationList = entry.getValue();
+            Mutation mutation = mutationList.get(mutationList.size() - 1);
+            if (mutation instanceof Delete) {
+                continue;
+            }
+            currentTime = EnvironmentEdgeManager.currentTimeMillis();
+            String errorMsg;
+            IndexVerificationOutputRepository.IndexVerificationErrorType errorType;
+            if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, getTimestamp(mutation))){
+                errorMsg = ERROR_MESSAGE_MISSING_INDEX_ROW_BEYOND_MAX_LOOKBACK;
+                errorType = BEYOND_MAX_LOOKBACK_MISSING;
+                verificationPhaseResult.
+                        setBeyondMaxLookBackMissingIndexRowCount(verificationPhaseResult.getBeyondMaxLookBackMissingIndexRowCount() + 1);
+            }
+            else {
+                errorMsg = ERROR_MESSAGE_MISSING_INDEX_ROW;
+                errorType = MISSING_ROW;
                 verificationPhaseResult.setMissingIndexRowCount(verificationPhaseResult.getMissingIndexRowCount() + 1);
             }
+            byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexKey), viewConstants);
+            logToIndexToolOutputTable(dataKey, indexKey, getTimestamp(mutation), 0, errorMsg,
+                isBeforeRebuild, errorType);
         }
-        keys.addAll(invalidKeys);
+        // Leave the invalid and missing rows in indexKeyToMutationMap
+        indexKeyToMutationMap.putAll(invalidIndexRows);
     }
 
-    private boolean isTimestampBeforeTTL(long currentTime, long tsToCheck) {
-        if (indexTableTTL == HConstants.FOREVER) {
-            return false;
+    private void rebuildIndexRows(Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                  List<Mutation> oldIndexRowsToBeDeletedList,
+                                  IndexToolVerificationResult verificationResult) throws IOException {
+        if (ignoreIndexRebuildForTesting) {
+            return;
         }
-        return tsToCheck < (currentTime - (long) indexTableTTL * 1000);
+        try {
+            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+            int batchSize = 0;
+            List<Mutation> indexUpdates = new ArrayList<>(maxBatchSize);
+            for (List<Mutation> mutationList : indexKeyToMutationMap.values()) {
+                indexUpdates.addAll(mutationList);
+                batchSize += mutationList.size();
+                if (batchSize >= maxBatchSize) {
+                    Object[] results = new Object[batchSize];
+                    indexHTable.batch(indexUpdates, results);
+                    batchSize = 0;
+                    indexUpdates = new ArrayList<>(maxBatchSize);
+                }
+            }
+            if (batchSize > 0) {
+                Object[] results = new Object[batchSize];
+                indexHTable.batch(indexUpdates, results);
+            }
+            batchSize = 0;
+            indexUpdates = new ArrayList<>(maxBatchSize);
+            for (Mutation mutation : oldIndexRowsToBeDeletedList) {
+                indexUpdates.add(mutation);
+                batchSize ++;
+                if (batchSize >= maxBatchSize) {
+                    Object[] results = new Object[batchSize];
+                    indexHTable.batch(indexUpdates, results);
+                    batchSize = 0;
+                    indexUpdates = new ArrayList<>(maxBatchSize);
+                }
+            }
+            if (batchSize > 0) {
+                Object[] results = new Object[batchSize];
+                ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+                indexHTable.batch(indexUpdates, results);
+            }
+            if (verify) {
+                verificationResult.setRebuiltIndexRowCount(verificationResult.getRebuiltIndexRowCount() + indexKeyToMutationMap.size());
+            }
+            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(indexHTable.getName().toString(), t);
+        }
     }
 
-    private void addVerifyTask(final List<KeyRange> keys,
-                               final IndexToolVerificationResult.PhaseResult verificationPhaseResult) {
+    private void rebuildAndOrVerifyIndexRows(Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                             Set<byte[]> mostRecentIndexRowKeys,
+                                             IndexToolVerificationResult verificationResult) throws IOException {
+        List<Mutation> oldIndexRowsToBeDeletedList = new ArrayList<>();
+        if (verifyType == IndexTool.IndexVerifyType.NONE) {
+            rebuildIndexRows(indexKeyToMutationMap, oldIndexRowsToBeDeletedList, verificationResult);
+        } else if (verifyType == IndexTool.IndexVerifyType.ONLY) {
+            verifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, Collections.EMPTY_LIST, verificationResult.getBefore(), true);
+        } else if (verifyType == IndexTool.IndexVerifyType.BEFORE) {
+            verifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, oldIndexRowsToBeDeletedList, verificationResult.getBefore(), true);
+            if (!indexKeyToMutationMap.isEmpty() || !oldIndexRowsToBeDeletedList.isEmpty()) {
+                rebuildIndexRows(indexKeyToMutationMap, oldIndexRowsToBeDeletedList, verificationResult);
+            }
+        } else if (verifyType == IndexTool.IndexVerifyType.AFTER) {
+            rebuildIndexRows(indexKeyToMutationMap, Collections.EMPTY_LIST, verificationResult);
+            verifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, Collections.EMPTY_LIST, verificationResult.getAfter(), false);
+        } else { // verifyType == IndexTool.IndexVerifyType.BOTH
+            verifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, oldIndexRowsToBeDeletedList, verificationResult.getBefore(), true);
+            if (!indexKeyToMutationMap.isEmpty() || !oldIndexRowsToBeDeletedList.isEmpty()) {
+                rebuildIndexRows(indexKeyToMutationMap, oldIndexRowsToBeDeletedList, verificationResult);
+            }
+            if (!indexKeyToMutationMap.isEmpty()) {
+                verifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, Collections.EMPTY_LIST, verificationResult.getAfter(), false);
+            }
+        }
+    }
+
+    private void addRebuildAndOrVerifyTask(TaskBatch<Boolean> tasks,
+                                           final Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                           final Set<byte[]> mostRecentIndexRowKeys,
+                                           final IndexToolVerificationResult verificationResult) {
         tasks.add(new Task<Boolean>() {
             @Override
             public Boolean call() throws Exception {
                 try {
+                    //in HBase 1.x we could check if the coproc environment was closed or aborted,
+                    //but in HBase 2.x the coproc environment can't check region server services
                     if (Thread.currentThread().isInterrupted()) {
-                        exceptionMessage = "Pool closed, not attempting to verify index rows! " + indexHTable.getName();
+                        exceptionMessage = "Pool closed, not attempting to rebuild and/or verify index rows! " + indexHTable.getName();
                         throw new IOException(exceptionMessage);
                     }
-                    verifyIndexRows(keys, verificationPhaseResult);
+                    rebuildAndOrVerifyIndexRows(indexKeyToMutationMap, mostRecentIndexRowKeys, verificationResult);
                 } catch (Exception e) {
                     throw e;
                 }
@@ -868,31 +981,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         });
     }
 
-    private void parallelizeIndexVerify(IndexToolVerificationResult.PhaseResult verificationPhaseResult) throws IOException {
-        int taskCount = (indexKeyToMutationMap.size() + rowCountPerTask - 1) / rowCountPerTask;
-        tasks = new TaskBatch<>(taskCount);
-        List<List<KeyRange>> listOfKeyRangeList = new ArrayList<>(taskCount);
-        List<IndexToolVerificationResult.PhaseResult> verificationPhaseResultList = new ArrayList<>(taskCount);
-        List<KeyRange> keys = new ArrayList<>(rowCountPerTask);
-        listOfKeyRangeList.add(keys);
-        IndexToolVerificationResult.PhaseResult perTaskVerificationPhaseResult = new IndexToolVerificationResult.PhaseResult();
-        verificationPhaseResultList.add(perTaskVerificationPhaseResult);
-        for (byte[] indexKey: indexKeyToMutationMap.keySet()) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
-            if (keys.size() == rowCountPerTask) {
-                addVerifyTask(keys, perTaskVerificationPhaseResult);
-                keys = new ArrayList<>(rowCountPerTask);
-                listOfKeyRangeList.add(keys);
-                perTaskVerificationPhaseResult = new IndexToolVerificationResult.PhaseResult();
-                verificationPhaseResultList.add(perTaskVerificationPhaseResult);
-            }
-        }
-        if (keys.size() > 0) {
-            addVerifyTask(keys, perTaskVerificationPhaseResult);
-        }
+    private void submitTasks(TaskBatch<Boolean> tasks) throws IOException{
         Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
         try {
-            LOGGER.debug("Waiting on index verify tasks to complete...");
+            LOGGER.debug("Waiting on index verify and/or rebuild tasks to complete...");
             resultsAndFutures = this.pool.submitUninterruptible(tasks);
         } catch (ExecutionException e) {
             throw new RuntimeException("Should not fail on the results while using a WaitForCompletionTaskRunner", e);
@@ -908,111 +1000,58 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             }
             index++;
         }
-        for (IndexToolVerificationResult.PhaseResult result : verificationPhaseResultList) {
-            verificationPhaseResult.add(result);
-        }
-        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
-            Map<byte[], Pair<Put, Delete>> newDataKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-            for (List<KeyRange> keyRangeList : listOfKeyRangeList) {
-                for (KeyRange keyRange : keyRangeList) {
-                    byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(keyRange.getLowerRange()), viewConstants);
-                    newDataKeyToMutationMap.put(dataKey, dataKeyToMutationMap.get(dataKey));
-                }
-            }
-            dataKeyToMutationMap.clear();
-            dataKeyToMutationMap = newDataKeyToMutationMap;
-        }
     }
 
-    private void rebuildIndexRows(UngroupedAggregateRegionObserver.MutationList mutationList) throws IOException {
-        byte[] uuidValue = ServerCacheClient.generateId();
-        UngroupedAggregateRegionObserver.MutationList currentMutationList =
-                new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);
-        Put put = null;
-        for (Mutation mutation : mutationList) {
-            if (mutation instanceof Put) {
-                if (put != null) {
-                    // back to back put, i.e., no delete in between. we can commit the previous put
-                    uuidValue = commitIfReady(uuidValue, currentMutationList);
+    public static List<Map<byte[], List<Mutation>>> getPerTaskIndexKeyToMutationMaps(
+            TreeMap<byte[], List<Mutation>> indexKeyToMutationMap, byte[][] endKeys, int maxMapSize) {
+        List<Map<byte[], List<Mutation>>> mapList = new ArrayList<>();
+        int regionCount = endKeys.length;
+        int regionIndex = 0;
+        byte[] indexKey = indexKeyToMutationMap.firstKey();
+        Map<byte[], List<Mutation>> perTaskIndexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        mapList.add(perTaskIndexKeyToMutationMap);
+        // Find the region including the first index key
+        while (regionIndex < regionCount - 1 && Bytes.BYTES_COMPARATOR.compare(indexKey, endKeys[regionIndex]) > 0) {
+            regionIndex++;
+        }
+        for (Map.Entry<byte[], List<Mutation>> entry: indexKeyToMutationMap.entrySet()) {
+            indexKey = entry.getKey();
+            if (perTaskIndexKeyToMutationMap.size() == maxMapSize ||
+                    (regionIndex < regionCount - 1 && Bytes.BYTES_COMPARATOR.compare(indexKey, endKeys[regionIndex]) > 0)) {
+                perTaskIndexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+                mapList.add(perTaskIndexKeyToMutationMap);
+                // Find the region including indexKey
+                while (regionIndex < regionCount - 1 && Bytes.BYTES_COMPARATOR.compare(indexKey, endKeys[regionIndex]) > 0) {
+                    regionIndex++;
                 }
-                currentMutationList.add(mutation);
-                setMutationAttributes(mutation, uuidValue);
-                put = (Put)mutation;
-            } else {
-                currentMutationList.add(mutation);
-                setMutationAttributes(mutation, uuidValue);
-                uuidValue = commitIfReady(uuidValue, currentMutationList);
-                put = null;
             }
+            perTaskIndexKeyToMutationMap.put(indexKey, entry.getValue());
         }
-        if (!currentMutationList.isEmpty()) {
-            ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-            ungroupedAggregateRegionObserver.commitBatchWithRetries(region, currentMutationList, blockingMemstoreSize);
-        }
+        return mapList;
     }
 
-    private void verifyAndOrRebuildIndex() throws IOException {
-        isBeforeRebuilt = true;
-        IndexToolVerificationResult nextVerificationResult = new IndexToolVerificationResult(scan);
-        nextVerificationResult.setScannedDataRowCount(dataKeyToMutationMap.size());
-        if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.NONE) {
-            // For these options we start with rebuilding index rows
-            rebuildIndexRows(mutations);
-            nextVerificationResult.setRebuiltIndexRowCount(dataKeyToMutationMap.size());
-            isBeforeRebuilt = false;
-        }
-        if (verifyType == IndexTool.IndexVerifyType.NONE) {
+    private void verifyAndOrRebuildIndex(Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                         Set<byte[]> mostRecentIndexRowKeys) throws IOException {
+        if (indexKeyToMutationMap.size() == 0) {
             return;
         }
-        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH ||
-                verifyType == IndexTool.IndexVerifyType.ONLY) {
-            IndexToolVerificationResult.PhaseResult verificationPhaseResult = new IndexToolVerificationResult.PhaseResult();
-            // For these options we start with verifying index rows
-            parallelizeIndexVerify(verificationPhaseResult);
-            nextVerificationResult.getBefore().add(verificationPhaseResult);
+        List<Map<byte[], List<Mutation>>> mapList =
+            getPerTaskIndexKeyToMutationMaps((TreeMap<byte[], List<Mutation>>)indexKeyToMutationMap,
+                indexRegionEndKeys, rowCountPerTask);
+        int taskCount = mapList.size();
+        TaskBatch<Boolean> tasks = new TaskBatch<>(taskCount);
+        List<IndexToolVerificationResult> verificationResultList = new ArrayList<>(taskCount);
+        for (int i = 0; i < taskCount; i++) {
+            IndexToolVerificationResult perTaskVerificationResult = new IndexToolVerificationResult(scan);
+            verificationResultList.add(perTaskVerificationResult);
+            addRebuildAndOrVerifyTask(tasks, mapList.get(i), mostRecentIndexRowKeys, perTaskVerificationResult);
         }
-        if (verifyType == IndexTool.IndexVerifyType.BEFORE || verifyType == IndexTool.IndexVerifyType.BOTH) {
-            // For these options, we have identified the rows to be rebuilt and now need to rebuild them
-            // At this point, dataKeyToDataPutMap includes mapping only for the rows to be rebuilt
-            mutations.clear();
-
-            for (Map.Entry<byte[], Pair<Put, Delete>> entry: dataKeyToMutationMap.entrySet()) {
-                if (entry.getValue().getFirst() != null) {
-                    mutations.add(entry.getValue().getFirst());
-                }
-                if (entry.getValue().getSecond() != null) {
-                    mutations.add(entry.getValue().getSecond());
-                }
+        submitTasks(tasks);
+        if (verify) {
+            for (IndexToolVerificationResult result : verificationResultList) {
+                verificationResult.add(result);
             }
-            rebuildIndexRows(mutations);
-            nextVerificationResult.setRebuiltIndexRowCount(nextVerificationResult.getRebuiltIndexRowCount() + dataKeyToMutationMap.size());
-            isBeforeRebuilt = false;
         }
-
-        if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.BOTH) {
-            // We have rebuilt index row and now we need to verify them
-            IndexToolVerificationResult.PhaseResult verificationPhaseResult = new IndexToolVerificationResult.PhaseResult();
-            indexKeyToMutationMap.clear();
-            for (Map.Entry<byte[], Pair<Put, Delete>> entry: dataKeyToMutationMap.entrySet()) {
-                prepareIndexMutations(entry.getValue().getFirst(), entry.getValue().getSecond());
-            }
-            parallelizeIndexVerify(verificationPhaseResult);
-            nextVerificationResult.getAfter().add(verificationPhaseResult);
-        }
-        verificationResult.add(nextVerificationResult);
-    }
-
-    private boolean isColumnIncluded(Cell cell) {
-        byte[] family = CellUtil.cloneFamily(cell);
-        if (!familyMap.containsKey(family)) {
-            return false;
-        }
-        NavigableSet<byte[]> set = familyMap.get(family);
-        if (set == null || set.isEmpty()) {
-            return true;
-        }
-        byte[] qualifier = CellUtil.cloneQualifier(cell);
-        return set.contains(qualifier);
     }
 
     /**
@@ -1056,7 +1095,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     private static Put prepareIndexPutForRebuid(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
-                                                ValueGetter mergedRowVG, long ts)
+            ValueGetter mergedRowVG, long ts)
             throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 mergedRowVG, rowKeyPtr, ts, null, null);
@@ -1112,17 +1151,17 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     private static void applyDeleteOnPut(Delete del, Put put) throws IOException {
         for (List<Cell> cells : del.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                switch ((KeyValue.Type.codeToType(cell.getTypeByte()))) {
-                    case DeleteFamily:
-                        put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
-                        break;
-                    case DeleteColumn:
-                        removeColumn(put, cell);
-                        break;
-                    default:
-                        // We do not expect this can happen
-                        throw new DoNotRetryIOException("Single version delete marker in data mutation " +
-                                del);
+                switch (cell.getType()) {
+                case DeleteFamily:
+                    put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
+                    break;
+                case DeleteColumn:
+                    removeColumn(put, cell);
+                    break;
+                default:
+                    // We do not expect this can happen
+                    throw new DoNotRetryIOException("Single version delete marker in data mutation " +
+                            del);
                 }
             }
         }
@@ -1136,7 +1175,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
      * after put.
      */
     public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
-                                                                 Put dataPut, Delete dataDel) throws IOException {
+            Put dataPut, Delete dataDel) throws IOException {
         List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
         List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
         // The row key ptr of the data table row for which we will build index rows here
@@ -1169,7 +1208,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                                 }
                             }
                         } else {
-                            /**
+                            /*
                              * When the mutation is empty after the delete mutation is applied, we should
                              * reuse the logical of applying a delete mutation on currentDataRowState.
                              */
@@ -1237,12 +1276,24 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     }
 
     @VisibleForTesting
-    public int prepareIndexMutations(Put put, Delete del) throws IOException {
+    public int prepareIndexMutations(Put put, Delete del, Map<byte[], List<Mutation>> indexKeyToMutationMap,
+                                     Set<byte[]> mostRecentIndexRowKeys) throws IOException {
         List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
+        boolean mostRecentDone = false;
+        // Do not populate mostRecentIndexRowKeys when verifyType is NONE or AFTER
+        if (verifyType == IndexTool.IndexVerifyType.NONE || verifyType == IndexTool.IndexVerifyType.AFTER) {
+            mostRecentDone = true;
+        }
         for (Mutation mutation : indexMutations) {
             byte[] indexRowKey = mutation.getRow();
             List<Mutation> mutationList = indexKeyToMutationMap.get(indexRowKey);
             if (mutationList == null) {
+                if (!mostRecentDone) {
+                    if (mutation instanceof Put) {
+                        mostRecentIndexRowKeys.add(indexRowKey);
+                        mostRecentDone = true;
+                    }
+                }
                 mutationList = new ArrayList<>();
                 mutationList.add(mutation);
                 indexKeyToMutationMap.put(indexRowKey, mutationList);
@@ -1250,26 +1301,29 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 mutationList.add(mutation);
             }
         }
-        return 0;
+        return indexMutations.size();
     }
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-        if (indexRowKey != null &&
+        if (indexRowKeyforReadRepair != null &&
                 singleRowRebuildReturnCode == GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue()) {
             byte[] rowCountBytes =
                     PLong.INSTANCE.toBytes(Long.valueOf(singleRowRebuildReturnCode));
-            final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+            final Cell aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
+                SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
             results.add(aggKeyValue);
             return false;
         }
+        Map<byte[], List<Mutation>> indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        Set<byte[]> mostRecentIndexRowKeys = new TreeSet<>(Bytes.BYTES_COMPARATOR);
         Cell lastCell = null;
-        int rowCount = 0;
+        int dataRowCount = 0;
+        int indexMutationCount = 0;
         region.startRegionOperation();
         RegionScanner localScanner = null;
         try {
-            byte[] uuidValue = ServerCacheClient.generateId();
             localScanner = getLocalScanner();
             if (localScanner == null) {
                 return false;
@@ -1280,21 +1334,21 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                     return false;
                 }
                 do {
-                    /**
+                    /*
                         If region is closing and there are large number of rows being verified/rebuilt with IndexTool,
                         not having this check will impact/delay the region closing -- affecting the availability
                         as this method holds the read lock on the region.
                     * */
                     ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-                    List<Cell> row = new ArrayList<Cell>();
+                    List<Cell> row = new ArrayList<>();
                     hasMore = localScanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         lastCell = row.get(0); // lastCell is any cell from the last visited row
                         Put put = null;
                         Delete del = null;
                         for (Cell cell : row) {
-                            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
-                                if (!partialRebuild && familyMap != null && !isColumnIncluded(cell)) {
+                            if (cell.getType().equals(Cell.Type.Put)) {
+                                if (familyMap != null && !isColumnIncluded(cell)) {
                                     continue;
                                 }
                                 if (put == null) {
@@ -1305,43 +1359,26 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                                 if (del == null) {
                                     del = new Delete(CellUtil.cloneRow(cell));
                                 }
-                                del.addDeleteMarker(cell);
+                                del.add(cell);
                             }
                         }
                         if (put == null && del == null) {
                             continue;
                         }
-                        // Always add the put first and then delete for a given row. This simplifies the logic in
-                        // IndexRegionObserver
-                        if (put != null) {
-                            mutations.add(put);
-                        }
-                        if (del != null) {
-                            mutations.add(del);
-                        }
-                        if (!verify) {
-                            if (put != null) {
-                                setMutationAttributes(put, uuidValue);
-                            }
-                            if (del != null) {
-                                setMutationAttributes(del, uuidValue);
-                            }
-                            uuidValue = commitIfReady(uuidValue, mutations);
-                        } else {
-                            byte[] dataKey = (put != null) ? put.getRow() : del.getRow();
-                            prepareIndexMutations(put, del);
-                            dataKeyToMutationMap.put(dataKey, new Pair<Put, Delete>(put, del));
-                        }
-                        rowCount++;
+                        indexMutationCount += prepareIndexMutations(put, del, indexKeyToMutationMap, mostRecentIndexRowKeys);
+                        dataRowCount++;
                     }
-                } while (hasMore && rowCount < pageSizeInRows);
-                if (!mutations.isEmpty()) {
-                    if (verify) {
-                        verifyAndOrRebuildIndex();
+                } while (hasMore && indexMutationCount < pageSizeInRows
+                        && dataRowCount < pageSizeInRows);
+                if (!indexKeyToMutationMap.isEmpty()) {
+                    if (indexRowKeyforReadRepair != null) {
+                        rebuildIndexRows(indexKeyToMutationMap, Collections.EMPTY_LIST, verificationResult);
                     } else {
-                        ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-                        ungroupedAggregateRegionObserver.commitBatchWithRetries(region, mutations, blockingMemstoreSize);
+                        verifyAndOrRebuildIndex(indexKeyToMutationMap, mostRecentIndexRowKeys);
                     }
+                }
+                if (verify) {
+                    verificationResult.setScannedDataRowCount(verificationResult.getScannedDataRowCount() + dataRowCount);
                 }
             }
         } catch (Throwable e) {
@@ -1350,28 +1387,25 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             throw e;
         } finally {
             region.closeRegionOperation();
-            mutations.clear();
-            if (verify) {
-              dataKeyToMutationMap.clear();
-              indexKeyToMutationMap.clear();
-            }
             if (localScanner!=null && localScanner!=innerScanner) {
                 localScanner.close();
             }
         }
-        if (indexRowKey != null) {
-            rowCount = singleRowRebuildReturnCode;
+        if (indexRowKeyforReadRepair != null) {
+            dataRowCount = singleRowRebuildReturnCode;
         }
         if (minTimestamp != 0) {
             nextStartKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(CellUtil.cloneRow(lastCell));
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(dataRowCount));
         final Cell aggKeyValue;
         if (lastCell == null) {
-            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
+                SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         } else {
-            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY,
+            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell),
+                SINGLE_COLUMN_FAMILY,
                     SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         }
         results.add(aggKeyValue);
@@ -1382,11 +1416,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         // override the filter to skip scan and open new scanner
         // when lower bound of timerange is passed or newStartKey was populated
         // from previous call to next()
-        if (minTimestamp != 0) {
+        if(minTimestamp!= 0) {
             Scan incrScan = new Scan(scan);
             incrScan.setTimeRange(minTimestamp, scan.getTimeRange().getMax());
             incrScan.setRaw(true);
-            incrScan.setMaxVersions();
+            incrScan.readAllVersions();
             incrScan.getFamilyMap().clear();
             incrScan.setCacheBlocks(false);
             for (byte[] family : scan.getFamilyMap().keySet()) {
@@ -1401,11 +1435,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 // Override the filter so that we get all versions
                 incrScan.setFilter(new AllVersionsIndexRebuildFilter(scan.getFilter()));
             }
-            if (nextStartKey != null) {
-                incrScan.setStartRow(nextStartKey);
+            if(nextStartKey != null) {
+                incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try (RegionScanner scanner = region.getScanner(incrScan)) {
+            try(RegionScanner scanner = region.getScanner(incrScan)) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range
