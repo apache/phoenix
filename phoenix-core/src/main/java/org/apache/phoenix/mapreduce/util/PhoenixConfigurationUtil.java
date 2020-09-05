@@ -39,7 +39,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
@@ -809,10 +808,8 @@ public final class PhoenixConfigurationUtil {
 					if (tenantId != null) {
 						tenantId = null;
 					} else {
-						BaseResultIterators.LOGGER.warn(
-								"Unable to find parent table \"" + parentTableName + "\" of table \""
-										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",
-								e);
+						LOGGER.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
+										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",e);
 					}
 				}
 		    }
