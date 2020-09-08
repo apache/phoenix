@@ -17,15 +17,16 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.joda.time.DateTime;
 
 /**
- * Floor function that rounds up the {@link DateTime} to start of week. 
+ * Floor function that rounds up the {@link Date} to start of week.
  */
-public class FloorWeekExpression extends RoundJodaDateExpression {
+public class FloorWeekExpression extends RoundJavaDateExpression {
 
     public FloorWeekExpression() {
         super();
@@ -36,8 +37,7 @@ public class FloorWeekExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime datetime) {
-        return datetime.weekOfWeekyear().roundFloorCopy().getMillis();
+    public long roundDateTime(Date dateTime) {
+        return dateTime.getTime() - dateTime.getTime() % week - correction;
     }
-
 }

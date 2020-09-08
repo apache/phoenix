@@ -18,6 +18,8 @@
 package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -28,7 +30,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
 
 /**
  * 
@@ -57,8 +58,10 @@ public class YearFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime);
-        int year = dt.getYear();
+        Date dt = new Date(dateTime);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(dt);
+        int year = calendar.get(Calendar.YEAR);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(year, byteValue, 0);

@@ -18,36 +18,36 @@ package org.apache.phoenix.cache;
 import static org.junit.Assert.assertNotNull;
 
 import java.nio.ByteBuffer;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.joda.time.DateTimeZone;
 import org.junit.Test;
 
-public class JodaTimezoneCacheTest {
+public class TimezoneGetterTest {
 
     @Test
     public void testGetInstanceByteBufferUTC() {
-        DateTimeZone instance = JodaTimezoneCache.getInstance(ByteBuffer.wrap(Bytes.toBytes("UTC")));
+        TimeZone instance = TimezoneGetter.getInstance(ByteBuffer.wrap(Bytes.toBytes("UTC")));
         assertNotNull(instance);
     }
 
     @Test
     public void testGetInstanceString() {
-        DateTimeZone instance = JodaTimezoneCache.getInstance("America/St_Vincent");
+        TimeZone instance = TimezoneGetter.getInstance("America/St_Vincent");
         assertNotNull(instance);
     }
 
     @Test(expected = IllegalDataException.class)
     public void testGetInstanceStringUnknown() {
-        JodaTimezoneCache.getInstance("SOME_UNKNOWN_TIMEZONE");
+        TimezoneGetter.getInstance("SOME_UNKNOWN_TIMEZONE");
     }
 
     @Test
     public void testGetInstanceImmutableBytesWritable() {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(Bytes.toBytes("Europe/Isle_of_Man"));
-        DateTimeZone instance = JodaTimezoneCache.getInstance(ptr);
+        TimeZone instance = TimezoneGetter.getInstance(ptr);
         assertNotNull(instance);
     }
 }

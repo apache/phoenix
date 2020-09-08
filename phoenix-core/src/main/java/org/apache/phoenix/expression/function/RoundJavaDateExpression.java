@@ -17,26 +17,39 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.Date;
-import java.util.List;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.joda.time.DateTime;
-import org.joda.time.chrono.ISOChronology;
+
+import java.sql.Date;
+import java.util.Calendar;
+import java.util.List;
 
 /**
  * 
- * Base class for functions that use joda time. 
+ * Base class for functions that use java time.
  * Used primarily by FLOOR , ROUND and CEIL on the time units WEEK,MONTH and YEAR. 
  */
-public abstract class RoundJodaDateExpression extends RoundDateExpression{
+public abstract class RoundJavaDateExpression extends RoundDateExpression{
 
-    public RoundJodaDateExpression(){}
-    
-    public RoundJodaDateExpression(List<Expression> children) {
+    protected static long week;
+    protected static long correction;
+    {
+        java.util.Date zeroDay = new java.util.Date(0);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(zeroDay);
+        calendar.add(Calendar.DAY_OF_YEAR, 7);
+        week = calendar.getTimeInMillis();
+
+        calendar.set(Calendar.DAY_OF_YEAR, 4);
+        correction = calendar.getTimeInMillis();
+        // because the first day according to start of the timestamp was thursday
+    }
+
+    public RoundJavaDateExpression(){}
+
+    public RoundJavaDateExpression(List<Expression> children) {
        super(children);
     }
 
@@ -48,7 +61,7 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            DateTime dt = new DateTime(time,ISOChronology.getInstanceUTC());
+            java.util.Date dt = new java.util.Date(time);
             long value = roundDateTime(dt);
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
@@ -62,5 +75,5 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
      * @param dateTime
      * @return Time in millis.
      */
-    public abstract long roundDateTime(DateTime dateTime);
+    public abstract long roundDateTime(java.util.Date dateTime);
 }
