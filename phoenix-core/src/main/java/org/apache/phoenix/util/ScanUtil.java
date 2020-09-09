@@ -406,12 +406,9 @@ public class ScanUtil {
              *    for the same reason. However, if the type is variable width
              *    continue building the key because null values will be filtered
              *    since our separator byte will be appended and incremented.
-             * 3) if the range includes everything as we cannot add any more useful
-             *    information to the key after that.
              */
             lastUnboundUpper = false;
-            if (  range.isUnbound(bound) &&
-                ( bound == Bound.UPPER || isFixedWidth || range == KeyRange.EVERYTHING_RANGE) ){
+            if (range.isUnbound(bound) && (bound == Bound.UPPER || isFixedWidth)) {
                 lastUnboundUpper = (bound == Bound.UPPER);
                 break;
             }

@@ -137,11 +137,45 @@ public class SkipScanFilterTest extends TestCase {
                                              QueryConstants.SEPARATOR_BYTE_ARRAY,
                                              Bytes.toBytes("1") ), 
                             ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
-                                            Bytes.toBytes("b") )),
+                                            Bytes.toBytes("b"),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("1") )),
                 new Include(ByteUtil.concat(Bytes.toBytes("f"),QueryConstants.SEPARATOR_BYTE_ARRAY, 
                                             Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY,
                                             QueryConstants.SEPARATOR_BYTE_ARRAY,
                                             Bytes.toBytes("1") ) ) )
+        );
+        testCases.addAll(
+                foreach(new KeyRange[][]{{
+                                PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("2018-02-10"), true, Bytes.toBytes("2019-02-19"), true),
+                        },
+                        {
+                                PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("channel"), true, Bytes.toBytes("channel"), true),
+                        },
+                        {
+                                PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
+                        },
+                        {
+                                KeyRange.EVERYTHING_RANGE,
+                        },
+                        {
+                                KeyRange.EVERYTHING_RANGE,
+                        },
+                        {
+                                PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("A004"), true, Bytes.toBytes("A004"), true),
+                        },
+                },
+                new int[] {0, 0, 1, 0, 0, 0, 0, 0},
+                null,
+                new SeekNext(
+                        ByteUtil.concat(Bytes.toBytes("2018-02-14"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("channel"),
+                                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("2")),
+                        ByteUtil.concat(Bytes.toBytes("2018-02-14"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("channel"),
+                                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("2"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY,
+                                Bytes.toBytes("A004"))),
+                new Include(ByteUtil.concat(Bytes.toBytes("2018-02-15"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("channel"),
+                        QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("2"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        Bytes.toBytes("A004")))
+                )
         );
         testCases.addAll(
                 foreach(new KeyRange[][]{{
