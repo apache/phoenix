@@ -422,6 +422,42 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testCoveredColumnForSingleCellArray() throws Exception {
+        if (localIndex || transactionProvider != null || tableDDLOptions.contains("COLUMN_ENCODED_BYTES=0")) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+
+            String tableName = "TBL_" + generateUniqueName();
+            String indexName = "IND_" + generateUniqueName();
+            String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+            String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+            TABLE_NAME = fullTableName;
+            int numRows = 1;
+            createAndPopulateTableAndIndexForConsistentIndex(conn, fullTableName, fullIndexName,
+                    numRows, SINGLE_CELL_ARRAY_WITH_OFFSETS.toString());
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullIndexName);
+            assertTrue(rs.next());
+            // Table has 6 PK fields
+            // (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
+            // Index has 2 pk and 2 covered col
+            // (long_pk, varchar_pk) INCLUDE (long_col1, long_col2)
+            assertEquals("1", rs.getString(1));
+            assertEquals("varchar1", rs.getString(2));
+            assertEquals("char1", rs.getString(3));
+            assertEquals("1", rs.getString(4));
+            assertEquals("1", rs.getString(5));
+            assertEquals("2015-01-01 00:00:00.000", rs.getString(6));
+            assertEquals(2, rs.getLong(7));
+            assertEquals(3, rs.getLong(8));
+        }
+    }
+
     public static class DeleteFailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws

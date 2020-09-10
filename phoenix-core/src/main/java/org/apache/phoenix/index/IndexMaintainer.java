@@ -398,7 +398,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // null check for b/w compatibility
         this.encodingScheme = index.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : index.getEncodingScheme();
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
-        
+
         byte[] indexTableName = index.getPhysicalName().getBytes();
         // Use this for the nDataSaltBuckets as we need this for local indexes
         // TODO: persist nDataSaltBuckets separately, but maintain b/w compat.
@@ -1030,35 +1030,43 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
                     ColumnReference indexColRef = colRefPair.getFirst();
                     ColumnReference dataColRef = colRefPair.getSecond();
-                    Expression expression = new SingleCellColumnExpression(new PDatum() {
-                        @Override
-                        public boolean isNullable() {
-                            return false;
+
+                    byte[] value = null;
+                    if (this.immutableRows) {
+                        // This is the old behavior where both table and index are SINGLE_CELL and the datatable is immutable.
+                        // Below code parses the datatable single-cell row to get the value
+                        Expression expression = new SingleCellColumnExpression(new PDatum() {
+                            @Override public boolean isNullable() {
+                                return false;
+                            }
+
+                            @Override public SortOrder getSortOrder() {
+                                return null;
+                            }
+
+                            @Override public Integer getScale() {
+                                return null;
+                            }
+
+                            @Override public Integer getMaxLength() {
+                                return null;
+                            }
+
+                            @Override public PDataType getDataType() {
+                                return null;
+                            }
+                        }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme,
+                                immutableStorageScheme);
+                        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                        expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                        value = ptr.copyBytesIfNecessary();
+                    } else {
+                        // For mutable data tables SINGLE_CELL is not supported.
+                        ImmutableBytesWritable dataValue = valueGetter.getLatestValue(dataColRef, ts);
+                        if (dataValue != null && dataValue != ValueGetter.HIDDEN_BY_DELETE) {
+                            value = dataValue.copyBytes();
                         }
-                        
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public Integer getScale() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public Integer getMaxLength() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public PDataType getDataType() {
-                            return null;
-                        }
-                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme, immutableStorageScheme);
-                    ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-                    expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
-                    byte[] value = ptr.copyBytesIfNecessary();
+                    }
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
                         colValues[indexArrayPos] = new LiteralExpression(value);
@@ -1941,5 +1949,5 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public ImmutableStorageScheme getIndexStorageScheme() {
         return immutableStorageScheme;
     }
-    
+
 }
