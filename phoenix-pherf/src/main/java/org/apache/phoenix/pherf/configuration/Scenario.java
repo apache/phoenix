@@ -36,15 +36,19 @@ public class Scenario {
     private String tableName;
     private int rowCount;
     private Map<String, String> phoenixProperties;
+    private WriteParams writeParams = null;
     private DataOverride dataOverride;
     private List<QuerySet> querySet = new ArrayList<>();
-    private WriteParams writeParams = null;
+    private List<Upsert> upsertSet = new ArrayList<>();
+    private List<Noop> noops = new ArrayList<>();
+    private List<UserDefined> udfs = new ArrayList<>();
+    private LoadProfile loadProfile = null;
+
     private String name;
     private String tenantId;
     private List<Ddl> preScenarioDdls;
     private List<Ddl> postScenarioDdls;
-    
-   
+
     public Scenario() {
     }
 
@@ -194,6 +198,7 @@ public class Scenario {
         this.writeParams = writeParams;
     }
 
+
     @Override
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
@@ -232,4 +237,43 @@ public class Scenario {
 	public void setPostScenarioDdls(List<Ddl> postScenarioDdls) {
 		this.postScenarioDdls = postScenarioDdls;
 	}
+
+    public List<Upsert> getUpsert() {
+        return upsertSet;
+    }
+
+    @XmlElementWrapper(name = "upserts")
+    @XmlElement(name = "upsert")
+    public void setUpsert(List<Upsert> upsertSet) {
+        this.upsertSet = upsertSet;
+    }
+
+    public List<Noop> getNoop() {
+        return noops;
+    }
+
+    @XmlElementWrapper(name = "noops")
+    @XmlElement(name = "noop")
+    public void setNoop(List<Noop> noops) {
+        this.noops = noops;
+    }
+
+    public List<UserDefined> getUdf() {
+        return udfs;
+    }
+
+    @XmlElementWrapper(name = "ufds")
+    @XmlElement(name = "udf")
+    public void setUdf(List<UserDefined> udfs) {
+        this.udfs = udfs;
+    }
+
+
+    public LoadProfile getLoadProfile() {
+        return loadProfile;
+    }
+
+    public void setLoadProfile(LoadProfile loadProfile) {
+        this.loadProfile = loadProfile;
+    }
 }
