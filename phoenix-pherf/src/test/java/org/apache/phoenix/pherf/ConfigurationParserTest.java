@@ -24,7 +24,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
+import com.google.common.collect.Sets;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.junit.Test;
@@ -43,7 +45,8 @@ public class ConfigurationParserTest extends ResultBaseTest {
     @Test
     public void testReadWriteWorkloadReader() throws Exception {
         String scenarioName = "testScenarioRW";
-        List<Scenario> scenarioList = getScenarios();
+        String testResourceName = "/scenario/test_scenario.xml";
+        List<Scenario> scenarioList = getScenarios(testResourceName);
         Scenario target = null;
         for (Scenario scenario : scenarioList) {
             if (scenarioName.equals(scenario.getName())) {
@@ -64,10 +67,10 @@ public class ConfigurationParserTest extends ResultBaseTest {
     // TODO Break this into multiple smaller tests.
     public void testConfigReader() {
         try {
-
+            String testResourceName = "/scenario/test_scenario.xml";
             LOGGER.debug("DataModel: " + writeXML());
-            List<Scenario> scenarioList = getScenarios();
-            List<Column> dataMappingColumns = getDataModel().getDataMappingColumns();
+            List<Scenario> scenarioList = getScenarios(testResourceName);
+            List<Column> dataMappingColumns = getDataModel(testResourceName).getDataMappingColumns();
             assertTrue("Could not load the data columns from xml.",
                     (dataMappingColumns != null) && (dataMappingColumns.size() > 0));
             assertTrue("Could not load the data DataValue list from xml.",
@@ -122,22 +125,61 @@ public class ConfigurationParserTest extends ResultBaseTest {
         }
     }
 
-    private URL getResourceUrl() {
-        URL resourceUrl = getClass().getResource("/scenario/test_scenario.xml");
+    @Test
+    public void testWorkloadWithLoadProfile() throws Exception {
+        String testResourceName = "/scenario/test_scenario_with_load_profile.xml";
+        Set<String> scenarioNames = Sets.newHashSet("scenario_11", "scenario_12");
+        List<Scenario> scenarioList = getScenarios(testResourceName);
+        Scenario target = null;
+        for (Scenario scenario : scenarioList) {
+            if (scenarioNames.contains(scenario.getName())) {
+                target = scenario;
+            }
+            assertNotNull("Could not find scenario: " + scenario.getName(), target);
+        }
+
+        Scenario testScenarioWithLoadProfile = scenarioList.get(0);
+        LoadProfile loadProfile = testScenarioWithLoadProfile.getLoadProfile();
+        assertTrue("batch size not as expected: ",
+                loadProfile.getBatchSize() == 1);
+        assertTrue("num operations not as expected: ",
+                loadProfile.getNumOperations() == 1000);
+        assertTrue("tenant group size is not as expected: ",
+                loadProfile.getTenantDistribution().size() == 3);
+        assertTrue("operation group size is not as expected: ",
+                loadProfile.getOpDistribution().size() == 5);
+        assertTrue("UDFs size is not as expected  ",
+                testScenarioWithLoadProfile.getUdf().size() == 1);
+        assertNotNull("UDFs clazzName cannot be null ",
+                testScenarioWithLoadProfile.getUdf().get(0).getClazzName());
+        assertTrue("UDFs args size is not as expected  ",
+                testScenarioWithLoadProfile.getUdf().get(0).getArgs().size() == 2);
+        assertTrue("UpsertSet size is not as expected ",
+                testScenarioWithLoadProfile.getUpsert().size() == 1);
+        assertTrue("#Column within the first upsert is not as expected ",
+                testScenarioWithLoadProfile.getUpsert().get(0).getColumn().size() == 7);
+        assertTrue("QuerySet size is not as expected ",
+                testScenarioWithLoadProfile.getQuerySet().size() == 1);
+        assertTrue("#Queries within the first querySet is not as expected ",
+                testScenarioWithLoadProfile.getQuerySet().get(0).getQuery().size() == 2);
+    }
+
+    private URL getResourceUrl(String resourceName) {
+        URL resourceUrl = getClass().getResource(resourceName);
         assertNotNull("Test data XML file is missing", resourceUrl);
         return resourceUrl;
     }
 
-    private List<Scenario> getScenarios() throws Exception {
-        DataModel data = getDataModel();
+    private List<Scenario> getScenarios(String resourceName) throws Exception {
+        DataModel data = getDataModel(resourceName);
         List<Scenario> scenarioList = data.getScenarios();
         assertTrue("Could not load the scenarios from xml.",
                 (scenarioList != null) && (scenarioList.size() > 0));
         return scenarioList;
     }
 
-    private DataModel getDataModel() throws Exception {
-        Path resourcePath = Paths.get(getResourceUrl().toURI());
+    private DataModel getDataModel(String resourceName) throws Exception {
+        Path resourcePath = Paths.get(getResourceUrl(resourceName).toURI());
         return XMLConfigParser.readDataModel(resourcePath);
     }
 
