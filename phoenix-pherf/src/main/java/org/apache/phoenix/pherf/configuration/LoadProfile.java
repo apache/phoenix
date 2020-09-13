@@ -18,20 +18,21 @@
 
 package org.apache.phoenix.pherf.configuration;
 
-import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlType;
 import java.util.List;
 
 @XmlType
 public class LoadProfile {
+    public static int MIN_BATCH_SIZE = 1;
 
     private int batchSize;
-    private int numOperations;
+    private long numOperations;
     List<TenantGroup> tenantDistribution;
     List<OperationGroup> opDistribution;
 
     public LoadProfile() {
-        this.batchSize = Integer.MIN_VALUE;
+        this.batchSize = MIN_BATCH_SIZE;
+        this.numOperations = Long.MAX_VALUE;
     }
 
     public int getBatchSize() {
@@ -42,11 +43,11 @@ public class LoadProfile {
         this.batchSize = batchSize;
     }
 
-    public int getNumOperations() {
+    public long getNumOperations() {
         return numOperations;
     }
 
-    public void setNumOperations(int numOperations) {
+    public void setNumOperations(long numOperations) {
         this.numOperations = numOperations;
     }
 
