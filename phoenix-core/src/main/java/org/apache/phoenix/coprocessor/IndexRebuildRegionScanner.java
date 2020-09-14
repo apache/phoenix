@@ -111,7 +111,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
     private byte[] indexRowKeyforReadRepair;
     private IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
-    private int singleRowRebuildReturnCode;
     private byte[][] viewConstants;
     private IndexVerificationOutputRepository verificationOutputRepository = null;
     private boolean skipped = false;
@@ -131,7 +130,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKeyforReadRepair != null) {
-            setReturnCodeForSingleRowRebuild();
             pageSizeInRows = 1;
             return;
         }
@@ -206,29 +204,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         }
         shouldVerifyCheckDone = true;
         return verificationResultTemp == null;
-    }
-
-    private void setReturnCodeForSingleRowRebuild() throws IOException {
-        try (RegionScanner scanner = region.getScanner(scan)) {
-            List<Cell> row = new ArrayList<>();
-            scanner.next(row);
-            // Check if the data table row we have just scanned matches with the index row key.
-            // If not, there is no need to build the index row from this data table row,
-            // and just return zero row count.
-            if (row.isEmpty()) {
-                singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue();
-            } else {
-                Put put = new Put(CellUtil.cloneRow(row.get(0)));
-                for (Cell cell : row) {
-                    put.add(cell);
-                }
-                if (checkIndexRow(indexRowKeyforReadRepair, put)) {
-                    singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
-                } else {
-                    singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
-                }
-            }
-        }
     }
 
     @Override
@@ -1159,10 +1134,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
      * This list is sorted in ascending order by the tuple of row key, timestamp and mutation type where delete comes
      * after put.
      */
-    public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
-            Put dataPut, Delete dataDel) throws IOException {
+    public static Put prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
+            Put dataPut, Delete dataDel, List<Mutation> indexMutations) throws IOException {
         List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
-        List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
         // The row key ptr of the data table row for which we will build index rows here
         ImmutableBytesPtr rowKeyPtr = (dataPut != null) ? new ImmutableBytesPtr(dataPut.getRow()) :
                 new ImmutableBytesPtr(dataDel.getRow());
@@ -1257,13 +1231,15 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 }
             }
         }
-        return indexMutations;
+        return currentDataRowState;
     }
+
 
     @VisibleForTesting
     public int prepareIndexMutations(Put put, Delete del, Map<byte[], List<Mutation>> indexKeyToMutationMap,
                                      Set<byte[]> mostRecentIndexRowKeys) throws IOException {
-        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
+        List<Mutation> indexMutations = new ArrayList<>();
+        prepareIndexMutationsForRebuild(indexMaintainer, put, del, indexMutations);
         boolean mostRecentDone = false;
         // Do not populate mostRecentIndexRowKeys when verifyType is NONE or AFTER
         if (verifyType == IndexTool.IndexVerifyType.NONE || verifyType == IndexTool.IndexVerifyType.AFTER) {
@@ -1289,17 +1265,25 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         return indexMutations.size();
     }
 
+    public Put prepareIndexMutationsForReadRepair(Put put, Delete del, Map<byte[], List<Mutation>> indexKeyToMutationMap) throws IOException {
+        List<Mutation> indexMutations = new ArrayList<>();
+        Put currentRowState = prepareIndexMutationsForRebuild(indexMaintainer, put, del, indexMutations);
+        for (Mutation mutation : indexMutations) {
+            byte[] indexRowKey = mutation.getRow();
+            List<Mutation> mutationList = indexKeyToMutationMap.get(indexRowKey);
+            if (mutationList == null) {
+                mutationList = new ArrayList<>();
+                mutationList.add(mutation);
+                indexKeyToMutationMap.put(indexRowKey, mutationList);
+            } else {
+                mutationList.add(mutation);
+            }
+        }
+        return currentRowState;
+    }
+
     @Override
     public boolean next(List<Cell> results) throws IOException {
-        if (indexRowKeyforReadRepair != null &&
-                singleRowRebuildReturnCode == GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue()) {
-            byte[] rowCountBytes =
-                    PLong.INSTANCE.toBytes(Long.valueOf(singleRowRebuildReturnCode));
-            final Cell aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
-                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
-            results.add(aggKeyValue);
-            return false;
-        }
         Map<byte[], List<Mutation>> indexKeyToMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         Set<byte[]> mostRecentIndexRowKeys = new TreeSet<>(Bytes.BYTES_COMPARATOR);
         Cell lastCell = null;
@@ -1349,7 +1333,22 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         if (put == null && del == null) {
                             continue;
                         }
-                        indexMutationCount += prepareIndexMutations(put, del, indexKeyToMutationMap, mostRecentIndexRowKeys);
+                        if (indexRowKeyforReadRepair != null) {
+                            Put currentDataRowState = prepareIndexMutationsForReadRepair(put, del, indexKeyToMutationMap);
+                            if (currentDataRowState != null) {
+                                if (checkIndexRow(indexRowKeyforReadRepair, currentDataRowState)) {
+                                    dataRowCount =  GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
+                                } else {
+                                    dataRowCount =  GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
+                                }
+                            } else {
+                                dataRowCount = 0;
+                            }
+                            hasMore = false;
+                            break;
+                        } else {
+                            indexMutationCount += prepareIndexMutations(put, del, indexKeyToMutationMap, mostRecentIndexRowKeys);
+                        }
                         dataRowCount++;
                     }
                 } while (hasMore && indexMutationCount < pageSizeInRows
@@ -1374,9 +1373,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (localScanner!=null && localScanner!=innerScanner) {
                 localScanner.close();
             }
-        }
-        if (indexRowKeyforReadRepair != null) {
-            dataRowCount = singleRowRebuildReturnCode;
         }
         if (minTimestamp != 0) {
             nextStartKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(lastCell.getRow());

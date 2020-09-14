@@ -133,10 +133,10 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 1,
                 Bytes.toBytes("v2"));
         addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 1);
-
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
-                null);
+                null, actualIndexMutations);
 
         // Expect one row of index with row key "v1_k1"
         Put idxPut1 = new Put(generateIndexRowKey("v1"));
@@ -166,9 +166,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("v2"));
         addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 1);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                null);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, null, actualIndexMutations);
 
         // Expect one row of index with row key "_k1", as indexed column C1 is nullable.
         Put idxPut1 = new Put(generateIndexRowKey(null));
@@ -212,10 +212,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteColumn);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
-
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
         List<Mutation> expectedIndexMutation = new ArrayList<>();
 
         // generate the index row key "v1_k1"
@@ -278,9 +277,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteColumn);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
@@ -338,9 +337,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 3,
                 KeyValue.Type.DeleteFamily);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
@@ -406,9 +405,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 1,
                 KeyValue.Type.DeleteColumn);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
 
@@ -458,10 +457,11 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteFamily);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
                 info.indexMaintainer,
                 dataPut,
-                dataDel);
+                dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
         byte[] idxKeyBytes = generateIndexRowKey("v2");
@@ -522,10 +522,11 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteFamily);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
                 info.indexMaintainer,
                 dataPut,
-                dataDel);
+                dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
         byte[] idxKeyBytes = generateIndexRowKey("v2");
@@ -579,9 +580,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteColumn);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutations = new ArrayList<>();
         byte[] idxKeyBytes = generateIndexRowKey("v1");
@@ -655,9 +656,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 2,
                 KeyValue.Type.DeleteColumn);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                dataDel);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, dataDel, actualIndexMutations);
 
         List<Mutation> expectedIndexMutation = new ArrayList<>();
 
@@ -720,9 +721,9 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("v3"));
         addEmptyColumnToDataPutMutation(dataPut, info.pDataTable, 2);
 
-        List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
-                dataPut,
-                null);
+        List<Mutation> actualIndexMutations = new ArrayList<>();
+        IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
+                dataPut, null, actualIndexMutations);
 
         byte[] idxKeyBytes = generateIndexRowKey(null);
 

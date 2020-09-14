@@ -331,6 +331,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+            conn.commit();
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);

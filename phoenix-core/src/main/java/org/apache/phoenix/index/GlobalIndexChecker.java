@@ -22,12 +22,13 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
-import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.IndexUtil.addEmptyColumnToScan;
 
 import static org.apache.phoenix.compat.hbase.CompatUtil.*;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -62,12 +63,18 @@ import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 /**
@@ -97,6 +104,14 @@ public class GlobalIndexChecker extends BaseRegionObserver {
     private static final Log LOG = LogFactory.getLog(GlobalIndexChecker.class);
     private HTableFactory hTableFactory;
     private GlobalIndexCheckerSource metricsSource;
+    private IndexMaintainer cachedIndexMaintainer;
+    byte[] cachedEmptyCF;
+    byte[] cachedEmptyCQ;
+    private long ageThreshold;
+    private String indexName = null;
+    byte[] dataTableName = null;
+    private byte[] cachedSerializedIndexMaintainer;
+
     public enum RebuildReturnCode {
         NO_DATA_ROW(0),
         NO_INDEX_ROW(1),
@@ -119,11 +134,8 @@ public class GlobalIndexChecker extends BaseRegionObserver {
      */
     private class GlobalIndexScanner implements RegionScanner {
         private RegionScanner scanner;
-        private RegionScanner deleteRowScanner;
-        private long ageThreshold;
         private Scan scan;
         private Scan indexScan;
-        private Scan deleteRowScan;
         private Scan singleRowIndexScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
@@ -150,21 +162,22 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             this.metricsSource = metricsSource;
 
             region = env.getRegion();
-            emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
-            emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
-            ageThreshold = env.getConfiguration().getLong(
-                    QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
-            minTimestamp = scan.getTimeRange().getMin();
-            maxTimestamp = scan.getTimeRange().getMax();
-            byte[] indexTableName = region.getRegionInfo().getTable().getName();
-            byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-            List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
-            indexMaintainer = getIndexMaintainer(maintainers, indexTableName);
-            if (indexMaintainer == null) {
-                throw new DoNotRetryIOException(
-                        "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
-                                region.getRegionInfo().getTable().getNameAsString());
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+            if (viewConstants != null) {
+                emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
+                emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
+                byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+                List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
+                indexMaintainer = maintainers.get(0);
+                if (indexMaintainer == null) {
+                    throw new DoNotRetryIOException(
+                            "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
+                                    region.getRegionInfo().getTable().getNameAsString());
+                }
+            } else {
+                indexMaintainer = cachedIndexMaintainer;
+                emptyCF = cachedEmptyCF;
+                emptyCQ = cachedEmptyCQ;
             }
         }
 
@@ -301,31 +314,40 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             return null;
         }
 
+        private void initializeRepair() throws IOException {
+            minTimestamp = scan.getTimeRange().getMin();
+            maxTimestamp = scan.getTimeRange().getMax();
+            PageFilter pageFilter = removePageFilter(scan);
+            if (pageFilter != null) {
+                pageSize = pageFilter.getPageSize();
+                restartScanDueToPageFilterRemoval = true;
+            }
+            indexScan = new Scan(scan);
+            singleRowIndexScan = new Scan(scan);
+            buildIndexScan = new Scan();
+            // The following attributes are set to instruct UngroupedAggregateRegionObserver to do partial index rebuild
+            // i.e., rebuild a subset of index rows.
+            buildIndexScan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
+            buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
+            if (viewConstants != null) {
+                //dataHTable = hTableFactory.getTable(
+                        //new ImmutableBytesPtr(scan.getAttribute(PHYSICAL_DATA_TABLE_NAME)));
+                buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
+            } else {
+                buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, cachedSerializedIndexMaintainer);
+            }
+            dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
+            buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+            // Scan only columns included in the index table plus the empty column
+            for (ColumnReference column : indexMaintainer.getAllColumns()) {
+                buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
+            }
+            buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
+        }
+
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
             if (buildIndexScan == null) {
-                PageFilter pageFilter = removePageFilter(scan);
-                if (pageFilter != null) {
-                    pageSize = pageFilter.getPageSize();
-                    restartScanDueToPageFilterRemoval = true;
-                }
-                buildIndexScan = new Scan();
-                indexScan = new Scan(scan);
-                deleteRowScan = new Scan();
-                singleRowIndexScan = new Scan(scan);
-                byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
-                dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-                // The following attributes are set to instruct UngroupedAggregateRegionObserver to do partial index rebuild
-                // i.e., rebuild a subset of index rows.
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
-                buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
-                // Scan only columns included in the index table plus the empty column
-                for (ColumnReference column : indexMaintainer.getAllColumns()) {
-                    buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
-                }
-                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
+                initializeRepair();
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
@@ -467,17 +489,13 @@ public class GlobalIndexChecker extends BaseRegionObserver {
          *  (i.e., effectively has null value) for a column whereas an older version has a value for the column.
          *  In this case, we need to remove the older cells for correctness.
          */
-        private void removeOlderCells(List<Cell> cellList) {
-            Iterator<Cell> cellIterator = cellList.iterator();
-            if (!cellIterator.hasNext()) {
-                return;
-            }
-            Cell cell = cellIterator.next();
+        private void removeOlderCells(List<Cell> cellList, int cellListSize) {
+            Cell cell = cellList.get(0);
             long maxTs = cell.getTimestamp();
             long ts;
             boolean allTheSame = true;
-            while (cellIterator.hasNext()) {
-                cell = cellIterator.next();
+            for (int i = 1; i < cellListSize; i++) {
+                cell = cellList.get(i);
                 ts = cell.getTimestamp();
                 if (ts != maxTs) {
                     if (ts > maxTs) {
@@ -489,7 +507,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
             if (allTheSame) {
                 return;
             }
-            cellIterator = cellList.iterator();
+            Iterator<Cell> cellIterator = cellList.iterator();
             while (cellIterator.hasNext()) {
                 cell = cellIterator.next();
                 if (cell.getTimestamp() != maxTs) {
@@ -499,32 +517,53 @@ public class GlobalIndexChecker extends BaseRegionObserver {
         }
 
         private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) throws IOException {
-            if (!indexMaintainer.isImmutableRows()) {
-                removeOlderCells(cellList);
-            }
-            long cellListSize = cellList.size();
-            Cell cell = null;
+            int cellListSize = cellList.size();
             if (cellListSize == 0) {
                 return true;
             }
-            Iterator<Cell> cellIterator = cellList.iterator();
-            while (cellIterator.hasNext()) {
-                cell = cellIterator.next();
-                if (isEmptyColumn(cell)) {
-                    if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                            VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
-                        return false;
+            if (!indexMaintainer.isImmutableRows()) {
+                removeOlderCells(cellList, cellListSize);
+                cellListSize = cellList.size();
+            }
+            Cell cell;
+            if (cellListSize == 1) {
+                cell = cellList.get(0);
+                if (!isEmptyColumn(cell)) {
+                    // The index row has one cell and it is not the empty column. This row is considered unverified
+                    return false;
+                }
+            } else {
+                // Empty column is likely the last or first cell
+                cell = cellList.get(cellListSize - 1);
+                if (!isEmptyColumn(cell)) {
+                    cell = cellList.get(0);
+                    if (!isEmptyColumn(cell)) {
+                        if (cellListSize == 2) {
+                            return false;
+                        }
+                        for (int i = 1; i < cellListSize - 1; i++) {
+                            cell = cellList.get(i);
+                            if (isEmptyColumn(cell)) {
+                                break;
+                            } else {
+                                cell = null;
+                            }
+                        }
+                        if (cell == null) {
+                            return false;
+                        }
                     }
-                    // Empty column is not supposed to be returned to the client except it is the only column included
-                    // in the scan
-                    if (cellListSize > 1) {
-                        cellIterator.remove();
-                    }
-                    return true;
                 }
             }
-            // This index row does not have an empty column cell. It must be removed by compaction. This row will
-            // be treated as unverified so that it can be repaired
+            // Empty column is not supposed to be returned to the client except it is the only column included
+            // in the scan
+            if (cellListSize > 1) {
+                cellList.remove(cell);
+            }
+            if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+                    VERIFIED_BYTES, 0, VERIFIED_BYTES.length) == 0) {
+                return true;
+            }
             return false;
         }
 
@@ -576,6 +615,52 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 return true;
             }
         }
+    }
+
+    private void initialize(final ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
+        indexName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+        ageThreshold = c.getEnvironment().getConfiguration().getLong(
+                QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
+        try (PhoenixConnection phoenixConnection = QueryUtil.getConnectionOnServer(c.getEnvironment().getConfiguration()).unwrap(PhoenixConnection.class)) {
+            if (indexName.startsWith("_IDX_")) {
+                dataTableName = indexName.substring("_IDX_".length()).getBytes();
+                return;
+            }
+            PTable indexTable =  PhoenixRuntime.getTableNoCache(phoenixConnection, indexName);
+            String tableName = indexTable.getParentTableName().getString();
+            String schemaName = indexTable.getParentSchemaName().getString();
+            PTable dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
+            dataTableName = dataTable.getPhysicalName().getBytes();
+            if (indexTable.getViewIndexId() == null) {
+                cachedIndexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
+                cachedEmptyCF = cachedIndexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+                cachedEmptyCQ = cachedIndexMaintainer.getEmptyKeyValueQualifier();
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
+                cachedSerializedIndexMaintainer = ByteUtil.copyKeyBytesIfNecessary(ptr);
+            }
+        } catch (Exception exception) {
+            throw new DoNotRetryIOException(exception);
+        }
+    }
+
+    @Override
+    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
+                                        Scan scan, RegionScanner s) throws IOException {
+        if (scan.getAttribute(CHECK_VERIFY_COLUMN) == null) {
+            return s;
+        }
+        synchronized (this) {
+            if (indexName == null) {
+                initialize(c);
+            }
+        }
+        byte[][] viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        if (viewConstants == null) {
+            addEmptyColumnToScan(scan, cachedEmptyCF, cachedEmptyCQ);
+        }
+        return s;
     }
 
     @Override

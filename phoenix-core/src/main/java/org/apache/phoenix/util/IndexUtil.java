@@ -25,6 +25,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
+import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 
@@ -1005,15 +1006,7 @@ public class IndexUtil {
         if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
             return;
         }
-        String schemaName = indexTable.getParentSchemaName().getString();
-        String tableName = indexTable.getParentTableName().getString();
-        PTable dataTable;
-        try {
-            dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-        } catch (TableNotFoundException e) {
-            // This index table must be being deleted. No need to set the scan attributes
-            return;
-        }
+
         // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
         // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
         if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
@@ -1021,24 +1014,36 @@ public class IndexUtil {
             String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
             indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
         }
-        if (!dataTable.getIndexes().contains(indexTable)) {
-            return;
-        }
-        if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
-            scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-        }
+
         scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
-        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
-        IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
-        byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
-        byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
-        if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
-            BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
+
+        if (indexTable.getViewIndexId() != null) {
+            String schemaName = indexTable.getParentSchemaName().getString();
+            String tableName = indexTable.getParentTableName().getString();
+            PTable dataTable;
+            try {
+                dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
+            } catch (TableNotFoundException e) {
+                // This index table must be being deleted. No need to set the scan attributes
+                return;
+            }
+            if (!dataTable.getIndexes().contains(indexTable)) {
+                return;
+            }
+            IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
+            byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+            byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+            if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
+                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+            }
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
+                BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
+            }
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
-        addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 }
