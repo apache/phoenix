@@ -165,11 +165,6 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-tools-hbase2.x</artifactId>
-      <version>${omid.version}</version>
-    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.woodstox</groupId>
@@ -186,37 +181,32 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
-      <version>2.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-protobuf</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-netty</artifactId>
-      <version>2.1.0</version>
+      <version>${hbase.thirdparty.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
-      <version>3.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
-      <version>4.0.0-incubating</version>
     </dependency>
 
   </dependencies>
