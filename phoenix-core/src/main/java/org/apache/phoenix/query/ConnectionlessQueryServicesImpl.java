@@ -189,7 +189,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     protected String getMutexDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
     protected String getTaskDDL() {
