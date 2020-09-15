@@ -18,8 +18,6 @@
 package org.apache.phoenix.query;
 
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
-
 import java.math.BigDecimal;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -28,7 +26,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
@@ -40,6 +37,125 @@ import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
 import org.apache.phoenix.schema.SystemStatsSplitPolicy;
 import org.apache.phoenix.schema.TableProperty;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BUFFER_LENGTH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLIENT_IP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXCEPTION_TRACE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXPLAIN_PLAN;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GLOBAL_SCAN_DETAILS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POST_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_AUTOINCREMENT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NULLABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NO_OF_RESULTS_ITERATED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCAN_METRICS_JSON;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_CATALOG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SELF_REFERENCING_COL_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SEQUENCE_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SOURCE_DATA_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATA_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SQL_DATETIME_SUB;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_DATA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_END_TS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_PRIORITY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_STATUS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
 /**
  *
@@ -49,130 +165,121 @@ import org.apache.phoenix.schema.TableProperty;
  * @since 0.1
  */
 public interface QueryConstants {
-    public static final String NAME_SEPARATOR = ".";
-    public static final String NAMESPACE_SEPARATOR = ":";
-    public static final String CHILD_VIEW_INDEX_NAME_SEPARATOR = "#";
-    public static final byte[] NAMESPACE_SEPARATOR_BYTES = Bytes.toBytes(NAMESPACE_SEPARATOR);
-    public static final byte NAMESPACE_SEPARATOR_BYTE = NAMESPACE_SEPARATOR_BYTES[0];
-    public static final String NAME_SEPARATOR_REGEX = "\\" + NAME_SEPARATOR;
-    public final static byte[] NAME_SEPARATOR_BYTES = Bytes.toBytes(NAME_SEPARATOR);
-    public static final byte NAME_SEPARATOR_BYTE = NAME_SEPARATOR_BYTES[0];
-    public static final String NULL_SCHEMA_NAME = "";
-    public static final String NULL_DISPLAY_TEXT = "<null>";
-    public static final long UNSET_TIMESTAMP = -1;
+    String NAME_SEPARATOR = ".";
+    String NAMESPACE_SEPARATOR = ":";
+    String CHILD_VIEW_INDEX_NAME_SEPARATOR = "#";
+    byte[] NAMESPACE_SEPARATOR_BYTES = Bytes.toBytes(NAMESPACE_SEPARATOR);
+    byte NAMESPACE_SEPARATOR_BYTE = NAMESPACE_SEPARATOR_BYTES[0];
+    String NAME_SEPARATOR_REGEX = "\\" + NAME_SEPARATOR;
+    byte[] NAME_SEPARATOR_BYTES = Bytes.toBytes(NAME_SEPARATOR);
+    byte NAME_SEPARATOR_BYTE = NAME_SEPARATOR_BYTES[0];
+    String NULL_DISPLAY_TEXT = "<null>";
+    long UNSET_TIMESTAMP = -1;
 
-    public enum JoinType {INNER, LEFT_OUTER}
-    public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
-    public final static byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
-    public final static String PHOENIX_METADATA = "table";
-    public final static String OFFSET_ROW_KEY = "_OFFSET_";
-    public final static byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
-    public final static ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
+    enum JoinType {INNER, LEFT_OUTER}
+    String SYSTEM_SCHEMA_NAME = "SYSTEM";
+    byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
+    String OFFSET_ROW_KEY = "_OFFSET_";
+    byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
+    ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
 
-    public static final long AGG_TIMESTAMP = HConstants.LATEST_TIMESTAMP;
+    long AGG_TIMESTAMP = HConstants.LATEST_TIMESTAMP;
     /**
      * Key used for a single row aggregation where there is no group by
      */
-    public final static byte[] UNGROUPED_AGG_ROW_KEY = Bytes.toBytes("a");
+    byte[] UNGROUPED_AGG_ROW_KEY = Bytes.toBytes("a");
     
     /** BEGIN Set of reserved column qualifiers **/
     
-    public static final String RESERVED_COLUMN_FAMILY = "_v";
-    public static final byte[] RESERVED_COLUMN_FAMILY_BYTES = Bytes.toBytes(RESERVED_COLUMN_FAMILY);
+    String RESERVED_COLUMN_FAMILY = "_v";
+    byte[] RESERVED_COLUMN_FAMILY_BYTES = Bytes.toBytes(RESERVED_COLUMN_FAMILY);
     
-    public static final byte[] VALUE_COLUMN_FAMILY = RESERVED_COLUMN_FAMILY_BYTES;
-    public static final byte[] VALUE_COLUMN_QUALIFIER = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(1);
+    byte[] VALUE_COLUMN_FAMILY = RESERVED_COLUMN_FAMILY_BYTES;
+    byte[] VALUE_COLUMN_QUALIFIER = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(1);
     
-    public static final byte[] ARRAY_VALUE_COLUMN_FAMILY = RESERVED_COLUMN_FAMILY_BYTES;
-    public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(2);
+    byte[] ARRAY_VALUE_COLUMN_FAMILY = RESERVED_COLUMN_FAMILY_BYTES;
+    byte[] ARRAY_VALUE_COLUMN_QUALIFIER = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(2);
     
-    public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
-    public final static PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
-    public final static byte[] SINGLE_COLUMN = SINGLE_COLUMN_NAME.getBytes();
-    public final static byte[] SINGLE_COLUMN_FAMILY = SINGLE_COLUMN_FAMILY_NAME.getBytes();
+    PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
+    PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
+    byte[] SINGLE_COLUMN = SINGLE_COLUMN_NAME.getBytes();
+    byte[] SINGLE_COLUMN_FAMILY = SINGLE_COLUMN_FAMILY_NAME.getBytes();
 
     /** END Set of reserved column qualifiers **/
     
-    public static final byte[] TRUE = new byte[] {1};
+    byte[] TRUE = new byte[] {1};
     
     /**
      * The priority property for an hbase table. This is already in HTD, but older versions of
      * HBase do not have this, so we re-defined it here. Once Phoenix is HBase-1.3+, we can remote.
      */
-    public static final String PRIORITY = "PRIORITY";
+    String PRIORITY = "PRIORITY";
 
     /**
      * Separator used between variable length keys for a composite key.
      * Variable length data types may not use this byte value.
      */
-    public static final byte SEPARATOR_BYTE = (byte) 0;
-    public static final byte[] SEPARATOR_BYTE_ARRAY = new byte[] {SEPARATOR_BYTE};
-    public static final byte DESC_SEPARATOR_BYTE = SortOrder.invert(SEPARATOR_BYTE);
-    public static final byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
+    byte SEPARATOR_BYTE = (byte) 0;
+    byte[] SEPARATOR_BYTE_ARRAY = new byte[] {SEPARATOR_BYTE};
+    byte DESC_SEPARATOR_BYTE = SortOrder.invert(SEPARATOR_BYTE);
+    byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
 
-    public static final String DEFAULT_COPROCESS_PATH = "phoenix.jar";
-    public static final String DEFAULT_COPROCESS_JAR_NAME = "phoenix-[version]-server.jar";
+    String DEFAULT_COPROCESS_JAR_NAME = "phoenix-[version]-server.jar";
     
-    public final static int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;
-
-    public static final String EMPTY_COLUMN_NAME = "_0";
+    int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;
+    String EMPTY_COLUMN_NAME = "_0";
     // For transactional tables, the value of our empty key value can no longer be empty
     // since empty values are treated as column delete markers.
-    public static final byte[] EMPTY_COLUMN_BYTES = Bytes.toBytes(EMPTY_COLUMN_NAME);
-    public static final ImmutableBytesPtr EMPTY_COLUMN_BYTES_PTR = new ImmutableBytesPtr(
-            EMPTY_COLUMN_BYTES);
-    public static final Integer ENCODED_EMPTY_COLUMN_NAME = 0;
-    public static final byte[] ENCODED_EMPTY_COLUMN_BYTES = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(ENCODED_EMPTY_COLUMN_NAME);
-    public final static String EMPTY_COLUMN_VALUE = "x";
-    public final static byte[] EMPTY_COLUMN_VALUE_BYTES = Bytes.toBytes(EMPTY_COLUMN_VALUE);
-    public static final ImmutableBytesPtr EMPTY_COLUMN_VALUE_BYTES_PTR = new ImmutableBytesPtr(
+    byte[] EMPTY_COLUMN_BYTES = Bytes.toBytes(EMPTY_COLUMN_NAME);
+    ImmutableBytesPtr EMPTY_COLUMN_BYTES_PTR = new ImmutableBytesPtr(EMPTY_COLUMN_BYTES);
+    Integer ENCODED_EMPTY_COLUMN_NAME = 0;
+    byte[] ENCODED_EMPTY_COLUMN_BYTES = QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(
+            ENCODED_EMPTY_COLUMN_NAME);
+    String EMPTY_COLUMN_VALUE = "x";
+    byte[] EMPTY_COLUMN_VALUE_BYTES = Bytes.toBytes(EMPTY_COLUMN_VALUE);
+    ImmutableBytesPtr EMPTY_COLUMN_VALUE_BYTES_PTR = new ImmutableBytesPtr(
             EMPTY_COLUMN_VALUE_BYTES);
-    public static final String ENCODED_EMPTY_COLUMN_VALUE = EMPTY_COLUMN_VALUE;
-    public final static byte[] ENCODED_EMPTY_COLUMN_VALUE_BYTES = Bytes.toBytes(EMPTY_COLUMN_VALUE);
-    public static final ImmutableBytesPtr ENCODED_EMPTY_COLUMN_VALUE_BYTES_PTR = new ImmutableBytesPtr(
-            ENCODED_EMPTY_COLUMN_VALUE_BYTES);
-    public static final String DEFAULT_COLUMN_FAMILY = "0";
-    public static final byte[] DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_COLUMN_FAMILY);
-    public static final ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
+    byte[] ENCODED_EMPTY_COLUMN_VALUE_BYTES = Bytes.toBytes(EMPTY_COLUMN_VALUE);
+    String DEFAULT_COLUMN_FAMILY = "0";
+    byte[] DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_COLUMN_FAMILY);
+    ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
             DEFAULT_COLUMN_FAMILY_BYTES);
-    // column qualifier of the single key value used to store all columns for the COLUMNS_STORED_IN_SINGLE_CELL storage scheme
-    public static final String SINGLE_KEYVALUE_COLUMN_QUALIFIER = "1";
-    public final static byte[] SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES = Bytes.toBytes(SINGLE_KEYVALUE_COLUMN_QUALIFIER);
-    public static final ImmutableBytesPtr SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR = new ImmutableBytesPtr(
+    // column qualifier of the single key value used to store all columns for the
+    // COLUMNS_STORED_IN_SINGLE_CELL storage scheme
+    String SINGLE_KEYVALUE_COLUMN_QUALIFIER = "1";
+    byte[] SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES = Bytes.toBytes(SINGLE_KEYVALUE_COLUMN_QUALIFIER);
+    ImmutableBytesPtr SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR = new ImmutableBytesPtr(
             SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
 
-    public static final String LOCAL_INDEX_COLUMN_FAMILY_PREFIX = "L#";
-    public static final byte[] LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
-    public static final ImmutableBytesPtr LOCAL_INDEX_COLUMN_FAMILY_PREFIX_PTR = new ImmutableBytesPtr(
-        LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES);
-    
-    public static final String DEFAULT_LOCAL_INDEX_COLUMN_FAMILY = LOCAL_INDEX_COLUMN_FAMILY_PREFIX + DEFAULT_COLUMN_FAMILY;
-    public static final byte[] DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_LOCAL_INDEX_COLUMN_FAMILY);
-    public static final ImmutableBytesPtr DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
+    String LOCAL_INDEX_COLUMN_FAMILY_PREFIX = "L#";
+    byte[] LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+
+    String DEFAULT_LOCAL_INDEX_COLUMN_FAMILY = LOCAL_INDEX_COLUMN_FAMILY_PREFIX +
+            DEFAULT_COLUMN_FAMILY;
+    byte[] DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES = Bytes.toBytes(
+            DEFAULT_LOCAL_INDEX_COLUMN_FAMILY);
+    ImmutableBytesPtr DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
                DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
 
-    public static final String GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER = EMPTY_COLUMN_NAME;
-    public static final byte[] GLOBAL_INDEX_VERIFIED_COLUMN_NAME_BYTES = Bytes.toBytes(GLOBAL_INDEX_VERIFIED_COLUMN_QUALIFIER);
-            ;
-    public static final String ALL_FAMILY_PROPERTIES_KEY = "";
-    public static final String SYSTEM_TABLE_PK_NAME = "pk";
+    String ALL_FAMILY_PROPERTIES_KEY = "";
+    String SYSTEM_TABLE_PK_NAME = "pk";
 
-    public static final double MILLIS_TO_NANOS_CONVERTOR = Math.pow(10, 6);
-    public static final BigDecimal BD_MILLIS_NANOS_CONVERSION = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR);
-    public static final BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
-    public static final int MAX_ALLOWED_NANOS = 999999999;
-    public static final int NANOS_IN_SECOND = BigDecimal.valueOf(Math.pow(10, 9)).intValue();
-    public static final int DIVERGED_VIEW_BASE_COLUMN_COUNT = -100;
-    public static final int BASE_TABLE_BASE_COLUMN_COUNT = -1;
+    double MILLIS_TO_NANOS_CONVERTOR = Math.pow(10, 6);
+    BigDecimal BD_MILLIS_NANOS_CONVERSION = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR);
+    BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
+    int MAX_ALLOWED_NANOS = 999999999;
+    int DIVERGED_VIEW_BASE_COLUMN_COUNT = -100;
+    int BASE_TABLE_BASE_COLUMN_COUNT = -1;
 
     // custom TagType
-    public static final byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
+    byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
     /**
-     * We mark counter values 0 to 10 as reserved. Value 0 is used by {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
+     * We mark counter values 0 to 10 as reserved. Value 0 is used by
+     * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
      * are reserved for special column qualifiers returned by Phoenix co-processors.
      */
-    public static final int ENCODED_CQ_COUNTER_INITIAL_VALUE = 11;
-    public static final String CREATE_TABLE_METADATA =
+    int ENCODED_CQ_COUNTER_INITIAL_VALUE = 11;
+    String CREATE_TABLE_METADATA =
             // Do not use IF NOT EXISTS as we sometimes catch the TableAlreadyExists
             // exception and add columns to the SYSTEM.TABLE dynamically.
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"(\n" +
@@ -254,9 +361,9 @@ public interface QueryConstants {
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
             // Install split policy to prevent a tenant's metadata from being split across regions.
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "',\n" + 
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE;
 
-    public static final String CREATE_STATS_TABLE_METADATA =
+    String CREATE_STATS_TABLE_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"(\n" +
             // PK columns
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
@@ -268,11 +375,12 @@ public interface QueryConstants {
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY ("
             + PHYSICAL_NAME + ","
             + COLUMN_FAMILY + ","+ GUIDE_POST_KEY+"))\n" +
-            // Install split policy to prevent a physical table's stats from being split across regions.
+            // Install split policy to prevent a physical table's stats from being split
+            // across regions.
             HTableDescriptor.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() + "',\n" + 
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            TRANSACTIONAL + "=" + Boolean.FALSE;
 
-    public static final String CREATE_SEQUENCE_METADATA =
+    String CREATE_SEQUENCE_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"(\n" +
             TENANT_ID + " VARCHAR NULL," +
             SEQUENCE_SCHEMA + " VARCHAR NULL, \n" +
@@ -286,14 +394,15 @@ public interface QueryConstants {
             MAX_VALUE + " BIGINT, \n" +
             CYCLE_FLAG + " BOOLEAN, \n" +
             LIMIT_REACHED_FLAG + " BOOLEAN \n" +
-            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n"+
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
-    public static final String CREATE_SYSTEM_SCHEMA = "CREATE SCHEMA " + SYSTEM_CATALOG_SCHEMA;
-    public static final String UPGRADE_TABLE_SNAPSHOT_PREFIX = "_UPGRADING_TABLE_";
+            TRANSACTIONAL + "=" + Boolean.FALSE;
 
-    public static final String CREATE_FUNCTION_METADATA =
+    String UPGRADE_TABLE_SNAPSHOT_PREFIX = "_UPGRADING_TABLE_";
+
+    String CREATE_FUNCTION_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"(\n" +
              // Pk columns
             TENANT_ID + " VARCHAR NULL," +
@@ -311,19 +420,20 @@ public interface QueryConstants {
             DEFAULT_VALUE + " VARCHAR, \n" +
             MIN_VALUE + " VARCHAR, \n" +
             MAX_VALUE + " VARCHAR, \n" +
-            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ", " + FUNCTION_NAME + ", " + TYPE + ", " + ARG_POSITION + "))\n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ", " +
+            FUNCTION_NAME + ", " + TYPE + ", " + ARG_POSITION + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n"+
             // Install split policy to prevent a tenant's metadata from being split across regions.
-            HTableDescriptor.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() + "',\n" + 
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+            HTableDescriptor.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() +
+            "',\n" + TRANSACTIONAL + "=" + Boolean.FALSE;
     
-    public static final String CREATE_LOG_METADATA =
+    String CREATE_LOG_METADATA =
             "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"(\n" +
-             // Pk columns
-             START_TIME + " DECIMAL, \n" +
-             TABLE_NAME + " VARCHAR, \n" +
-             QUERY_ID + " VARCHAR NOT NULL,\n" +
+            // Pk columns
+            START_TIME + " DECIMAL, \n" +
+            TABLE_NAME + " VARCHAR, \n" +
+            QUERY_ID + " VARCHAR NOT NULL,\n" +
             TENANT_ID + " VARCHAR ," +
             USER + " VARCHAR , \n" +
             CLIENT_IP + " VARCHAR, \n" +
@@ -338,48 +448,53 @@ public interface QueryConstants {
             BIND_PARAMETERS + " VARCHAR, \n" +
             SCAN_METRICS_JSON + " VARCHAR, \n" +
             MetricType.getMetricColumnsDetails()+"\n"+
-            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (START_TIME, TABLE_NAME, QUERY_ID))\n" +
-            PhoenixDatabaseMetaData.SALT_BUCKETS + "=%s,\n"+
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE+ ",\n" +
+            " CONSTRAINT " + SYSTEM_TABLE_PK_NAME +
+            " PRIMARY KEY (START_TIME, TABLE_NAME, QUERY_ID))\n" +
+            SALT_BUCKETS + "=%s,\n"+
+            TRANSACTIONAL + "=" + Boolean.FALSE+ ",\n" +
             HColumnDescriptor.TTL + "=" + MetaDataProtocol.DEFAULT_LOG_TTL+",\n"+
-            TableProperty.IMMUTABLE_STORAGE_SCHEME.toString() + " = " + ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.name() + ",\n" +
+            TableProperty.IMMUTABLE_STORAGE_SCHEME.toString() + " = " +
+            ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.name() + ",\n" +
             TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 1";
     
-    public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
-    public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
-    public static final String LAST_SCAN = "LAST_SCAN";
-    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
-    public static final String HASH_JOIN_CACHE_RETRIES = "hashjoin.client.retries.number";
-    public static final int DEFAULT_HASH_JOIN_CACHE_RETRIES = 5;
+    byte[] OFFSET_FAMILY = "f_offset".getBytes();
+    byte[] OFFSET_COLUMN = "c_offset".getBytes();
+    String LAST_SCAN = "LAST_SCAN";
+    String HASH_JOIN_CACHE_RETRIES = "hashjoin.client.retries.number";
+    int DEFAULT_HASH_JOIN_CACHE_RETRIES = 5;
     
 	// Links from parent to child views are stored in a separate table for
 	// scalability
-	public static final String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+	String CREATE_CHILD_LINK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
             SYSTEM_CHILD_LINK_TABLE + "\"(\n" +
 			// PK columns
-			TENANT_ID + " VARCHAR NULL," + TABLE_SCHEM + " VARCHAR NULL," + TABLE_NAME + " VARCHAR NOT NULL,"
-			+ COLUMN_NAME + " VARCHAR NULL," + COLUMN_FAMILY + " VARCHAR NULL," + LINK_TYPE + " UNSIGNED_TINYINT,\n"
-			+ "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME
+            TENANT_ID + " VARCHAR NULL," + TABLE_SCHEM + " VARCHAR NULL," + TABLE_NAME +
+            " VARCHAR NOT NULL," + COLUMN_NAME + " VARCHAR NULL," + COLUMN_FAMILY +
+            " VARCHAR NULL," + LINK_TYPE + " UNSIGNED_TINYINT,\n" + "CONSTRAINT " +
+            SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME
 			+ "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" + HConstants.VERSIONS + "=%s,\n"
-			+ HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" + PhoenixDatabaseMetaData.TRANSACTIONAL + "="
+			+ HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" + TRANSACTIONAL + "="
 			+ Boolean.FALSE;
-	
-	 public static final String CREATE_MUTEX_METADTA =
-	            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_MUTEX_TABLE_NAME + "\"(\n" +
-	            // Pk columns
-	            TENANT_ID + " VARCHAR NULL," +
-	            TABLE_SCHEM + " VARCHAR NULL," +
-	            TABLE_NAME + " VARCHAR NOT NULL," +
-	            COLUMN_NAME + " VARCHAR NULL," + // null for table row
-	            COLUMN_FAMILY + " VARCHAR NULL " + // using for CF to uniqueness for columns
-	            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
-	            + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
-	            HConstants.VERSIONS + "=%s,\n" +
-	            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
-	            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+
+	String CREATE_MUTEX_METADATA =
+            "CREATE IMMUTABLE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_MUTEX_TABLE_NAME + "\"(\n" +
+             // Pk columns
+            TENANT_ID + " VARCHAR NULL," +
+            TABLE_SCHEM + " VARCHAR NULL," +
+            TABLE_NAME + " VARCHAR NOT NULL," +
+            COLUMN_NAME + " VARCHAR NULL," + // null for table row
+            COLUMN_FAMILY + " VARCHAR NULL " + // using for CF to uniqueness for columns
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," +
+            TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            HColumnDescriptor.TTL + "=" + TTL_FOR_MUTEX;
     
-	public static final String CREATE_TASK_METADATA =
-            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_TABLE + "\"(\n" +
+	String CREATE_TASK_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_TASK_TABLE + "\"(\n" +
             // PK columns
             TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
             TASK_TS + " TIMESTAMP NOT NULL," +
@@ -391,11 +506,12 @@ public interface QueryConstants {
             TASK_END_TS + " TIMESTAMP NULL," +
             TASK_PRIORITY + " UNSIGNED_TINYINT NULL," +
             TASK_DATA + " VARCHAR NULL,\n" +
-            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
             TABLE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
             HColumnDescriptor.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
-            PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
 }
