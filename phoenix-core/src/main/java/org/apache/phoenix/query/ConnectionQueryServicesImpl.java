@@ -47,6 +47,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -54,6 +58,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
@@ -295,7 +300,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
-    private static final int TTL_FOR_MUTEX = 15 * 60; // 15min
     private final GuidePostsCacheProvider
             GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     protected final Configuration config;
@@ -3099,7 +3103,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     protected String getMutexDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
     protected String getTaskDDL() {
@@ -3255,15 +3259,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    void createSysMutexTableIfNotExists(HBaseAdmin admin) throws IOException, SQLException {
+    void createSysMutexTableIfNotExists(HBaseAdmin admin) throws IOException {
         try {
-            if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME) || admin.tableExists(TableName.valueOf(
-                    PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME))) {
-                LOGGER.debug("System mutex table already appears to exist, not creating it");
+            if (checkIfSysMutexExistsAndModifyTTLIfRequired(admin)) {
                 return;
             }
             final TableName mutexTableName = SchemaUtil.getPhysicalTableName(
-                PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, this.getProps());
+                SYSTEM_MUTEX_NAME, this.getProps());
             HTableDescriptor tableDesc = new HTableDescriptor(mutexTableName);
             HColumnDescriptor columnDesc = new HColumnDescriptor(
                     PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
@@ -3284,6 +3286,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 throw e;
             }
         }
+    }
+
+    /**
+     * Check if the SYSTEM MUTEX table exists. If it does, ensure that its TTL is correct and if
+     * not, modify its table descriptor
+     * @param admin HBase admin
+     * @return true if SYSTEM MUTEX exists already and false if it needs to be created
+     * @throws IOException thrown if there is an error getting the table descriptor
+     */
+    @VisibleForTesting
+    boolean checkIfSysMutexExistsAndModifyTTLIfRequired(HBaseAdmin admin) throws IOException {
+        HTableDescriptor htd;
+        try {
+            htd = admin.getTableDescriptor(Bytes.toBytes(SYSTEM_MUTEX_NAME));
+        } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
+            try {
+                // Try with the namespace mapping name
+                htd = admin.getTableDescriptor(TableName.valueOf(SYSTEM_SCHEMA_NAME,
+                        SYSTEM_MUTEX_TABLE_NAME));
+            } catch (org.apache.hadoop.hbase.TableNotFoundException ignored2) {
+                return false;
+            }
+        }
+
+        // The SYSTEM MUTEX table already exists so check its TTL
+        if (htd.getFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX) {
+            LOGGER.debug("SYSTEM MUTEX already appears to exist, but has the wrong TTL. " +
+                    "Will modify the TTL");
+            HColumnDescriptor hColFamDesc = htd.removeFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+            hColFamDesc.setTimeToLive(TTL_FOR_MUTEX);
+            htd.addFamily(hColFamDesc);
+            admin.modifyTable(htd.getTableName(), htd);
+        } else {
+            LOGGER.debug("SYSTEM MUTEX already appears to exist with the correct TTL, " +
+                    "not creating it");
+        }
+        return true;
     }
 
     private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends Exception>> ioList) {
@@ -3330,13 +3369,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableAlreadyExistsException ignore) {}
         try {
             metaConnection.createStatement().executeUpdate(getChildLinkDDL());
-        } catch (TableAlreadyExistsException e) {}
+        } catch (TableAlreadyExistsException ignore) {}
         try {
             metaConnection.createStatement().executeUpdate(getMutexDDL());
-        } catch (TableAlreadyExistsException e) {}
+        } catch (TableAlreadyExistsException ignore) {}
         try {
             metaConnection.createStatement().executeUpdate(getTaskDDL());
-        } catch (TableAlreadyExistsException e) {}
+        } catch (TableAlreadyExistsException ignore) {}
 
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
     }
@@ -3905,7 +3944,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // The COLUMN_FAMILY column should be nullable as we create a row in it without
                 // any column family to mark when guideposts were last collected.
                 metaConnection = removeNotNullConstraint(metaConnection,
-                        PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                        SYSTEM_SCHEMA_NAME,
                         PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
                         PhoenixDatabaseMetaData.COLUMN_FAMILY);
@@ -4310,8 +4349,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
                 sysMutexPhysicalTableNameBytes = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
             } else if (admin.tableExists(TableName.valueOf(
-                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props).getName()))) {
-                sysMutexPhysicalTableNameBytes = SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME, props).getName();
+                    SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName()))) {
+                sysMutexPhysicalTableNameBytes = SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName();
             }
         }
         return sysMutexPhysicalTableNameBytes;
@@ -4426,7 +4465,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE "
                     + PhoenixDatabaseMetaData.TABLE_NAME + "='" + PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE
                     + "' AND " + PhoenixDatabaseMetaData.TABLE_SCHEM + "='"
-                    + PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME + "'");
+                    + SYSTEM_SCHEMA_NAME + "'");
         } catch (SQLException e) {
             LOGGER.warn("exception during upgrading stats table:" + e);
             sqlE = e;

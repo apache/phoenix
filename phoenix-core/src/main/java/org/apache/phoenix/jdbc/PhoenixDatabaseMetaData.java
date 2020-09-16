@@ -224,6 +224,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TASK_PRIORITY = "TASK_PRIORITY";
     public static final String TASK_DATA = "TASK_DATA";
     public static final String TASK_TABLE_TTL = "864000";
+    public static final int TTL_FOR_MUTEX = 15 * 60; // 15min
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
     public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
