@@ -152,6 +152,10 @@
               <shadedPattern>${shaded.package}.com.sun.research</shadedPattern>
             </relocation>
             <relocation>
+              <pattern>com.sun.jersey</pattern>
+              <shadedPattern>${shaded.package}.com.sun.jersey</shadedPattern>
+            </relocation>
+            <relocation>
               <pattern>com.sun.activation</pattern>
               <shadedPattern>${shaded.package}.com.sun.activation</shadedPattern>
             </relocation>
@@ -186,6 +190,10 @@
             <relocation>
               <pattern>org.fusesource</pattern>
               <shadedPattern>${shaded.package}.org.fusesource</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.glassfish.jersey</pattern>
+              <shadedPattern>${shaded.package}.org.glassfish.jersey</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.hamcrest</pattern>
