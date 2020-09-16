@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -38,7 +39,6 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -58,7 +58,8 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         stmt.setInt(3, i);
         stmt.setLong(4, i);
         stmt.setBigDecimal(5, new BigDecimal(i*0.5d));
-        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
+        Date date = new Date(getDateUtilContext().parseDate("2015-01-01 00:00:00")
+                .getTime() + (i - 1) * MILLIS_IN_DAY);
         stmt.setDate(6, date);
         stmt.setString(7, "a.varchar" + String.valueOf(i));
         stmt.setString(8, "a.char" + String.valueOf(i));

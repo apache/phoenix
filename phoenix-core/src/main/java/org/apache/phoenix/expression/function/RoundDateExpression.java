@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.Date;
 import java.sql.SQLException;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 
@@ -48,6 +49,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
 import com.google.common.collect.Lists;
+
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 
 /**
  * Function used to bucketize date/time values by rounding them to
@@ -150,6 +153,8 @@ public class RoundDateExpression extends ScalarFunction {
     
     
     protected long roundTime(long time) {
+        int offset = Calendar.getInstance().getTimeZone().getRawOffset();
+        time = time + offset;
         long value;
         long roundUpAmount = getRoundUpAmount();
         if (time <= Long.MAX_VALUE - roundUpAmount) { // If no overflow, add
@@ -157,7 +162,7 @@ public class RoundDateExpression extends ScalarFunction {
         } else { // Else subtract and add one
             value = (time - roundUpAmount) / divBy + 1;
         }
-        return value * divBy;
+        return value * divBy - offset;
     }
     
     @Override

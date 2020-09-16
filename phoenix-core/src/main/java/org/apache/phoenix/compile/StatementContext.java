@@ -48,6 +48,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 
 import com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 
 /**
  *
@@ -128,12 +130,12 @@ public class StatementContext {
         String timeZoneID = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                 DateUtil.DEFAULT_TIME_ZONE_ID);
         this.dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        this.dateFormatter = DateUtil.getDateFormatter(dateFormat, timeZoneID);
+        this.dateFormatter = getDateUtilContext().getDateFormatter(dateFormat, timeZoneID);
         this.timeFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat, timeZoneID);
+        this.timeFormatter = getDateUtilContext().getTimeFormatter(timeFormat, timeZoneID);
         this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat, timeZoneID);
-        this.dateFormatTimeZone = DateUtil.getTimeZone(timeZoneID);
+        this.timestampFormatter = getDateUtilContext().getTimestampFormatter(timestampFormat, timeZoneID);
+        this.dateFormatTimeZone = getDateUtilContext().getTimeZone(timeZoneID);
         this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;

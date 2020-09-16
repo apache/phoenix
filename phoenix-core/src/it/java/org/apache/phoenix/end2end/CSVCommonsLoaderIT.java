@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -570,11 +571,11 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
                 }
                 // special case for matching date, time values
                 String timeFieldValue = record.get(9);
-                assertEquals(timeFieldValue.isEmpty() ? null : DateUtil.parseTime(record.get(9)),
+                assertEquals(timeFieldValue.isEmpty() ? null : getDateUtilContext().parseTime(record.get(9)),
                         phoenixResultSet.getTime("CTIME"));
 
                 String dateField = record.get(10);
-                assertEquals(dateField.isEmpty() ? null : DateUtil.parseDate(record.get(10)),
+                assertEquals(dateField.isEmpty() ? null : getDateUtilContext().parseDate(record.get(10)),
                         phoenixResultSet.getDate("CDATE"));
             }
 

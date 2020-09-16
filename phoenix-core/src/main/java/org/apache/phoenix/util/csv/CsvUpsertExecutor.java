@@ -51,6 +51,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 /** {@link UpsertExecutor} over {@link CSVRecord}s. */
 public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
 
@@ -137,7 +139,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             this.dataType = dataType;
             PDataCodec codec = dataType.getCodec();
             if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-                codec = DateUtil.getCodecFor(dataType);
+                codec = getDateUtilContext().getCodecFor(dataType);
                 // TODO: move to DateUtil
                 String dateFormat;
                 int dateSqlType = dataType.getResultSetSqlType();
@@ -149,11 +151,11 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                             DateUtil.DEFAULT_TIME_FORMAT);
                 } else {
                     dateFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
+                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);
                 }
                 String timeZoneId = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
-                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
+                this.dateTimeParser = getDateUtilContext().getDateTimeParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }
@@ -169,7 +171,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 return null;
             }
             if (dataType == PTimestamp.INSTANCE) {
-                return DateUtil.parseTimestamp(input);
+                return getDateUtilContext().parseTimestamp(input);
             }
             if (dateTimeParser != null) {
                 long epochTime = dateTimeParser.parseDateTime(input);

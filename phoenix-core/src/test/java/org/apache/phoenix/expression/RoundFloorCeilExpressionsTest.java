@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -56,7 +57,6 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
@@ -555,7 +555,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testRoundDateExpression() throws Exception {
-        LiteralExpression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        LiteralExpression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression roundDateExpression = RoundDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -564,12 +565,13 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-02 00:00:00"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2012-01-02 00:00:00", true), resultDate);
     }
     
     @Test
     public void testRoundDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        Expression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression roundDateExpression = RoundDateExpression.create(dateLiteral, TimeUnit.MINUTE, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -578,12 +580,13 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-01 14:30:00"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2012-01-01 14:30:00"), resultDate);
     }
     
     @Test
     public void testFloorDateExpression() throws Exception {
-        LiteralExpression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        LiteralExpression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -592,12 +595,14 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-01 00:00:00"), resultDate);
+        Date d1 = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        assertEquals(getDateUtilContext().parseDate("2012-01-01 00:00:00", true), resultDate);
     }
     
     @Test
     public void testFloorDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        Expression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.SECOND, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -606,12 +611,13 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-01 14:25:20"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2012-01-01 14:25:20"), resultDate);
     }
     
     @Test
     public void testCeilDateExpression() throws Exception {
-        LiteralExpression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        LiteralExpression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression ceilDateExpression = CeilDateExpression.create(dateLiteral, TimeUnit.DAY);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -620,12 +626,13 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-02 00:00:00"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2012-01-02 00:00:00", true), resultDate);
     }
     
     @Test
     public void testCeilDateExpressionWithMultiplier() throws Exception {
-        Expression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        Expression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         Expression ceilDateExpression = CeilDateExpression.create(dateLiteral, TimeUnit.SECOND, 10);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -634,7 +641,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2012-01-01 14:25:30"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2012-01-01 14:25:30"), resultDate);
     }
     
     /**
@@ -642,7 +649,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      */
     @Test
     public void testRoundDateExpressionValidation_1() throws Exception {
-        LiteralExpression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        LiteralExpression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         
         List<Expression> childExpressions = new ArrayList<Expression>(1);
         childExpressions.add(dateLiteral);
@@ -660,7 +668,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      */
     @Test
     public void testRoundDateExpressionValidation_2() throws Exception {
-        LiteralExpression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
+        LiteralExpression dateLiteral = LiteralExpression.newConstant(getDateUtilContext()
+                .parseDate("2012-01-01 14:25:28"), PDate.INSTANCE);
         LiteralExpression timeUnitLiteral = LiteralExpression.newConstant("millis", PVarchar.INSTANCE);
         
         List<Expression> childExpressions = new ArrayList<Expression>(1);
@@ -677,7 +686,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testFloorDateExpressionForWeek() throws Exception {
-        Expression dateLiteral = LiteralExpression.newConstant(DateUtil.parseDate("2016-01-07 08:17:28"), PDate.INSTANCE);
+        Expression dateLiteral = LiteralExpression.newConstant(getDateUtilContext().parseDate("2016-01-07 08:17:28"), PDate.INSTANCE);
         Expression floorDateExpression = FloorDateExpression.create(dateLiteral, TimeUnit.WEEK);
         
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -686,6 +695,6 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         
         assertTrue(result instanceof Date);
         Date resultDate = (Date)result;
-        assertEquals(DateUtil.parseDate("2016-01-04 00:00:00"), resultDate);
+        assertEquals(getDateUtilContext().parseDate("2016-01-04 00:00:00", true), resultDate);
     }
 }

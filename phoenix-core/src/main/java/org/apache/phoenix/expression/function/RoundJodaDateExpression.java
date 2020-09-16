@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.sql.Date;
+import java.util.Calendar;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -48,9 +49,10 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            DateTime dt = new DateTime(time,ISOChronology.getInstanceUTC());
+            int offset = Calendar.getInstance().getTimeZone().getRawOffset();
+            DateTime dt = new DateTime(time + offset,ISOChronology.getInstanceUTC());
             long value = roundDateTime(dt);
-            Date d = new Date(value);
+            Date d = new Date(value - offset);
             byte[] byteValue = dataType.toBytes(d);
             ptr.set(byteValue);
             return true;

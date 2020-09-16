@@ -33,6 +33,8 @@ import org.apache.phoenix.util.DateUtil;
 
 import com.google.common.base.Preconditions;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
+
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;
     public static final PTimestamp INSTANCE = new PTimestamp();
@@ -89,7 +91,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp value = (java.sql.Timestamp) object;
         // For Timestamp, the getTime() method includes milliseconds that may
         // be stored in the nanos part as well.
-        DateUtil.getCodecFor(this).encodeLong(value.getTime(), bytes, offset);
+        getDateUtilContext().getCodecFor(this).encodeLong(value.getTime(), bytes, offset);
 
         /*
          * By not getting the stuff that got spilled over from the millis part,
@@ -123,9 +125,9 @@ public class PTimestamp extends PDataType<Timestamp> {
             int nanos =
                     (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
                     .intValue();
-            return DateUtil.getTimestamp(ms, nanos);
+            return getDateUtilContext().getTimestamp(ms, nanos);
         } else if (actualType == PVarchar.INSTANCE) {
-            return DateUtil.parseTimestamp((String) object);
+            return getDateUtilContext().parseTimestamp((String) object);
         }
         return throwConstraintViolationException(actualType, this);
     }
@@ -139,7 +141,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp v;
         if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
             long millisDeserialized =
-                    DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder);
+                    getDateUtilContext().getCodecFor(actualType).decodeLong(b, o, sortOrder);
             v = new java.sql.Timestamp(millisDeserialized);
             int nanosDeserialized =
                     PUnsignedInt.INSTANCE.getCodec().decodeInt(b, o + Bytes.SIZEOF_LONG, sortOrder);
@@ -159,7 +161,7 @@ public class PTimestamp extends PDataType<Timestamp> {
             long ms = bd.longValue();
             int nanos = (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
                     .intValue();
-            v = DateUtil.getTimestamp(ms, nanos);
+            v = getDateUtilContext().getTimestamp(ms, nanos);
             return v;
         }
         throwConstraintViolationException(actualType, this);
@@ -225,7 +227,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         if (value == null || value.length() == 0) {
             return null;
         }
-        return DateUtil.parseTimestamp(value);
+        return getDateUtilContext().parseTimestamp(value);
     }
 
     @Override
@@ -246,7 +248,7 @@ public class PTimestamp extends PDataType<Timestamp> {
 
     @Override
     public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
-        long millis = DateUtil.getCodecFor(this).decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
+        long millis = getDateUtilContext().getCodecFor(this).decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
         return millis;
     }
 

@@ -47,6 +47,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -73,6 +74,7 @@ import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -688,6 +690,21 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         checkCursorState();
         Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
+
+        String tz = context.getConnection().getQueryServices().getProps()
+                .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+        int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+        TimeZone timezone = Calendar.getInstance().getTimeZone();
+        long msFromEpochGmt = value.getTime();
+        int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+        Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+        gmtCal.setTime(value);
+        gmtCal.add(Calendar.MILLISECOND, - offsetFromUTC);
+
+        value  = new Time(gmtCal.getTimeInMillis() + offset);
+
         wasNull = (value == null);
         return value;
     }
@@ -721,6 +738,24 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         checkCursorState();
         Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PTimestamp.INSTANCE, ptr);
+        int nanos = value.getNanos();
+
+
+        String tz = context.getConnection().getQueryServices().getProps()
+                .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB, "GMT");
+        int offset = TimeZone.getTimeZone(tz).getRawOffset();
+
+        TimeZone timezone = Calendar.getInstance().getTimeZone();
+        long msFromEpochGmt = value.getTime();
+        int offsetFromUTC = timezone.getOffset(msFromEpochGmt);
+
+        Calendar gmtCal = Calendar.getInstance(TimeZone.getTimeZone(tz));
+        gmtCal.setTime(value);
+        gmtCal.add(Calendar.MILLISECOND, - offsetFromUTC);
+
+        value  = new Timestamp(gmtCal.getTimeInMillis() + offset);
+        value.setNanos(nanos);
+
         wasNull = (value == null);
         return value;
     }

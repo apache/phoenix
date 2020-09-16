@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE;
 import static org.apache.phoenix.query.KeyRange.getKeyRange;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
@@ -85,7 +86,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -409,8 +409,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testEqualRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -430,7 +430,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testDegenerateRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 01:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -441,8 +441,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testBoundaryGreaterThanRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -461,8 +461,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testBoundaryGreaterThanOrEqualRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -481,8 +481,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testGreaterThanRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 01:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -501,8 +501,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLessThanRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 01:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -521,8 +521,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testBoundaryLessThanRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-01 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -541,8 +541,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testLessThanOrEqualRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 01:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();
@@ -561,8 +561,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     public void testBoundaryLessThanOrEqualRound() throws Exception {
         String inst = "a";
         String host = "b";
-        Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
-        Date endDate = DateUtil.parseDate("2012-01-02 00:00:00");
+        Date startDate = getDateUtilContext().parseDate("2012-01-01 00:00:00");
+        Date endDate = getDateUtilContext().parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
         Scan scan = compileStatement(query, binds).getScan();

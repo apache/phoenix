@@ -18,13 +18,17 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.DriverManager;
 import java.sql.Time;
 import java.sql.Types;
 import java.text.Format;
+import java.time.LocalTime;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
+
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 
 public class PTime extends PDataType<Time> {
 
@@ -78,7 +82,7 @@ public class PTime extends PDataType<Time> {
     } else if (actualType == PDecimal.INSTANCE) {
       return new java.sql.Time(((BigDecimal) object).longValueExact());
     } else if (actualType == PVarchar.INSTANCE) {
-      return DateUtil.parseTime((String) object);
+      return getDateUtilContext().parseTime((String) object);
     }
     return throwConstraintViolationException(actualType, this);
   }
@@ -118,7 +122,7 @@ public class PTime extends PDataType<Time> {
     if (value == null || value.length() == 0) {
       return null;
     }
-    return DateUtil.parseTime(value);
+    return getDateUtilContext().parseTime(value);
   }
 
   @Override

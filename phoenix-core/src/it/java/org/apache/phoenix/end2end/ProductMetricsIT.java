@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -83,7 +84,7 @@ public class ProductMetricsIT extends ParallelStatsDisabledIT {
     }
 
     private static Date toDate(String dateString) {
-        return DateUtil.parseDate(dateString);
+        return getDateUtilContext().parseDate(dateString);
     }
 
     private static void initTable(String tablename, byte[][] splits) throws Exception {

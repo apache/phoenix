@@ -18,15 +18,19 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.Types;
 import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.StringUtil;
+
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 
 public class PDate extends PDataType<Date> {
 
@@ -70,7 +74,7 @@ public class PDate extends PDataType<Date> {
         } else if (actualType == PDecimal.INSTANCE) {
             return new Date(((BigDecimal) object).longValueExact());
         } else if (actualType == PVarchar.INSTANCE) {
-            return DateUtil.parseDate((String) object);
+            return getDateUtilContext().parseDate((String) object);
         }
         return throwConstraintViolationException(actualType, this);
     }
@@ -148,7 +152,7 @@ public class PDate extends PDataType<Date> {
         if (value == null || value.length() == 0) {
             return null;
         }
-        return DateUtil.parseDate(value);
+        return getDateUtilContext().parseDate(value);
     }
 
     @Override

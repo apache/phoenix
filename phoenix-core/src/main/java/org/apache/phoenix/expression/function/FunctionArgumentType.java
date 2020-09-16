@@ -21,13 +21,13 @@ package org.apache.phoenix.expression.function;
 import java.text.DecimalFormat;
 import java.text.Format;
 
-import org.apache.phoenix.util.DateUtil;
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 
 public enum FunctionArgumentType {
     TEMPORAL {
         @Override
         public Format getFormatter(String format) {
-            return DateUtil.getDateFormatter(format);
+            return getDateUtilContext().getDateFormatter(format);
         }
     }, 
     NUMERIC {

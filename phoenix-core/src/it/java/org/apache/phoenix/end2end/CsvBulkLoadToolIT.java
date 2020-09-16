@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -91,11 +92,11 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();
@@ -132,7 +133,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1971-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1971-01-01"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();
@@ -239,11 +240,11 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
 
         rs.close();
@@ -441,15 +442,15 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
-        assertEquals(DateUtil.parseDate("1970-02-01"), rs.getDate(4));
-        assertEquals(DateUtil.parseDate("1970-03-01"), rs.getDate(5));
+        assertEquals(getDateUtilContext().parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-02-01"), rs.getDate(4));
+        assertEquals(getDateUtilContext().parseDate("1970-03-01"), rs.getDate(5));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
-        assertEquals(DateUtil.parseDate("1970-02-02"), rs.getDate(4));
-        assertEquals(DateUtil.parseDate("1970-03-02"), rs.getDate(5));
+        assertEquals(getDateUtilContext().parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-02-02"), rs.getDate(4));
+        assertEquals(getDateUtilContext().parseDate("1970-03-02"), rs.getDate(5));
         assertFalse(rs.next());
 
         rs.close();
@@ -561,11 +562,11 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
         rs.close();
         stmt.close();
@@ -595,11 +596,11 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-01"), rs.getDate(3));
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals("Name 2", rs.getString(2));
-        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(getDateUtilContext().parseDate("1970-01-02"), rs.getDate(3));
         assertFalse(rs.next());
         rs.close();
         stmt.close();

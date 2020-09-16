@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
+import java.util.Calendar;
 import java.util.List;
 
 import org.apache.phoenix.compile.StatementContext;
@@ -25,6 +26,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.ToTimestampFunction;
+import org.apache.phoenix.query.QueryServices;
 
 
 public class ToTimestampParseNode extends FunctionParseNode { 
@@ -41,7 +43,9 @@ public class ToTimestampParseNode extends FunctionParseNode {
             dateFormat = context.getTimestampFormat();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getConnection().getQueryServices().getProps()
+                    .get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                            "GMT");
         }
         return new ToTimestampFunction(children, dateFormat, timeZoneId);
     }

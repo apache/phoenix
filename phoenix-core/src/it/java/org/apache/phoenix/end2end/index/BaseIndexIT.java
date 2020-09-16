@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.PhoenixConnection.getDateUtilContext;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -297,7 +298,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 pstmt2.setInt(3, 4);
                 pstmt2.setLong(4, 4L);
                 pstmt2.setBigDecimal(5, new BigDecimal(4.0));
-                Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+                Date date = getDateUtilContext().parseDate("2015-01-01 00:00:00");
                 pstmt2.setDate(6, date);
                 pstmt2.setString(7, "varchar_a");
                 pstmt2.setString(8, "chara");
