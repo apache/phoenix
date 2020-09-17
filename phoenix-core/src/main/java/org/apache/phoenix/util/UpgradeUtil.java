@@ -54,6 +54,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQU
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -63,6 +64,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -80,6 +82,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import com.google.common.base.Strings;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -2250,6 +2253,35 @@ public class UpgradeUtil {
                 mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getLinks());
             }
         }
+    }
+
+    public static boolean updateViewIndexIdColumnDataTypeFromShortToLongIfNeeds(
+            PhoenixConnection metaConnection, HBaseAdmin admin) {
+        try {
+            String tableName = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+            if (!admin.tableExists(tableName)) {
+                tableName = tableName.replace(
+                        QueryConstants.NAME_SEPARATOR,
+                        QueryConstants.NAMESPACE_SEPARATOR);
+            }
+            Table sysTable = metaConnection.getQueryServices().getTable(tableName.getBytes());
+            byte[] rowKey =
+                    SchemaUtil.getColumnKey(null, SYSTEM_SCHEMA_NAME, SYSTEM_CATALOG_TABLE,
+                            VIEW_INDEX_ID,  PhoenixDatabaseMetaData.TABLE_FAMILY);
+            KeyValue viewIndexIdKV = KeyValueUtil.newKeyValue(rowKey,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(Types.BIGINT));
+            Put viewIndexIdPut = new Put(rowKey);
+            viewIndexIdPut.add(viewIndexIdKV);
+            sysTable.put(viewIndexIdPut);
+            return true;
+        } catch (Exception e) {
+            LOGGER.error("Upgrade/change VIEW_INDEX_ID data type failed: " + e.getMessage() +
+                    ". Full stacktrace: " + ExceptionUtils.getFullStackTrace(e));
+        }
+        return false;
     }
 
     private static void updateIndexesSequenceIfPresent(PhoenixConnection connection, PTable dataTable)
