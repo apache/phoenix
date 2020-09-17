@@ -3,10 +3,10 @@
  *mvn clean install*
 
 2. Start the TracingWebApp
- *java -jar target/phoenix-tracing-webapp-4.5.0-SNAPSHOT-runnable.jar*
+ *java -jar target/phoenix-tracing-webapp-<version>-runnable.jar*
 
 3. View the Content -
- *http://localhost:8864/webapp/#*
+ *http://localhost:8864/*
 
  ###Note
  You can set the port of the trace app by -Dphoenix.traceserver.http.port={portNo}
