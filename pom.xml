@@ -199,6 +199,7 @@
           </dependencies>
           <configuration>
             <effort>Max</effort>
+            <maxHeap>2048</maxHeap>
           </configuration>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
