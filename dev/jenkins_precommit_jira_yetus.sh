@@ -35,6 +35,8 @@ export MAVEN_HOME=/home/jenkins/tools/maven/apache-maven-3.0.5
 #export PATH=$PATH:${JAVA_HOME}/bin:${MAVEN_HOME}/bin:
 export PATH=$PATH:${MAVEN_HOME}/bin:
 
+export MAVEN_OPTS=-Xmx3g
+
 YETUS_RELEASE=0.12.0
 COMPONENT=${WORKSPACE}/component
 TEST_FRAMEWORK=${WORKSPACE}/test_framework
