@@ -209,7 +209,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
             long currentTime, long tsToCheck) {
         if (!ScanInfoUtil.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
-            return false;
+            // By definition, if the max lookback feature is not enabled, then delete markers and rows
+            // version can be removed by compaction any time, and thus there is no window in which these mutations are
+            // preserved, i.e.,  the max lookback window size is zero. This means all the mutations are effectively
+            // beyond the zero size max lookback window.
+            return true;
         }
         return tsToCheck < (currentTime - maxLookBackInMills);
     }
