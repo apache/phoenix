@@ -50,15 +50,6 @@ pipeline {
                     // Has to be relative to WORKSPACE.
                     archiveArtifacts artifacts: "patchprocess/*", excludes: "patchprocess/precommit"
                     archiveArtifacts artifacts: "patchprocess/**/*", excludes: "patchprocess/precommit/**/*"
-                    publishHTML target: [
-                      allowMissing: true,
-                      keepAll: true,
-                      alwaysLinkToLastBuild: true,
-                      // Has to be relative to WORKSPACE
-                      reportDir: "/",
-                      reportFiles: 'report.html',
-                      reportName: 'Precommit Report'
-                    ]
                 }
             }
         }
