@@ -156,6 +156,7 @@ import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
@@ -206,6 +207,7 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
+import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.PFunction;
@@ -504,7 +506,6 @@ public class MetaDataClient {
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     public static final String EMPTY_TABLE = " ";
-
 
     private final PhoenixConnection connection;
 
@@ -1095,7 +1096,7 @@ public class MetaDataClient {
                 }
                 // if there are new columns to add
                 return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
-                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
+                        true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
@@ -3629,14 +3630,25 @@ public class MetaDataClient {
 
     public MutationState addColumn(AddColumnStatement statement) throws SQLException {
         PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
-        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType());
+        return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType(), statement.isCascade(), statement.getIndexes());
     }
 
     public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
             ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
-            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType)
+            boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType, boolean cascade, List<NamedNode> indexes)
                     throws SQLException {
         connection.rollback();
+        List<PTable> indexesPTable = Lists.newArrayListWithExpectedSize(indexes != null ?
+                indexes.size() : table.getIndexes().size());
+        Map<PTable, Integer> indexToColumnSizeMap = new HashMap<>();
+
+        // if cascade keyword is passed and indexes are provided either implicitly or explicitly
+        if (cascade && (indexes == null || !indexes.isEmpty())) {
+            indexesPTable = getIndexesPTableForCascade(indexes, table);
+            for(PTable index : indexesPTable) {
+                indexToColumnSizeMap.put(index, index.getColumns().size());
+            }
+        }
         boolean wasAutoCommit = connection.getAutoCommit();
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(origColumnDefs != null ?
             origColumnDefs.size() : 0);
@@ -3769,10 +3781,10 @@ public class MetaDataClient {
                             if (!colDef.validateDefault(context, null)) {
                                 colDef = new ColumnDef(colDef, null); // Remove DEFAULT as it's not necessary
                             }
+                            String familyName = null;
                             Integer encodedCQ = null;
                             if (!colDef.isPK()) {
                                 String colDefFamily = colDef.getColumnDefName().getFamilyName();
-                                String familyName = null;
                                 ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
                                 String defaultColumnFamily = tableForCQCounters.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(tableForCQCounters.getDefaultFamilyName().getString()) ? 
                                         tableForCQCounters.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
@@ -3800,6 +3812,12 @@ public class MetaDataClient {
                                 .setTableName(tableName).build().buildException();
                             }
                             PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
+                            HashMap<PTable, PColumn> indexToIndexColumnMap = null;
+                            if (cascade) {
+                                indexToIndexColumnMap = getPTablePColumnHashMapForCascade(indexesPTable, willBeImmutableRows,
+                                                colDef, familyName, indexToColumnSizeMap);
+                            }
+
                             columns.add(column);
                             String pkName = null;
                             Short keySeq = null;
@@ -3814,6 +3832,13 @@ public class MetaDataClient {
                             }
                             colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
                             addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
+                            // add new columns for given indexes one by one
+                            if (cascade) {
+                                for (PTable index: indexesPTable) {
+                                    LOGGER.info("Adding column "+column.getName().getString()+" to "+index.getTableName().toString());
+                                    addColumnMutation(schemaName, index.getTableName().getString(), indexToIndexColumnMap.get(index), colUpsert, null, "", keySeq, index.getBucketNum() != null);
+                                }
+                            }
                         }
                         
                         // Add any new PK columns to end of index PK
@@ -3879,7 +3904,18 @@ public class MetaDataClient {
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
-                
+
+                if (cascade) {
+                    for (PTable index : indexesPTable) {
+                        incrementTableSeqNum(index, index.getType(), columnDefs.size(),
+                                Boolean.FALSE,
+                                metaPropertiesEvaluated.getUpdateCacheFrequency(),
+                                metaPropertiesEvaluated.getPhoenixTTL());
+                    }
+                    tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
+                    connection.rollback();
+                }
+
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
                     incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
 
@@ -4054,6 +4090,80 @@ public class MetaDataClient {
             }
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
         }
+    }
+
+    private List<PTable> getIndexesPTableForCascade(List<NamedNode> indexes, PTable table) throws SQLException {
+        boolean isView = table.getType().equals(PTableType.VIEW);
+        List<PTable> indexesPTable = new ArrayList<>();
+
+        // when indexes is null, that means ALL keyword is passed and
+        // we ll collect all global indexes for cascading
+        if(indexes == null) {
+            indexesPTable.addAll(table.getIndexes());
+            for (PTable index : table.getIndexes()) {
+                // a child view has access to its parents indexes,
+                // this if clause ensures we only get the indexes that
+                // are only created on the view itself.
+                if (index.getIndexType().equals(IndexType.LOCAL)
+                        || (isView && index.getTableName().toString().contains("#"))) {
+                    indexesPTable.remove(index);
+                }
+            }
+        } else {
+            List<String> indexesParam = Lists.newArrayListWithExpectedSize(indexes.size());
+            for (NamedNode index : indexes) {
+                indexesParam.add(index.getName());
+            }
+            // gets the PTable for list of indexes passed in the function
+            // if all the names in parameter list are correct, indexesParam list should be empty
+            // by end of the loop
+            for (PTable index : table.getIndexes()) {
+                if(index.getIndexType().equals(IndexType.LOCAL)) {
+                    throw new SQLExceptionInfo
+                            .Builder(SQLExceptionCode.NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX)
+                            .setTableName(index.getName().getString())
+                            .build()
+                            .buildException();
+                }
+                if (indexesParam.remove(index.getTableName().getString())) {
+                    indexesPTable.add(index);
+                }
+            }
+            // indexesParam has index names that are not correct
+            if (!indexesParam.isEmpty()) {
+                throw new SQLExceptionInfo
+                        .Builder(SQLExceptionCode.INCORRECT_INDEX_NAME)
+                        .setTableName(StringUtils.join(",", indexesParam))
+                        .build()
+                        .buildException();
+            }
+        }
+        return indexesPTable;
+    }
+
+    private HashMap<PTable, PColumn> getPTablePColumnHashMapForCascade(List<PTable> indexesPTable,
+            boolean willBeImmutableRows, ColumnDef colDef, String familyName, Map<PTable, Integer> indexToColumnSizeMap) throws SQLException {
+        HashMap<PTable, PColumn> indexColumn;
+        if (colDef.isPK()) {
+            //only supported for non pk column
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.NOT_SUPPORTED_CASCADE_FEATURE_PK)
+                    .build()
+                    .buildException();
+        }
+        indexColumn = new HashMap(indexesPTable.size());
+        PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
+        ColumnName
+                indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(familyName, colDef.getColumnDefName().getColumnName()));
+        ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), false, colDef.getSortOrder(), colDef.getExpression(), colDef.isRowTimestamp());
+        // TODO: add support to specify tenant owned indexes in the DDL statement with CASCADE executed with Global connection
+        for (PTable index : indexesPTable) {
+            int iPos = indexToColumnSizeMap.get(index);
+            PColumn iColumn = newColumn(iPos, indexColDef, null, "", false, null, willBeImmutableRows);
+            indexColumn.put(index, iColumn);
+            indexToColumnSizeMap.put(index, iPos+1);
+        }
+        return indexColumn;
     }
 
     private void deleteMutexCells(String physicalSchemaName, String physicalTableName, Set<String> acquiredColumnMutexSet) throws SQLException {
