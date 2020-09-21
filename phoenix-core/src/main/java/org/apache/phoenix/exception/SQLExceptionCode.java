@@ -528,7 +528,13 @@ public enum SQLExceptionCode {
             "Cannot use a connection with SCN set to upsert data for a table with indexes."),
 
     CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS(904, "43M15",
-            "Cannot perform DDL with pending mutations. Commit or rollback mutations before performing DDL");
+            "Cannot perform DDL with pending mutations. Commit or rollback mutations before performing DDL"),
+
+    NOT_SUPPORTED_CASCADE_FEATURE_PK(905, "43M16", "CASCADE INDEX feature is not supported to add new PK column in INDEX"),
+
+    INCORRECT_INDEX_NAME(906, "43M17", "The list contains one or more incorrect index name(s)"),
+
+    NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX(907, "43M18", "CASCADE INDEX feature is not supported for local index");
 
     private final int errorCode;
     private final String sqlState;
