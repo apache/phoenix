@@ -81,6 +81,34 @@
                 <exclude>README*</exclude>
               </excludes>
             </filter>
+           <filter>
+              <artifact>org.apache.hadoop:hadoop-yarn-common</artifact>
+              <excludes>
+                <exclude>org/apache/hadoop/yarn/factories/package-info.class</exclude>
+                <exclude>org/apache/hadoop/yarn/util/package-info.class</exclude>
+                <exclude>org/apache/hadoop/yarn/factory/providers/package-info.class</exclude>
+                <exclude>org/apache/hadoop/yarn/client/api/impl/package-info.class</exclude>
+                <exclude>org/apache/hadoop/yarn/client/api/package-info.class</exclude>
+                <exclude>webapps/*</exclude>
+                <exclude>webapps/**/*</exclude>
+              </excludes>
+            </filter>
+            <!-- Phoenix specific -->
+            <filter>
+              <artifact>org.apache.commons:commons-math3</artifact>
+              <excludes>
+                <exclude>assets/*</exclude>
+                <exclude>assets/**/*</exclude>
+              </excludes>
+            </filter>
+            <filter>
+              <artifact>org.apache.hbase:hbase-server</artifact>
+              <excludes>
+                <exclude>hbase-webapps/*</exclude>
+                <exclude>hbase-webapps/**/*</exclude>
+              </excludes>
+            </filter>
+            <!-- Phoenix specific -->
           </filters>
           <transformers>
             <transformer
@@ -109,267 +137,173 @@
             </transformer>
           </transformers>
           <relocations>
-
-            <!-- COM relocation -->
             <relocation>
-              <pattern>com.beust.jcommander</pattern>
-              <shadedPattern>${shaded.package}.com.beust.jcommander</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.codahale</pattern>
-              <shadedPattern>${shaded.package}.com.codahale</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.fasterxml</pattern>
-              <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
-            </relocation>
-            <!-- Phoenix uses phoenix-thirdparty Guava, but we still want to shade away any Guava we
-            may get as a transitive dependency (from Hadoop) -->
-            <relocation>
-              <pattern>com.google</pattern>
-              <shadedPattern>${shaded.package}.com.google</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.jamesmurty</pattern>
-              <shadedPattern>${shaded.package}.com.jamesmurty</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.jcraft</pattern>
-              <shadedPattern>${shaded.package}.com.jcraft</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.lmax</pattern>
-              <shadedPattern>${shaded.package}.com.lmax</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.sun.xml</pattern>
-              <shadedPattern>${shaded.package}.com.sun.xml</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.sun.istack</pattern>
-              <shadedPattern>${shaded.package}.com.sun.istack</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.sun.research</pattern>
-              <shadedPattern>${shaded.package}.com.sun.research</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.sun.jersey</pattern>
-              <shadedPattern>${shaded.package}.com.sun.jersey</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.sun.activation</pattern>
-              <shadedPattern>${shaded.package}.com.sun.activation</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.thoughtworks</pattern>
-              <shadedPattern>${shaded.package}.com.thoughtworks</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>com.yammer</pattern>
-              <shadedPattern>${shaded.package}.com.yammer</shadedPattern>
-            </relocation>
-
-            <!-- IO relocations -->
-            <relocation>
-              <pattern>io.netty</pattern>
-              <shadedPattern>${shaded.package}.io.netty</shadedPattern>
-            </relocation>
-
-            <!-- ORG relocations -->
-            <relocation>
-              <pattern>org.antlr</pattern>
-              <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.aopalliance</pattern>
-              <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.codehaus</pattern>
-              <shadedPattern>${shaded.package}.org.codehaus</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.fusesource</pattern>
-              <shadedPattern>${shaded.package}.org.fusesource</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.glassfish.jersey</pattern>
-              <shadedPattern>${shaded.package}.org.glassfish.jersey</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.hamcrest</pattern>
-              <shadedPattern>${shaded.package}.org.hamcrest</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.hsqldb</pattern>
-              <shadedPattern>${shaded.package}.org.hsqldb</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.iq80</pattern>
-              <shadedPattern>${shaded.package}.org.iq80</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.jamon</pattern>
-              <shadedPattern>${shaded.package}.org.jamon</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.jboss</pattern>
-              <shadedPattern>${shaded.package}.org.jboss</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.jcodings</pattern>
-              <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.jets3t</pattern>
-              <shadedPattern>${shaded.package}.org.jets3t</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.joda</pattern>
-              <shadedPattern>${shaded.package}.org.joda</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.joni</pattern>
-              <shadedPattern>${shaded.package}.org.joni</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.junit</pattern>
-              <shadedPattern>${shaded.package}.org.junit</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.kosmix</pattern>
-              <shadedPattern>${shaded.package}.org.kosmix</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.mortbay</pattern>
-              <shadedPattern>${shaded.package}.org.mortbay</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.objectweb</pattern>
-              <shadedPattern>${shaded.package}.org.objectweb</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.stringtemplate</pattern>
-              <shadedPattern>${shaded.package}.org.stringtemplate</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.tukaani</pattern>
-              <shadedPattern>${shaded.package}.org.tukaani</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.znerd</pattern>
-              <shadedPattern>${shaded.package}.org.znerd</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.apache.avro</pattern>
-              <shadedPattern>${shaded.package}.org.apache.avro</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.apache.commons</pattern>
-              <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
+              <pattern>org/</pattern>
+              <shadedPattern>${shaded.package}.org.</shadedPattern>
               <excludes>
-                <exclude>org.apache.commons.csv.**</exclude>
-                <exclude>org.apache.commons.logging.**</exclude>
-                <exclude>org.apache.commons.configuration.**</exclude>
+                <exclude>org/apache/hadoop/*</exclude>
+                <exclude>org/apache/hadoop/**/*</exclude>
+                <!-- Our non-shaded htrace and logging libraries -->
+                <exclude>org/apache/htrace/*</exclude>
+                <exclude>org/apache/htrace/**/*</exclude>
+                <exclude>org/slf4j/*</exclude>
+                <exclude>org/slf4j/**/*</exclude>
+                <exclude>org/apache/commons/logging/*</exclude>
+                <exclude>org/apache/commons/logging/**/*</exclude>
+                <exclude>org/apache/log4j/*</exclude>
+                <exclude>org/apache/log4j/**/*</exclude>
+                <exclude>**/pom.xml</exclude>
+                <!-- Not the org/ packages that are a part of the jdk -->
+                <exclude>org/ietf/jgss/*</exclude>
+                <exclude>org/omg/**/*</exclude>
+                <exclude>org/w3c/dom/*</exclude>
+                <exclude>org/w3c/dom/**/*</exclude>
+                <exclude>org/xml/sax/*</exclude>
+                <exclude>org/xml/sax/**/*</exclude>
+
+                <!-- Extras compared to Hadoop -->
+                <!-- Hbase classes - Maybe these could be shaded as well ? -->
+                <exclude>org/apache/hbase/*</exclude>
+                <exclude>org/apache/hbase/**/*</exclude>
+                <!-- Phoenix classes -->
+                <exclude>org/apache/phoenix/*</exclude>
+                <exclude>org/apache/phoenix/**/*</exclude>
+                <!-- Do want/need to expose Omid and Tephra as well ? -->
               </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.directory</pattern>
-              <shadedPattern>${shaded.package}.org.apache.directory</shadedPattern>
+              <pattern>com/</pattern>
+              <shadedPattern>${shaded.package}.com.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+                <!-- Not the com/ packages that are a part of particular jdk implementations -->
+                <exclude>com/sun/tools/*</exclude>
+                <exclude>com/sun/javadoc/*</exclude>
+                <exclude>com/sun/security/*</exclude>
+                <exclude>com/sun/jndi/*</exclude>
+                <exclude>com/sun/management/*</exclude>
+                <exclude>com/sun/tools/**/*</exclude>
+                <exclude>com/sun/javadoc/**/*</exclude>
+                <exclude>com/sun/security/**/*</exclude>
+                <exclude>com/sun/jndi/**/*</exclude>
+                <exclude>com/sun/management/**/*</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.http</pattern>
-              <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+              <pattern>io/</pattern>
+              <shadedPattern>${shaded.package}.io.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+                <!-- Exclude config keys for Hadoop that look like package names -->
+                <exclude>io/compression/*</exclude>
+                <exclude>io/compression/**/*</exclude>
+                <exclude>io/mapfile/*</exclude>
+                <exclude>io/mapfile/**/*</exclude>
+                <exclude>io/map/index/*</exclude>
+                <exclude>io/seqfile/*</exclude>
+                <exclude>io/seqfile/**/*</exclude>
+                <exclude>io/file/buffer/size</exclude>
+                <exclude>io/skip/checksum/errors</exclude>
+                <exclude>io/sort/*</exclude>
+                <exclude>io/serializations</exclude>
+              </excludes>
+            </relocation>
+            <!-- JSRs that haven't made it to inclusion in J2SE -->
+            <relocation>
+              <pattern>javax/el/</pattern>
+              <shadedPattern>${shaded.package}.javax.el.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.jasper</pattern>
-              <shadedPattern>${shaded.package}.org.apache.jasper</shadedPattern>
+              <pattern>javax/cache/</pattern>
+              <shadedPattern>${shaded.package}.javax.cache.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.jute</pattern>
-              <shadedPattern>${shaded.package}.org.apache.jute</shadedPattern>
+              <pattern>javax/servlet/</pattern>
+              <shadedPattern>${shaded.package}.javax.servlet.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.mina</pattern>
-              <shadedPattern>${shaded.package}.org.apache.mina</shadedPattern>
+              <pattern>javax/ws/</pattern>
+              <shadedPattern>${shaded.package}.javax.ws.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.oro</pattern>
-              <shadedPattern>${shaded.package}.org.apache.oro</shadedPattern>
+              <pattern>net/</pattern>
+              <shadedPattern>${shaded.package}.net.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+                <!-- Exclude config keys for Hadoop that look like package names -->
+                <exclude>net/topology/*</exclude>
+                <exclude>net/topology/**/*</exclude>
+              </excludes>
+            </relocation>
+            <!-- okio declares a top level package instead of nested -->
+            <relocation>
+              <pattern>okio/</pattern>
+              <shadedPattern>${shaded.package}.okio.</shadedPattern>
+            </relocation>
+            <!-- Phoenix specific relocations -->
+            <relocation>
+              <!-- Tephra -->
+              <pattern>co/</pattern>
+              <shadedPattern>${shaded.package}.co.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.taglibs</pattern>
-              <shadedPattern>${shaded.package}.org.apache.taglibs</shadedPattern>
+              <pattern>it/</pattern>
+              <shadedPattern>${shaded.package}.it.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.thrift</pattern>
-              <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
+              <pattern>javassist/</pattern>
+              <shadedPattern>${shaded.package}.javassist.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.tools</pattern>
-              <shadedPattern>${shaded.package}.org.apache.tools</shadedPattern>
+              <pattern>jersey/</pattern>
+              <shadedPattern>${shaded.package}.jersey.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.twill</pattern>
-              <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
+              <pattern>jline/</pattern>
+              <shadedPattern>${shaded.package}.jline.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.velocity</pattern>
-              <shadedPattern>${shaded.package}.org.apache.velocity</shadedPattern>
+              <pattern>mozilla/</pattern>
+              <shadedPattern>${shaded.package}.mozilla.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
             <relocation>
-              <pattern>org.apache.zookeeper</pattern>
-              <shadedPattern>${shaded.package}.org.apache.zookeeper</shadedPattern>
+              <pattern>tables/</pattern>
+              <shadedPattern>${shaded.package}.tables.</shadedPattern>
+              <excludes>
+                <exclude>**/pom.xml</exclude>
+              </excludes>
             </relocation>
-
-            <!-- NET relocations -->
-            <relocation>
-              <pattern>net</pattern>
-              <shadedPattern>${shaded.package}.net</shadedPattern>
-            </relocation>
-
-            <!-- Misc relocations -->
-            <relocation>
-              <pattern>antlr</pattern>
-              <shadedPattern>${shaded.package}.antlr</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>it.unimi</pattern>
-              <shadedPattern>${shaded.package}.it.unimi</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>jline</pattern>
-              <shadedPattern>${shaded.package}.jline</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>junit</pattern>
-              <shadedPattern>${shaded.package}.junit</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.activation</pattern>
-              <shadedPattern>${shaded.package}.javax.activation</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.annotation</pattern>
-              <shadedPattern>${shaded.package}.javax.annotation</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.inject</pattern>
-              <shadedPattern>${shaded.package}.javax.inject</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.xml.bind</pattern>
-              <shadedPattern>${shaded.package}.javax.xml.bind</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.servlet</pattern>
-              <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.ws</pattern>
-              <shadedPattern>${shaded.package}.javax.ws</shadedPattern>
-            </relocation>
+            <!-- Phoenix specific relocations end -->
           </relocations>
         </configuration>
         <executions>
