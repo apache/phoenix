@@ -786,9 +786,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             }
             else {
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRow.getRow()), viewConstants);
-                String errorMsg = "Not matching index row";
+                String errorMsg = String.format("Not matching index row. expectedIndex=%d. expectedMutationSize=%d. actualIndex=%d. actualMutationSize=%d. expectedType=%s. actualType=%s",
+                        expectedIndex, expectedSize, actualIndex, actualSize, expected.getClass().getName(), (actualIndex < actualSize ? actual.getClass().getName() : "null"));
                 logToIndexToolOutputTable(dataKey, indexRow.getRow(),
-                        getTimestamp(expectedMutationList.get(0)), 0L, errorMsg, isBeforeRebuild,
+                        getTimestamp(expected), (actualIndex < actualSize ? getTimestamp(actual): 0L), errorMsg, isBeforeRebuild,
                     INVALID_ROW);
             }
             verificationPhaseResult.setInvalidIndexRowCount(verificationPhaseResult.getInvalidIndexRowCount() + 1);
