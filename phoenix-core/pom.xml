@@ -362,8 +362,8 @@
       <artifactId>jackson-annotations</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-protobuf</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.htrace</groupId>

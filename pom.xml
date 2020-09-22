@@ -97,7 +97,7 @@
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.7.25</slf4j.version>
-    <protobuf-java.version>2.5.0</protobuf-java.version>
+    <phoenix.thirdparty.version>1.0.0-SNAPSHOT</phoenix.thirdparty.version>
     <commons-io.version>2.5</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
@@ -1279,9 +1279,9 @@
         <version>${jackson.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.google.protobuf</groupId>
-        <artifactId>protobuf-java</artifactId>
-        <version>${protobuf-java.version}</version>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-protobuf</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>

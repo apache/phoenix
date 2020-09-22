@@ -399,8 +399,8 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-protobuf</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
