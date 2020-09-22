@@ -18,23 +18,23 @@
 
 package org.apache.phoenix.pherf.configuration;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.apache.phoenix.pherf.rules.RulesApplier;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlType;
-
-import org.apache.phoenix.pherf.rules.RulesApplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @XmlType
 public class Query {
 
+    private String id;
+    private String queryGroup;
+    private String tenantId;
     private String statement;
     private Long expectedAggregateRowCount;
-    private String tenantId;
     private String ddl;
-    private String queryGroup;
-    private String id;
+    private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
 
@@ -51,20 +51,24 @@ public class Query {
     public String getStatement() {
         return statement;
     }
-    
-    public String getDynamicStatement(RulesApplier ruleApplier, Scenario scenario) throws Exception {
-    	String ret = this.statement;
-    	String needQuotes = "";
-    	Matcher m = pattern.matcher(ret);
-        while(m.find()) {
-        	String dynamicField = m.group(0).replace("[", "").replace("]", "");
-        	Column dynamicColumn = ruleApplier.getRule(dynamicField, scenario);
-			needQuotes = (dynamicColumn.getType() == DataTypeMapping.CHAR || dynamicColumn
-					.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
-			ret = ret.replace("[" + dynamicField + "]",
-					needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue() + needQuotes);
-     }
-      	return ret;    	
+
+    public String getDynamicStatement(RulesApplier ruleApplier, Scenario scenario)
+            throws Exception {
+        String ret = this.statement;
+        String needQuotes = "";
+        Matcher m = pattern.matcher(ret);
+        while (m.find()) {
+            String dynamicField = m.group(0).replace("[", "").replace("]", "");
+            Column dynamicColumn = ruleApplier.getRule(dynamicField, scenario);
+            needQuotes =
+                    (dynamicColumn.getType() == DataTypeMapping.CHAR
+                            || dynamicColumn.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
+            ret =
+                    ret.replace("[" + dynamicField + "]",
+                            needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue()
+                                    + needQuotes);
+        }
+        return ret;
     }
 
     public void setStatement(String statement) {
@@ -160,6 +164,14 @@ public class Query {
         this.id = id;
     }
 
+    @XmlAttribute
+    public boolean isUseGlobalConnection() {
+        return useGlobalConnection;
+    }
+
+    public void setUseGlobalConnection(boolean useGlobalConnection) {
+        this.useGlobalConnection = useGlobalConnection;
+    }
 
     @XmlAttribute
     public long getTimeoutDuration() {

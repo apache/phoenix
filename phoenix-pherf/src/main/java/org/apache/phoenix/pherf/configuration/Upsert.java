@@ -21,7 +21,6 @@ package org.apache.phoenix.pherf.configuration;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 
 import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlType;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,29 +31,31 @@ public class Upsert {
     private String upsertGroup;
     private String statement;
     private List<Column> columns;
+    private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
 
     public Upsert() {
     	pattern = Pattern.compile("\\[.*?\\]");
     }
-    
 
-    public String getDynamicStatement(RulesApplier ruleApplier, Scenario scenario) throws Exception {
-    	String ret = this.statement;
-    	String needQuotes = "";
-    	Matcher m = pattern.matcher(ret);
-        while(m.find()) {
-        	String dynamicField = m.group(0).replace("[", "").replace("]", "");
-        	Column dynamicColumn = ruleApplier.getRule(dynamicField, scenario);
-			needQuotes = (dynamicColumn.getType() == DataTypeMapping.CHAR || dynamicColumn
-					.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
-			ret = ret.replace("[" + dynamicField + "]",
-					needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue() + needQuotes);
-     }
-      	return ret;    	
+    public String getDynamicStatement(RulesApplier ruleApplier, Scenario scenario)
+            throws Exception {
+        String ret = this.statement;
+        String needQuotes = "";
+        Matcher m = pattern.matcher(ret);
+        while (m.find()) {
+            String dynamicField = m.group(0).replace("[", "").replace("]", "");
+            Column dynamicColumn = ruleApplier.getRule(dynamicField, scenario);
+            needQuotes =
+                    (dynamicColumn.getType() == DataTypeMapping.CHAR
+                            || dynamicColumn.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
+            ret = ret.replace("[" + dynamicField + "]",
+                    needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue()
+                                    + needQuotes);
+        }
+        return ret;
     }
-
 
     /**
      * upsertGroup attribute is just a string value to help correlate upserts across sets or files.
@@ -89,6 +90,22 @@ public class Upsert {
         this.id = id;
     }
 
+    public List<Column> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(List<Column> columns) {
+        this.columns = columns;
+    }
+
+    @XmlAttribute
+    public boolean isUseGlobalConnection() {
+        return useGlobalConnection;
+    }
+
+    public void setUseGlobalConnection(boolean useGlobalConnection) {
+        this.useGlobalConnection = useGlobalConnection;
+    }
 
     @XmlAttribute
     public long getTimeoutDuration() {
