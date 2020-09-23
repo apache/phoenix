@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -202,7 +204,7 @@ public class SchemaExtractionProcessor {
 
     private String generateCreateViewDDL(String columnInfoString, String baseTableFullName,
             String whereClause, String pSchemaName, String pTableName) {
-        String viewFullName = SchemaUtil.getQualifiedTableName(pSchemaName, pTableName);
+        String viewFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_VIEW, viewFullName,
                 columnInfoString, baseTableFullName, whereClause));
         return outputBuilder.toString();
@@ -225,9 +227,10 @@ public class SchemaExtractionProcessor {
 
         return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
     }
+
     private String generateTableDDLString(String columnInfoString, String propertiesString,
             String pSchemaName, String pTableName) {
-        String pTableFullName = SchemaUtil.getQualifiedTableName(pSchemaName, pTableName);
+        String pTableFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE, pTableFullName));
         outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
         return outputBuilder.toString();
@@ -326,8 +329,15 @@ public class SchemaExtractionProcessor {
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }
-                key = columnFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)? key : String.format("\"%s\".%s", columnFamilyName, key);
-                optionBuilder.append(key+"="+value);
+                key = columnFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)?
+                        key : String.format("\"%s\".%s", columnFamilyName, key);
+                // properties value that corresponds to a number will not need single quotes around it
+                // properties value that corresponds to a boolean value will not need single quotes around it
+                if(!(StringUtils.isNumeric(value)) &&
+                        !(value.equalsIgnoreCase(Boolean.TRUE.toString()) ||value.equalsIgnoreCase(Boolean.FALSE.toString()))) {
+                    value= "'" + value + "'";
+                }
+                optionBuilder.append(key + "=" + value);
             }
         }
         return optionBuilder.toString();

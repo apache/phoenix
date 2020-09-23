@@ -1230,4 +1230,12 @@ public class SchemaUtil {
     public static String getNormalizedColumnName(ColumnParseNode columnParseNode) {
         return columnParseNode.getName();
     }
+
+    public static String getPTableFullNameWithQuotes(String pSchemaName, String pTableName) {
+        String pTableFullName = getQualifiedTableName(pSchemaName, pTableName);
+        if(!(Character.isAlphabetic(pTableName.charAt(0)))) {
+            pTableFullName = pSchemaName+".\""+pTableName+"\"";
+        }
+        return pTableFullName;
+    }
 }
