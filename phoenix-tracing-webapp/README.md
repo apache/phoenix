@@ -1,9 +1,9 @@
 # TracingWebApp
 1. Build the web application-
- *mvn clean install*
+ `mvn clean install`
 
 2. Start the TracingWebApp
- *java -jar target/phoenix-tracing-webapp-<version>-runnable.jar*
+ `java -jar target/phoenix-tracing-webapp-<version>-runnable.jar`
 
 3. View the Content -
  *http://localhost:8864/*
