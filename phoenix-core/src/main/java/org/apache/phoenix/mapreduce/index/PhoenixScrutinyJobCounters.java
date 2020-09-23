@@ -35,7 +35,17 @@ public enum PhoenixScrutinyJobCounters {
      */
     BAD_COVERED_COL_VAL_COUNT,
     /**
+     * Number of rows in source that have expired while scrutiny was comparing them with target
+     */
+    EXPIRED_ROW_COUNT,
+    /**
      * Number of batches processed
      */
-    BATCHES_PROCESSED_COUNT;
+    BATCHES_PROCESSED_COUNT,
+    /**
+     * Number of rows in source that became older than the max lookback age while scrutiny
+     * was comparing them with the target, and didn't match. We break these out separately because
+     * they could be due to extra versions being compacted, and are harmless.
+     */
+    BEYOND_MAX_LOOKBACK_COUNT;
 }

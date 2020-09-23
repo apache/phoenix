@@ -37,7 +37,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
@@ -54,7 +54,7 @@ public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
@@ -93,7 +93,7 @@ public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Parameters(name = "LocalIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList(true, false);
     }
 

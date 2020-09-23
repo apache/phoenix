@@ -20,7 +20,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.BaseIndexBuilder;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
-import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexUpdateManager;
 import org.slf4j.Logger;
@@ -38,18 +37,15 @@ import org.slf4j.LoggerFactory;
 public class NonTxIndexBuilder extends BaseIndexBuilder {
     private static final Logger LOGGER = LoggerFactory.getLogger(NonTxIndexBuilder.class);
 
-    protected LocalHBaseState localTable;
-
     @Override
     public void setup(RegionCoprocessorEnvironment env) throws IOException {
         super.setup(env);
-        this.localTable = new LocalTable(env);
     }
 
     @Override
-    public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData indexMetaData) throws IOException {
+    public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData indexMetaData, LocalHBaseState localHBaseState) throws IOException {
     	// create a state manager, so we can manage each batch
-        LocalTableState state = new LocalTableState(localTable, mutation);
+        LocalTableState state = new LocalTableState(localHBaseState, mutation);
         // build the index updates for each group
         IndexUpdateManager manager = new IndexUpdateManager(indexMetaData);
 

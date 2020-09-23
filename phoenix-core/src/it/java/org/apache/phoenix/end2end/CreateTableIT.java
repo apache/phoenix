@@ -32,6 +32,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
@@ -621,52 +623,96 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testCreateTableWithUpdateCacheFrequencyAttrib() throws Exception {
-        Connection connection = null;
-        String tableName = generateUniqueName();
-        try {
-            Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-            connection = DriverManager.getConnection(getUrl(), props);
+    private void verifyUCFValueInSysCat(String tableName, String createTableString,
+            Properties props, long expectedUCFInSysCat) throws SQLException {
+        String readSysCatQuery = "SELECT TABLE_NAME, UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG "
+                + "WHERE TABLE_NAME = '" + tableName + "'  AND TABLE_TYPE='u'";
 
-            // Assert update cache frequency to default value zero
-            connection.createStatement().execute(
-                "create table " + tableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-            String readSysCatQuery =
-                    "select TABLE_NAME,UPDATE_CACHE_FREQUENCY from SYSTEM.CATALOG where "
-                            + "TABLE_NAME = '" + tableName + "'  AND TABLE_TYPE='u'";
-            ResultSet rs = connection.createStatement().executeQuery(readSysCatQuery);
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(0, rs.getLong(2));
-            connection.createStatement().execute("drop table " + tableName);
-            connection.close();
-
-            // Assert update cache frequency to configured default value 10sec
-            int defaultUpdateCacheFrequency = 10000;
-            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB,
-                "" + defaultUpdateCacheFrequency);
-            connection = DriverManager.getConnection(getUrl(), props);
-            connection.createStatement().execute(
-                "create table " + tableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-            rs = connection.createStatement().executeQuery(readSysCatQuery);
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(defaultUpdateCacheFrequency, rs.getLong(2));
-            connection.createStatement().execute("drop table " + tableName);
-
-            // Assert update cache frequency to table specific value 30sec
-            int tableSpecificUpdateCacheFrequency = 30000;
-            connection.createStatement()
-                    .execute("create table " + tableName
-                            + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-                            + "UPDATE_CACHE_FREQUENCY=" + tableSpecificUpdateCacheFrequency);
-            rs = connection.createStatement().executeQuery(readSysCatQuery);
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(tableSpecificUpdateCacheFrequency, rs.getLong(2));
-        } finally {
-            if (connection != null) {
-                connection.createStatement().execute("drop table if exists " + tableName);
-                connection.close();
+        try (Connection connection = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = connection.createStatement()) {
+            stmt.execute(createTableString);
+            try (ResultSet rs = stmt.executeQuery(readSysCatQuery)) {
+                assertTrue(rs.next());
+                assertEquals(expectedUCFInSysCat, rs.getLong(2));
             }
+            stmt.execute("drop table " + tableName);
+        }
+    }
+
+    @Test
+    public void testCreateTableNoUpdateCacheFreq() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String createTableString = "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY, "
+                + "v1 VARCHAR, v2 VARCHAR)";
+        verifyUCFValueInSysCat(tableName, createTableString, props, 0L);
+    }
+
+    @Test
+    public void testCreateTableWithTableLevelUpdateCacheFreq() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+
+        HashMap<String, Long> expectedUCF = new HashMap<>();
+        expectedUCF.put("10", new Long(10L));
+        expectedUCF.put("0", new Long(0L));
+        expectedUCF.put("10000", new Long(10000L));
+        expectedUCF.put("ALWAYS", new Long(0L));
+        expectedUCF.put("NEVER", new Long(Long.MAX_VALUE));
+
+        for (HashMap.Entry<String, Long> entry : expectedUCF.entrySet()) {
+            String tableLevelUCF = entry.getKey();
+            long expectedUCFInSysCat = entry.getValue();
+
+            String createTableString = "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY,"
+                    + "v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY = " + tableLevelUCF;
+            verifyUCFValueInSysCat(tableName, createTableString, props, expectedUCFInSysCat);
+        }
+    }
+
+    @Test
+    public void testCreateTableWithInvalidTableUpdateCacheFreqShouldThrow() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+
+        ArrayList<String> invalidUCF = new ArrayList<>();
+        invalidUCF.add("GIBBERISH");
+        invalidUCF.add("10000.6");
+
+        for (String tableLevelUCF : invalidUCF) {
+            String createTableString = "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY,"
+                    + "v1 VARCHAR, v2 VARCHAR) UPDATE_CACHE_FREQUENCY = " + tableLevelUCF;
+            try {
+                verifyUCFValueInSysCat(tableName, createTableString, props, -1L);
+                fail();
+            } catch (IllegalArgumentException e) {
+                // expected
+                assertTrue(e.getMessage().contains("Table's " +
+                        PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY));
+            }
+        }
+    }
+
+    @Test
+    public void testCreateTableWithConnLevelUpdateCacheFreq() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+
+        HashMap<String, Long> expectedUCF = new HashMap<>();
+        expectedUCF.put("10", new Long(10L));
+        expectedUCF.put("0", new Long(0L));
+        expectedUCF.put("10000", new Long(10000L));
+        expectedUCF.put("ALWAYS", new Long(0L));
+        expectedUCF.put("NEVER", new Long(Long.MAX_VALUE));
+
+        for (HashMap.Entry<String, Long> entry : expectedUCF.entrySet()) {
+            String connLevelUCF = entry.getKey();
+            long expectedUCFInSysCat = entry.getValue();
+
+            String createTableString = "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY,"
+                    + "v1 VARCHAR, v2 VARCHAR)";
+            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, connLevelUCF);
+            verifyUCFValueInSysCat(tableName, createTableString, props, expectedUCFInSysCat);
         }
     }
 

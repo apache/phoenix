@@ -54,6 +54,7 @@ public class QueryResult extends Query {
         this.setDdl(query.getDdl());
         this.setQueryGroup(query.getQueryGroup());
         this.setId(query.getId());
+        this.setTimeoutDuration(query.getTimeoutDuration());
     }
 
     public Date getStartTime() {
@@ -150,6 +151,7 @@ public class QueryResult extends Query {
                 List<ResultValue> rowValues = new ArrayList<>();
                 rowValues.add(new ResultValue(util.convertNull(getStartTimeText())));
                 rowValues.add(new ResultValue(util.convertNull(this.getQueryGroup())));
+                rowValues.add(new ResultValue(util.convertNull(this.getId())));
                 rowValues.add(new ResultValue(util.convertNull(this.getStatement())));
                 rowValues.add(new ResultValue(util.convertNull(this.getTenantId())));
                 rowValues.addAll(runTime);

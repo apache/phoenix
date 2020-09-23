@@ -78,7 +78,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
 
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static synchronized void setup() throws Exception {
     setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     Properties tenantProperties = new Properties();
     tenantProperties.setProperty("TenantId", TENANT_ID);
@@ -98,7 +98,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   }
 
   @AfterClass
-  public static void tearDown() throws Exception {
+  public static synchronized void tearDown() throws Exception {
     Properties tenantProperties = new Properties();
     tenantProperties.setProperty("TenantId", TENANT_ID);
     try (java.sql.Connection connection =

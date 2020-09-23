@@ -21,7 +21,7 @@ import java.util.Map;
 
 import org.apache.phoenix.expression.function.*;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  *
@@ -191,6 +191,8 @@ public enum ExpressionType {
     SinFunction(SinFunction.class),
     CosFunction(CosFunction.class),
     TanFunction(TanFunction.class),
+    RowKeyBytesStringFunction(RowKeyBytesStringFunction.class),
+    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

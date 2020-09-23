@@ -70,8 +70,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
@@ -92,7 +92,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
     
     // name is used by failsafe as file name in reports
     @Parameters(name = "AlterTableWithViewsIT_columnEncoded={0}, multiTenant={1}, salted={2}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false, false, false }, { true, false, true },
                 { true, true, false }, { true, true, true } });
     }

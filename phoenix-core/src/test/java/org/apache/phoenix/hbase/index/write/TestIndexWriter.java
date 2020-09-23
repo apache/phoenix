@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.write;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -217,6 +218,8 @@ public class TestIndexWriter {
         try {
           writer.write(indexUpdates, ScanUtil.UNKNOWN_CLIENT_VERSION);
         } catch (IndexWriteException e) {
+          failedWrite[0] = true;
+        } catch (IOException e) {
           failedWrite[0] = true;
         }
       }

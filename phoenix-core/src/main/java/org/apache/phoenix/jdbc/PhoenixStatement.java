@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -94,9 +95,9 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogInfo;
-import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
+import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
@@ -114,6 +115,7 @@ import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.CursorName;
+import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
@@ -132,6 +134,7 @@ import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.ListJarsStatement;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.MutableStatement;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OffsetNode;
@@ -143,6 +146,8 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.ShowSchemasStatement;
+import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
@@ -180,6 +185,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -190,10 +196,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.math.IntMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -292,7 +298,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
                 @Override
                     public PhoenixResultSet call() throws SQLException {
-                    final long startTime = System.currentTimeMillis();
+                    final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
                         
@@ -361,7 +367,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         // Regardless of whether the query was successfully handled or not, 
                         // update the time spent so far. If needed, we can separate out the
                         // success times and failure times.
-                        GLOBAL_QUERY_TIME.update(System.currentTimeMillis() - startTime);
+                        GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
@@ -408,6 +414,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);
                                 state.checkpointIfNeccessary(plan);
+                                checkIfDDLStatementandMutationState(stmt, state);
                                 MutationState lastState = plan.execute();
                                 state.join(lastState);
                                 if (connection.getAutoCommit()) {
@@ -776,6 +783,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public List<OrderBy> getOutputOrderBys() {
                     return Collections.<OrderBy> emptyList();
                 }
+
+                @Override
+                public boolean isApplicable() {
+                    return true;
+                }
             };
         }
     }
@@ -904,50 +916,62 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context, stmt);
+        }
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+        private class CustomMutationPlan extends BaseMutationPlan {
+
+            private final StatementContext context;
+            private final PhoenixStatement stmt;
+
+            private CustomMutationPlan(StatementContext context, PhoenixStatement stmt) {
+                super(context, ExecutableAddJarsStatement.this.getOperation());
+                this.context = context;
+                this.stmt = stmt;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("ADD JARS"));
+            }
+
+            @Override
+            public MutationState execute() throws SQLException {
+                String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps()
+                    .get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                if (dynamicJarsDir == null) {
+                    throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
+                        + " is not configured for placing the jars.");
                 }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ADD JARS"));
+                dynamicJarsDir =
+                  dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                Configuration conf = HBaseFactoryProvider.getConfigurationFactory()
+                    .getConfiguration();
+                Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                for (LiteralParseNode jarPath : getJarPaths()) {
+                    String jarPathStr = (String) jarPath.getValue();
+                    if (!jarPathStr.endsWith(".jar")) {
+                        throw new SQLException(jarPathStr + " is not a valid jar file path.");
+                    }
                 }
-
-                @Override
-                public MutationState execute() throws SQLException {
-                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
-                    if(dynamicJarsDir == null) {
-                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY+" is not configured for placing the jars.");
+                try {
+                    FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                    List<LiteralParseNode> jarPaths = getJarPaths();
+                    for (LiteralParseNode jarPath : jarPaths) {
+                        File f = new File((String) jarPath.getValue());
+                        fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
+                            dynamicJarsDir + f.getName()));
                     }
-                    dynamicJarsDir =
-                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
-                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
-                    for (LiteralParseNode jarPath : getJarPaths()) {
-                        String jarPathStr = (String)jarPath.getValue();
-                        if(!jarPathStr.endsWith(".jar")) {
-                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
-                        }
-                    }
-
-                    try {
-                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
-                        List<LiteralParseNode> jarPaths = getJarPaths();
-                        for (LiteralParseNode jarPath : jarPaths) {
-                            File f = new File((String) jarPath.getValue());
-                            fs.copyFromLocalFile(new Path(f.getAbsolutePath()), new Path(
-                                    dynamicJarsDir + f.getName()));
-                        }
-                    } catch(IOException e) {
-                        throw new SQLException(e);
-                    }
-                    return new MutationState(0, 0, context.getConnection());
+                } catch (IOException e) {
+                    throw new SQLException(e);
                 }
-            };
-            
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
     
@@ -1012,46 +1036,58 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context, stmt);
+        }
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+        private class CustomMutationPlan extends BaseMutationPlan {
+
+            private final StatementContext context;
+            private final PhoenixStatement stmt;
+
+            private CustomMutationPlan(StatementContext context, PhoenixStatement stmt) {
+                super(context, ExecutableDeleteJarStatement.this.getOperation());
+                this.context = context;
+                this.stmt = stmt;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("DELETE JAR"));
+            }
+
+            @Override
+            public MutationState execute() throws SQLException {
+                String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps()
+                    .get(QueryServices.DYNAMIC_JARS_DIR_KEY);
+                if (dynamicJarsDir == null) {
+                    throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
+                            + " is not configured.");
                 }
-
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("DELETE JAR"));
-                }
-
-                @Override
-                public MutationState execute() throws SQLException {
-                    String dynamicJarsDir = stmt.getConnection().getQueryServices().getProps().get(QueryServices.DYNAMIC_JARS_DIR_KEY);
-                    if (dynamicJarsDir == null) {
-                        throw new SQLException(QueryServices.DYNAMIC_JARS_DIR_KEY
-                                + " is not configured.");
+                dynamicJarsDir =
+                        dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
+                Configuration conf = HBaseFactoryProvider.getConfigurationFactory()
+                    .getConfiguration();
+                Path dynamicJarsDirPath = new Path(dynamicJarsDir);
+                try {
+                    FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
+                    String jarPathStr = (String)getJarPath().getValue();
+                    if(!jarPathStr.endsWith(".jar")) {
+                        throw new SQLException(jarPathStr + " is not a valid jar file path.");
                     }
-                    dynamicJarsDir =
-                            dynamicJarsDir.endsWith("/") ? dynamicJarsDir : dynamicJarsDir + '/';
-                    Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-                    Path dynamicJarsDirPath = new Path(dynamicJarsDir);
-                    try {
-                        FileSystem fs = dynamicJarsDirPath.getFileSystem(conf);
-                        String jarPathStr = (String)getJarPath().getValue();
-                        if(!jarPathStr.endsWith(".jar")) {
-                            throw new SQLException(jarPathStr + " is not a valid jar file path.");
-                        }
-                        Path p = new Path(jarPathStr);
-                        if(fs.exists(p)) {
-                            fs.delete(p, false);
-                        }
-                    } catch(IOException e) {
-                        throw new SQLException(e);
+                    Path p = new Path(jarPathStr);
+                    if(fs.exists(p)) {
+                        fs.delete(p, false);
                     }
-                    return new MutationState(0, 0, context.getConnection());
+                } catch(IOException e) {
+                    throw new SQLException(e);
                 }
-            };
-            
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
 
@@ -1066,6 +1102,35 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             return new ListJarsQueryPlan(stmt);
+        }
+    }
+
+    private static class ExecutableShowTablesStatement extends ShowTablesStatement
+        implements CompilableStatement {
+
+        public ExecutableShowTablesStatement(String schema, String pattern) {
+          super(schema, pattern);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+            throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getTablesStmt(stmt.getConnection(), null,
+                getTargetSchema(), getDbPattern(), null);
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
+    // Delegates to a SELECT query against SYSCAT.
+    private static class ExecutableShowSchemasStatement extends ShowSchemasStatement implements CompilableStatement {
+
+        public ExecutableShowSchemasStatement(String pattern) { super(pattern); }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            PreparedStatement delegateStmt =
+                QueryUtil.getSchemasStmt(stmt.getConnection(), null, getSchemaPattern());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
         }
     }
 
@@ -1298,37 +1363,47 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             final StatementContext context = new StatementContext(stmt);
-            return new BaseMutationPlan(context, this.getOperation()) {
+            return new CustomMutationPlan(context);
+        }
 
-                @Override
-                public StatementContext getContext() {
-                    return context;
-                }
+        private class CustomMutationPlan extends BaseMutationPlan {
 
-                @Override
-                public ParameterMetaData getParameterMetaData() {
-                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
-                }
+            private final StatementContext context;
 
-                @Override
-                public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
-                }
+            private CustomMutationPlan(StatementContext context) {
+                super(context, ExecutableAlterSessionStatement.this.getOperation());
+                this.context = context;
+            }
+
+            @Override
+            public StatementContext getContext() {
+                return context;
+            }
+
+            @Override
+            public ParameterMetaData getParameterMetaData() {
+                return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+            }
+
+            @Override
+            public ExplainPlan getExplainPlan() throws SQLException {
+                return new ExplainPlan(Collections.singletonList("ALTER SESSION"));
+            }
 
 
-                @Override
-                public MutationState execute() throws SQLException {
-                    Object consistency = getProps().get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
-                    if(consistency != null) {
-                        if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
-                            getContext().getConnection().setConsistency(Consistency.TIMELINE);
-                        } else {
-                        	getContext().getConnection().setConsistency(Consistency.STRONG);
-                        }
+            @Override
+            public MutationState execute() throws SQLException {
+                Object consistency = getProps()
+                    .get(PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase());
+                if(consistency != null) {
+                    if (((String)consistency).equalsIgnoreCase(Consistency.TIMELINE.toString())){
+                        getContext().getConnection().setConsistency(Consistency.TIMELINE);
+                    } else {
+                        getContext().getConnection().setConsistency(Consistency.STRONG);
                     }
-                    return new MutationState(0, 0, context.getConnection());
                 }
-            };
+                return new MutationState(0, 0, context.getConnection());
+            }
         }
     }
 
@@ -1424,8 +1499,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            super(table, tableType, columnDefs, ifNotExists, props);
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
+            super(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
         }
 
         @SuppressWarnings("unchecked")
@@ -1566,8 +1641,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
         
         @Override
-        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
+            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
         }
         
         @Override
@@ -1634,6 +1709,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecutableChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName,
                                                          String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
             return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
+        }
+
+        @Override
+        public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+            return new ExecutableShowTablesStatement(schema, pattern);
+        }
+
+        @Override
+        public ShowSchemasStatement showSchemasStatement(String pattern) {
+            return new ExecutableShowSchemasStatement(pattern);
         }
 
     }
@@ -2131,4 +2216,26 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    /**
+     * Check if the statement is a DDL and if there are any uncommitted mutations Throw or log the
+     * message
+     */
+    private void checkIfDDLStatementandMutationState(final CompilableStatement stmt,
+            MutationState state) throws SQLException {
+        boolean throwUncommittedMutation =
+                connection.getQueryServices().getProps().getBoolean(
+                    QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB,
+                    QueryServicesOptions.DEFAULT_PENDING_MUTATIONS_DDL_THROW);
+        if (stmt instanceof MutableStatement && !(stmt instanceof DMLStatement)
+                && state.getNumRows() > 0) {
+            if (throwUncommittedMutation) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS).build()
+                                .buildException();
+            } else {
+                LOGGER.warn(
+                    "There are Uncommitted mutations, which will be dropped on the execution of this DDL statement.");
+            }
+        }
+    }
 }

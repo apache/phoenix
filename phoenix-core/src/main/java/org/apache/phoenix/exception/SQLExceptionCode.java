@@ -35,6 +35,9 @@ import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
+import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
@@ -48,7 +51,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.MetaDataUtil;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 /**
@@ -148,7 +151,6 @@ public enum SQLExceptionCode {
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed."),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !=."),
-
     /**
      *  Invalid Transaction State (errorcode 05, sqlstate 25)
      */
@@ -188,6 +190,8 @@ public enum SQLExceptionCode {
      UNEQUAL_SCN_AND_BUILD_INDEX_AT(534, "42911", "If both specified, values of CURRENT_SCN and BUILD_INDEX_AT must be equal."),
      ONLY_INDEX_UPDATABLE_AT_SCN(535, "42912", "Only an index may be updated when the BUILD_INDEX_AT property is specified"),
      PARENT_TABLE_NOT_FOUND(536, "42913", "Can't drop the index because the parent table in the DROP statement is incorrect."),
+    CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE(538, "42915",
+        "Cannot use SCN to look further back in the past beyond the configured max lookback age"),
 
      /**
      * HBase and Phoenix specific implementation defined sub-classes.
@@ -321,6 +325,13 @@ public enum SQLExceptionCode {
             + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.toString()),
     CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX(10950, "44A31", "Cannot set or alter "
             + PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " on an index"),
+    PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY(10951, "44A32", PhoenixDatabaseMetaData.PHOENIX_TTL
+            + " property can only be set for views"),
+    CANNOT_SET_OR_ALTER_PHOENIX_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
+            + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an table with TTL,"),
+    ABOVE_INDEX_NON_ASYNC_THRESHOLD(1097, "44A34", "The estimated read size for index creation "
+            + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
+            + " limit or create ASYNC index."),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -410,6 +421,13 @@ public enum SQLExceptionCode {
     CANNOT_SET_GUIDE_POST_WIDTH(1139, "XCL39", "Guide post width can only be set on base data tables"),
     CANNOT_CREATE_VIEWS_ON_SYSTEM_TABLES(1141, "XCL41", "Cannot create views on tables of type" +
             PTableType.SYSTEM),
+    UNABLE_TO_CREATE_CHILD_LINK(1142, "XCL42", "Error creating parent-child link (Link type=" +
+            PTable.LinkType.CHILD_TABLE + ") for view"),
+    UNABLE_TO_UPDATE_PARENT_TABLE(1143, "XCL43", "Error Updating the parent table"),
+    UNABLE_TO_DELETE_CHILD_LINK(1144, "XCL44", "Error deleting parent-child link (Link type=" +
+            PTable.LinkType.CHILD_TABLE + ") for view"),
+    TABLE_NOT_IN_REGION(1145, "XCL45", "No modifications allowed on this table. "
+    + "Table not in this region."),
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */
@@ -427,6 +445,10 @@ public enum SQLExceptionCode {
     UPGRADE_NOT_REQUIRED(2012, "INT14", ""),
     GET_TABLE_ERROR(2013, "INT15", "MetadataEndpointImpl doGetTable called for table not present " +
             "on region"),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_COERCIBLE(2014, "INT16", "Row Value Constructor Offset Not Coercible to a Primary or Indexed RowKey."),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR(2015, "INT17", "Row Value Constructor Offset had an Unexpected Error."),
+    ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_ALLOWED_IN_QUERY(2016, "INT18", "Row Value Constructor Offset Not Allowed In Query."),
+
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
@@ -471,25 +493,43 @@ public enum SQLExceptionCode {
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
         " of connections to the target cluster."),
-    
     MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger" +
             " than maximum allowed number of rows, try upserting rows in smaller batches or " +
-            "using autocommit on for deletes."),
+            "using autocommit on for deletes.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxMutationSizeExceededException(
+                    info.getMaxMutationSize(), info.getMutationSize());
+        }
+    }),
     MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is " +
             "bigger than maximum allowed number of bytes, try upserting rows in smaller batches " +
-            "or using autocommit on for deletes."),
+            "or using autocommit on for deletes.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxMutationSizeBytesExceededException(info.getMaxMutationSizeBytes(),
+                    info.getMutationSizeBytes());
+        }
+    }),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
     STATS_COLLECTION_DISABLED_ON_SERVER(1401, "STS01", "Stats collection attempted but is disabled on server"),
 
-    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMSTAMP_COLUMN(901,"43M12",
+    CANNOT_UPSERT_WITH_SCN_FOR_ROW_TIMESTAMP_COLUMN(901,"43M12",
             "Cannot use a connection with SCN set to upsert data for " +
                     "table with ROW_TIMESTAMP column."),
-    CANNOT_UPSERT_WITH_SCN_FOR_MUTABLE_TABLE_WITH_INDEXES(903,"43M14",
-            "Cannot use a connection with SCN set to " +
-                    "upsert data for a mutable table with indexes.");
+    CANNOT_UPSERT_WITH_SCN_FOR_TABLE_WITH_INDEXES(903,"43M14",
+            "Cannot use a connection with SCN set to upsert data for a table with indexes."),
 
+    CANNOT_PERFORM_DDL_WITH_PENDING_MUTATIONS(904, "43M15",
+            "Cannot perform DDL with pending mutations. Commit or rollback mutations before performing DDL"),
+
+    NOT_SUPPORTED_CASCADE_FEATURE_PK(905, "43M16", "CASCADE INDEX feature is not supported to add new PK column in INDEX"),
+
+    INCORRECT_INDEX_NAME(906, "43M17", "The list contains one or more incorrect index name(s)"),
+
+    NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX(907, "43M18", "CASCADE INDEX feature is not supported for local index");
 
     private final int errorCode;
     private final String sqlState;
@@ -565,4 +605,5 @@ public enum SQLExceptionCode {
         }
         return code;
     }
+
 }

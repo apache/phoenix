@@ -17,24 +17,15 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-
+import com.google.protobuf.ByteString;
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -47,7 +38,10 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.ObserverContextImpl;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcServer;
+import org.apache.hadoop.hbase.ipc.RpcUtil;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.AccessControlService;
@@ -57,14 +51,14 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.UserProvider;
 import org.apache.hadoop.hbase.security.access.AccessChecker;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.AccessControlConstants;
 import org.apache.hadoop.hbase.security.access.AccessControlUtil;
 import org.apache.hadoop.hbase.security.access.AuthResult;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.apache.hadoop.hbase.security.access.TableAuthManager;
 import org.apache.hadoop.hbase.security.access.UserPermission;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
+import org.apache.phoenix.compat.hbase.CompatPermissionUtil;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -75,10 +69,20 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.RpcCallback;
-import com.google.protobuf.RpcController;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.authorizeUserTable;
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getPermissionFromUP;
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getUserFromUP;
 
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
@@ -86,6 +90,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     AtomicReference<ArrayList<MasterObserver>> accessControllers = new AtomicReference<>();
     private boolean hbaseAccessControllerEnabled;
     private boolean accessCheckEnabled;
+    private boolean execPermissionsCheckEnabled;
     private UserProvider userProvider;
     private AccessChecker accessChecker;
     public static final Logger LOGGER = LoggerFactory.getLogger(PhoenixAccessController.class);
@@ -123,7 +128,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void preGetTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String tableName, TableName physicalTableName) throws IOException {
         if (!accessCheckEnabled) { return; }
-        requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        if(this.execPermissionsCheckEnabled) {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        } else {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ);
+        }
     }
 
     @Override
@@ -131,10 +140,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Configuration conf = env.getConfiguration();
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
-        if (!this.accessCheckEnabled) {
-            LOGGER.warn(
-                    "PhoenixAccessController has been loaded with authorization checks disabled.");
-        }
+            if (!this.accessCheckEnabled) {
+                LOGGER.warn(
+                        "PhoenixAccessController has been loaded with authorization checks disabled.");
+            }
+        this.execPermissionsCheckEnabled = conf.getBoolean(AccessControlConstants.EXEC_PERMISSION_CHECKS_KEY,
+                AccessControlConstants.DEFAULT_EXEC_PERMISSION_CHECKS);
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
             this.env = (PhoenixMetaDataControllerEnvironment)env;
         } else {
@@ -142,12 +153,13 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     "Not a valid environment, should be loaded by PhoenixMetaDataControllerEnvironment");
         }
 
+        //2.3+ doesn't need to access ZK object.
         ZKWatcher zk = null;
         RegionCoprocessorEnvironment regionEnv = this.env.getRegionCoprocessorEnvironment();
         if (regionEnv instanceof HasRegionServerServices) {
             zk = ((HasRegionServerServices) regionEnv).getRegionServerServices().getZooKeeper();
         }
-        accessChecker = new AccessChecker(env.getConfiguration(), zk);
+        accessChecker = CompatPermissionUtil.newAccessChecker(env.getConfiguration(), zk);
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
         // init superusers and add the server principal (if using security)
@@ -158,7 +170,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
         if(accessChecker.getAuthManager() != null) {
-            TableAuthManager.release(accessChecker.getAuthManager());
+            CompatPermissionUtil.stopAccessChecker(accessChecker);
         }
     }
 
@@ -183,12 +195,17 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Set<TableName> physicalTablesChecked = new HashSet<TableName>();
         if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
             physicalTablesChecked.add(parentPhysicalTableName);
-            requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ);
+            }
         }
 
         if (tableType == PTableType.VIEW) {
-            
-            Action[] requiredActions = { Action.READ, Action.EXEC };
+
+            Action[] requiredActions = execPermissionsCheckEnabled ?
+                    new Action[]{ Action.READ, Action.EXEC } : new Action[] { Action.READ};
             for (TableName index : indexes) {
                 if (!physicalTablesChecked.add(index)) {
                     // skip check for local index as we have already check the ACLs above
@@ -198,22 +215,22 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
                 User user = getActiveUser();
                 List<UserPermission> permissionForUser = getPermissionForUser(
-                        getUserPermissions(index), Bytes.toBytes(user.getShortName()));
+                        getUserPermissions(index), user.getShortName());
                 Set<Action> requireAccess = new HashSet<>();
                 Set<Action> accessExists = new HashSet<>();
                 if (permissionForUser != null) {
                     for (UserPermission userPermission : permissionForUser) {
                         for (Action action : Arrays.asList(requiredActions)) {
-                            if (!userPermission.implies(action)) {
+                            if (!getPermissionFromUP(userPermission).implies(action)) {
                                 requireAccess.add(action);
                             }
                         }
                     }
                     if (!requireAccess.isEmpty()) {
                         for (UserPermission userPermission : permissionForUser) {
-                            accessExists.addAll(Arrays.asList(userPermission.getActions()));
+                            accessExists.addAll(Arrays.asList(
+                                getPermissionFromUP(userPermission).getActions()));
                         }
-
                     }
                 } else {
                     requireAccess.addAll(Arrays.asList(requiredActions));
@@ -238,9 +255,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // skip check for local index
             if (physicalTableName != null && !parentPhysicalTableName.equals(physicalTableName)
                     && !MetaDataUtil.isViewIndex(physicalTableName.getNameAsString())) {
+                List<Action> actions = new ArrayList<>(Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN));
+                if(execPermissionsCheckEnabled) {
+                    actions.add(Action.EXEC);
+                }
                 authorizeOrGrantAccessToUsers("Create" + tableType, parentPhysicalTableName,
-                        Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.EXEC, Action.ADMIN),
-                        physicalTableName);
+                        actions, physicalTableName);
             }
         }
     }
@@ -286,15 +306,15 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             Set<Action> requireAccess = new HashSet<Action>();
                             Set<Action> accessExists = new HashSet<Action>();
                             List<UserPermission> permsToTable = getPermissionForUser(permissionsOnTheTable,
-                                    userPermission.getUser());
+                                    getUserFromUP(userPermission));
                             for (Action action : requiredActionsOnTable) {
                                 boolean haveAccess=false;
-                                if (userPermission.implies(action)) {
+                                if (getPermissionFromUP(userPermission).implies(action)) {
                                     if (permsToTable == null) {
                                         requireAccess.add(action);
                                     } else {
                                         for (UserPermission permToTable : permsToTable) {
-                                            if (permToTable.implies(action)) {
+                                            if (getPermissionFromUP(permToTable).implies(action)) {
                                                 haveAccess=true;
                                             }
                                         }
@@ -307,19 +327,21 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             if (permsToTable != null) {
                                 // Append access to already existing access for the user
                                 for (UserPermission permToTable : permsToTable) {
-                                    accessExists.addAll(Arrays.asList(permToTable.getActions()));
+                                    accessExists.addAll(Arrays.asList(
+                                        getPermissionFromUP(permToTable).getActions()));
                                 }
                             }
                             if (!requireAccess.isEmpty()) {
-                                if(AuthUtil.isGroupPrincipal(Bytes.toString(userPermission.getUser()))){
-                                    AUDITLOG.warn("Users of GROUP:" + Bytes.toString(userPermission.getUser())
+                                if(AuthUtil.isGroupPrincipal(getUserFromUP(userPermission))){
+                                    AUDITLOG.warn("Users of GROUP:" + getUserFromUP(userPermission)
                                             + " will not have following access " + requireAccess
                                             + " to the newly created index " + toTable
                                             + ", Automatic grant is not yet allowed on Groups");
                                     continue;
                                 }
-                                handleRequireAccessOnDependentTable(request, Bytes.toString(userPermission.getUser()),
-                                        toTable, toTable.getNameAsString(), requireAccess, accessExists);
+                                handleRequireAccessOnDependentTable(request,
+                                        getUserFromUP(userPermission), toTable,
+                                        toTable.getNameAsString(), requireAccess, accessExists);
                             }
                         }
                     }
@@ -329,13 +351,13 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         });
     }
 
-    private List<UserPermission> getPermissionForUser(List<UserPermission> perms, byte[] user) {
+    private List<UserPermission> getPermissionForUser(List<UserPermission> perms, String user) {
         if (perms != null) {
             // get list of permissions for the user as multiple implementation of AccessControl coprocessors can give
             // permissions for same users
             List<UserPermission> permissions = new ArrayList<>();
             for (UserPermission p : perms) {
-                if (Bytes.equals(p.getUser(),user)){
+                if (getUserFromUP(p).equals(user)){
                      permissions.add(p);
                 }
             }
@@ -365,7 +387,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         //checking similar permission checked during the create of the view.
         if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
-            requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
@@ -380,7 +406,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
         }
         if (tableType == PTableType.VIEW) {
-            requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Alter "+tableType, parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
@@ -424,7 +454,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         // Check for read access in case of rebuild
         if (newState == PIndexState.BUILDING) {
-            requireAccess("Rebuild:", parentPhysicalTableName, Action.READ, Action.EXEC);
+            if(execPermissionsCheckEnabled) {
+                requireAccess("Rebuild:", parentPhysicalTableName, Action.READ, Action.EXEC);
+            } else {
+                requireAccess("Rebuild:", parentPhysicalTableName, Action.READ);
+            }
         }
     }
 
@@ -439,7 +473,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             @Override
             public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
+                final RpcCall rpcContext = RpcUtil.getRpcContext();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
+                    // Setting RPC context as null so that user can be resetted
+                    RpcUtil.setRpcContext(null);
                     // Merge permissions from all accessController coprocessors loaded in memory
                     for (MasterObserver service : getAccessControllers()) {
                         // Use AccessControlClient API's if the accessController is an instance of org.apache.hadoop.hbase.security.access.AccessController
@@ -456,6 +493,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                         throw (Error) e;
                     }
                     throw new Exception(e);
+                } finally {
+                    // Setting RPC context back to original context of the RPC
+                    RpcUtil.setRpcContext(rpcContext);
                 }
                 return userPermissions;
             }
@@ -469,9 +509,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
           User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
               @Override
               public List<UserPermission> run() throws Exception {
-                  final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
-                 try (Connection connection =
+                  final RpcCall rpcContext = RpcUtil.getRpcContext();
+                  try (Connection connection =
                          ConnectionFactory.createConnection(((CoprocessorEnvironment) env).getConfiguration())) {
+                      // Setting RPC context as null so that user can be resetted
+                      RpcUtil.setRpcContext(null);
                       for (MasterObserver service : getAccessControllers()) {
                          if (service.getClass().getName().equals(
                              org.apache.hadoop.hbase.security.access.AccessController.class
@@ -489,13 +531,15 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                           throw (Error) e;
                       }
                       throw new Exception(e);
+                  } finally {
+                      // Setting RPC context back to original context of the RPC
+                      RpcUtil.setRpcContext(rpcContext);
                   }
                   return userPermissions;
               }
             private void getUserPermsFromUserDefinedAccessController(final List<UserPermission> userPermissions, Connection connection, AccessControlService.Interface service) {
 
-                RpcController controller = (RpcController) ((ClusterConnection)connection)
-                        .getRpcControllerFactory().newController();
+                RpcController controller = new ServerRpcController();
 
                 AccessControlProtos.GetUserPermissionsRequest.Builder builderTablePerms = AccessControlProtos.GetUserPermissionsRequest
                         .newBuilder();
@@ -544,10 +588,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User user = getActiveUser();
         AuthResult result = null;
         List<Action> requiredAccess = new ArrayList<Action>();
-        List<UserPermission> userPermissions = new ArrayList<>();
-        if(permissions.length > 0) {
-           getUserDefinedPermissions(tableName, userPermissions);
-        }
+
         for (Action permission : permissions) {
              if (hasAccess(getUserPermissions(tableName), tableName, permission, user)) {
                 result = AuthResult.allow(request, "Table permission granted", user, permission, tableName, null, null);
@@ -578,26 +619,23 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
         if (perms != null) {
             if (hbaseAccessControllerEnabled
-                    && accessChecker.getAuthManager().userHasAccess(user, table, action)) {
+                    && authorizeUserTable(accessChecker, user, table, action)) {
                 return true;
             }
-            List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName().getBytes());
+            List<UserPermission> permissionsForUser =
+                    getPermissionForUser(perms, user.getShortName());
             if (permissionsForUser != null) {
                 for (UserPermission permissionForUser : permissionsForUser) {
-                    if (permissionForUser.implies(action)) { return true; }
+                    if (getPermissionFromUP(permissionForUser).implies(action)) { return true; }
                 }
             }
             String[] groupNames = user.getGroupNames();
             if (groupNames != null) {
               for (String group : groupNames) {
-                    List<UserPermission> groupPerms =
-                            getPermissionForUser(perms, (AuthUtil.toGroupEntry(group)).getBytes());
-                    if (hbaseAccessControllerEnabled && accessChecker.getAuthManager()
-                            .groupHasAccess(group, table, action)) {
-                        return true;
-                    }
+                List<UserPermission> groupPerms =
+                        getPermissionForUser(perms, (AuthUtil.toGroupEntry(group)));
                 if (groupPerms != null) for (UserPermission permissionForUser : groupPerms) {
-                    if (permissionForUser.implies(action)) { return true; }
+                    if (getPermissionFromUP(permissionForUser).implies(action)) { return true; }
                 }
               }
             }

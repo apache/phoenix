@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -46,9 +47,9 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 public class ScanRanges {
@@ -73,9 +74,14 @@ public class ScanRanges {
     }
 
     public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, Integer nBuckets, boolean useSkipScan, int rowTimestampColIndex) {
+        return create(schema,ranges,slotSpan,nBuckets,useSkipScan,rowTimestampColIndex,Optional.<byte[]>absent());
+    }
+
+    public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, Integer nBuckets, boolean useSkipScan, int rowTimestampColIndex, Optional<byte[]> scanMinOffset) {
         int offset = nBuckets == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
         int nSlots = ranges.size();
-        if (nSlots == offset) {
+
+        if (nSlots == offset && !scanMinOffset.isPresent()) {
             return EVERYTHING;
         } else if ((nSlots == 1 + offset && ranges.get(offset).size() == 1 && ranges.get(offset).get(0) == KeyRange.EMPTY_RANGE)) {
             return NOTHING;
@@ -108,6 +114,7 @@ public class ScanRanges {
                 slotSpan = new int[] {schema.getMaxFields()-1};
             }
         }
+
         List<List<KeyRange>> sortedRanges = Lists.newArrayListWithExpectedSize(ranges.size());
         for (int i = 0; i < ranges.size(); i++) {
             Field f = schema.getField(i);
@@ -135,6 +142,24 @@ public class ScanRanges {
             if (minKey.length <= offset) {
                 minKey = KeyRange.UNBOUND;
             }
+
+            //Handle the offset by pushing it into the scanRange
+            if(scanMinOffset.isPresent()){
+
+                byte[] minOffset = scanMinOffset.get();
+                //If we are salted we have to
+                //This should be safe for RVC Offset since we specify a full rowkey which
+                // is by definition unique so duplicating the salt bucket is fine
+                if(nBuckets != null && nBuckets > 0) {
+                    minOffset[0] = 0;  //We use 0 for salt bucket for scans
+                }
+
+                //If the offset is more selective than the existing ranges
+                if(Bytes.BYTES_COMPARATOR.compare(minOffset,minKey) > 0){
+                    minKey=minOffset;
+                }
+            }
+
             scanRange = KeyRange.getKeyRange(minKey, maxKey);
         }
 
@@ -160,7 +185,7 @@ public class ScanRanges {
         this.useSkipScanFilter = useSkipScanFilter;
         this.scanRange = scanRange;
         this.rowTimestampRange = rowTimestampRange;
-        
+
         if (isSalted && !isPointLookup) {
             ranges.set(0, SaltingUtil.generateAllSaltingRanges(bucketNum));
         }
@@ -425,7 +450,7 @@ public class ScanRanges {
     }
 
     public boolean isEverything() {
-        return this == EVERYTHING || ranges.get(0).get(0) == KeyRange.EVERYTHING_RANGE;
+        return this == EVERYTHING || (!ranges.isEmpty() && ranges.get(0).get(0) == KeyRange.EVERYTHING_RANGE);
     }
 
     public boolean isDegenerate() {

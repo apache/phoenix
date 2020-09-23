@@ -54,6 +54,7 @@ import org.apache.phoenix.util.StringUtil;
 
 public abstract class ExplainTable {
     private static final List<KeyRange> EVERYTHING = Collections.singletonList(KeyRange.EVERYTHING_RANGE);
+    public static final String POINT_LOOKUP_ON_STRING = "POINT LOOKUP ON ";
     protected final StatementContext context;
     protected final TableRef tableRef;
     protected final GroupBy groupBy;
@@ -81,7 +82,7 @@ public abstract class ExplainTable {
         ScanRanges scanRanges = context.getScanRanges();
         if (scanRanges.isPointLookup()) {
             int keyCount = scanRanges.getPointLookupCount();
-            buf.append("POINT LOOKUP ON " + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
+            buf.append(POINT_LOOKUP_ON_STRING + keyCount + " KEY" + (keyCount > 1 ? "S " : " "));
         } else if (scanRanges.useSkipScanFilter()) {
             buf.append("SKIP SCAN ");
             int count = 1;
@@ -215,7 +216,7 @@ public abstract class ExplainTable {
     private Long getViewIndexValue(PDataType type, byte[] range) {
         boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(type);
         Object s = type.toObject(range);
-        return (useLongViewIndex ? (Long) s : (Short) s) - (useLongViewIndex ? Long.MAX_VALUE : Short.MAX_VALUE);
+        return (useLongViewIndex ? (Long) s : (Short) s) + Short.MAX_VALUE + 2;
     }
 
     private static class RowKeyValueIterator implements Iterator<byte[]> {

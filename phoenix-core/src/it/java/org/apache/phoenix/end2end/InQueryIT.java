@@ -51,12 +51,12 @@ import org.junit.runners.Parameterized.Parameters;
 
 public class InQueryIT extends BaseQueryIT {
 
-    public InQueryIT(String idxDdl, boolean columnEncoded) throws Exception {
-        super(idxDdl, columnEncoded, false);
+    public InQueryIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
 
     @Parameters(name="InQueryIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return BaseQueryIT.allIndexes();
     }
 

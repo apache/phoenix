@@ -67,7 +67,7 @@ public class BaseIndexTest extends BaseConnectionlessQueryTest {
     protected Connection conn;
 
     @BeforeClass
-    public static void setupClass() throws Exception {
+    public static synchronized void setupClass() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

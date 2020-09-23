@@ -30,7 +30,7 @@ public class GlobalMutableTxIndexIT extends BaseIndexIT {
     }
 
     @Parameters(name="GlobalMutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(
                 Arrays.asList(new Object[][] {
                     { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },

@@ -163,6 +163,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public MetaDataMutationResult dropSchema(List<Mutation> schemaMetaData, String schemaName) throws SQLException;
 
     boolean isUpgradeRequired();
+    void clearUpgradeRequired();
     void upgradeSystemTables(String url, Properties props) throws SQLException;
     
     public Configuration getConfiguration();

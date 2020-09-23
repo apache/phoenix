@@ -46,7 +46,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
@@ -58,7 +58,7 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(700));

@@ -25,11 +25,14 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.Callable;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ResultManager;
 import org.apache.phoenix.pherf.result.RunTime;
 import org.apache.phoenix.pherf.result.ThreadTime;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
@@ -48,7 +51,7 @@ class MultiThreadedRunner implements Callable<Void> {
     private DataModelResult dataModelResult;
     private long numberOfExecutions;
     private long executionDurationInMs;
-    private static long lastResultWritten = System.currentTimeMillis() - 1000;
+    private static long lastResultWritten = EnvironmentEdgeManager.currentTimeMillis() - 1000;
     private final ResultManager resultManager;
     private final RulesApplier ruleApplier;
     private final Scenario scenario;
@@ -87,16 +90,24 @@ class MultiThreadedRunner implements Callable<Void> {
      */
     @Override
     public Void call() throws Exception {
-        LOGGER.info("\n\nThread Starting " + threadName + " ; " + query.getStatement() + " for "
-                + numberOfExecutions + "times\n\n");
-        Long start = System.currentTimeMillis();
-        for (long i = numberOfExecutions; (i > 0 && ((System.currentTimeMillis() - start)
-                < executionDurationInMs)); i--) {
+        LOGGER.info("\n\nThread Starting " + threadName + " ; '" + query.getStatement() + "' for "
+                + numberOfExecutions + " times\n\n");
+        long threadStartTime = EnvironmentEdgeManager.currentTimeMillis();
+        for (long i = 0; i < numberOfExecutions; i++) {
+            long threadElapsedTime = EnvironmentEdgeManager.currentTimeMillis() - threadStartTime;
+            if (threadElapsedTime >= executionDurationInMs) {
+                LOGGER.info("Queryset timeout of " + executionDurationInMs + " ms reached; current time is " + threadElapsedTime + " ms."
+                        + "\nStopping queryset execution for query " + query.getId() + " on thread " + threadName + "...");
+                break;
+            }
+
             synchronized (workloadExecutor) {
-                timedQuery();
-                if ((System.currentTimeMillis() - lastResultWritten) > 1000) {
+                if (!timedQuery(i+1)) {
+                    break;
+                }
+                if ((EnvironmentEdgeManager.currentTimeMillis() - lastResultWritten) > 1000) {
                     resultManager.write(dataModelResult, ruleApplier);
-                    lastResultWritten = System.currentTimeMillis();
+                    lastResultWritten = EnvironmentEdgeManager.currentTimeMillis();
                 }
             }
         }
@@ -118,8 +129,9 @@ class MultiThreadedRunner implements Callable<Void> {
      * Timed query execution
      *
      * @throws Exception
+     * @returns boolean true if query finished without timing out; false otherwise
      */
-    private void timedQuery() throws Exception {
+    private boolean timedQuery(long iterationNumber) throws Exception {
         boolean
                 isSelectCountStatement =
                 query.getStatement().toUpperCase().trim().contains("COUNT(") ? true : false;
@@ -127,17 +139,19 @@ class MultiThreadedRunner implements Callable<Void> {
         Connection conn = null;
         PreparedStatement statement = null;
         ResultSet rs = null;
-        Long start = System.currentTimeMillis();
+        Long queryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         Date startDate = Calendar.getInstance().getTime();
         String exception = null;
-        long resultRowCount = 0;
+        Long resultRowCount = 0L;
+        String queryIteration = threadName + ":" + iterationNumber;
+        Long queryElapsedTime = 0L;
 
         try {
             conn = pUtil.getConnection(query.getTenantId(), scenario.getPhoenixProperties());
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
-            LOGGER.info("Executing: " + statementString);
+            LOGGER.info("Executing iteration: " + queryIteration + ": " + statementString);
             
             if (scenario.getWriteParams() != null) {
             	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);
@@ -147,34 +161,54 @@ class MultiThreadedRunner implements Callable<Void> {
             boolean isQuery = statement.execute();
             if (isQuery) {
                 rs = statement.getResultSet();
-                while (rs.next()) {
-                    if (null != query.getExpectedAggregateRowCount()) {
-                        if (rs.getLong(1) != query.getExpectedAggregateRowCount())
-                            throw new RuntimeException(
-                                    "Aggregate count " + rs.getLong(1) + " does not match expected "
-                                            + query.getExpectedAggregateRowCount());
-                    }
-
-                    if (isSelectCountStatement) {
-                        resultRowCount = rs.getLong(1);
-                    } else {
-                        resultRowCount++;
-                    }
-                }
+                Pair<Long, Long> r = getResults(rs, queryIteration, isSelectCountStatement, queryStartTime);
+                resultRowCount = r.getFirst();
+                queryElapsedTime = r.getSecond();
             } else {
                 conn.commit();
             }
         } catch (Exception e) {
-            LOGGER.error("Exception while executing query", e);
+            LOGGER.error("Exception while executing query iteration " + queryIteration, e);
             exception = e.getMessage();
             throw e;
         } finally {
             getThreadTime().getRunTimesInMs().add(new RunTime(exception, startDate, resultRowCount,
-                    (int) (System.currentTimeMillis() - start)));
+                    queryElapsedTime, queryElapsedTime > query.getTimeoutDuration()));
 
             if (rs != null) rs.close();
             if (statement != null) statement.close();
             if (conn != null) conn.close();
         }
+        return true;
     }
+
+    @VisibleForTesting
+    /**
+     * @return a Pair whose first value is the resultRowCount, and whose second value is whether the query timed out.
+     */
+    Pair<Long, Long> getResults(ResultSet rs, String queryIteration, boolean isSelectCountStatement, Long queryStartTime) throws Exception {
+        Long resultRowCount = 0L;
+        while (rs.next()) {
+            if (null != query.getExpectedAggregateRowCount()) {
+                if (rs.getLong(1) != query.getExpectedAggregateRowCount())
+                    throw new RuntimeException(
+                            "Aggregate count " + rs.getLong(1) + " does not match expected "
+                                    + query.getExpectedAggregateRowCount());
+            }
+
+            if (isSelectCountStatement) {
+                resultRowCount = rs.getLong(1);
+            } else {
+                resultRowCount++;
+            }
+            long queryElapsedTime = EnvironmentEdgeManager.currentTimeMillis() - queryStartTime;
+            if (queryElapsedTime >= query.getTimeoutDuration()) {
+                LOGGER.error("Query " + queryIteration + " exceeded timeout of "
+                        +  query.getTimeoutDuration() + " ms at " + queryElapsedTime + " ms.");
+                return new Pair(resultRowCount, queryElapsedTime);
+            }
+        }
+        return new Pair(resultRowCount, EnvironmentEdgeManager.currentTimeMillis() - queryStartTime);
+    }
+
 }

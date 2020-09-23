@@ -41,7 +41,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseJoinIT {
@@ -50,7 +50,7 @@ public class SubqueryIT extends BaseJoinIT {
     }
     
     @Parameters
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {}, {

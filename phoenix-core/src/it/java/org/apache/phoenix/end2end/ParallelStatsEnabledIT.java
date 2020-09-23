@@ -30,7 +30,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Base class for tests whose methods run in parallel with statistics enabled.
@@ -61,7 +61,7 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
     }
 
     @AfterClass
-    public static void freeResources() throws Exception {
+    public static synchronized void freeResources() throws Exception {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 }

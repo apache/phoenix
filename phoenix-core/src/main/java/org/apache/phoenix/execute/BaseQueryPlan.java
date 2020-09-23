@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -82,8 +83,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -120,7 +121,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected Long estimatedSize;
     protected Long estimateInfoTimestamp;
     private boolean getEstimatesCalled;
-    
+    protected boolean isApplicable = true;
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
@@ -261,7 +262,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PTable table = tableRef.getTable();
         
         if (dynamicFilter != null) {
-            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null);
+            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null,
+                    Optional.<byte[]>absent());
         }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
@@ -359,13 +361,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
-                    "Scan ready for iteration: " + scan, connection));
+                    "Scan on table " + context.getCurrentTable().getTable().getName() + " ready for iteration: " + scan, connection));
         }
         
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
-                    "Iterator ready: " + iterator, connection));
+                    "Iterator for table " + context.getCurrentTable().getTable().getName() + " ready: " + iterator, connection));
         }
 
         // wrap the iterator so we start/end tracing as we expect
@@ -556,6 +558,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
             getEstimates();
         }
         return estimateInfoTimestamp;
+    }
+
+    public boolean isApplicable(){
+        return isApplicable;
+    }
+
+    public void setApplicable(boolean isApplicable){
+        this.isApplicable = isApplicable;
     }
 
     private void getEstimates() throws SQLException {

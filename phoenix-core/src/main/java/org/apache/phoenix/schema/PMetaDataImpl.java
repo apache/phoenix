@@ -32,7 +32,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TimeKeeper;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Client-side cache of MetaData, not thread safe. Internally uses a LinkedHashMap that evicts the

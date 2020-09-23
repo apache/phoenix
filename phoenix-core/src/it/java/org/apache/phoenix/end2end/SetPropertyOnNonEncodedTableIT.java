@@ -28,7 +28,7 @@ public class SetPropertyOnNonEncodedTableIT extends SetPropertyIT {
     }
 
     @Parameters(name="SetPropertyOnNonEncodedTableIT") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList( false );
     }
 }

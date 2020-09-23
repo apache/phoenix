@@ -57,6 +57,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
@@ -91,7 +92,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -422,6 +423,11 @@ public class ProjectionCompiler {
                     projectTableColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 }
             } else {
+                if (node instanceof PhoenixRowTimestampParseNode) {
+                    if (statement.isAggregate()) {
+                        ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
+                    }
+                }
                 Expression expression = node.accept(selectVisitor);
                 projectedExpressions.add(expression);
                 expression = coerceIfNecessary(index, targetColumns, expression);
@@ -507,6 +513,12 @@ public class ProjectionCompiler {
                 } else {
                     for (byte[] cq : entry.getValue()) {
                             PColumn column = family.getPColumnForColumnQualifier(cq);
+                            // Continue: If an EMPTY_COLUMN is in the projection list,
+                            // since the table column list does not contain the EMPTY_COLUMN
+                            // no value is returned.
+                            if (column == null) {
+                                continue;
+                            }
                             Integer maxLength = column.getMaxLength();
                             int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
                             estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;

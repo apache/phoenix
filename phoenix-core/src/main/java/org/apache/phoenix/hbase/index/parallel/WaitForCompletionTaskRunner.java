@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Futures;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * A {@link TaskRunner} that ensures that all the tasks have been attempted before we return, even

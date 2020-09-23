@@ -47,8 +47,8 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.TupleUtil;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Class servers as an adapter between the in-memory LRU cache and the Spill data structures. It

@@ -37,8 +37,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -444,6 +444,18 @@ public class KeyRange implements Writable {
 
     public static boolean isDegenerate(byte[] lowerRange, byte[] upperRange) {
         return lowerRange == KeyRange.EMPTY_RANGE.getLowerRange() && upperRange == KeyRange.EMPTY_RANGE.getUpperRange();
+    }
+
+    public static boolean areAllSingleKey(List<KeyRange> rowKeyRanges) {
+        if(rowKeyRanges == null || rowKeyRanges.isEmpty()) {
+           return false;
+        }
+        for(KeyRange rowKeyRange : rowKeyRanges) {
+           if(!rowKeyRange.isSingleKey()) {
+               return false;
+           }
+        }
+        return true;
     }
 
     /**

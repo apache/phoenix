@@ -40,7 +40,7 @@ public class PhoenixStopWatch {
      *             if the stopwatch is already running.
      */
     public PhoenixStopWatch start() {
-        long currentTime = System.currentTimeMillis();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         if (isRunning) { throw new IllegalStateException("Watch is already running"); }
         startTime = currentTime;
         isRunning = true;
@@ -56,7 +56,7 @@ public class PhoenixStopWatch {
      *             if the stopwatch is already stopped.
      */
     public PhoenixStopWatch stop() {
-        long currentTime = System.currentTimeMillis();
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         if (!isRunning) { throw new IllegalStateException("Watch wasn't started"); }
         elapsedTimeMs = currentTime - startTime;
         startTime = 0;

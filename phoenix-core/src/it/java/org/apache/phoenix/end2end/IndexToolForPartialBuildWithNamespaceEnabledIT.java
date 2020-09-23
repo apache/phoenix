@@ -28,7 +28,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Tests for the {@link IndexToolForPartialBuildWithNamespaceEnabled}
@@ -53,7 +53,7 @@ public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolFor
     }
     
     @Parameters(name="isNamespaceEnabled = {0}")
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { true },{ false }
            });

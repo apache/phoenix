@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 public class IndexScrutiny {
 

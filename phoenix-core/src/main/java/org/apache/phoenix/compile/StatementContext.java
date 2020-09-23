@@ -46,7 +46,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 /**
@@ -140,7 +140,7 @@ public class StatementContext {
         this.whereConditionColumns = new ArrayList<Pair<byte[], byte[]>>();
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer> emptyMap() : Maps
                 .<PColumn, Integer> newLinkedHashMap();
-        this.subqueryResults = Maps.<SelectStatement, Object> newHashMap();
+        this.subqueryResults = Maps.<SelectStatement, Object> newConcurrentMap();
         this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
         this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();

@@ -44,7 +44,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
@@ -55,7 +55,7 @@ public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass 
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Drop the HBase table metadata for this test
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
@@ -65,7 +65,7 @@ public class DropSchemaIT extends BaseUniqueNamesOwnClusterIT {
 
 
     @Parameters(name = "DropSchemaIT_schema={0}") // name is used by failsafe as file name in reports
-    public static Collection<String> data() {
+    public static synchronized Collection<String> data() {
         return Arrays.asList(generateUniqueName().toUpperCase(), "\"" + generateUniqueName().toLowerCase() + "\"");
     }
 

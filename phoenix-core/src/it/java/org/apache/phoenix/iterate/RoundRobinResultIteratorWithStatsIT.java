@@ -40,7 +40,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class RoundRobinResultIteratorWithStatsIT extends BaseUniqueNamesOwnClusterIT {
     
@@ -52,7 +52,7 @@ public class RoundRobinResultIteratorWithStatsIT extends BaseUniqueNamesOwnClust
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(70000));

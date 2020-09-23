@@ -53,7 +53,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -73,7 +73,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
@@ -100,6 +100,72 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs.next();
         assertEquals(0, rs.getInt(1));
         rs.close();
+    }
+
+    @Test
+    public void testLocalIndexConsistency() throws Exception {
+        if (isNamespaceMapped) {
+            return;
+        }
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT) SPLIT ON (4000)");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(rand() * 8000, rand())");
+
+        for (int i=0; i<16; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT rand() * 8000, rand() FROM " + tableName);
+            assertEquals(getCountViaIndex(conn, tableName, null), getCountViaIndex(conn, tableName, indexName));
+        }
+    }
+
+    @Test
+    public void testLocalIndexConsistencyWithGlobalMix() throws Exception {
+        if (isNamespaceMapped) {
+            return;
+        }
+        String tableName = schemaName + "." + generateUniqueName();
+        String localIndexNames[] = {"L_" + generateUniqueName(), "L_" + generateUniqueName()};
+        String globalIndexNames[] = {"G_" + generateUniqueName(), "G_" + generateUniqueName()};
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT, v3 FLOAT, v4 FLOAT) SPLIT ON (4000)");
+
+        int idx=1;
+        for (String indexName : localIndexNames) {
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v" + idx++ +")");
+        }
+        for (String indexName : globalIndexNames) {
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v" + idx++ +")");
+        }
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(rand() * 8000, rand())");
+
+        for (int i=0; i<16; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT rand() * 8000, rand() FROM " + tableName);
+
+            int count = getCountViaIndex(conn, tableName, null);
+            for (String indexName : localIndexNames) {
+                assertEquals(count, getCountViaIndex(conn, tableName, indexName));
+            }
+
+            for (String indexName : globalIndexNames) {
+                assertEquals(count, getCountViaIndex(conn, tableName, indexName));
+            }
+        }
+    }
+
+    private int getCountViaIndex(Connection conn, String tableName, String indexName) throws SQLException {
+        String hint = indexName == null ? "NO_INDEX" : "INDEX(" + tableName + " " + indexName + ")";
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ " + hint + " */ COUNT(*) FROM " + tableName)) {
+            rs.next();
+            return rs.getInt(1);
+        }
     }
 
     @Test
@@ -429,7 +495,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
-        verifySequenceValue(null, sequenceName, sequenceSchemaName,-9223372036854775807L);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName,Short.MIN_VALUE + 1);
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
@@ -1039,17 +1105,22 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn1.close();
     }
 
-    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion, RegionInfo toRegion, boolean move)
-            throws IOException {
-        Path root = FSUtils.getRootDir(conf);
+    private void copyLocalIndexHFiles(Configuration conf, RegionInfo fromRegion,
+            RegionInfo toRegion, boolean move) throws IOException {
+        Path root = CommonFSUtils.getRootDir(conf);
 
-        Path seondRegion = new Path(FSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
-                + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
-        Path hfilePath = FSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next().getPath();
-        Path firstRegionPath = new Path(FSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
-                + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
-        FileSystem currentFileSystem = FSUtils.getCurrentFileSystem(conf);
-        assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath, move, conf));
+        Path seondRegion =
+                new Path(CommonFSUtils.getTableDir(root, fromRegion.getTable()) + Path.SEPARATOR
+                        + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        Path hfilePath =
+                CommonFSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next()
+                        .getPath();
+        Path firstRegionPath =
+                new Path(CommonFSUtils.getTableDir(root, toRegion.getTable()) + Path.SEPARATOR
+                        + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        FileSystem currentFileSystem = CommonFSUtils.getCurrentFileSystem(conf);
+        assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath,
+            move, conf));
     }
 
     private int getCount(PhoenixConnection conn, String tableName, String columnFamily)

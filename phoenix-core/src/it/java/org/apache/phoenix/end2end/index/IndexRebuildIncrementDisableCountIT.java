@@ -53,7 +53,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClusterIT {
     private static final Logger LOGGER =
@@ -76,7 +76,7 @@ public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClust
     private static PhoenixConnection phoenixConn;
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_ATTRIB,
             Boolean.TRUE.toString());

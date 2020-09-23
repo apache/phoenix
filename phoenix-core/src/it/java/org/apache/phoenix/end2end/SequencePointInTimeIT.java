@@ -39,7 +39,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 public class SequencePointInTimeIT extends BaseUniqueNamesOwnClusterIT {
@@ -49,7 +49,7 @@ public class SequencePointInTimeIT extends BaseUniqueNamesOwnClusterIT {
         return SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueSequenceName());
     }
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Must update config before starting server
         props.put(QueryServices.DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, Boolean.TRUE.toString());

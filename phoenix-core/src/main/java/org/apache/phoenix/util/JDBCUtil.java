@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Maps.newHashMapWithExpectedSize;
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import java.sql.SQLException;
@@ -32,8 +32,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 
-import com.google.common.base.Preconditions;
-import com.sun.istack.NotNull;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 
 
@@ -113,7 +114,7 @@ public class JDBCUtil {
 		return result;
     }
     
-    public static Map<String, String> getAnnotations(@NotNull String url, @NotNull Properties info) {
+    public static Map<String, String> getAnnotations(@NonNull String url, @NonNull Properties info) {
         Preconditions.checkNotNull(url);
         Preconditions.checkNotNull(info);
         

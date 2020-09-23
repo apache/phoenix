@@ -27,8 +27,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 /**
  * Equi-Depth histogram based on http://web.cs.ucla.edu/~zaniolo/papers/Histogram-EDBT2011-CamReady.pdf,
  * but without the sliding window - we assume a single window over the entire data set.

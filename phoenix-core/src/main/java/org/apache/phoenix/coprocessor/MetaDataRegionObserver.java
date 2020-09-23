@@ -87,10 +87,10 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 /**
@@ -641,7 +641,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
     }
 
     public static PhoenixConnection getRebuildIndexConnection(Configuration config)
-            throws SQLException, ClassNotFoundException {
+            throws SQLException {
         initRebuildIndexConnectionProps(config);
         //return QueryUtil.getConnectionOnServer(rebuildIndexConnectionProps, config).unwrap(PhoenixConnection.class);
         return QueryUtil.getConnectionOnServerWithCustomUrl(rebuildIndexConnectionProps,

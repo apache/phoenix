@@ -67,6 +67,7 @@ public class PherfConstants {
 
     // TODO MOve to properties
     // log out data load per n rows
+    public static final String LOG_PER_NROWS_NAME = "pherf.default.log_per_nrows";
     public static final int LOG_PER_NROWS = 1000000;
     public static final String COMBINED_FILE_NAME = "COMBINED";
 

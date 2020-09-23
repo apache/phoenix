@@ -75,9 +75,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Function;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 @RunWith(Parameterized.class)
@@ -141,7 +141,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
     }
 
     @Parameters(name="{1} {2}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Scan range is empty.
         testCases.addAll(
@@ -503,6 +503,9 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public List<OrderBy> getOutputOrderBys() {
                 return Collections.<OrderBy> emptyList();
             }
+
+            @Override
+            public boolean isApplicable() { return true; }
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false, null, null);
         List<KeyRange> keyRanges = parallelIterators.getSplits();
         return keyRanges;

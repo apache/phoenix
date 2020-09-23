@@ -23,8 +23,8 @@ import java.util.Map;
 
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class SortMergeJoinNoIndexIT extends SortMergeJoinIT {
 
@@ -49,7 +49,7 @@ public class SortMergeJoinNoIndexIT extends SortMergeJoinIT {
     }
 
     @Parameters(name="SortMergeJoinNoIndexIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {}, {

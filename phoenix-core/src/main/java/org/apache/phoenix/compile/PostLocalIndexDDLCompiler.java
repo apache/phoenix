@@ -38,7 +38,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * For local indexes, we optimize the initial index population by *not* sending
@@ -95,27 +95,39 @@ public class PostLocalIndexDDLCompiler {
 
             // Go through MutationPlan abstraction so that we can create local indexes
             // with a connectionless connection (which makes testing easier).
-            return new BaseMutationPlan(plan.getContext(), Operation.UPSERT) {
+            return new PostLocalIndexDDLMutationPlan(plan, dataTable);
+    }
+  }
 
-                @Override
-                public MutationState execute() throws SQLException {
-                    connection.getMutationState().commitDDLFence(dataTable);
-                    Tuple tuple = plan.iterator().next();
-                    long rowCount = 0;
-                    if (tuple != null) {
-                        Cell kv = tuple.getValue(0);
-                        ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-                        // A single Cell will be returned with the count(*) - we decode that here
-                        rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
-                    }
-                    // The contract is to return a MutationState that contains the number of rows modified. In this
-                    // case, it's the number of rows in the data table which corresponds to the number of index
-                    // rows that were added.
-                    return new MutationState(0, 0, connection, rowCount);
-                }
+  private class PostLocalIndexDDLMutationPlan extends BaseMutationPlan {
 
-            };
+    private final QueryPlan plan;
+    private final PTable dataTable;
+
+    private PostLocalIndexDDLMutationPlan(QueryPlan plan, PTable dataTable) {
+        super(plan.getContext(), Operation.UPSERT);
+        this.plan = plan;
+        this.dataTable = dataTable;
+    }
+
+    @Override
+    public MutationState execute() throws SQLException {
+        connection.getMutationState().commitDDLFence(dataTable);
+        Tuple tuple = plan.iterator().next();
+        long rowCount = 0;
+        if (tuple != null) {
+            Cell kv = tuple.getValue(0);
+            ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(),
+              kv.getValueOffset(), kv.getValueLength());
+            // A single Cell will be returned with the count(*) - we decode that here
+            rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
         }
-	}
-	
+        // The contract is to return a MutationState that contains the number of rows modified.
+        // In this case, it's the number of rows in the data table which corresponds to the
+        // number of index rows that were added.
+        return new MutationState(0, 0, connection, rowCount);
+    }
+
+  }
+
 }

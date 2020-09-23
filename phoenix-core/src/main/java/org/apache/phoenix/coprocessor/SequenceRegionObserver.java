@@ -60,7 +60,7 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 

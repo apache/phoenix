@@ -22,19 +22,23 @@ import java.util.List;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTableType;
 
-import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 public class AddColumnStatement extends AlterTableStatement {
     private final List<ColumnDef> columnDefs;
     private final boolean ifNotExists;
     private final ListMultimap<String,Pair<String,Object>> props;
-    
-    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
+    private final boolean cascade;
+    private final List<NamedNode> indexes;
+
+    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
         super(table, tableType);
         this.columnDefs = columnDefs;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of()  : props;
         this.ifNotExists = ifNotExists;
+        this.cascade = cascade;
+        this.indexes = indexes;
     }
 
     public List<ColumnDef> getColumnDefs() {
@@ -48,4 +52,8 @@ public class AddColumnStatement extends AlterTableStatement {
     public ListMultimap<String,Pair<String,Object>> getProps() {
         return props;
     }
+
+    public boolean isCascade() { return cascade; }
+
+    public List<NamedNode> getIndexes() { return indexes; }
 }

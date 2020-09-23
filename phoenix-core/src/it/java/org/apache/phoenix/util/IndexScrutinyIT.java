@@ -91,17 +91,11 @@ public class IndexScrutinyIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES('a','ccc','1')");
             conn.commit();
 
-            // Writing index directly will generate unverified rows with no corresponding data rows. These rows will not be visible to the applications
+            // Writing index directly will generate unverified rows. These rows will recovered if there exists the
+            // corresponding data row
             conn.createStatement().executeUpdate("UPSERT INTO " + fullIndexName + " VALUES ('ccc','a','2')");
             conn.commit();
-            try {
-                IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
-                fail();
-            } catch (AssertionError e) {
-                assertEquals("Expected data table row count to match expected:<2> but was:<1>", e.getMessage());
-            }
+            assertEquals(2, IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName));
         }
     }
-
-
 }

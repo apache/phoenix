@@ -52,7 +52,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -110,7 +110,7 @@ public class KeyRangeClipTest extends BaseConnectionlessQueryTest {
     }
 
     @Parameters(name="KeyRangeClipTest_{0}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(Lists.newArrayList( // [XY - *]
                 "A VARCHAR NOT NULL, B VARCHAR, C VARCHAR, CONSTRAINT PK PRIMARY KEY (A,B,C)",

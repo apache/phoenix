@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static com.google.common.collect.Sets.newHashSet;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newHashSet;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -34,7 +34,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
     
@@ -140,18 +140,18 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
         if(localIndex){
             assertEquals(saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [" + Long.toString(1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [" + Long.toString(1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             String expected = saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [" + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [" + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0," + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix +
-                        "v2-1'] - ["+(saltBuckets.intValue()-1)+"," + Long.toString(Long.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix +
+                        "v2-1'] - ["+(saltBuckets.intValue()-1)+"," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
 
                   + "    SERVER FILTER BY FIRST KEY ONLY\n"
                   + "CLIENT MERGE SORT";

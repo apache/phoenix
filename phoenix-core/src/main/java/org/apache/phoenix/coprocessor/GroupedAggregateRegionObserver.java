@@ -82,7 +82,7 @@ import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Region observer that aggregates grouped rows (i.e. SQL query with GROUP BY clause)

@@ -52,6 +52,9 @@ public class EnvironmentEdgeManager {
    * Injects the given edge such that it becomes the managed entity. If null is
    * passed to this method, the default type is assigned to the delegate.
    *
+   * <b>Note: This is JVM global. Make sure to call reset() after the test.</b>
+   * See org.apache.hadoop.hbase.util.EnvironmentEdgeManager for other caveats
+   *
    * @param edge the new edge.
    */
   public static void injectEdge(EnvironmentEdge edge) {

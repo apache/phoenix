@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+    <version>5.1.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
   <name>Phoenix Assembly</name>
@@ -42,7 +42,7 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>Symlink to deprecated client jar name</id>
+            <id>client without version</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
@@ -52,8 +52,34 @@
               <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>phoenix-client-${project.version}.jar</argument>
-                <argument>phoenix-${project.version}-client.jar</argument>
+                <argument>
+                  phoenix-client-${project.version}.jar
+                </argument>
+                <argument>
+                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
+                  phoenix-client.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>server without version</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-server-${project.version}.jar
+                </argument>
+                <argument>
+                  <!-- We are overwriting the unshaded server JAR, but we don't care -->
+                  phoenix-server.jar
+                </argument>
               </arguments>
             </configuration>
           </execution>
@@ -117,12 +143,31 @@
     <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <artifactId>phoenix-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-tools-hbase2.x</artifactId>
-      <version>${omid.version}</version>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-pherf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-tracing-webapp</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
     </dependency>
 
     <dependency>
@@ -140,37 +185,32 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
-      <version>2.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-protobuf</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-netty</artifactId>
-      <version>2.1.0</version>
+      <version>${hbase.thirdparty.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
-      <version>3.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
-      <version>4.0.0-incubating</version>
     </dependency>
 
   </dependencies>

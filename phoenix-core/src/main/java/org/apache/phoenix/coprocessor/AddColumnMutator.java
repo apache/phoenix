@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -294,6 +294,7 @@ public class AddColumnMutator implements ColumnMutator {
                                                          List<ImmutableBytesPtr> invalidateList,
                                                          List<Region.RowLock> locks,
                                                          long clientTimeStamp,
+                                                         long clientVersion,
                                                          ExtendedCellBuilder extendedCellBuilder) {
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];

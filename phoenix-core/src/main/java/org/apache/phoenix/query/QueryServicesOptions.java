@@ -64,11 +64,6 @@ import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_AT
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_SERVICE_NAME;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD;
-import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
@@ -80,14 +75,14 @@ import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_I
 import static org.apache.phoenix.query.QueryServices.RUN_UPDATE_STATS_ASYNC;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
-import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
+import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
 import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
@@ -101,6 +96,7 @@ import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENC
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -120,7 +116,6 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.tephra.TxConstants;
 
 
 /**
@@ -160,6 +155,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
     public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
+    public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
@@ -283,6 +279,7 @@ public class QueryServicesOptions {
     public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
 
     public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final boolean DEFAULT_MULTI_TENANT = false;
     public static final boolean DEFAULT_AUTO_FLUSH = false;
 
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
@@ -301,20 +298,6 @@ public class QueryServicesOptions {
 
     public static final long DEFAULT_INDEX_POPULATION_SLEEP_TIME = 5000;
 
-    // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-queryserver-client
-    // doesn't depend on phoenix-core.
-    public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
-    public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
-    public static final long DEFAULT_QUERY_SERVER_UGI_CACHE_MAX_SIZE = 1000L;
-    public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_INITIAL_SIZE = 100;
-    public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY = 10;
-    public static final boolean DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED = false;
-    public static final boolean DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR = false;
-    public static final boolean DEFAULT_QUERY_SERVER_CUSTOM_AUTH_ENABLED = false;
-    public static final String DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM = "doAs";
-    public static final boolean DEFAULT_QUERY_SERVER_DISABLE_KERBEROS_LOGIN = false;
-    public static final boolean DEFAULT_QUERY_SERVER_CUSTOMIZERS_ENABLED = false;
-
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
     public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
             DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD / 2;
@@ -332,11 +315,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_COLUMN_ENCODED_BYTES = QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue();
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.toString();
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.ONE_CELL_PER_COLUMN.toString();
-    public static final boolean DEFAULT_PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED = false;
-    public static final String DEFAULT_PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH = "/phoenix";
-    public static final String DEFAULT_PHOENIX_QUERY_SERVER_SERVICE_NAME = "queryserver";
-    public static final String DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME = "phoenix";
-    public static final String DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD = "phoenix";
+
 
     //by default, max connections from one client to one cluster is unlimited
     public static final int DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
@@ -347,7 +326,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
     //default update cache frequency
-    public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
+    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
     // default system task handling interval in milliseconds
@@ -355,23 +334,14 @@ public class QueryServicesOptions {
     public static final long DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS = 30*60*1000; // 30 min
     public static final long DEFAULT_TASK_HANDLING_INITIAL_DELAY_MS = 10*1000; // 10 sec
 
-    public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 10*60*1000; /* 10 min */
-    public static final int DEFAULT_GLOBAL_INDEX_REPAIR_COUNT = 1;
+    public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 7*24*60*60*1000; /* 7 days */
     public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
+    public static final long DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS = 32*1024;
 
     public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
 
     public static final boolean DEFAULT_PROPERTY_POLICY_PROVIDER_ENABLED = true;
 
-    @SuppressWarnings("serial")
-    public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
-      {
-        add("secret");
-        add("passwd");
-        add("password");
-        add("credential");
-      }
-    };
     public static final String DEFAULT_SCHEMA = null;
     public static final String DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING = "BASE64"; // for backward compatibility, till
                                                                                     // 4.10, psql and CSVBulkLoad
@@ -389,12 +359,15 @@ public class QueryServicesOptions {
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
+    public static final int DEFAULT_SALT_BUCKETS = 0;
 
 	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
 
     public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
 
     public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
+
+    public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -464,11 +437,6 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
-            .setIfUnset(PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED, DEFAULT_PHOENIX_QUERY_SERVER_LOADBALANCER_ENABLED)
-            .setIfUnset(PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH, DEFAULT_PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH)
-            .setIfUnset(PHOENIX_QUERY_SERVER_SERVICE_NAME, DEFAULT_PHOENIX_QUERY_SERVER_SERVICE_NAME)
-            .setIfUnset(PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME, DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME)
-            .setIfUnset(PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD, DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD)
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
             .setIfUnset(TRACING_ENABLED, DEFAULT_TRACING_ENABLED)
             .setIfUnset(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE)
@@ -481,8 +449,9 @@ public class QueryServicesOptions {
             .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
             .setIfUnset(LOG_LEVEL,  DEFAULT_LOGGING_LEVEL)
             .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE)
-            .setIfUnset(TxConstants.TX_PRE_014_CHANGESET_KEY, Boolean.FALSE.toString())
+            .setIfUnset("data.tx.pre.014.changeset.key", Boolean.FALSE.toString())
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
+            .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

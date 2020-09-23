@@ -66,7 +66,7 @@ import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @SuppressWarnings("rawtypes")
 public class UnnestArrayPlanTest {

@@ -30,8 +30,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 
 public class CoerceExpression extends BaseSingleExpression {

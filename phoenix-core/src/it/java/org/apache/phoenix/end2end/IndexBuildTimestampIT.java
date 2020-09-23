@@ -46,7 +46,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
@@ -69,13 +69,13 @@ public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static synchronized void setup() throws Exception {
         IndexToolIT.setup();
     }
 
     @Parameters(
             name = "mutable={0},localIndex={1},async={2},view={3}")
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(16);
         boolean[] Booleans = new boolean[]{false, true};
         for (boolean mutable : Booleans) {
@@ -170,80 +170,84 @@ public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testCellTimestamp() throws Exception {
         EnvironmentEdgeManager.reset();
-        MyClock clock1 = new MyClock(100000);
-        MyClock clock2 = new MyClock(200000);
-        String dataTableName = generateUniqueName();
-        populateTable(dataTableName, clock1, clock2);
+        try {
+            MyClock clock1 = new MyClock(100000);
+            MyClock clock2 = new MyClock(200000);
+            String dataTableName = generateUniqueName();
+            populateTable(dataTableName, clock1, clock2);
 
-        MyClock clock3 = new MyClock(300000);
-        EnvironmentEdgeManager.injectEdge(clock3);
+            MyClock clock3 = new MyClock(300000);
+            EnvironmentEdgeManager.injectEdge(clock3);
 
-        Properties props = new Properties();
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS, "true");
-        props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, "true");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+            Properties props = new Properties();
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS, "true");
+            props.setProperty(QueryServices.ENABLE_SERVER_SIDE_DELETE_MUTATIONS, "true");
+            Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        String viewName = null;
-        if (view) {
-            viewName = generateUniqueName();
-            conn.createStatement().execute("CREATE VIEW "+ viewName + " AS SELECT * FROM " +
-                    dataTableName);
+            String viewName = null;
+            if (view) {
+                viewName = generateUniqueName();
+                conn.createStatement().execute("CREATE VIEW "+ viewName + " AS SELECT * FROM " +
+                        dataTableName);
+            }
+            String indexName = generateUniqueName();
+            conn.createStatement().execute("CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " +
+                    (view ? viewName : dataTableName) + " (val) include (ts)" + (async ? "ASYNC" : ""));
+
+            conn.close();
+
+            if (async) {
+                // run the index MR job.
+                IndexToolIT.runIndexTool(true, false, null, (view ? viewName : dataTableName), indexName);
+            }
+
+            // Verify the index timestamps via Phoenix
+            String selectSql = String.format("SELECT * FROM %s WHERE val = 'abc'", (view ? viewName : dataTableName));
+            conn = DriverManager.getConnection(getUrl());
+            // assert we are pulling from index table
+            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue (rs.next());
+            assertTrue(rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() < clock2.initialTime() &&
+                    rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() >= clock1.initialTime());
+
+            selectSql =
+                    String.format("SELECT * FROM %s WHERE val = 'bcd'", (view ? viewName : dataTableName));
+            // assert we are pulling from index table
+            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
+
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue (rs.next());
+            assertTrue(rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() < clock3.initialTime() &&
+                            rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() >= clock2.initialTime()
+                    );
+            assertFalse (rs.next());
+
+            // Verify the index timestamps via HBase
+            PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(pIndexTable.getPhysicalName().getBytes());
+
+            Scan scan = new Scan();
+            scan.setTimeRange(clock3.initialTime(), clock3.currentTime());
+            ResultScanner scanner = table.getScanner(scan);
+            assertTrue(scanner.next() == null);
+
+
+            scan = new Scan();
+            scan.setTimeRange(clock2.initialTime(), clock3.initialTime());
+            scanner = table.getScanner(scan);
+            assertTrue(scanner.next() != null);
+
+
+            scan = new Scan();
+            scan.setTimeRange(clock1.initialTime(), clock2.initialTime());
+            scanner = table.getScanner(scan);
+            assertTrue(scanner.next() != null);
+            conn.close();
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
-        String indexName = generateUniqueName();
-        conn.createStatement().execute("CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " +
-                (view ? viewName : dataTableName) + " (val) include (ts)" + (async ? "ASYNC" : ""));
 
-        conn.close();
-
-        if (async) {
-            // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, (view ? viewName : dataTableName), indexName);
-        }
-
-        // Verify the index timestamps via Phoenix
-        String selectSql = String.format("SELECT * FROM %s WHERE val = 'abc'", (view ? viewName : dataTableName));
-        conn = DriverManager.getConnection(getUrl());
-        // assert we are pulling from index table
-        assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
-        ResultSet rs = conn.createStatement().executeQuery(selectSql);
-        assertTrue (rs.next());
-        assertTrue(rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() < clock2.initialTime() &&
-                rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() >= clock1.initialTime());
-
-        selectSql =
-                String.format("SELECT * FROM %s WHERE val = 'bcd'", (view ? viewName : dataTableName));
-        // assert we are pulling from index table
-        assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
-
-        rs = conn.createStatement().executeQuery(selectSql);
-        assertTrue (rs.next());
-        assertTrue(rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() < clock3.initialTime() &&
-                        rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() >= clock2.initialTime()
-                );
-        assertFalse (rs.next());
-
-        // Verify the index timestamps via HBase
-        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
-        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .getTable(pIndexTable.getPhysicalName().getBytes());
-
-        Scan scan = new Scan();
-        scan.setTimeRange(clock3.initialTime(), clock3.currentTime());
-        ResultScanner scanner = table.getScanner(scan);
-        assertTrue(scanner.next() == null);
-
-
-        scan = new Scan();
-        scan.setTimeRange(clock2.initialTime(), clock3.initialTime());
-        scanner = table.getScanner(scan);
-        assertTrue(scanner.next() != null);
-
-
-        scan = new Scan();
-        scan.setTimeRange(clock1.initialTime(), clock2.initialTime());
-        scanner = table.getScanner(scan);
-        assertTrue(scanner.next() != null);
-        conn.close();
-        EnvironmentEdgeManager.reset();
     }
 }

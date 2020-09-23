@@ -10,24 +10,26 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.util.TableViewFinderResult;
-import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TableViewFinderResult;
+import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -96,6 +98,83 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childMostView.getName().getString()), "PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
 
     }
+    
+    @Test
+    public void testUpsertIntoChildViewWithPKAndIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+        String childView = generateUniqueName();
+    
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
+                    + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
+                    + "VERSIONS=1, IMMUTABLE_ROWS=TRUE";
+            conn.createStatement().execute(baseTableDDL);
+            String view1DDL = "CREATE VIEW IF NOT EXISTS " + view + 
+                    "(V2 VARCHAR NOT NULL,V3 BIGINT NOT NULL, "
+                    + "V4 VARCHAR CONSTRAINT PKVIEW PRIMARY KEY(V2, V3)) AS SELECT * FROM " 
+                    + baseTable + " WHERE KEY_PREFIX = '0CY'";
+            conn.createStatement().execute(view1DDL);
+    
+            // Create an Index on the base view
+            String view1Index = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + view1Index + 
+                " ON " + view + " (V2, V3) include (V1, V4)");
+    
+            // Create a child view with primary key constraint
+            String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
+                    + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
+                    + "(V5, V6)) AS SELECT * FROM " + view;
+            conn.createStatement().execute(childViewDDL);
+    
+            String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
+                    + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+        }
+    }
+    
+    @Test
+    public void testUpsertIntoTenantChildViewWithPKAndIndex() throws Exception {
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
+        String childView = generateUniqueName();
+        String tenantId = "TENANT";
+    
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE IF NOT EXISTS " + baseTable + 
+                    " (TENANT_ID VARCHAR NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, "
+                    + "V1 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, KEY_PREFIX)) "
+                    + "MULTI_TENANT=TRUE, VERSIONS=1, IMMUTABLE_ROWS=TRUE";
+            conn.createStatement().execute(baseTableDDL);
+            String view1DDL = "CREATE VIEW IF NOT EXISTS " + view + 
+                    "(V2 VARCHAR NOT NULL,V3 BIGINT NOT NULL, "
+                    + "V4 VARCHAR CONSTRAINT PKVIEW PRIMARY KEY(V2, V3)) AS SELECT * FROM " 
+                    + baseTable + " WHERE KEY_PREFIX = '0CY'";
+            conn.createStatement().execute(view1DDL);
+    
+            // Create an Index on the base view
+            String view1Index = generateUniqueName() + "_IDX";
+            conn.createStatement().execute("CREATE INDEX " + view1Index + 
+                " ON " + view + " (V2, V3) include (V1, V4)");
+    
+            // Create a child view with primary key constraint owned by tenant
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
+                        + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
+                        + "(V5, V6)) AS SELECT * FROM " + view;
+                conn.createStatement().execute(childViewDDL);
+            }
+            
+            String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
+                    + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
+            conn.createStatement().executeUpdate(upsert);
+            conn.commit();
+        }
+    }
 
     @Test
     public void testGettingOneChild() throws Exception {
@@ -128,6 +207,34 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
         assertColumnNamesEqual(PhoenixRuntime.getTableNoCache(conn, childView.toUpperCase()), "A", "B", "D");
 
     }
+    
+    @Test
+    public void testUpdateCacheWithAlteringColumns() throws Exception {
+        String tableName = generateUniqueName();
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(
+                PhoenixConnection.class)) {
+            String ddlFormat =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + "  (" + " PK2 INTEGER NOT NULL, "
+                            + "V1 INTEGER, V2 INTEGER "
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+                conn.createStatement().execute(ddlFormat);
+                conn.createStatement().execute("ALTER TABLE " + tableName + " ADD V3 integer");
+                PTable table = PhoenixRuntime.getTable(conn, tableName.toUpperCase());
+                assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
+                
+                // Set the SCN to the timestamp when V3 column is added
+                Properties props = PropertiesUtil.deepCopy(conn.getClientInfo());
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(table.getTimeStamp()));
+                
+                try (PhoenixConnection metaConnection = new PhoenixConnection(conn, 
+                        conn.getQueryServices(), props)) {
+                    // Force update the cache and check if V3 is present in the returned table result
+                    table = PhoenixRuntime.getTableNoCache(metaConnection, tableName.toUpperCase());
+                    assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
+                }                              
+        }      
+    }
+
 
     @Test
     public void testDroppingAColumn() throws Exception {

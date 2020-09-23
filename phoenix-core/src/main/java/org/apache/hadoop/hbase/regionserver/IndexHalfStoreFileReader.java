@@ -35,11 +35,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatStoreFileReader;
 import org.apache.phoenix.index.IndexMaintainer;
 
 /**
  * A facade for a {@link org.apache.hadoop.hbase.io.hfile.HFile.Reader} that serves up either the
- * top or bottom half of a HFile where 'bottom' is the first half of the file containing the keys
+ * top or bottom half of an HFile where 'bottom' is the first half of the file containing the keys
  * that sort lowest and 'top' is the second half of the file with keys that sort greater than those
  * of the bottom half. The top includes the split files midkey, of the key that follows if it does
  * not exist in the file.
@@ -52,7 +53,7 @@ import org.apache.phoenix.index.IndexMaintainer;
  * This file is not splitable. Calls to {@link #midkey()} return null.
  */
 
-public class IndexHalfStoreFileReader extends StoreFileReader {
+public class IndexHalfStoreFileReader extends CompatStoreFileReader {
     private final boolean top;
     // This is the key we split around. Its the first possible entry on a row:
     // i.e. empty column and a timestamp of LATEST_TIMESTAMP.
@@ -88,8 +89,7 @@ public class IndexHalfStoreFileReader extends StoreFileReader {
             final byte[][] viewConstants, final RegionInfo regionInfo,
             byte[] regionStartKeyInHFile, byte[] splitKey, boolean primaryReplicaStoreFile,
             AtomicInteger refCount, RegionInfo currentRegion) throws IOException {
-        super(fs, p, in, size, cacheConf, primaryReplicaStoreFile, refCount, false,
-                conf);
+        super(fs, p, in, size, cacheConf, primaryReplicaStoreFile, refCount, conf);
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());

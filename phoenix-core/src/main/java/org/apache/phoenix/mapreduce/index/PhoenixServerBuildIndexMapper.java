@@ -18,47 +18,45 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
 import java.util.UUID;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
-import org.apache.phoenix.mapreduce.util.ConnectionUtil;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.PhoenixRuntime;
 
 /**
  * Mapper that does not do much as regions servers actually build the index from the data table regions directly
  */
 public class PhoenixServerBuildIndexMapper extends
-        Mapper<NullWritable, PhoenixIndexDBWritable, ImmutableBytesWritable, IntWritable> {
+        Mapper<NullWritable, PhoenixServerBuildIndexDBWritable, ImmutableBytesWritable, IntWritable> {
+
+    private long rebuildPageRowSize;
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
         super.setup(context);
+        String rebuildPageRowSizeConf =
+                context.getConfiguration().get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+        if (rebuildPageRowSizeConf != null) {
+            this.rebuildPageRowSize = Long.valueOf(rebuildPageRowSizeConf);
+        } else {
+            this.rebuildPageRowSize = -1L;
+        }
     }
 
     @Override
-    protected void map(NullWritable key, PhoenixIndexDBWritable record, Context context)
+    protected void map(NullWritable key, PhoenixServerBuildIndexDBWritable record, Context context)
             throws IOException, InterruptedException {
-        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
+        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(record.getRowCount());
+        if (this.rebuildPageRowSize != -1) {
+            if (record.getRowCount() > this.rebuildPageRowSize) {
+                throw new IOException("Rebuilt/Verified rows greater than page size. Rebuilt rows: "
+                        + record.getRowCount() + " Page size: " + this.rebuildPageRowSize);
+            }
+        }
         // Make sure progress is reported to Application Master.
         context.progress();
     }

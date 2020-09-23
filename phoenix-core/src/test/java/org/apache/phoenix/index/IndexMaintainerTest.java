@@ -57,7 +57,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private static final String DEFAULT_SCHEMA_NAME = "";
@@ -152,6 +152,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             assertArrayEquals(dataRowKey, CellUtil.cloneRow(dataKeyValues.get(0)));
         } finally {
             try {
+                conn.rollback();
                 conn.createStatement().execute("DROP TABLE " + fullTableName);
             } finally {
                 conn.close();

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -40,8 +40,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
@@ -188,7 +188,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             PName physicalName = PNameFactory.newName(hbaseTableName);
             String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
             String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
-            verifySequenceValue(null, newSequenceName, newSchemaName, -9223372036854775805L);
+            verifySequenceValue(null, newSequenceName, newSchemaName, Short.MIN_VALUE + 3);
             admin.close();
         }
     }

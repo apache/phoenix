@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
@@ -59,7 +60,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(RunUntilFailure.class)
 public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
@@ -83,6 +84,8 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB, Long.toString(WAIT_AFTER_DISABLED));
         serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, numberOfRetries + "");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        // Index rebuilds are not needed with IndexRegionObserver
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "false");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
         indexRebuildTaskRegionEnvironment =
                 getUtility()
@@ -108,6 +111,8 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             // Simulate write failure when rebuilder runs
             TestUtil.addCoprocessor(conn, fullIndexName, WriteFailingRegionObserver.class);
             waitForIndexState(conn, fullTableName, fullIndexName, PIndexState.INACTIVE);
+            long pendingDisableCount = TestUtil.getPendingDisableCount(
+                    conn.unwrap(PhoenixConnection.class), fullIndexName);
             // rebuild writes should retry for exactly the configured number of times
             ExecutorService executor = Executors.newSingleThreadExecutor();
             try {
@@ -119,6 +124,9 @@ public class MutableIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                     }});
                 assertTrue(future.get(120, TimeUnit.SECONDS));
                 assertEquals(numberOfRetries, WriteFailingRegionObserver.attempts.get());
+                // Index rebuild write failures should not increase the pending disable count of the index table
+                assertEquals(pendingDisableCount, TestUtil.getPendingDisableCount(
+                        conn.unwrap(PhoenixConnection.class), fullIndexName));
             } finally {
                 executor.shutdownNow();
             }

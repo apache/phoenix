@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +39,9 @@ public class Sandbox {
     public static void main(String[] args) throws Exception {
         System.out.println("Starting Phoenix sandbox");
         Configuration conf = HBaseConfiguration.create();
-        BaseTest.setUpConfigForMiniCluster(conf, new ReadOnlyProps(ImmutableMap.<String, String>of()));
+        // unset test=true parameter
+        BaseTest.setUpConfigForMiniCluster(conf, new ReadOnlyProps(
+                ImmutableMap.<String, String> of(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, "")));
 
         final HBaseTestingUtility testUtil = new HBaseTestingUtility(conf);
         testUtil.startMiniCluster();

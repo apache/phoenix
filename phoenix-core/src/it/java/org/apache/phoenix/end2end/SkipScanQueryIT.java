@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -653,6 +654,95 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("17", rs.getString(1));
             assertEquals("a", rs.getString(2));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testRVCClipBug5753() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+
+            String sql = "CREATE TABLE "+tableName+" (" +
+                         " pk1 INTEGER NOT NULL , " +
+                         " pk2 INTEGER NOT NULL, " +
+                         " pk3 INTEGER NOT NULL, " +
+                         " pk4 INTEGER NOT NULL, " +
+                         " pk5 INTEGER NOT NULL, " +
+                         " pk6 INTEGER NOT NULL, " +
+                         " pk7 INTEGER NOT NULL, " +
+                         " pk8 INTEGER NOT NULL, " +
+                         " v INTEGER, CONSTRAINT PK PRIMARY KEY(pk1,pk2,pk3 desc,pk4,pk5,pk6 desc,pk7,pk8))";;
+
+            stmt.execute(sql);
+
+            stmt.execute(
+                    "UPSERT INTO " + tableName + " (pk1,pk2,pk3,pk4,pk5,pk6,pk7,pk8,v) "+
+                    "VALUES (1,3,4,10,2,6,7,9,1)");
+
+            sql = "select pk1,pk2,pk3,pk4 from " + tableName +
+                 " where (pk1 >=1 and pk1<=2) and (pk2>=3 and pk2<=4) and (pk3,pk4) < (5,7) order by pk1,pk2,pk3";
+
+            ResultSet rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,3,4,10}});
+
+            sql = "select * from " + tableName +
+                    " where (pk1 >=1 and pk1<=2) and (pk2>=2 and pk2<=3) and (pk3,pk4) < (5,7) and "+
+                    " (pk5,pk6,pk7) < (5,6,7) and pk8 > 8 order by pk1,pk2,pk3";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,3,4,10}});
+
+            stmt.execute(
+                    "UPSERT INTO " + tableName + " (pk1,pk2,pk3,pk4,pk5,pk6,pk7,pk8,v) "+
+                    "VALUES (1,3,2,10,5,4,3,9,1)");
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,3,2,10},{1,3,4,10}});
+
+            stmt.execute(
+                    "UPSERT INTO " + tableName + " (pk1,pk2,pk3,pk4,pk5,pk6,pk7,pk8,v) "+
+                    "VALUES (1,3,5,6,4,7,8,9,1)");
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,3,2,10},{1,3,4,10},{1,3,5,6}});
+
+            sql = "select * from " + tableName +
+                    " where (pk1 >=1 and pk1<=2) and (pk2>=2 and pk2<=3) and (pk3,pk4) in ((5,6),(2,10)) and "+
+                    " (pk5,pk6,pk7) in ((4,7,8),(5,4,3)) and pk8 > 8 order by pk1,pk2,pk3";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,3,2,10},{1,3,5,6}});
+        }
+    }
+
+    @Test
+    public void testKeyRangesContainsAllValues() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + "(" +
+                     " vdate VARCHAR, " +
+                     " tab VARCHAR, " +
+                     " dev TINYINT NOT NULL, " +
+                     " app VARCHAR, " +
+                     " target VARCHAR, " +
+                     " channel VARCHAR, " +
+                     " one VARCHAR, " +
+                     " two VARCHAR, " +
+                     " count1 INTEGER, " +
+                     " count2 INTEGER, " +
+                     " CONSTRAINT PK PRIMARY KEY (vdate,tab,dev,app,target,channel,one,two))";
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('2018-02-14','channel_agg',2,null,null,'A004',null,null,2,2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('2018-02-14','channel_agg',2,null,null,null,null,null,2,2)");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM " + tableName +
+                " WHERE dev = 2 AND vdate BETWEEN '2018-02-10' AND '2019-02-19'" +
+                " AND tab = 'channel_agg' AND channel='A004'");
+
+            assertTrue(rs.next());
+            assertEquals("2018-02-14", rs.getString(1));
             assertFalse(rs.next());
         }
     }

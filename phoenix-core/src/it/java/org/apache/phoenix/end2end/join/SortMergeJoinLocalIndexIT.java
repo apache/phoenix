@@ -23,8 +23,8 @@ import java.util.Map;
 
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();
@@ -48,7 +48,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     }
 
     @Parameters(name="SortMergeJoinLocalIndexIT_{index}") // name is used by failsafe as file name in reports
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -119,12 +120,12 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
-import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
@@ -372,7 +373,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
                 this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
-                maxSizeBytes) : new MutationState(mutationState);
+                maxSizeBytes) : new MutationState(mutationState, this);
         this.metaData = metaData;
         this.metaData.pruneTables(pruner);
         this.metaData.pruneFunctions(pruner);
@@ -467,7 +468,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     for (int i = 0; i < paramMetaData.getParameterCount(); i++) {
                         stmt.setObject(i + 1, binds.get(bindsOffset + i));
                     }
-                    long start = System.currentTimeMillis();
+                    long start = EnvironmentEdgeManager.currentTimeMillis();
                     boolean isQuery = stmt.execute();
                     if (isQuery) {
                         ResultSet rs = stmt.getResultSet();
@@ -542,7 +543,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                         }
                     }
                     bindsOffset += paramMetaData.getParameterCount();
-                    double elapsedDuration = ((System.currentTimeMillis() - start) / 1000.0);
+                    double elapsedDuration = ((EnvironmentEdgeManager.currentTimeMillis() - start) / 1000.0);
                     out.println("Time: " + elapsedDuration + " sec(s)\n");
                     nStatements++;
                 } finally {

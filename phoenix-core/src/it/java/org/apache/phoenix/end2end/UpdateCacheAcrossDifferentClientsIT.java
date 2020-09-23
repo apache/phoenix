@@ -10,7 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -46,7 +46,7 @@ import static org.junit.Assert.fail;
 public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         HBaseTestingUtility hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);

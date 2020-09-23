@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -58,6 +59,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -89,8 +91,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 @RunWith(Parameterized.class)
@@ -123,7 +125,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put("hbase.coprocessor.region.classes", CreateIndexRegionObserver.class.getName());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(5);
@@ -136,7 +138,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
 		return TestUtil.filterTxParamData(
 		        Arrays.asList(new Object[][] {
     				{ false, false, null, false }, { false, false, null, true },
@@ -339,6 +341,9 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
                 assertEquals(numRows, rs.getInt(1));
                 assertEquals(true, verifyRowsForEmptyColValue(conn, fullIndexName,
                         IndexRegionObserver.VERIFIED_BYTES));
+                rs = conn.createStatement().executeQuery("SELECT * FROM " + fullIndexName);
+                assertTrue(rs.next());
+                assertEquals("1", rs.getString(1));
 
                 // Now try to fail Phase1 and observe that index state is not DISABLED
                 try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
@@ -418,6 +423,14 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     public static class DeleteFailingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws
+                IOException {
+            throw new DoNotRetryIOException();
+        }
+    }
+
+    public static class UpsertFailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws
                 IOException {

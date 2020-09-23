@@ -20,7 +20,6 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -159,11 +158,11 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * 
@@ -619,6 +618,7 @@ public abstract class BaseTest {
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
         conf.setInt("hbase.regionserver.hlog.syncer.count", 2);
+        conf.setInt("hbase.hfile.compaction.discharger.interval", 5000);
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
@@ -626,7 +626,6 @@ public abstract class BaseTest {
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
-        conf.setInt(GLOBAL_INDEX_ROW_REPAIR_COUNT_ATTRIB, 5);
         return conf;
     }
 
@@ -1848,6 +1847,8 @@ public abstract class BaseTest {
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();
+        //We don't want BalancerChore to undo our hard work
+        assertFalse("Balancer must be off", master.isBalancerOn());
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
         for (int i=1; i<splitPoints.size(); ++i) {

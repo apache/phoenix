@@ -53,12 +53,12 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
     
     @AfterClass
-    public static void doTeardown() throws Exception {
+    public static synchronized void doTeardown() throws Exception {
         dropNonSystemTables();
     }
     

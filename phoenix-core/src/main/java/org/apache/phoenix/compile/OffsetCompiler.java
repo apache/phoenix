@@ -30,10 +30,13 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+
 public class OffsetCompiler {
+
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
 
-    public static final PDatum OFFSET_DATUM = new PDatum() {
+    private static final PDatum OFFSET_DATUM = new PDatum() {
         @Override
         public boolean isNullable() {
             return false;
@@ -60,25 +63,43 @@ public class OffsetCompiler {
         }
     };
 
+    private final RVCOffsetCompiler rvcOffsetCompiler = RVCOffsetCompiler.getInstance();
+
     private OffsetCompiler() {}
 
-    public static Integer compile(StatementContext context, FilterableStatement statement) throws SQLException {
+    // eager initialization
+    final private static OffsetCompiler OFFSET_COMPILER = getInstance();
+
+    private static OffsetCompiler getInstance() {
+        return new OffsetCompiler();
+    }
+
+    public static OffsetCompiler getOffsetCompiler() {
+        return OFFSET_COMPILER;
+    }
+
+    public CompiledOffset compile(StatementContext context, FilterableStatement statement, boolean inJoin, boolean inUnion) throws SQLException {
         OffsetNode offsetNode = statement.getOffset();
-        if (offsetNode == null) { return null; }
-        OffsetParseNodeVisitor visitor = new OffsetParseNodeVisitor(context);
-        offsetNode.getOffsetParseNode().accept(visitor);
-        return visitor.getOffset();
+        if (offsetNode == null) { return new CompiledOffset(Optional.<Integer>absent(), Optional.<byte[]>absent()); }
+        if (offsetNode.isIntegerOffset()) {
+            OffsetParseNodeVisitor visitor = new OffsetParseNodeVisitor(context);
+            offsetNode.getOffsetParseNode().accept(visitor);
+            Integer offset = visitor.getOffset();
+            return new CompiledOffset(Optional.fromNullable(offset), Optional.<byte[]>absent());
+        } else { //Must be a RVC Offset
+            return rvcOffsetCompiler.getRVCOffset(context, statement, inJoin, inUnion, offsetNode);
+        }
     }
 
     private static class OffsetParseNodeVisitor extends TraverseNoParseNodeVisitor<Void> {
         private final StatementContext context;
         private Integer offset;
 
-        public OffsetParseNodeVisitor(StatementContext context) {
+        OffsetParseNodeVisitor(StatementContext context) {
             this.context = context;
         }
 
-        public Integer getOffset() {
+        Integer getOffset() {
             return offset;
         }
 
@@ -87,7 +108,7 @@ public class OffsetCompiler {
             Object offsetValue = node.getValue();
             if (offsetValue != null) {
                 Integer offset = (Integer)OFFSET_DATUM.getDataType().toObject(offsetValue, node.getType());
-                if (offset.intValue() >= 0) {
+                if (offset >= 0) {
                     this.offset = offset;
                 }
             }

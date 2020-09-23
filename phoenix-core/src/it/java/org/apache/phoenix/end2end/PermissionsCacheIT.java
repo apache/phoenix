@@ -27,13 +27,13 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.security.access.AccessControlLists;
+import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.apache.hadoop.hbase.security.access.TablePermission;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.hadoop.hbase.zookeeper.ZNodePaths;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -45,7 +45,7 @@ public class PermissionsCacheIT extends BasePermissionsIT {
 	}
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         BasePermissionsIT.initCluster(true);
     }
 
@@ -85,15 +85,16 @@ public class PermissionsCacheIT extends BasePermissionsIT {
             Configuration conf = utility.getConfiguration();
             ZKWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(utility);
             String aclZnodeParent = conf.get("zookeeper.znode.acl.parent", "acl");
-            String aclZNode = ZNodePaths.joinZNode(zkw.znodePaths.baseZNode, aclZnodeParent);
+            String aclZNode = ZNodePaths.joinZNode(zkw.getZNodePaths().baseZNode, aclZnodeParent);
             String tableZNode = ZNodePaths.joinZNode(aclZNode, "@" + schema);
             byte[] data = ZKUtil.getData(zkw, tableZNode);
-            ListMultimap<String, TablePermission> userPermissions =
-                    AccessControlLists.readPermissions(data, conf);
+            ListMultimap<String, ? extends Permission> userPermissions =
+                    CompatUtil.readPermissions(data, conf);
             assertTrue("User permissions not found in cache:",
                 userPermissions.containsKey(regularUser1.getName()));
-            List<TablePermission> tablePermissions = userPermissions.get(regularUser1.getName());
-            for (TablePermission tablePerm : tablePermissions) {
+            List<? extends Permission> tablePermissions =
+                    userPermissions.get(regularUser1.getName());
+            for (Permission tablePerm : tablePermissions) {
                 assertTrue("Table create permission don't exist", tablePerm.implies(Action.CREATE));
             }
         } catch (Exception e) {

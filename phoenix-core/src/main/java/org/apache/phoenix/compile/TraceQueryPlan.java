@@ -237,6 +237,11 @@ public class TraceQueryPlan implements QueryPlan {
         return Collections.<OrderBy> emptyList();
     }
 
+    @Override
+    public boolean isApplicable() {
+        return true;
+    }
+
     private class TraceQueryResultIterator implements ResultIterator {
 
         private final PhoenixConnection conn;

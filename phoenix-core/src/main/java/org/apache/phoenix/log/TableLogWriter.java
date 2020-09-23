@@ -33,7 +33,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 /**
  * Writes RingBuffer log event into table 
@@ -82,7 +82,7 @@ public class TableLogWriter implements LogWriter {
     }
 
     @Override
-    public void write(RingBufferEvent event) throws SQLException, IOException, ClassNotFoundException {
+    public void write(RingBufferEvent event) throws SQLException, IOException {
         if (isClosed()) {
             LOGGER.warn("Unable to commit query log as Log committer is already closed");
             return;

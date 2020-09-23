@@ -65,7 +65,7 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Test that we correctly replicate indexes over replication
@@ -106,7 +106,7 @@ public class MutableIndexReplicationIT extends BaseTest {
     protected static final byte[] row = Bytes.toBytes("row");
 
     @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
+    public static synchronized void setUpBeforeClass() throws Exception {
         setupConfigsAndStartCluster();
         setupDriver();
     }

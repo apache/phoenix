@@ -26,7 +26,7 @@ public class PermissionNSDisabledIT extends BasePermissionsIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         BasePermissionsIT.initCluster(false);
     }
 }

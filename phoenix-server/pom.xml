@@ -24,7 +24,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.1.0-HBase-2.0-SNAPSHOT</version>
+    <version>5.1.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Server</name>
@@ -59,31 +59,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <configuration>
-          <finalName>phoenix-${project.version}-server</finalName>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-install-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>install-file</goal>
-            </goals>
-            <id>default-install</id>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-            <phase>install</phase>
-          </execution>
-        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
-          <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
- 	  <pomFile>${basedir}/pom.xml</pomFile>
+          <ignoredDependencies>
+            <ignoredDependency>*</ignoredDependency>
+          </ignoredDependencies>
         </configuration>
       </plugin>
-
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -94,8 +83,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
-                <finalName>phoenix-${project.version}-server</finalName>
-                <shadedArtifactAttached>false</shadedArtifactAttached>
+                <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
                 <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                 <shadeTestJar>false</shadeTestJar>
                 <transformers>
@@ -133,6 +121,7 @@
                         <exclude>log4j:log4j</exclude>
                         <exclude>org.slf4j:slf4j-api</exclude>
                         <exclude>org.slf4j:slf4j-log4j</exclude>
+                        <exlcude>org.apache.phoenix:phoenix-hbase-compat*</exlcude>
                     </excludes>
                 </artifactSet>
                 <filters>
@@ -145,6 +134,7 @@
                             <exclude>META-INF/license/*</exclude>
                             <exclude>LICENSE.*</exclude>
                             <exclude>NOTICE.*</exclude>
+                            <exclude>NOTICE</exclude>
                         </excludes>
                     </filter>
                 </filters>
@@ -264,8 +254,8 @@
                       <shadedPattern>${shaded.package}.net.jcip.annotations</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.codehaus.jackson</pattern>
-                      <shadedPattern>${shaded.package}.org.codehaus.jackson</shadedPattern>
+                      <pattern>com.fasterxml.jackson</pattern>
+                      <shadedPattern>${shaded.package}.com.fasterxml.jackson</shadedPattern>
                     </relocation>
                     <relocation>
                       <pattern>javax.annotation</pattern>
@@ -296,7 +286,6 @@
   </build>
 
   <dependencies>
-    <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
@@ -311,7 +300,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-mapreduce</artifactId>
+      <artifactId>hbase-protocol</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -321,17 +315,32 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-protocol</artifactId>
+      <artifactId>hbase-endpoint</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-mapreduce</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -342,6 +351,21 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-hadoop2-compat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-miscellaneous</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-protobuf</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -360,15 +384,29 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
+      <groupId>commons-logging</groupId>
+      <artifactId>commons-logging</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>

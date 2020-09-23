@@ -15,12 +15,15 @@
  */
 package org.apache.phoenix.util;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -69,10 +72,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
@@ -80,25 +87,25 @@ public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
 
-    public static void findAllRelatives(Table systemTable, byte[] tenantId, byte[] schema, byte[] table,
+    public static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
-        findAllRelatives(systemTable, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
+        findAllRelatives(sysCatOrsysChildLink, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
     }
 
-    static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
+    private static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp, TableViewFinderResult result) throws IOException {
         TableViewFinderResult currentResult =
-            findRelatedViews(systemCatalog, tenantId, schema, table, linkType, timestamp);
+            findRelatedViews(sysCatOrsysChildLink, tenantId, schema, table, linkType, timestamp);
         result.addResult(currentResult);
         for (TableInfo viewInfo : currentResult.getLinks()) {
-            findAllRelatives(systemCatalog, viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName(), linkType, timestamp, result);
+            findAllRelatives(sysCatOrsysChildLink, viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName(), linkType, timestamp, result);
         }
     }
 
     /**
      * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the related tables/views
      */
-    static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
+    private static TableViewFinderResult findRelatedViews(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema, byte[] table,
         PTable.LinkType linkType, long timestamp) throws IOException {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
             throw new IllegalArgumentException("findAllRelatives does not support link type "+linkType);
@@ -116,7 +123,7 @@ public class ViewUtil {
         if (linkType==PTable.LinkType.PHYSICAL_TABLE)
             scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
         List<TableInfo> tableInfoList = Lists.newArrayList();
-        try (ResultScanner scanner = systemCatalog.getScanner(scan))  {
+        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan))  {
             for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                 byte[][] rowKeyMetaData = new byte[5][];
                 byte[] viewTenantId = null;
@@ -141,10 +148,18 @@ public class ViewUtil {
     }
     
     /**
+     * Check metadata to find all child views for a given table/view
+     * @param sysCatOrsysChildLink For older (pre-4.15.0) clients, we look for child links inside SYSTEM.CATALOG,
+     *                             otherwise we look for them inside SYSTEM.CHILD_LINK
+     * @param tenantId tenantId
+     * @param schemaName table schema name
+     * @param tableName table name
+     * @param timestamp passed client-side timestamp
      * @return true if the given table has at least one child view
-     * @throws IOException 
+     * @throws IOException
      */
-    public static boolean hasChildViews(Table systemCatalog, byte[] tenantId, byte[] schemaName, byte[] tableName, long timestamp) throws IOException {
+    public static boolean hasChildViews(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schemaName,
+                                        byte[] tableName, long timestamp) throws IOException {
         byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
         SingleColumnValueFilter linkFilter =
@@ -154,38 +169,54 @@ public class ViewUtil {
                     // if we found a row with the CHILD_TABLE link type we are done and can
                     // terminate the scan
                     @Override
-                    public boolean filterAllRemaining() throws IOException {
+                    public boolean filterAllRemaining() {
                         return matchedColumn;
                     }
                 };
         linkFilter.setFilterIfMissing(true);
         scan.setFilter(linkFilter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-        try (ResultScanner scanner = systemCatalog.getScanner(scan)) {
+        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan)) {
             Result result = scanner.next();
             return result!=null; 
         }
     }
 
-    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes, byte[] schemaName, byte[] tableName)
-            throws IOException, SQLException, ClassNotFoundException {
+    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
+            byte[] schemaName, byte[] tableName, byte[] sysCatOrSysChildLink)
+            throws IOException, SQLException {
         Table hTable = null;
         try {
-            hTable =
-                    ServerUtil.getHTableForCoprocessorScan(env,
-                            SchemaUtil.getPhysicalTableName(
-                                    PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES,
-                                    env.getConfiguration()));
+            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
+                            sysCatOrSysChildLink, env.getConfiguration()));
+        } catch (Exception e){
+            logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
         }
-        catch (Exception e){
-        }
-        // if the SYSTEM.CHILD_LINK doesn't exist just return
+        // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
         if (hTable==null) {
             return;
         }
 
-        TableViewFinderResult childViewsResult = findRelatedViews(hTable, tenantIdBytes, schemaName, tableName,
-                LinkType.CHILD_TABLE, HConstants.LATEST_TIMESTAMP);
+        TableViewFinderResult childViewsResult = null;
+        try {
+            childViewsResult = findRelatedViews(
+                    hTable,
+                    tenantIdBytes,
+                    schemaName,
+                    tableName,
+                    LinkType.CHILD_TABLE,
+                    HConstants.LATEST_TIMESTAMP);
+        } finally {
+            hTable.close();
+        }
+
+        if(childViewsResult == null) {
+           logger.info("tenantIdBytes:" + Bytes.toStringBinary(tenantIdBytes) +
+                       ", schemaName:" + Bytes.toStringBinary(schemaName) +
+                       ", tableName:" + Bytes.toStringBinary(tableName) +
+                       ", ViewUtil.findRelatedViews return null.");
+           return;
+        }
 
         for (TableInfo viewInfo : childViewsResult.getLinks()) {
             byte[] viewTenantId = viewInfo.getTenantId();
@@ -215,8 +246,51 @@ public class ViewUtil {
         }
     }
 
+
+    /**
+     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find parent->child
+     * links i.e. {@link LinkType#CHILD_TABLE}.
+     * If the client is older than 4.15.0 and the SYSTEM.CHILD_LINK table does not exist, we use
+     * the SYSTEM.CATALOG table. In all other cases, we use the SYSTEM.CHILD_LINK table.
+     * This is required for backwards compatibility.
+     * @param clientVersion client version
+     * @param conf server-side configuration
+     * @return name of the system table to be used
+     * @throws SQLException
+     */
+    public static TableName getSystemTableForChildLinks(int clientVersion,
+            Configuration conf) throws SQLException, IOException {
+        byte[] fullTableName = SYSTEM_CHILD_LINK_NAME_BYTES;
+        if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                    conf).unwrap(PhoenixConnection.class);
+                    Admin admin = connection.getQueryServices().getAdmin()) {
+
+                // If this is an old client and the CHILD_LINK table doesn't exist i.e. metadata
+                // hasn't been updated since there was never a connection from a 4.15 client
+                if (!admin.tableExists(SchemaUtil.getPhysicalTableName(
+                        SYSTEM_CHILD_LINK_NAME_BYTES, conf))) {
+                    fullTableName = SYSTEM_CATALOG_NAME_BYTES;
+                }
+            } catch (SQLException e) {
+                logger.error("Error getting a connection on the server : " + e);
+                throw e;
+            }
+        }
+        return SchemaUtil.getPhysicalTableName(fullTableName, conf);
+    }
+
     public static boolean isDivergedView(PTable view) {
         return view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
+    }
+
+    public static boolean isViewDiverging(PColumn columnToDelete, PTable view,
+            long clientVersion) {
+        // If we are dropping a column from a pre-4.15 client, the only way to know if the
+        // view is diverging is by comparing the base column count
+        return !isDivergedView(view) && (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG ?
+                columnToDelete.getPosition() < view.getBaseColumnCount() :
+                columnToDelete.isDerived());
     }
 
     /**
@@ -250,7 +324,7 @@ public class ViewUtil {
             // Ensure that constant columns (i.e. columns matched in the view WHERE clause)
             // all exist in the index on the parent table.
             for (PColumn col : view.getColumns()) {
-                if (col.getViewConstant() != null) {
+                if (col.isViewReferenced() || col.getViewConstant() != null) {
                     try {
                         // It'd be possible to use a local index that doesn't have all view constants,
                         // but the WHERE clause for the view statement (which is added to the index below)
@@ -302,25 +376,29 @@ public class ViewUtil {
     }
 
     /**
-     * Inherit all columns from the parent unless its an excluded column if the same columns is present in the parent
-     * and child (for table metadata created before PHOENIX-3534) we chose the child column over the parent column
-     * @return table with inherited columns and indexes
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child (for table metadata created before
+     * PHOENIX-3534) we choose the child column over the parent column
+     * @return table with inherited columns
      */
     public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
-                                                               PTable table, PTable parentTable) throws SQLException {
+            PTable view, PTable parentTable) throws SQLException {
         // combine columns for view and view indexes
-        boolean hasIndexId = table.getViewIndexId() != null;
-        boolean isSalted = table.getBucketNum() != null;
-        boolean isDiverged = isDivergedView(table);
+        boolean hasIndexId = view.getViewIndexId() != null;
+        boolean isSalted = view.getBucketNum() != null;
+        boolean isDiverged = isDivergedView(view);
+        boolean isDivergedViewCreatedPre4_15 = isDiverged;
         List<PColumn> allColumns = Lists.newArrayList();
         List<PColumn> excludedColumns = Lists.newArrayList();
         // add my own columns first in reverse order
-        List<PColumn> myColumns = table.getColumns();
+        List<PColumn> myColumns = view.getColumns();
         // skip salted column as it will be created automatically
         myColumns = myColumns.subList(isSalted ? 1 : 0, myColumns.size());
         for (int i = myColumns.size() - 1; i >= 0; i--) {
             PColumn pColumn = myColumns.get(i);
             if (pColumn.isExcluded()) {
+                // Diverged views created pre-4.15 will not have EXCLUDED_COLUMN linking rows
+                isDivergedViewCreatedPre4_15 = false;
                 excludedColumns.add(pColumn);
             }
             allColumns.add(pColumn);
@@ -330,13 +408,13 @@ public class ViewUtil {
         // then remove the data columns that have not been dropped, so that we get the columns that
         // have been dropped
         Map<PColumn, List<String>> indexRequiredDroppedDataColMap =
-                Maps.newHashMapWithExpectedSize(table.getColumns().size());
+                Maps.newHashMapWithExpectedSize(view.getColumns().size());
         if (hasIndexId) {
-            int indexPosOffset = (isSalted ? 1 : 0) + (table.isMultiTenant() ? 1 : 0) + 1;
+            int indexPosOffset = (isSalted ? 1 : 0) + (view.isMultiTenant() ? 1 : 0) + 1;
             ColumnNameTrackingExpressionCompiler expressionCompiler =
                     new ColumnNameTrackingExpressionCompiler();
-            for (int i = indexPosOffset; i < table.getPKColumns().size(); i++) {
-                PColumn indexColumn = table.getPKColumns().get(i);
+            for (int i = indexPosOffset; i < view.getPKColumns().size(); i++) {
+                PColumn indexColumn = view.getPKColumns().get(i);
                 try {
                     expressionCompiler.reset();
                     String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
@@ -350,8 +428,8 @@ public class ViewUtil {
             }
         }
 
-        long maxTableTimestamp = table.getTimeStamp();
-        int numPKCols = table.getPKColumns().size();
+        long maxTableTimestamp = view.getTimeStamp();
+        int numPKCols = view.getPKColumns().size();
         // set the final table timestamp as the max timestamp of the view/view index or its ancestors
         maxTableTimestamp = Math.max(maxTableTimestamp, parentTable.getTimeStamp());
         if (hasIndexId) {
@@ -384,58 +462,10 @@ public class ViewUtil {
                     entry.getValue().remove(dataColumnName);
                 }
             }
-        } else {
-            List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(parentTable);
-            if (currAncestorTableCols != null) {
-                // add the ancestor columns in reverse order so that the final column list
-                // contains ancestor columns and then the view columns in the right order
-                for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
-                    PColumn column = currAncestorTableCols.get(j);
-                    // for diverged views we always include pk columns of the base table. We
-                    // have to include these pk columns to be able to support adding pk
-                    // columns to the diverged view
-                    // we only include regular columns that were created before the view
-                    // diverged
-                    if (isDiverged && column.getFamilyName() != null
-                            && column.getTimestamp() > table.getTimeStamp()) {
-                        continue;
-                    }
-                    // need to check if this column is in the list of excluded (dropped)
-                    // columns of the view
-                    int existingIndex = excludedColumns.indexOf(column);
-                    if (existingIndex != -1) {
-                        // if it is, only exclude the column if was created before the
-                        // column was dropped in the view in order to handle the case where
-                        // a base table column is dropped in a view, then dropped in the
-                        // base table and then added back to the base table
-                        if (column.getTimestamp() <= excludedColumns.get(existingIndex)
-                                .getTimestamp()) {
-                            continue;
-                        }
-                    }
-                    if (column.isExcluded()) {
-                        excludedColumns.add(column);
-                    } else {
-                        int existingColumnIndex = allColumns.indexOf(column);
-                        if (existingColumnIndex != -1) {
-                            // for diverged views if the view was created before
-                            // PHOENIX-3534 the parent table columns will be present in the
-                            // view PTable (since the base column count is
-                            // QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT we can't
-                            // filter them out) so we always pick the parent column
-                            // for non diverged views if the same column exists in a parent
-                            // and child, we keep the latest column
-                            PColumn existingColumn = allColumns.get(existingColumnIndex);
-                            if (isDiverged || column.getTimestamp() > existingColumn.getTimestamp()) {
-                                allColumns.remove(existingColumnIndex);
-                                allColumns.add(column);
-                            }
-                        } else {
-                            allColumns.add(column);
-                        }
-                    }
-                }
-            }
+        } else if (!isDivergedViewCreatedPre4_15) {
+            // For diverged views created by a pre-4.15 client, we don't need to inherit columns
+            // from its ancestors
+            inheritColumnsFromParent(view, parentTable, isDiverged, excludedColumns, allColumns);
         }
         // at this point indexRequiredDroppedDataColMap only contain the columns required by a view
         // index that have dropped
@@ -452,21 +482,13 @@ public class ViewUtil {
                 }
             }
         }
-        // remove the excluded columns if the timestamp of the excludedColumn is newer
-        for (PColumn excludedColumn : excludedColumns) {
-            int index = allColumns.indexOf(excludedColumn);
-            if (index != -1) {
-                if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
-                    allColumns.remove(excludedColumn);
-                }
-            }
-        }
+
         List<PColumn> columnsToAdd = Lists.newArrayList();
         int position = isSalted ? 1 : 0;
         // allColumns contains the columns in the reverse order
         for (int i = allColumns.size() - 1; i >= 0; i--) {
             PColumn column = allColumns.get(i);
-            if (table.getColumns().contains(column)) {
+            if (view.getColumns().contains(column)) {
                 // for views this column is not derived from an ancestor
                 columnsToAdd.add(new PColumnImpl(column, position++));
             } else {
@@ -480,12 +502,12 @@ public class ViewUtil {
                         : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
         // Inherit view-modifiable properties from the parent table/view if the current view has
         // not previously modified this property
-        Long updateCacheFreq = (table.getType() != PTableType.VIEW ||
-                table.hasViewModifiedUpdateCacheFrequency()) ?
-                table.getUpdateCacheFrequency() : parentTable.getUpdateCacheFrequency();
-        Boolean useStatsForParallelization = (table.getType() != PTableType.VIEW ||
-                table.hasViewModifiedUseStatsForParallelization()) ?
-                table.useStatsForParallelization() : parentTable.useStatsForParallelization();
+        long updateCacheFreq = (view.getType() != PTableType.VIEW ||
+                view.hasViewModifiedUpdateCacheFrequency()) ?
+                view.getUpdateCacheFrequency() : parentTable.getUpdateCacheFrequency();
+        Boolean useStatsForParallelization = (view.getType() != PTableType.VIEW ||
+                view.hasViewModifiedUseStatsForParallelization()) ?
+                view.useStatsForParallelization() : parentTable.useStatsForParallelization();
 
         // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
         // inherited from the physical base table.
@@ -494,7 +516,7 @@ public class ViewUtil {
         // if a TableProperty is valid on a view and is mutable on a view, we use the value set
         // on the view if the view had previously modified the property, otherwise we propagate the
         // value from the base table (see PHOENIX-4763)
-        PTable pTable = PTableImpl.builderWithColumns(table, columnsToAdd)
+        PTable pTable = PTableImpl.builderWithColumns(view, columnsToAdd)
                 .setImmutableRows(parentTable.isImmutableRows())
                 .setDisableWAL(parentTable.isWALDisabled())
                 .setMultiTenant(parentTable.isMultiTenant())
@@ -508,8 +530,7 @@ public class ViewUtil {
                         PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : parentTable.getEncodingScheme())
                 .setBaseColumnCount(baseTableColumnCount)
                 .setTimeStamp(maxTableTimestamp)
-                .setExcludedColumns(excludedColumns == null ?
-                        ImmutableList.<PColumn>of() : ImmutableList.copyOf(excludedColumns))
+                .setExcludedColumns(ImmutableList.copyOf(excludedColumns))
                 .setUpdateCacheFrequency(updateCacheFreq)
                 .setUseStatsForParallelization(useStatsForParallelization)
                 .build();
@@ -519,7 +540,7 @@ public class ViewUtil {
         if (!hasIndexId) {
             // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
             List<PTable> allIndexes = Lists.newArrayList();
-            if (!pTable.getIndexes().isEmpty()) {
+            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
                 for (PTable viewIndex : pTable.getIndexes()) {
                     PTable resolvedViewIndex =
                             ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
@@ -540,6 +561,85 @@ public class ViewUtil {
     }
 
     /**
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child
+     * (for table metadata created before PHOENIX-3534 or when
+     * {@link org.apache.phoenix.query.QueryServices#ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK} is
+     * enabled) we choose the child column over the parent column.
+     * Note that we don't need to call this method for views created before 4.15 since they
+     * already contain all the columns from their ancestors.
+     * @param view PTable of the view
+     * @param parentTable PTable of the view's parent
+     * @param isDiverged true if it is a diverged view
+     * @param excludedColumns list of excluded columns
+     * @param allColumns list of all columns. Initially this contains just the columns in the view.
+     *                   We will populate inherited columns by adding them to this list
+     */
+    static void inheritColumnsFromParent(PTable view, PTable parentTable,
+            boolean isDiverged, List<PColumn> excludedColumns, List<PColumn> allColumns) {
+        List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(parentTable);
+        if (currAncestorTableCols != null) {
+            // add the ancestor columns in reverse order so that the final column list
+            // contains ancestor columns and then the view columns in the right order
+            for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
+                PColumn ancestorColumn = currAncestorTableCols.get(j);
+                // for diverged views we always include pk columns of the base table. We
+                // have to include these pk columns to be able to support adding pk
+                // columns to the diverged view.
+                // We only include regular columns that were created before the view
+                // diverged.
+                if (isDiverged && ancestorColumn.getFamilyName() != null
+                        && ancestorColumn.getTimestamp() > view.getTimeStamp()) {
+                    // If this is a diverged view, the ancestor column is not a PK and the ancestor
+                    // column was added after the view diverged, ignore this ancestor column.
+                    continue;
+                }
+                // need to check if this ancestor column is in the list of excluded (dropped)
+                // columns of the view
+                int existingExcludedIndex = excludedColumns.indexOf(ancestorColumn);
+                if (existingExcludedIndex != -1) {
+                    // if it is, only exclude the ancestor column if it was created before the
+                    // column was dropped in the view in order to handle the case where
+                    // a base table column is dropped in a view, then dropped in the
+                    // base table and then added back to the base table
+                    if (ancestorColumn.getTimestamp() <= excludedColumns.get(existingExcludedIndex)
+                            .getTimestamp()) {
+                        continue;
+                    }
+                }
+                // A diverged view from a pre-4.15 client won't ever go in this case since
+                // isExcluded was introduced in 4.15. If this is a 4.15+ client, excluded columns
+                // will be identifiable via PColumn#isExcluded()
+                if (ancestorColumn.isExcluded()) {
+                    excludedColumns.add(ancestorColumn);
+                } else {
+                    int existingColumnIndex = allColumns.indexOf(ancestorColumn);
+                    if (existingColumnIndex != -1) {
+                        // For non-diverged views, if the same column exists in a parent and child,
+                        // we keep the latest column.
+                        PColumn existingColumn = allColumns.get(existingColumnIndex);
+                        if (!isDiverged && ancestorColumn.getTimestamp() > existingColumn.getTimestamp()) {
+                            allColumns.remove(existingColumnIndex);
+                            allColumns.add(ancestorColumn);
+                        }
+                    } else {
+                        allColumns.add(ancestorColumn);
+                    }
+                }
+            }
+        }
+        // remove the excluded columns if the timestamp of the excludedColumn is newer
+        for (PColumn excludedColumn : excludedColumns) {
+            int index = allColumns.indexOf(excludedColumn);
+            if (index != -1) {
+                if (allColumns.get(index).getTimestamp() <= excludedColumn.getTimestamp()) {
+                    allColumns.remove(excludedColumn);
+                }
+            }
+        }
+    }
+
+    /**
      * See PHOENIX-4763. If we are modifying any table-level properties that are mutable on a view,
      * we mark these cells in SYSTEM.CATALOG with tags to indicate that this view property should
      * not be kept in-sync with the base table and so we shouldn't propagate the base table's
@@ -551,6 +651,7 @@ public class ViewUtil {
             PTable parent, ExtendedCellBuilder extendedCellBuilder) {
         byte[] parentUpdateCacheFreqBytes = null;
         byte[] parentUseStatsForParallelizationBytes = null;
+        byte[] parentPhoenixTTLBytes = null;
         if (parent != null) {
             parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
@@ -559,6 +660,9 @@ public class ViewUtil {
                 parentUseStatsForParallelizationBytes =
                         PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
             }
+            parentPhoenixTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
+            PLong.INSTANCE.getCodec().encodeLong(parent.getPhoenixTTL(),
+                    parentPhoenixTTLBytes, 0);
         }
         for (Mutation m: tableMetaData) {
             if (m instanceof Put) {
@@ -573,6 +677,12 @@ public class ViewUtil {
                         PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES,
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
+                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
+                        extendedCellBuilder,
+                        parentPhoenixTTLBytes,
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 

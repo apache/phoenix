@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 
 /**
@@ -56,6 +56,7 @@ public interface PTable extends PMetaDataEntity {
     public static final long INITIAL_SEQ_NUM = 0;
     public static final String IS_IMMUTABLE_ROWS_PROP_NAME = "IMMUTABLE_ROWS";
     public static final boolean DEFAULT_DISABLE_WAL = false;
+    public static final boolean DEFAULT_IMMUTABLE_ROWS = false;
 
     public enum ViewType {
         MAPPED((byte)1),
@@ -800,6 +801,23 @@ public interface PTable extends PMetaDataEntity {
     Boolean useStatsForParallelization();
     boolean hasViewModifiedUpdateCacheFrequency();
     boolean hasViewModifiedUseStatsForParallelization();
+    Map<String, String> getPropertyValues();
+    Map<String, String> getDefaultPropertyValues();
+
+    /**
+     * @return The PHOENIX_TTL duration associated with the entity.
+     */
+    long getPhoenixTTL();
+
+    /**
+     * @return The PHOENIX_TTL high water mark timestamp associated with the entity.
+     */
+    long getPhoenixTTLHighWaterMark();
+
+    /**
+     * @return If the view has overridden the TTL set at the parent entity level.
+     */
+    boolean hasViewModifiedPhoenixTTL();
 
     /**
      * Class to help track encoded column qualifier counters per column family.

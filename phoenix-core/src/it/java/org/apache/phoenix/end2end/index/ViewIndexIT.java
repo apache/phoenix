@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -37,10 +38,17 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.SplitSystemCatalogIT;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.index.GlobalIndexChecker;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -66,17 +74,20 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     private boolean isNamespaceMapped;
 
     @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean> data() {
+    public static synchronized Collection<Boolean> data() {
         return Arrays.asList(true, false);
     }
 
-    private void createBaseTable(String schemaName, String tableName, boolean multiTenant, Integer saltBuckets, String splits)
+    private void createBaseTable(String schemaName, String tableName, boolean multiTenant,
+                                 Integer saltBuckets, String splits, boolean mutable)
             throws SQLException {
         Connection conn = getConnection();
         if (isNamespaceMapped) {
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
         }
-        String ddl = "CREATE TABLE " + SchemaUtil.getTableName(schemaName, tableName) + " (t_id VARCHAR NOT NULL,\n" +
+        String ddl = "CREATE " + (mutable ? "" : "IMMUTABLE") +
+            " TABLE " + SchemaUtil.getTableName(schemaName, tableName) +
+            " (t_id VARCHAR NOT NULL,\n" +
                 "k1 VARCHAR NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +
                 "v1 VARCHAR,\n" +
@@ -118,10 +129,10 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         conn.commit();
     }
     
-    private Connection getConnection() throws SQLException{
+    private PhoenixConnection getConnection() throws SQLException{
         Properties props = new Properties();
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
-        return DriverManager.getConnection(getUrl(),props);
+        return (PhoenixConnection) DriverManager.getConnection(getUrl(),props);
     }
 
     private Connection getTenantConnection(String tenant) throws SQLException {
@@ -145,7 +156,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String viewName = "VIEW_" + generateUniqueName();
         String fullViewName = SchemaUtil.getTableName(viewSchemaName, viewName);
 
-        createBaseTable(schemaName, tableName, false, null, null);
+        createBaseTable(schemaName, tableName, false, null, null, true);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
@@ -153,9 +164,9 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName).next();
         String sequenceName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, isNamespaceMapped);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), isNamespaceMapped);
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, Long.MIN_VALUE + 1);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, Short.MIN_VALUE + 1);
         conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + fullViewName + " (v1)");
-        verifySequenceValue(null, sequenceName, sequenceSchemaName, Long.MIN_VALUE + 2);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, Short.MIN_VALUE + 2);
         conn1.createStatement().execute("DROP VIEW " + fullViewName);
         conn1.createStatement().execute("DROP TABLE "+ fullTableName);
         
@@ -169,7 +180,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         
-        createBaseTable(SCHEMA1, tableName, true, null, null);
+        createBaseTable(SCHEMA1, tableName, true, null, null, true);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
                 "UPSERT INTO " + fullTableName
@@ -240,8 +251,47 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
         assertEquals(4, plan.getSplits().size());
     }
-    
-    
+
+    @Test
+    public void testCoprocsOnGlobalMTImmutableViewIndex() throws Exception {
+        testCoprocsOnGlobalViewIndexHelper(true, false);
+    }
+
+    @Test
+    public void testCoprocsOnGlobalNonMTMutableViewIndex() throws Exception {
+        testCoprocsOnGlobalViewIndexHelper(false, true);
+    }
+
+    @Test
+    public void testCoprocsOnGlobalMTMutableViewIndex() throws Exception {
+        testCoprocsOnGlobalViewIndexHelper(true, true);
+    }
+
+    @Test
+    public void testCoprocsOnGlobalNonMTImmutableViewIndex() throws Exception {
+        testCoprocsOnGlobalViewIndexHelper(false, false);
+    }
+
+    private void testCoprocsOnGlobalViewIndexHelper(boolean multiTenant, boolean mutable) throws SQLException, IOException {
+        String schemaName = generateUniqueName();
+        String baseTable =  generateUniqueName();
+        String globalView = generateUniqueName();
+        String globalViewIdx =  generateUniqueName();
+        createBaseTable(schemaName, baseTable, multiTenant, null, null, mutable);
+        try (PhoenixConnection conn = getConnection()) {
+            createView(conn, schemaName, globalView, baseTable);
+            createViewIndex(conn, schemaName, globalViewIdx, globalView, "K1");
+            //now check that the right coprocs are installed
+            Admin admin = conn.getQueryServices().getAdmin();
+            TableDescriptor td = admin.getTableDescriptor(TableName.valueOf(
+                MetaDataUtil.getViewIndexPhysicalName(SchemaUtil.getPhysicalHBaseTableName(
+                    schemaName, baseTable, isNamespaceMapped).getString())));
+            assertTrue(td.hasCoprocessor(GlobalIndexChecker.class.getName()));
+            assertFalse(td.hasCoprocessor(IndexRegionObserver.class.getName()));
+            assertFalse(td.hasCoprocessor(Indexer.class.getName()));
+        }
+    }
+
     @Test
     public void testMultiTenantViewGlobalIndex() throws Exception {
         String baseTable =  SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -550,7 +600,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String tenantViewIndexName = "TV_" + generateUniqueName();
         Connection globalConn = getConnection();
         Connection tenantConn = getTenantConnection(TENANT1);
-        createBaseTable(SCHEMA1, tableName, true, 0, null);
+        createBaseTable(SCHEMA1, tableName, true, 0, null, true);
         createView(globalConn, SCHEMA1, globalViewName, tableName);
         createViewIndex(globalConn, SCHEMA1, globalViewIndexName, globalViewName, "v1");
         createView(tenantConn, SCHEMA1, tenantViewName, tableName);

@@ -38,7 +38,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class SystemCatalogUpgradeIT extends BaseTest {
     private static boolean reinitialize;
@@ -94,7 +94,7 @@ public class SystemCatalogUpgradeIT extends BaseTest {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixUpgradeCountingDriver.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

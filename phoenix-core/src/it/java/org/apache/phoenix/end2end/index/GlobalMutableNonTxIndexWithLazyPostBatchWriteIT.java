@@ -19,7 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import java.util.Map;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -31,7 +31,7 @@ public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutab
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(IndexRegionObserver.INDEX_LAZY_POST_BATCH_WRITE, "true");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

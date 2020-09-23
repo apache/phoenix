@@ -39,7 +39,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class TenantIdTypeIT extends ParallelStatsDisabledIT {
@@ -87,7 +87,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters( name = "TenantIdTypeIT_datatype={0}" ) // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         List<Object[]> testCases = Lists.newArrayList();
         testCases.add(new Object[] { "INTEGER", "2147483647", "2147483646" });
         testCases.add(new Object[] { "UNSIGNED_INT", "2147483647", "2147483646" });

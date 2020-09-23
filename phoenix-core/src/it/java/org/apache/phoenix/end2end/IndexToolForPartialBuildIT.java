@@ -58,8 +58,8 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Tests for the {@link IndexToolForPartialBuildIT}
@@ -89,7 +89,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
     }
@@ -237,6 +237,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         // complete index rebuild
         args.add("-it");
         args.add(indexName);
+        args.add("-runfg");
         args.add("-op");
         args.add("/tmp/output/partialTable_");
         return args.toArray(new String[0]);

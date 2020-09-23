@@ -10,12 +10,13 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyMapperForTest;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
@@ -89,6 +90,8 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
 
         String idxStmtTenant = String.format(createIndexStr, indexNameTenant, tenantViewName);
         connTenant.createStatement().execute(idxStmtTenant);
+        connTenant.commit();
+        connGlobal.commit();
     }
 
     @After public void teardown() throws SQLException {
@@ -113,7 +116,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
                 getArgValues("", tenantViewName, indexNameTenant, 10L, SourceTable.INDEX_TABLE_SOURCE, false, null, null, tenantId,
                         EnvironmentEdgeManager.currentTimeMillis());
 
-        List<Job> completedJobs = runScrutiny(argValues);
+        List<Job> completedJobs = runScrutiny(IndexScrutinyMapperForTest.class, argValues);
         // Sunny case, both index and view are equal. 1 row
         assertEquals(1, completedJobs.size());
         for (Job job : completedJobs) {
@@ -143,7 +146,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
                 argValues =
                 getArgValues("", globalViewName, indexNameGlobal, 10L, SourceTable.INDEX_TABLE_SOURCE, false, null, null, null,
                         EnvironmentEdgeManager.currentTimeMillis());
-        List<Job> completedJobs = runScrutiny(argValues);
+        List<Job> completedJobs = runScrutiny(IndexScrutinyMapperForTest.class, argValues);
         // Sunny case, both index and view are equal. 1 row
         assertEquals(1, completedJobs.size());
         for (Job job : completedJobs) {
@@ -198,7 +201,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
         String[]
                 argValues =
                 getArgValues("", tenantViewName, indexNameTenant, 10L, SourceTable.BOTH, false, null, null, tenantId, EnvironmentEdgeManager.currentTimeMillis());
-        List<Job> completedJobs = runScrutiny(argValues);
+        List<Job> completedJobs = runScrutiny(IndexScrutinyMapperForTest.class, argValues);
 
         assertEquals(2, completedJobs.size());
         for (Job job : completedJobs) {
@@ -244,7 +247,7 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
                 argValues =
                 getArgValues("", tenantViewName, indexNameTenant, 10L, SourceTable.DATA_TABLE_SOURCE, true, outputFormat, null,
                         tenantId, EnvironmentEdgeManager.currentTimeMillis());
-        List<Job> completedJobs = runScrutiny(argValues);
+        List<Job> completedJobs = runScrutiny(IndexScrutinyMapperForTest.class, argValues);
 
         assertEquals(1, completedJobs.size());
         for (Job job : completedJobs) {

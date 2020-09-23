@@ -25,6 +25,7 @@ import org.apache.hadoop.metrics2.lib.MutableFastCounter;
  */
 public class GlobalIndexCheckerSourceImpl extends BaseSourceImpl implements GlobalIndexCheckerSource {
 
+    private final MutableFastCounter indexInspections;
     private final MutableFastCounter indexRepairs;
     private final MutableFastCounter indexRepairFailures;
 
@@ -41,11 +42,19 @@ public class GlobalIndexCheckerSourceImpl extends BaseSourceImpl implements Glob
                                         String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
 
+        indexInspections = getMetricsRegistry().newCounter(INDEX_INSPECTION, INDEX_INSPECTION_DESC, 0L);
         indexRepairs = getMetricsRegistry().newCounter(INDEX_REPAIR, INDEX_REPAIR_DESC, 0L);
         indexRepairFailures = getMetricsRegistry().newCounter(INDEX_REPAIR_FAILURE, INDEX_REPAIR_FAILURE_DESC, 0L);
 
         indexRepairTimeHisto = getMetricsRegistry().newHistogram(INDEX_REPAIR_TIME, INDEX_REPAIR_TIME_DESC);
         indexRepairFailureTimeHisto = getMetricsRegistry().newHistogram(INDEX_REPAIR_FAILURE_TIME, INDEX_REPAIR_FAILURE_TIME_DESC);
+    }
+
+    /**
+     * Increments the number of index rows inspected for verified status
+     */
+    public void incrementIndexInspections() {
+        indexInspections.incr();
     }
 
     /**

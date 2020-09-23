@@ -19,10 +19,10 @@ package org.apache.phoenix.mapreduce.bulkload;
 
 import java.util.Map;
 
-import org.codehaus.jackson.annotate.JsonCreator;
-import org.codehaus.jackson.annotate.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Represents the logical and physical name of a single table to which data is to be loaded.

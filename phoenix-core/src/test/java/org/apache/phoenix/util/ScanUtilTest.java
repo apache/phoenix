@@ -42,8 +42,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -129,7 +129,7 @@ public class ScanUtilTest {
         }
 
         @Parameters(name = "{0} {1} {2} {3} {4}")
-        public static Collection<Object> data() {
+        public static synchronized Collection<Object> data() {
             List<Object> testCases = Lists.newArrayList();
             // 1, Lower bound, all single keys, all inclusive.
             testCases.addAll(foreach(new KeyRange[][] {

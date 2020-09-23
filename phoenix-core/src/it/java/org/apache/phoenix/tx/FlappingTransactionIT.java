@@ -68,7 +68,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
     }
 
     @Parameters(name="FlappingTransactionIT_transactionProvider={0}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
             {"TEPHRA"}, {"OMID"}
            }),0);

@@ -32,10 +32,10 @@ import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.base.Charsets;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 /***
  * Upserts CSV data using Phoenix JDBC connection
@@ -204,17 +204,18 @@ public class CSVCommonsLoader {
         boolean wasAutoCommit = conn.getAutoCommit();
         try {
             conn.setAutoCommit(false);
-            long start = System.currentTimeMillis();
+            long start = EnvironmentEdgeManager.currentTimeMillis();
             CsvUpsertListener upsertListener = new CsvUpsertListener(conn,
                     conn.getMutateBatchSize(), isStrict);
-            CsvUpsertExecutor csvUpsertExecutor = new CsvUpsertExecutor(conn, tableName,
+            CsvUpsertExecutor csvUpsertExecutor = new CsvUpsertExecutor(conn,
+                SchemaUtil.getEscapedFullTableName(tableName),
                     columnInfoList, upsertListener, arrayElementSeparator);
 
             csvUpsertExecutor.execute(csvParser);
             csvUpsertExecutor.close();
 
             conn.commit();
-            double elapsedDuration = ((System.currentTimeMillis() - start) / 1000.0);
+            double elapsedDuration = ((EnvironmentEdgeManager.currentTimeMillis() - start) / 1000.0);
             System.out.println("CSV Upsert complete. " + upsertListener.getTotalUpsertCount()
                     + " rows upserted");
             System.out.println("Time: " + elapsedDuration + " sec(s)\n");

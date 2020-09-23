@@ -19,6 +19,8 @@
 #
 ############################################################################
 
+from __future__ import print_function
+from phoenix_utils import tryDecode
 import os
 import subprocess
 import sys
@@ -44,17 +46,17 @@ elif os.name == 'nt':
     hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
     hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
 if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
     sys.exit(-1)
 
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, _, v) = x.partition('=')
+        (k, _, v) = tryDecode(x).partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
+if 'JAVA_HOME' in hbase_env:
     java_home = hbase_env['JAVA_HOME']
 
 if java_home:
@@ -67,5 +69,4 @@ java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + phoenix_utils.pherf_conf_path + 
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 
 
-exitcode = subprocess.call(java_cmd, shell=True)
-sys.exit(exitcode)
+os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)

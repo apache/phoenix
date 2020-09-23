@@ -32,7 +32,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * This class is to ensure gets its own cluster with Namespace Enabled
@@ -46,7 +46,7 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
     }
     
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProps();
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(3);
@@ -64,7 +64,7 @@ public class MutableIndexFailureWithNamespaceIT extends MutableIndexFailureIT {
     }
     
     @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
-    public static Collection<Object[]> data() {
+    public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
                 // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
                 { null, false, true, true, false, null},

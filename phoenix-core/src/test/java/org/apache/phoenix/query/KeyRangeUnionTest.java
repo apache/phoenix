@@ -44,7 +44,7 @@ public class KeyRangeUnionTest extends TestCase {
     }
 
     @Parameters(name="union of {0} and {1} is {2}")
-    public static Collection<?> data() {
+    public static synchronized Collection<?> data() {
         return Arrays.asList(new Object[][] {
                 {
                     PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),

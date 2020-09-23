@@ -28,6 +28,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
@@ -265,5 +266,29 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
             }
         }
         conn.close();
+    }
+
+    @Test
+    public void testToChar100Times() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement statement = conn.createStatement()) {
+            conn.setAutoCommit(true);
+            statement.execute("create table " + tableName +
+                " (id varchar primary key, ts varchar)");
+            statement.execute("upsert into " + tableName +
+                " values ('id', '1596067200000')");
+            String query = "select ts from " + tableName +
+                " where ts <= (select to_char(" +
+                "cast(to_number(to_date('2020-07-30 00:00:00')) as BIGINT), '#############'))" +
+                " and ts >= (select to_char(" +
+                "cast(to_number(to_date('2020-07-29 00:00:00')) as BIGINT), '#############'))";
+            for (int i = 0; i < 100; i++) {
+                try (ResultSet rs = statement.executeQuery(query)) {
+                    // The query should always return a result
+                    assertTrue(rs.next());
+                }
+            }
+        }
     }
 }

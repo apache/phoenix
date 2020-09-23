@@ -3724,6 +3724,36 @@ public final class PTableProtos {
      * <code>optional bool viewModifiedUseStatsForParallelization = 41;</code>
      */
     boolean getViewModifiedUseStatsForParallelization();
+
+    // optional int64 phoenixTTL = 42;
+    /**
+     * <code>optional int64 phoenixTTL = 42;</code>
+     */
+    boolean hasPhoenixTTL();
+    /**
+     * <code>optional int64 phoenixTTL = 42;</code>
+     */
+    long getPhoenixTTL();
+
+    // optional int64 phoenixTTLHighWaterMark = 43;
+    /**
+     * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+     */
+    boolean hasPhoenixTTLHighWaterMark();
+    /**
+     * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+     */
+    long getPhoenixTTLHighWaterMark();
+
+    // optional bool viewModifiedPhoenixTTL = 44;
+    /**
+     * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+     */
+    boolean hasViewModifiedPhoenixTTL();
+    /**
+     * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+     */
+    boolean getViewModifiedPhoenixTTL();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3993,6 +4023,21 @@ public final class PTableProtos {
             case 328: {
               bitField1_ |= 0x00000008;
               viewModifiedUseStatsForParallelization_ = input.readBool();
+              break;
+            }
+            case 336: {
+              bitField1_ |= 0x00000010;
+              phoenixTTL_ = input.readInt64();
+              break;
+            }
+            case 344: {
+              bitField1_ |= 0x00000020;
+              phoenixTTLHighWaterMark_ = input.readInt64();
+              break;
+            }
+            case 352: {
+              bitField1_ |= 0x00000040;
+              viewModifiedPhoenixTTL_ = input.readBool();
               break;
             }
           }
@@ -4823,6 +4868,54 @@ public final class PTableProtos {
       return viewModifiedUseStatsForParallelization_;
     }
 
+    // optional int64 phoenixTTL = 42;
+    public static final int PHOENIXTTL_FIELD_NUMBER = 42;
+    private long phoenixTTL_;
+    /**
+     * <code>optional int64 phoenixTTL = 42;</code>
+     */
+    public boolean hasPhoenixTTL() {
+      return ((bitField1_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional int64 phoenixTTL = 42;</code>
+     */
+    public long getPhoenixTTL() {
+      return phoenixTTL_;
+    }
+
+    // optional int64 phoenixTTLHighWaterMark = 43;
+    public static final int PHOENIXTTLHIGHWATERMARK_FIELD_NUMBER = 43;
+    private long phoenixTTLHighWaterMark_;
+    /**
+     * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+     */
+    public boolean hasPhoenixTTLHighWaterMark() {
+      return ((bitField1_ & 0x00000020) == 0x00000020);
+    }
+    /**
+     * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+     */
+    public long getPhoenixTTLHighWaterMark() {
+      return phoenixTTLHighWaterMark_;
+    }
+
+    // optional bool viewModifiedPhoenixTTL = 44;
+    public static final int VIEWMODIFIEDPHOENIXTTL_FIELD_NUMBER = 44;
+    private boolean viewModifiedPhoenixTTL_;
+    /**
+     * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+     */
+    public boolean hasViewModifiedPhoenixTTL() {
+      return ((bitField1_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+     */
+    public boolean getViewModifiedPhoenixTTL() {
+      return viewModifiedPhoenixTTL_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4864,6 +4957,9 @@ public final class PTableProtos {
       viewIndexIdType_ = 5;
       viewModifiedUpdateCacheFrequency_ = false;
       viewModifiedUseStatsForParallelization_ = false;
+      phoenixTTL_ = 0L;
+      phoenixTTLHighWaterMark_ = 0L;
+      viewModifiedPhoenixTTL_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -5051,6 +5147,15 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000008) == 0x00000008)) {
         output.writeBool(41, viewModifiedUseStatsForParallelization_);
       }
+      if (((bitField1_ & 0x00000010) == 0x00000010)) {
+        output.writeInt64(42, phoenixTTL_);
+      }
+      if (((bitField1_ & 0x00000020) == 0x00000020)) {
+        output.writeInt64(43, phoenixTTLHighWaterMark_);
+      }
+      if (((bitField1_ & 0x00000040) == 0x00000040)) {
+        output.writeBool(44, viewModifiedPhoenixTTL_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -5224,6 +5329,18 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000008) == 0x00000008)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(41, viewModifiedUseStatsForParallelization_);
+      }
+      if (((bitField1_ & 0x00000010) == 0x00000010)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(42, phoenixTTL_);
+      }
+      if (((bitField1_ & 0x00000020) == 0x00000020)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(43, phoenixTTLHighWaterMark_);
+      }
+      if (((bitField1_ & 0x00000040) == 0x00000040)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(44, viewModifiedPhoenixTTL_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -5436,6 +5553,21 @@ public final class PTableProtos {
         result = result && (getViewModifiedUseStatsForParallelization()
             == other.getViewModifiedUseStatsForParallelization());
       }
+      result = result && (hasPhoenixTTL() == other.hasPhoenixTTL());
+      if (hasPhoenixTTL()) {
+        result = result && (getPhoenixTTL()
+            == other.getPhoenixTTL());
+      }
+      result = result && (hasPhoenixTTLHighWaterMark() == other.hasPhoenixTTLHighWaterMark());
+      if (hasPhoenixTTLHighWaterMark()) {
+        result = result && (getPhoenixTTLHighWaterMark()
+            == other.getPhoenixTTLHighWaterMark());
+      }
+      result = result && (hasViewModifiedPhoenixTTL() == other.hasViewModifiedPhoenixTTL());
+      if (hasViewModifiedPhoenixTTL()) {
+        result = result && (getViewModifiedPhoenixTTL()
+            == other.getViewModifiedPhoenixTTL());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -5608,6 +5740,18 @@ public final class PTableProtos {
       if (hasViewModifiedUseStatsForParallelization()) {
         hash = (37 * hash) + VIEWMODIFIEDUSESTATSFORPARALLELIZATION_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getViewModifiedUseStatsForParallelization());
+      }
+      if (hasPhoenixTTL()) {
+        hash = (37 * hash) + PHOENIXTTL_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getPhoenixTTL());
+      }
+      if (hasPhoenixTTLHighWaterMark()) {
+        hash = (37 * hash) + PHOENIXTTLHIGHWATERMARK_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getPhoenixTTLHighWaterMark());
+      }
+      if (hasViewModifiedPhoenixTTL()) {
+        hash = (37 * hash) + VIEWMODIFIEDPHOENIXTTL_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getViewModifiedPhoenixTTL());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -5813,6 +5957,12 @@ public final class PTableProtos {
         bitField1_ = (bitField1_ & ~0x00000040);
         viewModifiedUseStatsForParallelization_ = false;
         bitField1_ = (bitField1_ & ~0x00000080);
+        phoenixTTL_ = 0L;
+        bitField1_ = (bitField1_ & ~0x00000100);
+        phoenixTTLHighWaterMark_ = 0L;
+        bitField1_ = (bitField1_ & ~0x00000200);
+        viewModifiedPhoenixTTL_ = false;
+        bitField1_ = (bitField1_ & ~0x00000400);
         return this;
       }
 
@@ -6019,6 +6169,18 @@ public final class PTableProtos {
           to_bitField1_ |= 0x00000008;
         }
         result.viewModifiedUseStatsForParallelization_ = viewModifiedUseStatsForParallelization_;
+        if (((from_bitField1_ & 0x00000100) == 0x00000100)) {
+          to_bitField1_ |= 0x00000010;
+        }
+        result.phoenixTTL_ = phoenixTTL_;
+        if (((from_bitField1_ & 0x00000200) == 0x00000200)) {
+          to_bitField1_ |= 0x00000020;
+        }
+        result.phoenixTTLHighWaterMark_ = phoenixTTLHighWaterMark_;
+        if (((from_bitField1_ & 0x00000400) == 0x00000400)) {
+          to_bitField1_ |= 0x00000040;
+        }
+        result.viewModifiedPhoenixTTL_ = viewModifiedPhoenixTTL_;
         result.bitField0_ = to_bitField0_;
         result.bitField1_ = to_bitField1_;
         onBuilt();
@@ -6235,6 +6397,15 @@ public final class PTableProtos {
         }
         if (other.hasViewModifiedUseStatsForParallelization()) {
           setViewModifiedUseStatsForParallelization(other.getViewModifiedUseStatsForParallelization());
+        }
+        if (other.hasPhoenixTTL()) {
+          setPhoenixTTL(other.getPhoenixTTL());
+        }
+        if (other.hasPhoenixTTLHighWaterMark()) {
+          setPhoenixTTLHighWaterMark(other.getPhoenixTTLHighWaterMark());
+        }
+        if (other.hasViewModifiedPhoenixTTL()) {
+          setViewModifiedPhoenixTTL(other.getViewModifiedPhoenixTTL());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -8447,6 +8618,105 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional int64 phoenixTTL = 42;
+      private long phoenixTTL_ ;
+      /**
+       * <code>optional int64 phoenixTTL = 42;</code>
+       */
+      public boolean hasPhoenixTTL() {
+        return ((bitField1_ & 0x00000100) == 0x00000100);
+      }
+      /**
+       * <code>optional int64 phoenixTTL = 42;</code>
+       */
+      public long getPhoenixTTL() {
+        return phoenixTTL_;
+      }
+      /**
+       * <code>optional int64 phoenixTTL = 42;</code>
+       */
+      public Builder setPhoenixTTL(long value) {
+        bitField1_ |= 0x00000100;
+        phoenixTTL_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 phoenixTTL = 42;</code>
+       */
+      public Builder clearPhoenixTTL() {
+        bitField1_ = (bitField1_ & ~0x00000100);
+        phoenixTTL_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // optional int64 phoenixTTLHighWaterMark = 43;
+      private long phoenixTTLHighWaterMark_ ;
+      /**
+       * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+       */
+      public boolean hasPhoenixTTLHighWaterMark() {
+        return ((bitField1_ & 0x00000200) == 0x00000200);
+      }
+      /**
+       * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+       */
+      public long getPhoenixTTLHighWaterMark() {
+        return phoenixTTLHighWaterMark_;
+      }
+      /**
+       * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+       */
+      public Builder setPhoenixTTLHighWaterMark(long value) {
+        bitField1_ |= 0x00000200;
+        phoenixTTLHighWaterMark_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int64 phoenixTTLHighWaterMark = 43;</code>
+       */
+      public Builder clearPhoenixTTLHighWaterMark() {
+        bitField1_ = (bitField1_ & ~0x00000200);
+        phoenixTTLHighWaterMark_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // optional bool viewModifiedPhoenixTTL = 44;
+      private boolean viewModifiedPhoenixTTL_ ;
+      /**
+       * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+       */
+      public boolean hasViewModifiedPhoenixTTL() {
+        return ((bitField1_ & 0x00000400) == 0x00000400);
+      }
+      /**
+       * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+       */
+      public boolean getViewModifiedPhoenixTTL() {
+        return viewModifiedPhoenixTTL_;
+      }
+      /**
+       * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+       */
+      public Builder setViewModifiedPhoenixTTL(boolean value) {
+        bitField1_ |= 0x00000400;
+        viewModifiedPhoenixTTL_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool viewModifiedPhoenixTTL = 44;</code>
+       */
+      public Builder clearViewModifiedPhoenixTTL() {
+        bitField1_ = (bitField1_ & ~0x00000400);
+        viewModifiedPhoenixTTL_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -9116,7 +9386,7 @@ public final class PTableProtos {
       "es\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n" +
       "\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030" +
       "\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts" +
-      "\"\243\010\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
+      "\"\370\010\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
       "tableNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162" +
       "\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequ" +
       "enceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013p" +
@@ -9142,12 +9412,14 @@ public final class PTableProtos {
       "ransactionProvider\030& \001(\005\022\032\n\017viewIndexIdT" +
       "ype\030\' \001(\005:\0015\022(\n viewModifiedUpdateCacheF" +
       "requency\030( \001(\010\022.\n&viewModifiedUseStatsFo",
-      "rParallelization\030) \001(\010\"6\n\020EncodedCQCount" +
-      "er\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007counter\030\002 \002(\005*A" +
-      "\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VI" +
-      "EW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache." +
-      "phoenix.coprocessor.generatedB\014PTablePro" +
-      "tosH\001\210\001\001\240\001\001"
+      "rParallelization\030) \001(\010\022\022\n\nphoenixTTL\030* \001" +
+      "(\003\022\037\n\027phoenixTTLHighWaterMark\030+ \001(\003\022\036\n\026v" +
+      "iewModifiedPhoenixTTL\030, \001(\010\"6\n\020EncodedCQ" +
+      "Counter\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007counter\030\002 " +
+      "\002(\005*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022" +
+      "\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.ap" +
+      "ache.phoenix.coprocessor.generatedB\014PTab" +
+      "leProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -9171,7 +9443,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", "ViewModifiedUpdateCacheFrequency", "ViewModifiedUseStatsForParallelization", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", "ViewModifiedUpdateCacheFrequency", "ViewModifiedUseStatsForParallelization", "PhoenixTTL", "PhoenixTTLHighWaterMark", "ViewModifiedPhoenixTTL", });
           internal_static_EncodedCQCounter_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_EncodedCQCounter_fieldAccessorTable = new

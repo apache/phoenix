@@ -101,7 +101,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     }
     
     @Parameters(name="StoreNullsIT_mutable={0}, columnEncoded={1}, storeNulls={2}") // name is used by failsafe as file name in reports
-    public static Collection<Boolean[]> data() {
+    public static synchronized Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { 
                 { false, false, false }, { false, false, true },
                 { false, true, false }, { false, true, true },

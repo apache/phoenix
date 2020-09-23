@@ -18,18 +18,21 @@
 package org.apache.phoenix.hbase.index.parallel;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListeningExecutorService;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * {@link TaskRunner} that just manages the underlying thread pool. On called to
@@ -50,7 +53,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
   }
 
   @Override
-  public <R> List<R> submit(TaskBatch<R> tasks) throws CancellationException, ExecutionException,
+  public <R> Pair<List<R>, List<Future<R>>> submit(TaskBatch<R> tasks) throws CancellationException, ExecutionException,
       InterruptedException {
     // submit each task to the pool and queue it up to be watched
     List<ListenableFuture<R>> futures = new ArrayList<ListenableFuture<R>>(tasks.size());
@@ -63,7 +66,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
       // advantage of being (1) less code, and (2) supported as part of a library, it is just that
       // little bit slower. If push comes to shove, we can revert back to the previous
       // implementation, but for right now, this works just fine.
-      return submitTasks(futures).get();
+      return Pair.newPair(submitTasks(futures).get(), Collections.unmodifiableList(((List<Future<R>>)(List<?>)futures)));
     } catch (CancellationException e) {
       // propagate the failure back out
       logAndNotifyAbort(e, tasks);
@@ -90,7 +93,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
   protected abstract <R> ListenableFuture<List<R>> submitTasks(List<ListenableFuture<R>> futures);
 
   @Override
-  public <R> List<R> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
+  public <R> Pair<List<R>, List<Future<R>>> submitUninterruptible(TaskBatch<R> tasks) throws EarlyExitFailure,
       ExecutionException {
     boolean interrupted = false;
     try {
@@ -120,6 +123,7 @@ public abstract class BaseTaskRunner implements TaskRunner {
     }
     LOGGER.info("Shutting down task runner because " + why);
     this.writerPool.shutdownNow();
+    this.stopped = true;
   }
 
   @Override

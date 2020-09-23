@@ -29,8 +29,11 @@ import org.junit.Test;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -42,7 +45,7 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         BasePermissionsIT.initCluster(true);
     }
 
@@ -116,4 +119,73 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
             revokeAll();
         }
     }
+
+    // After PHOENIX-4810, a user requires Exec permissions on SYSTEM.CHILD_LINK to create views
+    // since the user must invoke the ChildLinkMetaDataEndpoint to create parent->child links
+    @Test
+    public void testViewCreationFailsWhenNoExecPermsOnSystemChildLink() throws Throwable {
+        try {
+            grantSystemTableAccess();
+            TableName systemChildLink = TableName.valueOf(SchemaUtil.getPhysicalHBaseTableName(
+                    SYSTEM_SCHEMA_NAME, SYSTEM_CHILD_LINK_TABLE, true).getString());
+            final String schemaName = "S_" + generateUniqueName();
+            final String tableName = "T_" + generateUniqueName();
+            final String fullTableName = schemaName + "." + tableName;
+            final String viewName = "V_" + generateUniqueName();
+            verifyAllowed(createSchema(schemaName), superUser1);
+            verifyAllowed(createTable(fullTableName), superUser1);
+
+            superUser1.runAs(new PrivilegedExceptionAction<Object>() {
+                @Override public Object run() throws Exception {
+                    try {
+                        // Revoke Exec permissions for SYSTEM CHILD_LINK for the unprivileged user
+                        AccessControlClient.revoke(getUtility().getConnection(), systemChildLink,
+                                unprivilegedUser.getShortName(), null, null,
+                                Permission.Action.EXEC);
+
+                        // Grant read and exec permissions to the user on the parent table so it
+                        // doesn't fail to getTable when resolving the parent
+                        PermissionNSEnabledIT.this.grantPermissions(unprivilegedUser.getShortName(),
+                                Collections.singleton(SchemaUtil
+                                        .getPhysicalHBaseTableName(schemaName, tableName, true)
+                                        .getString()), Permission.Action.READ,
+                                Permission.Action.EXEC);
+                    } catch (Throwable t) {
+                        if (t instanceof Exception) {
+                            throw (Exception) t;
+                        } else {
+                            throw new Exception(t);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            // Adding parent->child links fails for the unprivileged user thus failing view creation
+            verifyDenied(createView(viewName, fullTableName), AccessDeniedException.class,
+                    unprivilegedUser);
+
+            superUser1.runAs(new PrivilegedExceptionAction<Object>() {
+                @Override public Object run() throws Exception {
+                    try {
+                        // Grant Exec permissions for SYSTEM CHILD_LINK for the unprivileged user
+                        PermissionNSEnabledIT.this.grantPermissions(unprivilegedUser.getShortName(),
+                                Collections.singleton(systemChildLink.getNameAsString()),
+                                Permission.Action.EXEC);
+                    } catch (Throwable t) {
+                        if (t instanceof Exception) {
+                            throw (Exception) t;
+                        } else {
+                            throw new Exception(t);
+                        }
+                    }
+                    return null;
+                }
+            });
+            verifyAllowed(createView(viewName, fullTableName), unprivilegedUser);
+        } finally {
+            revokeAll();
+        }
+    }
+
 }

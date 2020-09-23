@@ -25,14 +25,14 @@ import java.util.Map;
 
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 
-import com.sun.istack.NotNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 
 public class UpdateStatisticsStatement extends SingleTableStatement {
     private final StatisticsCollectionScope scope;
     private final Map<String,Object> props;
     
-    public UpdateStatisticsStatement(NamedTableNode table, @NotNull StatisticsCollectionScope scope, Map<String,Object> props) {
+    public UpdateStatisticsStatement(NamedTableNode table, @NonNull StatisticsCollectionScope scope, Map<String,Object> props) {
         super(table, 0);
         this.scope = scope;
         this.props = props;

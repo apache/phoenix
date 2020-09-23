@@ -38,8 +38,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -90,7 +90,7 @@ public class SkipScanFilterIntersectTest {
     }
 
     @Parameters(name="{0} {4}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         // Both ranges in second slot are required b/c first slot contains range and upper/lower
         // values differ in this slot position.

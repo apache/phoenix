@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -68,7 +68,7 @@ public class MathTrigFunctionTest {
     }
 
     @Parameters(name = "{0} {1}")
-    public static Collection<Object> data() {
+    public static synchronized Collection<Object> data() {
         return Arrays.asList(new Object[][]{
             {
                 new BigDecimal[]{BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0),

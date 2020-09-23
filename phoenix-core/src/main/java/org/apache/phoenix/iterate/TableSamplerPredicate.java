@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
-import com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
 
 /**
  * TableSampler.

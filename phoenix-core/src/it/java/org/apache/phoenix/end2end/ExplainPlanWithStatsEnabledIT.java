@@ -50,7 +50,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
@@ -65,7 +65,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private static final long largeGpWidth = 2 * 1000 * 1000L;
 
     @BeforeClass
-    public static void createTables() throws Exception {
+    public static synchronized void createTables() throws Exception {
         tableA = generateUniqueName();
         initDataAndStats(tableA, 20L);
         tableB = generateUniqueName();

@@ -72,7 +72,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.rules.TestName;
 
 public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
@@ -272,7 +272,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Configuration conf = HBaseConfiguration.create();
         setUpConfigForMiniCluster(conf);
         util = new HBaseTestingUtility(conf);
@@ -380,6 +380,11 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         rs = stmt.executeQuery("select myreverse2(firstname) from t");
         assertTrue(rs.next());
         assertEquals("oof", rs.getString(1));        
+        assertFalse(rs.next());
+        rs = stmt.executeQuery("select myreverse2('abc'), myreverse2('aba')");
+        assertTrue(rs.next());
+        assertEquals("cba", rs.getString(1));
+        assertEquals("aba", rs.getString(2));
         assertFalse(rs.next());
         rs = stmt.executeQuery("select * from t where myreverse2(firstname)='oof'");
         assertTrue(rs.next());

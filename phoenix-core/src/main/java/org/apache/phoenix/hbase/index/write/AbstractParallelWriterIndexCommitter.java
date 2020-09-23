@@ -24,8 +24,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -43,8 +41,10 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.util.IndexUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Abstract class to Write index updates to the index tables in parallel.
@@ -54,7 +54,7 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
     public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
     public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
-    private static final Log LOG = LogFactory.getLog(AbstractParallelWriterIndexCommitter.class);
+    private static final Logger LOG = LoggerFactory.getLogger(IndexWriter.class);
 
     protected HTableFactory retryingFactory;
     protected HTableFactory noRetriesFactory;
@@ -143,7 +143,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                 @SuppressWarnings("deprecation")
                 @Override
                 public Void call() throws Exception {
-                    Table table = null;
                     // this may have been queued, so another task infront of us may have failed, so we should
                     // early exit, if that's the case
                     throwFailureIfDone();
@@ -176,9 +175,10 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                         else {
                             factory = retryingFactory;
                         }
-                        table = factory.getTable(tableReference.get());
-                        throwFailureIfDone();
-                        table.batch(mutations, null);
+                        try (Table table = factory.getTable(tableReference.get())) {
+                            throwFailureIfDone();
+                            table.batch(mutations, null);
+                        }
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
                     } catch (IOException e) {
@@ -187,11 +187,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
                         throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e, PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env));
-                    }
-                    finally{
-                        if (table != null) {
-                            table.close();
-                        }
                     }
                     return null;
                 }

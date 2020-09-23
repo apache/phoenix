@@ -40,7 +40,6 @@ import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.Activ
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.Stat;
-import org.codehaus.jettison.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,9 +78,27 @@ public class PhoenixMRJobUtil {
         CAPACITY, FAIR, NONE
     };
 
-    public static String getActiveResourceManagerHost(Configuration config, String zkQuorum)
-            throws IOException, InterruptedException, JSONException, KeeperException,
+    public static String getRMWebAddress(Configuration config){
+        return config.get(YarnConfiguration.RM_WEBAPP_ADDRESS,
+                YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS);
+    }
+
+    public static String getRMWebAddress(Configuration config, String Rmid){
+        return config.get(YarnConfiguration.RM_WEBAPP_ADDRESS + "." + Rmid,
+                YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS);
+    }
+
+    public static String getActiveResourceManagerAddress(Configuration config, String zkQuorum)
+            throws IOException, InterruptedException, KeeperException,
             InvalidProtocolBufferException, ZooKeeperConnectionException {
+        // In case of yarn HA is NOT enabled
+        String resourceManager = PhoenixMRJobUtil.getRMWebAddress(config);
+
+        LOGGER.info("ResourceManagerAddress from config = " + resourceManager);
+        if(!resourceManager.equals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS)){
+            return resourceManager;
+        }
+        // In case of yarn HA is enabled
         ZKWatcher zkw = null;
         ZooKeeper zk = null;
         String activeRMHost = null;
@@ -100,11 +117,10 @@ public class PhoenixMRJobUtil {
                                         + ACTIVE_STANDBY_ELECTOR_LOCK;
                         byte[] data = zk.getData(path, zkw, new Stat());
                         ActiveRMInfoProto proto = ActiveRMInfoProto.parseFrom(data);
-                        proto.getRmId();
-                        LOGGER.info("Active RmId : " + proto.getRmId());
+                        String RmId = proto.getRmId();
+                        LOGGER.info("Active RmId : " + RmId);
 
-                        activeRMHost =
-                                config.get(YarnConfiguration.RM_HOSTNAME + "." + proto.getRmId());
+                        activeRMHost = PhoenixMRJobUtil.getRMWebAddress(config, RmId);
                         LOGGER.info("activeResourceManagerHostname = " + activeRMHost);
 
                     }
@@ -118,7 +134,7 @@ public class PhoenixMRJobUtil {
         return activeRMHost;
     }
 
-    public static String getJobsInformationFromRM(String rmhost, int rmport,
+    public static String getJobsInformationFromRM(String rmAddress,
             Map<String, String> urlParams) throws MalformedURLException, ProtocolException,
             UnsupportedEncodingException, IOException {
         HttpURLConnection con = null;
@@ -128,7 +144,7 @@ public class PhoenixMRJobUtil {
         try {
             StringBuilder urlBuilder = new StringBuilder();
 
-            urlBuilder.append(RM_HTTP_SCHEME + "://").append(rmhost).append(":").append(rmport)
+            urlBuilder.append(RM_HTTP_SCHEME + "://").append(rmAddress)
                     .append(RM_APPS_GET_ENDPOINT);
 
             if (urlParams != null && urlParams.size() != 0) {
@@ -193,17 +209,6 @@ public class PhoenixMRJobUtil {
         if (!pool.isShutdown()) {
             LOGGER.warn("Pool did not shutdown");
         }
-    }
-
-    public static int getRMPort(Configuration conf) throws IOException {
-        String rmHostPortStr = conf.get(YarnConfiguration.RM_WEBAPP_ADDRESS);
-        String[] rmHostPort = rmHostPortStr.split(":");
-        if (rmHostPort == null || rmHostPort.length != 2) {
-            throw new IOException("Invalid value for property "
-                    + YarnConfiguration.RM_WEBAPP_ADDRESS + " = " + rmHostPortStr);
-        }
-        int rmPort = Integer.parseInt(rmHostPort[1]);
-        return rmPort;
     }
 
     /**

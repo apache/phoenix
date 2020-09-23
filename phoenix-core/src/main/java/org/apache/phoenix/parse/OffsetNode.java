@@ -17,51 +17,44 @@
  */
 package org.apache.phoenix.parse;
 
+import java.sql.SQLException;
+import java.util.Objects;
 
 public class OffsetNode {
-    private final BindParseNode bindNode;
-    private final LiteralParseNode offsetNode;
-    
-    OffsetNode(BindParseNode bindNode) {
-        this.bindNode = bindNode;
-        offsetNode = null;
-    }
-    
-    OffsetNode(LiteralParseNode limitNode) {
-        this.offsetNode = limitNode;
-        this.bindNode = null;
+    private final ParseNode node;
+
+    OffsetNode(ParseNode node) throws SQLException {
+        if(!(node instanceof BindParseNode || node instanceof LiteralParseNode || node instanceof ComparisonParseNode)) {
+            throw new SQLException("Bad Expression Passed To Offset, node of type" + node.getClass().getName());
+        }
+        this.node = node;
     }
     
     public ParseNode getOffsetParseNode() {
-        return bindNode == null ? offsetNode : bindNode;
+        return node;
+    }
+
+    /**
+     * As we usually consider RVC as having multiple binds treat bind as Integer offset.
+     * @return true for Literal or Bind parse nodes.
+     */
+    public boolean isIntegerOffset() {
+        return (node instanceof BindParseNode) || (node instanceof LiteralParseNode);
     }
     
     @Override
     public String toString() {
-        return bindNode == null ? offsetNode.toString() : bindNode.toString();
+        return node.toString();
     }
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((bindNode == null) ? 0 : bindNode.hashCode());
-        result = prime * result + ((offsetNode == null) ? 0 : offsetNode.hashCode());
-        return result;
+    @Override public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        OffsetNode that = (OffsetNode) o;
+        return Objects.equals(node, that.node);
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        OffsetNode other = (OffsetNode)obj;
-        if (bindNode == null) {
-            if (other.bindNode != null) return false;
-        } else if (!bindNode.equals(other.bindNode)) return false;
-        if (offsetNode == null) {
-            if (other.offsetNode != null) return false;
-        } else if (!offsetNode.equals(other.offsetNode)) return false;
-        return true;
+    @Override public int hashCode() {
+        return Objects.hash(node);
     }
 }

@@ -32,19 +32,14 @@ import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
-import com.google.protobuf.ByteString;
 import org.apache.phoenix.util.MetaDataUtil;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 
 /**
  *
@@ -97,7 +92,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // TODO Need to account for the inevitable 4.14 release too
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0 = MIN_TABLE_TIMESTAMP + 29;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 31;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0;
     
@@ -117,6 +113,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
     // Version at which we allow SYSTEM.CATALOG to split
     public static final int MIN_SPLITTABLE_SYSTEM_CATALOG = VersionUtil.encodeVersion("5", "1", "0");
+    public static final String MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION = "5.1.0";
 
     // Version at and after which we will no longer expect client to serialize thresholdBytes for
     // spooling into the scan
@@ -178,6 +175,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
         AUTO_PARTITION_SEQUENCE_NOT_FOUND,
         CANNOT_COERCE_AUTO_PARTITION_ID,
         TOO_MANY_INDEXES,
+        UNABLE_TO_CREATE_CHILD_LINK,
+        UNABLE_TO_UPDATE_PARENT_TABLE,
+        UNABLE_TO_DELETE_CHILD_LINK,
         NO_OP
     };
 
@@ -189,7 +189,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private List<PName> physicalNames;
         private PDataType viewIndexIdType;
         private Long viewIndexId;
-        
+
         public SharedTableState(PTable table) {
             this.tenantId = table.getTenantId();
             this.schemaName = table.getSchemaName();

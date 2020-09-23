@@ -42,17 +42,17 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Floats;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
 
 @RunWith(Parameterized.class)
 public abstract class NotQueryIT extends BaseQueryIT {
 
-    protected NotQueryIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    protected NotQueryIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
-    
+
     @Test
     public void testNotInList() throws Exception {
         String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and entity_id NOT IN (?,?,?,?,?,?)";

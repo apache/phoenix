@@ -19,10 +19,10 @@ package org.apache.phoenix.hbase.index.covered.data;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
 /**
@@ -30,20 +30,17 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
  */
 public interface LocalHBaseState {
 
-  /**
-   * @param m mutation for which we should get the current table state
-   * @param toCover all the columns the current row state needs to cover; hint the underlying lookup
-   *          to save getting all the columns for the row
-   * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
-   *        when replaying mutation state for partial index rebuild where writes succeeded to the data
-   *        table, but not to the index table.
-   * @return the full state of the given row. Includes all current versions (even if they are not
-   *         usually visible to the client (unless they are also doing a raw scan)). Never returns a
-   *         <tt>null</tt> {@link Result} - instead, when there is not data for the row, returns a
-   *         {@link Result} with no stored {@link Cell}s.
-   * @throws IOException if there is an issue reading the row
-   */
-  public Result getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)
-      throws IOException;
-
+    /**
+     * @param m mutation for which we should get the current table state
+     * @param toCover all the columns the current row state needs to cover; hint the underlying lookup
+     *          to save getting all the columns for the row
+     * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
+     *        when replaying mutation state for partial index rebuild where writes succeeded to the data
+     *        table, but not to the index table.
+     * @return the full state of the given row. Includes all current versions (even if they are not
+     *         usually visible to the client (unless they are also doing a raw scan)),may return null.
+     * @throws IOException if there is an issue reading the row
+     */
+    public List<Cell> getCurrentRowState(Mutation m, Collection<? extends ColumnReference> toCover, boolean ignoreNewerMutations)
+            throws IOException;
 }

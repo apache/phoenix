@@ -25,14 +25,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Base class for tests that run with split SYSTEM.CATALOG.
@@ -50,13 +50,21 @@ public class SplitSystemCatalogIT extends BaseTest {
     protected static String TENANT2 = "tenant2";
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
+       doSetup(null);
+    }
+
+    public static synchronized void doSetup(Map<String, String> props) throws Exception {
         NUM_SLAVES_BASE = 6;
-        Map<String, String> props = Collections.emptyMap();
+        if (props == null) {
+            props = Collections.emptyMap();
+        }
         boolean splitSystemCatalog = (driver == null);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         // Split SYSTEM.CATALOG once after the mini-cluster is started
         if (splitSystemCatalog) {
+            // splitSystemCatalog is incompatible with the balancer chore
+            getUtility().getHBaseCluster().getMaster().balanceSwitch(false);
             splitSystemCatalog();
         }
     }

@@ -16,8 +16,8 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.SequenceInfo;
 
-import com.google.common.base.Preconditions;
-import com.google.common.math.LongMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 
 /**
  * Sequence related util functions

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
@@ -42,7 +42,7 @@ import static org.junit.Assert.assertThat;
 public class PhoenixMetricsDisabledIT extends BaseUniqueNamesOwnClusterIT {
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
         conf.set(QueryServices.GLOBAL_METRICS_ENABLED, String.valueOf(false));
         conf.set(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));

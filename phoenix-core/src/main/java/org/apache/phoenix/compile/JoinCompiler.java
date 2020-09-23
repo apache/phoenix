@@ -34,7 +34,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -101,9 +101,9 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 
 public class JoinCompiler {
@@ -718,56 +718,46 @@ public class JoinCompiler {
                     .setMessage("On-clause LHS expression and RHS expression must be comparable. LHS type: " + lType + ", RHS type: " + rType)
                     .build().buildException();
 
-            if ((lType == null || lType.isCoercibleTo(PTinyint.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PTinyint.INSTANCE))) {
-                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            if (lType.isCoercibleTo(PTinyint.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PTinyint.INSTANCE))) {
+              return lType; // to preserve UNSIGNED type
             }
-
-            if ((lType == null || lType.isCoercibleTo(PSmallint.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PSmallint.INSTANCE))) {
-                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            if (lType.isCoercibleTo(PSmallint.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PSmallint.INSTANCE))) {
+              return lType; // to preserve UNSIGNED type
             }
-
-            if ((lType == null || lType.isCoercibleTo(PInteger.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PInteger.INSTANCE))) {
-                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            if (lType.isCoercibleTo(PInteger.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PInteger.INSTANCE))) {
+              return lType; // to preserve UNSIGNED type
             }
-
-            if ((lType == null || lType.isCoercibleTo(PLong.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PLong.INSTANCE))) {
-                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            if (lType.isCoercibleTo(PLong.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PLong.INSTANCE))) {
+              return lType; // to preserve UNSIGNED type
             }
-
-            if ((lType == null || lType.isCoercibleTo(PDouble.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PDouble.INSTANCE))) {
-                return lType == null ? rType : lType; // to preserve UNSIGNED type
+            if (lType.isCoercibleTo(PDouble.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PDouble.INSTANCE))) {
+              return lType; // to preserve UNSIGNED type
             }
-
-            if ((lType == null || lType.isCoercibleTo(PDecimal.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PDecimal.INSTANCE))) {
-                return PDecimal.INSTANCE;
+            if (lType.isCoercibleTo(PDecimal.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PDecimal.INSTANCE))) {
+              return PDecimal.INSTANCE;
             }
-
-            if ((lType == null || lType.isCoercibleTo(PDate.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PDate.INSTANCE))) {
-                return lType == null ? rType : lType;
+            if (lType.isCoercibleTo(PDate.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PDate.INSTANCE))) {
+              return lType;
             }
-
-            if ((lType == null || lType.isCoercibleTo(PTimestamp.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PTimestamp.INSTANCE))) {
-                return lType == null ? rType : lType;
+            if (lType.isCoercibleTo(PTimestamp.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PTimestamp.INSTANCE))) {
+              return lType;
             }
-
-            if ((lType == null || lType.isCoercibleTo(PVarchar.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PVarchar.INSTANCE))) {
-                return PVarchar.INSTANCE;
+            if (lType.isCoercibleTo(PVarchar.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PVarchar.INSTANCE))) {
+              return PVarchar.INSTANCE;
             }
-
-            if ((lType == null || lType.isCoercibleTo(PBoolean.INSTANCE))
-                    && (rType == null || rType.isCoercibleTo(PBoolean.INSTANCE))) {
-                return PBoolean.INSTANCE;
+            if (lType.isCoercibleTo(PBoolean.INSTANCE)
+                && (rType == null || rType.isCoercibleTo(PBoolean.INSTANCE))) {
+              return PBoolean.INSTANCE;
             }
-
             return PVarbinary.INSTANCE;
         }
     }

@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.phoenix.log.LogLevel;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Class that represents the overall metrics associated with a query being executed by the phoenix.
@@ -43,14 +44,22 @@ public class OverAllQueryMetrics {
     private final CombinableMetric cacheRefreshedDueToSplits;
 
     public OverAllQueryMetrics(boolean isRequestMetricsEnabled, LogLevel connectionLogLevel) {
-        queryWatch = new MetricsStopWatch(WALL_CLOCK_TIME_MS.isLoggingEnabled(connectionLogLevel));
-        resultSetWatch = new MetricsStopWatch(RESULT_SET_TIME_MS.isLoggingEnabled(connectionLogLevel));
-        numParallelScans = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, NUM_PARALLEL_SCANS);
-        wallClockTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, WALL_CLOCK_TIME_MS);
-        resultSetTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, RESULT_SET_TIME_MS);
-        queryTimedOut = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, QUERY_TIMEOUT_COUNTER);
-        queryFailed = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, QUERY_FAILED_COUNTER);
-        cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
+        queryWatch = MetricUtil.getMetricsStopWatch(isRequestMetricsEnabled, connectionLogLevel,
+                WALL_CLOCK_TIME_MS);
+        resultSetWatch = MetricUtil.getMetricsStopWatch(isRequestMetricsEnabled, connectionLogLevel,
+                RESULT_SET_TIME_MS);
+        numParallelScans = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, NUM_PARALLEL_SCANS);
+        wallClockTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, WALL_CLOCK_TIME_MS);
+        resultSetTimeMS = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, RESULT_SET_TIME_MS);
+        queryTimedOut = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, QUERY_TIMEOUT_COUNTER);
+        queryFailed = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, QUERY_FAILED_COUNTER);
+        cacheRefreshedDueToSplits = MetricUtil.getCombinableMetric(isRequestMetricsEnabled,
+                connectionLogLevel, CACHE_REFRESH_SPLITS_COUNTER);
     }
 
     public void updateNumParallelScans(long numParallelScans) {
@@ -74,8 +83,11 @@ public class OverAllQueryMetrics {
     }
 
     public void endQuery() {
+        boolean wasRunning = queryWatch.isRunning();
         queryWatch.stop();
-        wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        }
     }
 
     public void startResultSetWatch() {
@@ -83,8 +95,21 @@ public class OverAllQueryMetrics {
     }
 
     public void stopResultSetWatch() {
+        boolean wasRunning = resultSetWatch.isRunning();
         resultSetWatch.stop();
-        resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        }
+    }
+
+    @VisibleForTesting
+    long getWallClockTimeMs() {
+        return wallClockTimeMS.getValue();
+    }
+
+    @VisibleForTesting
+    long getResultSetTimeMs() {
+        return resultSetTimeMS.getValue();
     }
 
     public Map<MetricType, Long> publish() {

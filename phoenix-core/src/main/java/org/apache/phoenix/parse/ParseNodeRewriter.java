@@ -32,8 +32,8 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * 
@@ -90,6 +90,17 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         if (where != null) {
             rewriter.reset();
             normWhere = where.accept(rewriter);
+        }
+        OffsetNode offsetNode = statement.getOffset();
+        ParseNode offset = null;
+        ParseNode normOffset = null;
+        if(offsetNode != null) {
+            offset = statement.getOffset().getOffsetParseNode();
+            normOffset = offset;
+            if (offset != null && !statement.getOffset().isIntegerOffset()) {
+                rewriter.reset();
+                normOffset = offset.accept(rewriter);
+            }
         }
         ParseNode having = statement.getHaving();
         ParseNode normHaving= having;
@@ -171,12 +182,14 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 normHaving == having && 
                 selectNodes == normSelectNodes && 
                 groupByNodes == normGroupByNodes &&
-                orderByNodes == normOrderByNodes) {
+                orderByNodes == normOrderByNodes &&
+                normOffset == offset
+        ) {
             return statement;
         }
         return NODE_FACTORY.select(normFrom, statement.getHint(), statement.isDistinct(),
                 normSelectNodes, normWhere, normGroupByNodes, normHaving, normOrderByNodes,
-                statement.getLimit(), statement.getOffset(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
+                statement.getLimit(), normOffset == null ? null : new OffsetNode(normOffset), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
                 statement.getSelects(), statement.getUdfParseNodes());
     }
 
