@@ -82,14 +82,14 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private String CREATE_TABLE = "CREATE TABLE IF NOT EXISTS %s ( " +
       " FIELD1 VARCHAR NOT NULL , FIELD2 VARCHAR , FIELD3 INTEGER CONSTRAINT pk PRIMARY KEY (FIELD1 ))";
   private String UPSERT = "UPSERT into %s values (?, ?, ?)";
-  private static final String CREATE_STOCK_TABLE = "CREATE TABLE IF NOT EXISTS %s ( " +
-          " STOCK_NAME VARCHAR NOT NULL , RECORDING_YEAR  INTEGER NOT  NULL,  RECORDINGS_QUARTER " +
-          " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( STOCK_NAME, RECORDING_YEAR )) "
-          + "SPLIT ON ('AA')";
+  private static final String CREATE_STOCK_TABLE =
+          "CREATE TABLE IF NOT EXISTS %s ( " + STOCK_NAME + " VARCHAR NOT NULL , " + RECORDING_YEAR
+                  + "  INTEGER NOT  NULL,  " + RECORDINGS_QUARTER + " "
+                  + " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( " + STOCK_NAME + ", "
+                  + RECORDING_YEAR + " )) " + "SPLIT ON ('AA')";
   private static final String CREATE_STOCK_STATS_TABLE =
-          "CREATE TABLE IF NOT EXISTS %s(STOCK_NAME VARCHAR NOT NULL , "
-                  + " MAX_RECORDING DOUBLE CONSTRAINT pk PRIMARY KEY (STOCK_NAME ))";
-
+          "CREATE TABLE IF NOT EXISTS %s(" + STOCK_NAME + " VARCHAR NOT NULL , " + MAX_RECORDING
+                  + " DOUBLE CONSTRAINT pk PRIMARY KEY (" + STOCK_NAME + " ))";
   private static List<List<Object>> result;
   private long timestamp;
   private String tableName;
@@ -106,11 +106,11 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   @Before
   public void before() throws SQLException, IOException {
     // create table
-    Connection conn = DriverManager.getConnection(getUrl());
-    tableName = generateUniqueName();
-    conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
-    conn.commit();
-
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      tableName = generateUniqueName();
+      conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
+      conn.commit();
+    }
     // configure Phoenix M/R job to read snapshot
     conf = getUtility().getConfiguration();
     job = Job.getInstance(conf);
@@ -154,19 +154,30 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
                     FIELD1, FIELD2, FIELD3);
     configureJob(job, tableName, null, null, false);
 
-    // create table
-    Connection conn = DriverManager.getConnection(getUrl());
-    tableName = generateUniqueName();
-    conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
-    conn.commit();
+    //Asserting that snapshot name is set in configuration
+    Configuration config = job.getConfiguration();
+    Assert.assertEquals("Correct snapshot name not found in configuration", SNAPSHOT_NAME,
+            config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
 
-    //Submitting next map reduce job over table and making sure that it does not fail with
-    // any wrong snapshot properties set in common configurations which are
-    // used across all jobs.
-    createAndTestJob(conn);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // create table
+      tableName = generateUniqueName();
+      conn.createStatement().execute(String.format(CREATE_TABLE, tableName));
+      conn.commit();
+
+      //Submitting next map reduce job over table and making sure that it does not fail with
+      // any wrong snapshot properties set in common configurations which are
+      // used across all jobs.
+      job = createAndTestJob(conn);
+    }
+    //Asserting that snapshot name is no more set in common shared configuration
+    config = job.getConfiguration();
+    Assert.assertNull("Snapshot name is not null in Configuration",
+            config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
+
   }
 
-  private void createAndTestJob(Connection conn)
+  private Job createAndTestJob(Connection conn)
           throws SQLException, IOException, InterruptedException, ClassNotFoundException {
     String stockTableName = generateUniqueName();
     String stockStatsTableName = generateUniqueName();
@@ -178,6 +189,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     PhoenixMapReduceUtil.setInput(job, MapReduceIT.StockWritable.class, PhoenixTestingInputFormat.class,
             stockTableName, null, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
     testJob(conn, job, stockTableName, stockStatsTableName);
+    return job;
   }
 
   private void testJob(Connection conn, Job job, String stockTableName, String stockStatsTableName)
@@ -299,26 +311,27 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     upsertData(tableName);
 
     TableName hbaseTableName = TableName.valueOf(tableName);
-    Connection conn = DriverManager.getConnection(getUrl());
-    Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
 
-    if (shouldSplit) {
-      splitTableSync(admin, hbaseTableName, "BBBB".getBytes(), 2);
+      if (shouldSplit) {
+        splitTableSync(admin, hbaseTableName, "BBBB".getBytes(), 2);
+      }
+
+      admin.snapshot(SNAPSHOT_NAME, hbaseTableName);
+
+      List<SnapshotDescription> snapshots = admin.listSnapshots();
+      Assert.assertEquals(tableName, snapshots.get(0).getTable());
+
+      // Capture the snapshot timestamp to use as SCN while reading the table later
+      // Assigning the timestamp value here will make tests less flaky
+      timestamp = System.currentTimeMillis();
+
+      // upsert data after snapshot
+      PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
+      upsertData(stmt, "DDDD", "SNFB", 45);
+      conn.commit();
     }
-
-    admin.snapshot(SNAPSHOT_NAME, hbaseTableName);
-
-    List<SnapshotDescription> snapshots = admin.listSnapshots();
-    Assert.assertEquals(tableName, snapshots.get(0).getTable());
-
-    // Capture the snapshot timestamp to use as SCN while reading the table later
-    // Assigning the timestamp value here will make tests less flaky
-    timestamp = System.currentTimeMillis();
-
-    // upsert data after snapshot
-    PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
-    upsertData(stmt, "DDDD", "SNFB", 45);
-    conn.commit();
   }
 
   private void splitTableSync(Admin admin, TableName hbaseTableName,
