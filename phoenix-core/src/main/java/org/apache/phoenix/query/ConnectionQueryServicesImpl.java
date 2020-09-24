@@ -3165,8 +3165,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     Long.toString(getSystemTableVersion()));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
-                            try (Admin hBaseAdmin = getAdmin();
-                                 PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
+                            try (PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                                          scnProps, newEmptyMetaData())) {
                                 try {
                                     metaConnection.setRunningUpgrade(true);
@@ -3213,7 +3212,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
 
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
-                                    createOtherSystemTables(metaConnection, hBaseAdmin);
+                                    createOtherSystemTables(metaConnection);
                                     // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
                                     // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
                                     // with SYSTEM Namespace
@@ -3367,7 +3366,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return Lists.newArrayList(admin.listTableNames(Pattern.compile(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"))); // TODO: replace to pattern
     }
 
-    private void createOtherSystemTables(PhoenixConnection metaConnection, Admin hbaseAdmin) throws SQLException, IOException {
+    private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException, IOException {
         try {
 
             nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
