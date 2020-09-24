@@ -1,0 +1,5 @@
+notifications:
+    commits:      commits@phoenix.apache.org
+    issues:       issues@phoenix.apache.org
+    pullrequests: issues@phoenix.apache.org
+    jira_options: link label comment
