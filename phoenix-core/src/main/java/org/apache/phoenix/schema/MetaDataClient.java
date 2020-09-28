@@ -2954,7 +2954,12 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setBoolean(28, useStatsForParallelizationProp);
             }
-            tableUpsert.setInt(29, viewIndexIdType.getSqlType());
+            if (parent != null && parent.getType() == PTableType.VIEW && tableType == PTableType.INDEX) {
+                tableUpsert.setInt(29, viewIndexIdType.getSqlType());
+            } else {
+                tableUpsert.setNull(29, Types.NULL);
+            }
+
             if (phoenixTTL == null || phoenixTTL == PHOENIX_TTL_NOT_DEFINED) {
                 tableUpsert.setNull(30, Types.BIGINT);
                 tableUpsert.setNull(31, Types.BIGINT);
