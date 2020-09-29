@@ -42,6 +42,8 @@ public class SQLExceptionInfo {
     public static final String MUTATION_SIZE = "mutationSize";
     public static final String MAX_MUTATION_SIZE_BYTES = "maxMutationSizeBytes";
     public static final String MUTATION_SIZE_BYTES = "mutationSizeBytes";
+    public static final String MAX_PHOENIX_COLUMN_SIZE_BYTES = "maxPhoenixColumnSizeBytes";
+    public static final String PHOENIX_COLUMN_SIZE_BYTES = "phoenixColumnSizeBytes";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -55,6 +57,8 @@ public class SQLExceptionInfo {
     private final int mutationSize;
     private final long maxMutationSizeBytes;
     private final long mutationSizeBytes;
+    private final int phoenixColumnSizeBytes;
+    private final int maxPhoenixColumnSizeBytes;
 
     public static class Builder {
 
@@ -70,6 +74,8 @@ public class SQLExceptionInfo {
         private int mutationSize;
         private long maxMutationSizeBytes;
         private long mutationSizeBytes;
+        private int phoenixColumnSizeBytes;
+        private int maxPhoenixColumnSizeBytes;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -130,6 +136,16 @@ public class SQLExceptionInfo {
             return this;
         }
 
+        public Builder setPhoenixColumnSizeBytes(int phoenixColumnSizeBytes) {
+            this.phoenixColumnSizeBytes = phoenixColumnSizeBytes;
+            return this;
+        }
+
+        public Builder setMaxPhoenixColumnSizeBytes(int maxPhoenixColumnSizeBytes) {
+            this.maxPhoenixColumnSizeBytes = maxPhoenixColumnSizeBytes;
+            return this;
+        }
+
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
         }
@@ -153,6 +169,8 @@ public class SQLExceptionInfo {
         mutationSize = builder.mutationSize;
         maxMutationSizeBytes = builder.maxMutationSizeBytes;
         mutationSizeBytes = builder.mutationSizeBytes;
+        maxPhoenixColumnSizeBytes = builder.maxPhoenixColumnSizeBytes;
+        phoenixColumnSizeBytes = builder.phoenixColumnSizeBytes;
     }
 
     @Override
@@ -187,6 +205,10 @@ public class SQLExceptionInfo {
             builder.append(" ").append(MAX_MUTATION_SIZE_BYTES).append("=").
                     append(maxMutationSizeBytes);
             builder.append(" ").append(MUTATION_SIZE_BYTES).append("=").append(mutationSizeBytes);
+        }
+        if (maxPhoenixColumnSizeBytes != 0) {
+            builder.append(" ").append(MAX_PHOENIX_COLUMN_SIZE_BYTES).append("=").append(maxPhoenixColumnSizeBytes);
+            builder.append(" ").append(PHOENIX_COLUMN_SIZE_BYTES).append("=").append(phoenixColumnSizeBytes);
         }
         return builder.toString();
     }
@@ -243,4 +265,11 @@ public class SQLExceptionInfo {
         return mutationSizeBytes;
     }
 
+    public int getMaxPhoenixColumnSizeBytes() {
+        return maxPhoenixColumnSizeBytes;
+    }
+
+    public int getPhoenixColumnSizeBytes() {
+        return phoenixColumnSizeBytes;
+    }
 }

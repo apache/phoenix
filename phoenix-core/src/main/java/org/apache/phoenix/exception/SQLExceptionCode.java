@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
+import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.PTable;
@@ -516,6 +517,16 @@ public enum SQLExceptionCode {
     NEW_INTERNAL_CONNECTION_THROTTLED(731, "410M1", "Could not create connection " +
             "because the internal connections already has the maximum number" +
             " of connections to the target cluster."),
+    MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED(732,
+            "LIM03", "The Phoenix Column size is bigger than maximum " +
+            "HBase client key value allowed size for ONE_CELL_PER_COLUMN table, " +
+            "try upserting column in smaller value", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxPhoenixColumnSizeExceededException(info.getMessage(), info.getMaxPhoenixColumnSizeBytes(),
+                    info.getPhoenixColumnSizeBytes());
+        }
+    }),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
     HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
