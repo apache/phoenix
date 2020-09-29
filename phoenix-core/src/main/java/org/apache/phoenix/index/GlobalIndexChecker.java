@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.compat.hbase.CompatUtil.setSingleRow;
+import static org.apache.phoenix.compat.hbase.CompatUtil.setStartRow;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VERIFY_COLUMN;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
@@ -24,8 +26,6 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-
-import static org.apache.phoenix.compat.hbase.CompatUtil.*;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -70,6 +70,7 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * 
  * Coprocessor that verifies the scanned rows of a non-transactional global index.
@@ -97,6 +98,7 @@ public class GlobalIndexChecker extends BaseRegionObserver {
     private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexChecker.class);
     private HTableFactory hTableFactory;
     private GlobalIndexCheckerSource metricsSource;
+
     public enum RebuildReturnCode {
         NO_DATA_ROW(0),
         NO_INDEX_ROW(1),
@@ -603,5 +605,4 @@ public class GlobalIndexChecker extends BaseRegionObserver {
     public void stop(CoprocessorEnvironment e) throws IOException {
         this.hTableFactory.shutdown();
     }
-
 }

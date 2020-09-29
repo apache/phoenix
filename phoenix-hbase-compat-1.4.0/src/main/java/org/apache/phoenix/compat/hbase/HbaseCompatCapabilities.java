@@ -22,4 +22,8 @@ public class HbaseCompatCapabilities {
     public static boolean hasNewMetrics() {
         return true;
     }
+
+    //HBase 1.5+ has preWALAppend() on RegionObserver (HBASE-22623)
+    public static boolean hasPreWALAppend() { return false; }
+
 }

@@ -53,6 +53,9 @@ public class SQLCloseables {
         LinkedList<SQLException> exceptions = null;
         for (SQLCloseable closeable : iterable) {
             try {
+                if (closeable == null) {
+                    continue;
+                }
                 closeable.close();
             } catch (SQLException x) {
                 if (exceptions == null) exceptions = new LinkedList<SQLException>();

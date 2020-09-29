@@ -827,6 +827,11 @@ public interface PTable extends PMetaDataEntity {
     Long getLastDDLTimestamp();
 
     /**
+     * @return Whether change detection is enabled on a given table or view. If it is, we will
+     * annotate write-ahead logs with additional metadata
+     */
+    boolean isChangeDetectionEnabled();
+    /**
      * Class to help track encoded column qualifier counters per column family.
      */
     public class EncodedCQCounter {

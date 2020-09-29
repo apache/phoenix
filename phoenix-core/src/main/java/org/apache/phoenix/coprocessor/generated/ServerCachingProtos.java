@@ -2192,6 +2192,21 @@ public final class ServerCachingProtos {
      */
     com.google.protobuf.ByteString
         getParentTableTypeBytes();
+
+    // optional string logicalIndexName = 25;
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    boolean hasLogicalIndexName();
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    java.lang.String getLogicalIndexName();
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    com.google.protobuf.ByteString
+        getLogicalIndexNameBytes();
   }
   /**
    * Protobuf type {@code IndexMaintainer}
@@ -2398,6 +2413,11 @@ public final class ServerCachingProtos {
             case 194: {
               bitField0_ |= 0x00040000;
               parentTableType_ = input.readBytes();
+              break;
+            }
+            case 202: {
+              bitField0_ |= 0x00080000;
+              logicalIndexName_ = input.readBytes();
               break;
             }
           }
@@ -2959,6 +2979,49 @@ public final class ServerCachingProtos {
       }
     }
 
+    // optional string logicalIndexName = 25;
+    public static final int LOGICALINDEXNAME_FIELD_NUMBER = 25;
+    private java.lang.Object logicalIndexName_;
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    public boolean hasLogicalIndexName() {
+      return ((bitField0_ & 0x00080000) == 0x00080000);
+    }
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    public java.lang.String getLogicalIndexName() {
+      java.lang.Object ref = logicalIndexName_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          logicalIndexName_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>optional string logicalIndexName = 25;</code>
+     */
+    public com.google.protobuf.ByteString
+        getLogicalIndexNameBytes() {
+      java.lang.Object ref = logicalIndexName_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        logicalIndexName_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private void initFields() {
       saltBuckets_ = 0;
       isMultiTenant_ = false;
@@ -2984,6 +3047,7 @@ public final class ServerCachingProtos {
       viewIndexIdType_ = 0;
       indexDataColumnCount_ = -1;
       parentTableType_ = "";
+      logicalIndexName_ = "";
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3153,6 +3217,9 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         output.writeBytes(24, getParentTableTypeBytes());
       }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        output.writeBytes(25, getLogicalIndexNameBytes());
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -3262,6 +3329,10 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(24, getParentTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(25, getLogicalIndexNameBytes());
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -3391,6 +3462,11 @@ public final class ServerCachingProtos {
         result = result && getParentTableType()
             .equals(other.getParentTableType());
       }
+      result = result && (hasLogicalIndexName() == other.hasLogicalIndexName());
+      if (hasLogicalIndexName()) {
+        result = result && getLogicalIndexName()
+            .equals(other.getLogicalIndexName());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -3499,6 +3575,10 @@ public final class ServerCachingProtos {
       if (hasParentTableType()) {
         hash = (37 * hash) + PARENTTABLETYPE_FIELD_NUMBER;
         hash = (53 * hash) + getParentTableType().hashCode();
+      }
+      if (hasLogicalIndexName()) {
+        hash = (37 * hash) + LOGICALINDEXNAME_FIELD_NUMBER;
+        hash = (53 * hash) + getLogicalIndexName().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3682,6 +3762,8 @@ public final class ServerCachingProtos {
         bitField0_ = (bitField0_ & ~0x00400000);
         parentTableType_ = "";
         bitField0_ = (bitField0_ & ~0x00800000);
+        logicalIndexName_ = "";
+        bitField0_ = (bitField0_ & ~0x01000000);
         return this;
       }
 
@@ -3831,6 +3913,10 @@ public final class ServerCachingProtos {
           to_bitField0_ |= 0x00040000;
         }
         result.parentTableType_ = parentTableType_;
+        if (((from_bitField0_ & 0x01000000) == 0x01000000)) {
+          to_bitField0_ |= 0x00080000;
+        }
+        result.logicalIndexName_ = logicalIndexName_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4018,6 +4104,11 @@ public final class ServerCachingProtos {
         if (other.hasParentTableType()) {
           bitField0_ |= 0x00800000;
           parentTableType_ = other.parentTableType_;
+          onChanged();
+        }
+        if (other.hasLogicalIndexName()) {
+          bitField0_ |= 0x01000000;
+          logicalIndexName_ = other.logicalIndexName_;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -5920,6 +6011,80 @@ public final class ServerCachingProtos {
   }
   bitField0_ |= 0x00800000;
         parentTableType_ = value;
+        onChanged();
+        return this;
+      }
+
+      // optional string logicalIndexName = 25;
+      private java.lang.Object logicalIndexName_ = "";
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public boolean hasLogicalIndexName() {
+        return ((bitField0_ & 0x01000000) == 0x01000000);
+      }
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public java.lang.String getLogicalIndexName() {
+        java.lang.Object ref = logicalIndexName_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          logicalIndexName_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public com.google.protobuf.ByteString
+          getLogicalIndexNameBytes() {
+        java.lang.Object ref = logicalIndexName_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          logicalIndexName_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public Builder setLogicalIndexName(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x01000000;
+        logicalIndexName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public Builder clearLogicalIndexName() {
+        bitField0_ = (bitField0_ & ~0x01000000);
+        logicalIndexName_ = getDefaultInstance().getLogicalIndexName();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string logicalIndexName = 25;</code>
+       */
+      public Builder setLogicalIndexNameBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x01000000;
+        logicalIndexName_ = value;
         onChanged();
         return this;
       }
@@ -9050,7 +9215,7 @@ public final class ServerCachingProtos {
       "ength\030\003 \002(\005\"4\n\017ColumnReference\022\016\n\006family" +
       "\030\001 \002(\014\022\021\n\tqualifier\030\002 \002(\014\"4\n\nColumnInfo\022" +
       "\022\n\nfamilyName\030\001 \001(\t\022\022\n\ncolumnName\030\002 \002(\t\"" +
-      "\232\006\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
+      "\264\006\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
       "\022\025\n\risMultiTenant\030\002 \002(\010\022\023\n\013viewIndexId\030\003" +
       " \001(\014\022(\n\016indexedColumns\030\004 \003(\0132\020.ColumnRef" +
       "erence\022 \n\030indexedColumnTypeOrdinal\030\005 \003(\005",
@@ -9069,23 +9234,24 @@ public final class ServerCachingProtos {
       "\003(\0132\013.ColumnInfo\022\026\n\016encodingScheme\030\024 \002(\005" +
       "\022\036\n\026immutableStorageScheme\030\025 \002(\005\022\027\n\017view" +
       "IndexIdType\030\026 \001(\005\022 \n\024indexDataColumnCoun" +
-      "t\030\027 \001(\005:\002-1\022\027\n\017parentTableType\030\030 \001(\t\"\370\001\n" +
-      "\025AddServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014" +
-      "\022\017\n\007cacheId\030\002 \002(\014\022)\n\010cachePtr\030\003 \002(\0132\027.Im" +
-      "mutableBytesWritable\022)\n\014cacheFactory\030\004 \002" +
-      "(\0132\023.ServerCacheFactory\022\017\n\007txState\030\005 \001(\014",
-      "\022\"\n\032hasProtoBufIndexMaintainer\030\006 \001(\010\022\025\n\r" +
-      "clientVersion\030\007 \001(\005\022\032\n\022usePersistentCach" +
-      "e\030\010 \001(\010\"(\n\026AddServerCacheResponse\022\016\n\006ret" +
-      "urn\030\001 \002(\010\"=\n\030RemoveServerCacheRequest\022\020\n" +
-      "\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031Remo" +
-      "veServerCacheResponse\022\016\n\006return\030\001 \002(\0102\245\001" +
-      "\n\024ServerCachingService\022A\n\016addServerCache" +
-      "\022\026.AddServerCacheRequest\032\027.AddServerCach" +
-      "eResponse\022J\n\021removeServerCache\022\031.RemoveS" +
-      "erverCacheRequest\032\032.RemoveServerCacheRes",
-      "ponseBG\n(org.apache.phoenix.coprocessor." +
-      "generatedB\023ServerCachingProtosH\001\210\001\001\240\001\001"
+      "t\030\027 \001(\005:\002-1\022\027\n\017parentTableType\030\030 \001(\t\022\030\n\020" +
+      "logicalIndexName\030\031 \001(\t\"\370\001\n\025AddServerCach" +
+      "eRequest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 " +
+      "\002(\014\022)\n\010cachePtr\030\003 \002(\0132\027.ImmutableBytesWr" +
+      "itable\022)\n\014cacheFactory\030\004 \002(\0132\023.ServerCac",
+      "heFactory\022\017\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBu" +
+      "fIndexMaintainer\030\006 \001(\010\022\025\n\rclientVersion\030" +
+      "\007 \001(\005\022\032\n\022usePersistentCache\030\010 \001(\010\"(\n\026Add" +
+      "ServerCacheResponse\022\016\n\006return\030\001 \002(\010\"=\n\030R" +
+      "emoveServerCacheRequest\022\020\n\010tenantId\030\001 \001(" +
+      "\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServerCacheR" +
+      "esponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerCachin" +
+      "gService\022A\n\016addServerCache\022\026.AddServerCa" +
+      "cheRequest\032\027.AddServerCacheResponse\022J\n\021r" +
+      "emoveServerCache\022\031.RemoveServerCacheRequ",
+      "est\032\032.RemoveServerCacheResponseBG\n(org.a" +
+      "pache.phoenix.coprocessor.generatedB\023Ser" +
+      "verCachingProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -9115,7 +9281,7 @@ public final class ServerCachingProtos {
           internal_static_IndexMaintainer_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_IndexMaintainer_descriptor,
-              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", "IndexDataColumnCount", "ParentTableType", });
+              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", "IndexDataColumnCount", "ParentTableType", "LogicalIndexName", });
           internal_static_AddServerCacheRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddServerCacheRequest_fieldAccessorTable = new

@@ -3747,19 +3747,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = addColumnsIfNotExists(
                 metaConnection,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 2,
+                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 3,
                 PhoenixDatabaseMetaData.PHOENIX_TTL + " "
                         + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(
                 metaConnection,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 1,
+                MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 - 2,
                 PhoenixDatabaseMetaData.PHOENIX_TTL_HWM + " "
                         + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
-                PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 -1,
                 PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP + " "
                     + PLong.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
+                PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED
+                    + " " + PBoolean.INSTANCE.getSqlTypeName());
             UpgradeUtil.bootstrapLastDDLTimestamp(metaConnection);
 
             boolean isNamespaceMapping =
