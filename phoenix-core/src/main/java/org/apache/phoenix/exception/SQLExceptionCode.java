@@ -54,6 +54,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+
 
 /**
  * Various SQLException Information. Including a vendor-specific errorcode and a standard SQLState.
@@ -335,6 +337,8 @@ public enum SQLExceptionCode {
             + " limit or create ASYNC index."),
     CANNOT_SET_OR_ALTER_PHOENIX_TTL(10953, "44A35", "Cannot set or alter "
             + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
+    CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
+        CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

@@ -15,26 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.phoenix.compat.hbase.coprocessor;
 
-package org.apache.phoenix.compat.hbase;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.wal.WALKey;
 
-import org.apache.hadoop.conf.Configuration;
+import java.util.HashMap;
+import java.util.Map;
 
-public class HbaseCompatCapabilities {
+public class CompatIndexRegionObserver implements RegionObserver {
 
-    public static boolean isMaxLookbackTimeSupported() {
-        return false;
+    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+        key.addExtendedAttribute(attrKey, attrValue);
     }
 
-    //In HBase 2.1 and 2.2, a lookback query won't return any results if covered by a future delete
-    public static boolean isLookbackBeyondDeletesSupported() { return false; }
+    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+        return key.getExtendedAttribute(attrKey);
+    }
 
-    //HBase 2.1 does not have HBASE-22710, which is necessary for raw scan skip scan and
-    // AllVersionsIndexRebuild filters to
-    // show all versions properly. HBase 2.2.5+ and HBase 2.3.0+ have this fix.
-    public static boolean isRawFilterSupported() { return true; }
-
-    //HBase 2.3+ has preWALAppend() on RegionObserver (HBASE-22623)
-    public static boolean hasPreWALAppend() { return false; }
+    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+        return new HashMap<String, byte[]>(key.getExtendedAttributes());
+    }
 
 }

@@ -3764,6 +3764,16 @@ public final class PTableProtos {
      * <code>optional int64 lastDDLTimestamp = 45;</code>
      */
     long getLastDDLTimestamp();
+
+    // optional bool changeDetectionEnabled = 46;
+    /**
+     * <code>optional bool changeDetectionEnabled = 46;</code>
+     */
+    boolean hasChangeDetectionEnabled();
+    /**
+     * <code>optional bool changeDetectionEnabled = 46;</code>
+     */
+    boolean getChangeDetectionEnabled();
   }
   /**
    * Protobuf type {@code PTable}
@@ -4053,6 +4063,11 @@ public final class PTableProtos {
             case 360: {
               bitField1_ |= 0x00000080;
               lastDDLTimestamp_ = input.readInt64();
+              break;
+            }
+            case 368: {
+              bitField1_ |= 0x00000100;
+              changeDetectionEnabled_ = input.readBool();
               break;
             }
           }
@@ -4947,6 +4962,22 @@ public final class PTableProtos {
       return lastDDLTimestamp_;
     }
 
+    // optional bool changeDetectionEnabled = 46;
+    public static final int CHANGEDETECTIONENABLED_FIELD_NUMBER = 46;
+    private boolean changeDetectionEnabled_;
+    /**
+     * <code>optional bool changeDetectionEnabled = 46;</code>
+     */
+    public boolean hasChangeDetectionEnabled() {
+      return ((bitField1_ & 0x00000100) == 0x00000100);
+    }
+    /**
+     * <code>optional bool changeDetectionEnabled = 46;</code>
+     */
+    public boolean getChangeDetectionEnabled() {
+      return changeDetectionEnabled_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4992,6 +5023,7 @@ public final class PTableProtos {
       phoenixTTLHighWaterMark_ = 0L;
       viewModifiedPhoenixTTL_ = false;
       lastDDLTimestamp_ = 0L;
+      changeDetectionEnabled_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -5191,6 +5223,9 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000080) == 0x00000080)) {
         output.writeInt64(45, lastDDLTimestamp_);
       }
+      if (((bitField1_ & 0x00000100) == 0x00000100)) {
+        output.writeBool(46, changeDetectionEnabled_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -5380,6 +5415,10 @@ public final class PTableProtos {
       if (((bitField1_ & 0x00000080) == 0x00000080)) {
         size += com.google.protobuf.CodedOutputStream
           .computeInt64Size(45, lastDDLTimestamp_);
+      }
+      if (((bitField1_ & 0x00000100) == 0x00000100)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(46, changeDetectionEnabled_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -5612,6 +5651,11 @@ public final class PTableProtos {
         result = result && (getLastDDLTimestamp()
             == other.getLastDDLTimestamp());
       }
+      result = result && (hasChangeDetectionEnabled() == other.hasChangeDetectionEnabled());
+      if (hasChangeDetectionEnabled()) {
+        result = result && (getChangeDetectionEnabled()
+            == other.getChangeDetectionEnabled());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -5800,6 +5844,10 @@ public final class PTableProtos {
       if (hasLastDDLTimestamp()) {
         hash = (37 * hash) + LASTDDLTIMESTAMP_FIELD_NUMBER;
         hash = (53 * hash) + hashLong(getLastDDLTimestamp());
+      }
+      if (hasChangeDetectionEnabled()) {
+        hash = (37 * hash) + CHANGEDETECTIONENABLED_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getChangeDetectionEnabled());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -6013,6 +6061,8 @@ public final class PTableProtos {
         bitField1_ = (bitField1_ & ~0x00000400);
         lastDDLTimestamp_ = 0L;
         bitField1_ = (bitField1_ & ~0x00000800);
+        changeDetectionEnabled_ = false;
+        bitField1_ = (bitField1_ & ~0x00001000);
         return this;
       }
 
@@ -6235,6 +6285,10 @@ public final class PTableProtos {
           to_bitField1_ |= 0x00000080;
         }
         result.lastDDLTimestamp_ = lastDDLTimestamp_;
+        if (((from_bitField1_ & 0x00001000) == 0x00001000)) {
+          to_bitField1_ |= 0x00000100;
+        }
+        result.changeDetectionEnabled_ = changeDetectionEnabled_;
         result.bitField0_ = to_bitField0_;
         result.bitField1_ = to_bitField1_;
         onBuilt();
@@ -6463,6 +6517,9 @@ public final class PTableProtos {
         }
         if (other.hasLastDDLTimestamp()) {
           setLastDDLTimestamp(other.getLastDDLTimestamp());
+        }
+        if (other.hasChangeDetectionEnabled()) {
+          setChangeDetectionEnabled(other.getChangeDetectionEnabled());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -8807,6 +8864,39 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional bool changeDetectionEnabled = 46;
+      private boolean changeDetectionEnabled_ ;
+      /**
+       * <code>optional bool changeDetectionEnabled = 46;</code>
+       */
+      public boolean hasChangeDetectionEnabled() {
+        return ((bitField1_ & 0x00001000) == 0x00001000);
+      }
+      /**
+       * <code>optional bool changeDetectionEnabled = 46;</code>
+       */
+      public boolean getChangeDetectionEnabled() {
+        return changeDetectionEnabled_;
+      }
+      /**
+       * <code>optional bool changeDetectionEnabled = 46;</code>
+       */
+      public Builder setChangeDetectionEnabled(boolean value) {
+        bitField1_ |= 0x00001000;
+        changeDetectionEnabled_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool changeDetectionEnabled = 46;</code>
+       */
+      public Builder clearChangeDetectionEnabled() {
+        bitField1_ = (bitField1_ & ~0x00001000);
+        changeDetectionEnabled_ = false;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -9476,7 +9566,7 @@ public final class PTableProtos {
       "es\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n" +
       "\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030" +
       "\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts" +
-      "\"\222\t\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
+      "\"\262\t\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016" +
       "tableNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162" +
       "\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequ" +
       "enceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013p" +
@@ -9505,12 +9595,12 @@ public final class PTableProtos {
       "rParallelization\030) \001(\010\022\022\n\nphoenixTTL\030* \001" +
       "(\003\022\037\n\027phoenixTTLHighWaterMark\030+ \001(\003\022\036\n\026v" +
       "iewModifiedPhoenixTTL\030, \001(\010\022\030\n\020lastDDLTi" +
-      "mestamp\030- \001(\003\"6\n\020EncodedCQCounter\022\021\n\tcol" +
-      "Family\030\001 \002(\t\022\017\n\007counter\030\002 \002(\005*A\n\nPTableT" +
-      "ype\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005I" +
-      "NDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.c" +
-      "oprocessor.generatedB\014PTableProtosH\001\210\001\001\240" +
-      "\001\001"
+      "mestamp\030- \001(\003\022\036\n\026changeDetectionEnabled\030" +
+      ". \001(\010\"6\n\020EncodedCQCounter\022\021\n\tcolFamily\030\001" +
+      " \002(\t\022\017\n\007counter\030\002 \002(\005*A\n\nPTableType\022\n\n\006S" +
+      "YSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010" +
+      "\n\004JOIN\020\004B@\n(org.apache.phoenix.coprocess" +
+      "or.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -9534,7 +9624,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", "ViewModifiedUpdateCacheFrequency", "ViewModifiedUseStatsForParallelization", "PhoenixTTL", "PhoenixTTLHighWaterMark", "ViewModifiedPhoenixTTL", "LastDDLTimestamp", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", "TransactionProvider", "ViewIndexIdType", "ViewModifiedUpdateCacheFrequency", "ViewModifiedUseStatsForParallelization", "PhoenixTTL", "PhoenixTTLHighWaterMark", "ViewModifiedPhoenixTTL", "LastDDLTimestamp", "ChangeDetectionEnabled", });
           internal_static_EncodedCQCounter_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_EncodedCQCounter_fieldAccessorTable = new
