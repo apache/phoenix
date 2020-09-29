@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -112,6 +113,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.WALAnnotationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -659,6 +661,7 @@ public class MutationState implements SQLCloseable {
                 }
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again
                 rowMutationsPertainingToIndex = Collections.emptyList();
+
             } else {
                 for (Map.Entry<PColumn, byte[]> valueEntry : rowEntry.getValue().getColumnValues().entrySet()) {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
@@ -678,10 +681,40 @@ public class MutationState implements SQLCloseable {
                 }
                 rowMutationsPertainingToIndex = rowMutations;
             }
+            annotateMutationsWithMetadata(table, rowMutations);
             mutationList.addAll(rowMutations);
             if (mutationsPertainingToIndex != null) mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
         }
         values.putAll(modifiedValues);
+    }
+
+    private void annotateMutationsWithMetadata(PTable table, List<Mutation> rowMutations) {
+        //only annotate if the change detection flag is on the table and HBase supports
+        // preWALAppend coprocs server-side
+        if (table == null || !table.isChangeDetectionEnabled()
+            || !HbaseCompatCapabilities.hasPreWALAppend()) {
+            return;
+        }
+        //annotate each mutation with enough metadata so that anyone interested can
+        // deterministically figure out exactly what Phoenix schema object created the mutation
+        // Server-side we can annotate the HBase WAL with these.
+        for (Mutation mutation : rowMutations) {
+            annotateMutationWithMetadata(table, mutation);
+        }
+
+    }
+
+    private void annotateMutationWithMetadata(PTable table, Mutation mutation) {
+        byte[] tenantId = table.getTenantId() != null ? table.getTenantId().getBytes() : null;
+        byte[] schemaName = table.getSchemaName() != null ? table.getSchemaName().getBytes() : null;
+        byte[] tableName = table.getTableName() != null ? table.getTableName().getBytes() : null;
+        byte[] tableType = table.getType().getValue().getBytes();
+        //Note that we use the _HBase_ byte encoding for a Long, not the Phoenix one, so that
+        //downstream consumers don't need to have the Phoenix codecs.
+        byte[] lastDDLTimestamp =
+            table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName,
+            tableName, tableType, lastDDLTimestamp);
     }
 
     /**
@@ -859,6 +892,14 @@ public class MutationState implements SQLCloseable {
 
     public long getBatchCount() {
         return batchCount;
+    }
+
+    public enum MutationMetadataType {
+        TENANT_ID,
+        SCHEMA_NAME,
+        LOGICAL_TABLE_NAME,
+        TIMESTAMP,
+        TABLE_TYPE
     }
 
     private static class TableInfo {

@@ -386,6 +386,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String LAST_DDL_TIMESTAMP = "LAST_DDL_TIMESTAMP";
     public static final byte[] LAST_DDL_TIMESTAMP_BYTES = Bytes.toBytes(LAST_DDL_TIMESTAMP);
 
+    public static final String CHANGE_DETECTION_ENABLED = "CHANGE_DETECTION_ENABLED";
+    public static final byte[] CHANGE_DETECTION_ENABLED_BYTES =
+        Bytes.toBytes(CHANGE_DETECTION_ENABLED);
+
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);

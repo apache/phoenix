@@ -70,9 +70,12 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
+import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
@@ -93,12 +96,15 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.apache.phoenix.util.WALAnnotationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,15 +123,18 @@ import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeCol
  * Phoenix always does batch mutations.
  * <p>
  */
-public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
+public class IndexRegionObserver extends CompatIndexRegionObserver implements RegionCoprocessor,
+    RegionObserver {
 
-  private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
-  private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
-  private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
+    private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
+    private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
+    private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
     protected static final byte VERIFIED_BYTE = 1;
     protected static final byte UNVERIFIED_BYTE = 2;
     public static final byte[] UNVERIFIED_BYTES = new byte[] { UNVERIFIED_BYTE };
     public static final byte[] VERIFIED_BYTES = new byte[] { VERIFIED_BYTE };
+    public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
+    public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
 
   /**
    * Class to represent pending data table rows
@@ -187,7 +196,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
    * additional locks to serialize the access to the BatchMutateContext objects.
    */
 
-  private static class BatchMutateContext {
+  public static class BatchMutateContext {
       private BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
       // The max of reference counts on the pending rows of this batch at the time this batch arrives
       private int maxPendingRowCount = 0;
@@ -210,8 +219,25 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
       private List<CountDownLatch> waitList = null;
       private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
 
-      private BatchMutateContext(int clientVersion) {
+      //list containing the original mutations from the MiniBatchOperationInProgress. Contains
+      // any annotations we were sent by the client, and can be used in hooks that don't get
+      // passed MiniBatchOperationInProgress, like preWALAppend()
+      private List<Mutation> originalMutations;
+      public BatchMutateContext() {
+          this.clientVersion = 0;
+      }
+      public BatchMutateContext(int clientVersion) {
           this.clientVersion = clientVersion;
+      }
+
+      public void populateOriginalMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+          originalMutations = new ArrayList<Mutation>(miniBatchOp.size());
+          for (int k = 0; k < miniBatchOp.size(); k++) {
+              originalMutations.add(miniBatchOp.getOperation(k));
+          }
+      }
+      public List<Mutation> getOriginalMutations() {
+          return originalMutations;
       }
 
       public BatchMutatePhase getCurrentPhase() {
@@ -279,6 +305,8 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
   private int rowLockWaitDuration;
   private int concurrentMutationWaitDuration;
   private String dataTableName;
+  private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
+  private boolean isNamespaceEnabled = false;
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
@@ -322,6 +350,10 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
           setSlowThresholds(e.getConfiguration());
           this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
+          this.shouldWALAppend = env.getConfiguration().getBoolean(PHOENIX_APPEND_METADATA_TO_WAL,
+              DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL);
+          this.isNamespaceEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.INDEX,
+              env.getConfiguration());
       } catch (NoSuchMethodError ex) {
           disabled = true;
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
@@ -668,7 +700,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
      * Retrieve the the last committed data row state. This method is called only for regular data mutations since for
      * rebuild (i.e., index replay) mutations include all row versions.
      */
-
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
                                      BatchMutateContext context) throws IOException {
         Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
@@ -875,7 +906,6 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         context.indexUpdates.clear();
     }
 
-
     private static boolean hasGlobalIndex(PhoenixIndexMetaData indexMetaData) {
         for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
             if (!indexMaintainer.isLocalIndex()) {
@@ -941,6 +971,7 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
+        context.populateOriginalMutations(miniBatchOp);
         // Need to add cell tags to Delete Marker before we do any index processing
         // since we add tags to tables which doesn't have indexes also.
         setDeleteAttributes(miniBatchOp);
@@ -1043,9 +1074,9 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
         }
     }
 
-  private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
+    private void setBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context) {
       this.batchMutateContext.set(context);
-  }
+    }
 
   private BatchMutateContext getBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
       return this.batchMutateContext.get();
@@ -1054,6 +1085,15 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
   private void removeBatchMutateContext(ObserverContext<RegionCoprocessorEnvironment> c) {
       this.batchMutateContext.remove();
   }
+
+    @Override
+    public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> c, WALKey key,
+                             WALEdit edit) {
+        if (HbaseCompatCapabilities.hasPreWALAppend() && shouldWALAppend) {
+            BatchMutateContext context = getBatchMutateContext(c);
+            WALAnnotationUtil.appendMutationAttributesToWALKey(key, context);
+        }
+    }
 
   @Override
   public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,

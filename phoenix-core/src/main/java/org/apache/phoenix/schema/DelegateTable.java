@@ -355,6 +355,11 @@ public class DelegateTable implements PTable {
         return delegate.getLastDDLTimestamp();
     }
 
+    @Override
+    public boolean isChangeDetectionEnabled() {
+        return delegate.isChangeDetectionEnabled();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

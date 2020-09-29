@@ -34,4 +34,7 @@ public class HbaseCompatCapabilities {
     // show all versions properly. HBase 2.2.5+ and HBase 2.3.0+ have this fix.
     public static boolean isRawFilterSupported() { return false; }
 
+    //HBase 2.3+ has preWALAppend() on RegionObserver (HBASE-22623)
+    public static boolean hasPreWALAppend() { return false; }
+
 }

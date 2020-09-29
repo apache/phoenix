@@ -237,7 +237,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     /**
      * For client-side to append serialized IndexMaintainers of keyValueIndexes
-     * @param dataTable data table
+     * @param table data table
      * @param indexMetaDataPtr bytes pointer to hold returned serialized value
      * @param keyValueIndexes indexes to serialize
      */
@@ -380,6 +380,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     private Map<ColumnReference, ColumnReference> coveredColumnsMap;
     /**** END: New member variables added in 4.10 *****/
+
+    //**** START: New member variables added in 4.16 ****/
+    private String logicalIndexName;
 
     private IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
@@ -594,6 +597,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
+        this.logicalIndexName = index.getName().getString();
         initCachedState();
     }
     
@@ -1258,7 +1262,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // If if there are no covered columns, we know it's our default name
         return emptyKeyValueCFPtr;
     }
-    
+
+    /**
+     * The logical index name. For global indexes on base tables this will be the same as the
+     * physical index table name (unless namespaces are enabled, then . gets replaced with : for
+     * the physical table name). For view indexes, the logical and physical names will be
+     * different because all view indexes of a base table are stored in the same physical table
+     * @return The logical index name
+     */
+    public String getLogicalIndexName() {
+        return logicalIndexName;
+    }
+
     @Deprecated // Only called by code older than our 4.10 release
     @Override
     public void readFields(DataInput input) throws IOException {
@@ -1460,6 +1475,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
             maintainer.coveredColumnsMap.put(dataTableColRef, indexTableColRef);
         }
+        maintainer.logicalIndexName = proto.getLogicalIndexName();
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1583,6 +1599,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         builder.setEncodingScheme(maintainer.encodingScheme.getSerializedMetadataValue());
         builder.setImmutableStorageScheme(maintainer.immutableStorageScheme.getSerializedMetadataValue());
+        builder.setLogicalIndexName(maintainer.logicalIndexName);
         return builder.build();
     }
 

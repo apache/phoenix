@@ -402,7 +402,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
      * Used for an aggregate query in which the key order does not necessarily match the group by
      * key order. In this case, we must collect all distinct groups within a region into a map,
      * aggregating as we go.
-     * @param limit TODO
      */
     private static class UnorderedGroupByRegionScanner extends BaseRegionScanner {
         private final Region region;
@@ -519,8 +518,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
     /**
      * Used for an aggregate query in which the key order match the group by key order. In this
      * case, we can do the aggregation as we scan, by detecting when the group by key changes.
-     * @param limit TODO
-     * @throws IOException
      */
     private static class OrderedGroupByRegionScanner extends BaseRegionScanner {
         private final Scan scan;

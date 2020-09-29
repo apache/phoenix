@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.query;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Table;
@@ -44,6 +45,9 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Arrays.asList;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
 /**
@@ -597,8 +601,9 @@ public class PhoenixTestBuilder {
         public static final List<String> TENANT_VIEW_INCLUDE_COLUMNS = asList("COL7");
 
         public static final String
-                DEFAULT_TABLE_PROPS =
-                "COLUMN_ENCODED_BYTES=0, MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='Z'";
+                DEFAULT_MUTABLE_TABLE_PROPS =
+                "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='Z'";
+        public static final String DEFAULT_IMMUTABLE_TABLE_PROPS = "DEFAULT_COLUMN_FAMILY='Z'";
         public static final String DEFAULT_TABLE_INDEX_PROPS = "";
         public static final String DEFAULT_GLOBAL_VIEW_PROPS = "";
         public static final String DEFAULT_GLOBAL_VIEW_INDEX_PROPS = "";
@@ -641,9 +646,12 @@ public class PhoenixTestBuilder {
         boolean tenantViewIndexCreated = false;
         String url;
         String entityKeyPrefix;
-        String entityTableName;
-        String entityGlobalViewName;
-        String entityTenantViewName;
+        private String entityTableName;
+        private String entityGlobalViewName;
+        private String entityTenantViewName;
+        private String entityTableIndexName;
+        private String entityGlobalViewIndexName;
+        private String entityTenantViewIndexName;
         PTable baseTable;
         ConnectOptions connectOptions;
         TableOptions tableOptions;
@@ -739,6 +747,28 @@ public class PhoenixTestBuilder {
 
         public String getEntityTenantViewName() {
             return entityTenantViewName;
+        }
+
+        public String getEntityTableIndexName() {
+            return entityTableIndexName;
+        }
+
+        public String getEntityGlobalViewIndexName() {
+            return entityGlobalViewIndexName;
+        }
+
+        public String getEntityTenantViewIndexName() {
+            return entityTenantViewIndexName;
+        }
+
+        public String getPhysicalTableName(boolean isNamespaceEnabled) {
+            return SchemaUtil.getPhysicalTableName(Bytes.toBytes(getEntityTableName()),
+                isNamespaceEnabled).getNameAsString();
+        }
+
+        public String getPhysicalTableIndexName(boolean isNamespaceEnabled) {
+            return SchemaUtil.getPhysicalTableName(Bytes.toBytes(getEntityTableIndexName()),
+                isNamespaceEnabled).getNameAsString();
         }
 
         public ConnectOptions getConnectOptions() {
@@ -1055,6 +1085,7 @@ public class PhoenixTestBuilder {
             String tenantViewName = SchemaUtil.normalizeIdentifier(entityKeyPrefix);
             entityTenantViewName = SchemaUtil.getTableName(tenantViewSchemaName, tenantViewName);
             String globalViewCondition = String.format("KP = '%s'", entityKeyPrefix);
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(entityTableName);
 
             // Table and Table Index creation.
             try (Connection globalConnection = getGlobalConnection()) {
@@ -1080,6 +1111,7 @@ public class PhoenixTestBuilder {
                                     tableIndexOptions.tableIncludeColumns,
                                     tableIndexOptions.indexProps));
                     tableIndexCreated = true;
+                    entityTableIndexName = SchemaUtil.getTableName(schemaName, indexOnTableName);
                 }
             }
 
@@ -1103,6 +1135,8 @@ public class PhoenixTestBuilder {
                                     globalViewIndexOptions.globalViewIncludeColumns,
                                     globalViewIndexOptions.indexProps));
                     globalViewIndexCreated = true;
+                    entityGlobalViewIndexName =
+                        SchemaUtil.getTableName(schemaName, indexOnGlobalViewName);
                 }
             }
 
@@ -1136,6 +1170,8 @@ public class PhoenixTestBuilder {
                                     tenantViewIndexOptions.tenantViewIncludeColumns,
                                     tenantViewIndexOptions.indexProps));
                     tenantViewIndexCreated = true;
+                    entityTenantViewIndexName =
+                        SchemaUtil.getTableName(schemaName, indexOnTenantViewName);
                 }
             }
         }
@@ -1188,9 +1224,31 @@ public class PhoenixTestBuilder {
                 tableDefinition.append((")"));
             }
 
+
             statement.append("CREATE TABLE IF NOT EXISTS ").append(fullTableName)
                     .append(tableDefinition.toString()).append(" ")
                     .append((tableOptions.tableProps.isEmpty() ? "" : tableOptions.tableProps));
+            boolean hasAppendedTableProps = !tableOptions.tableProps.isEmpty();
+            if (tableOptions.isMultiTenant()) {
+                statement.append(hasAppendedTableProps ? ", MULTI_TENANT=true" : "MULTI_TENANT" +
+                    "=true");
+                hasAppendedTableProps = true;
+            }
+            if (tableOptions.getSaltBuckets() != null) {
+                String prop = SALT_BUCKETS +"=" + tableOptions.getSaltBuckets();
+                statement.append(hasAppendedTableProps ? ", " + prop : prop);
+                hasAppendedTableProps = true;
+            }
+            if (tableOptions.isImmutable()) {
+                String prop = IMMUTABLE_ROWS + "=true";
+                statement.append(hasAppendedTableProps ? ", " + prop : prop);
+                hasAppendedTableProps = true;
+            }
+            if (tableOptions.isChangeDetectionEnabled()) {
+                String prop = CHANGE_DETECTION_ENABLED + "=true";
+                statement.append(hasAppendedTableProps ? ", " + prop : prop);
+                hasAppendedTableProps = true;
+            }
             LOGGER.info(statement.toString());
             return statement.toString();
         }
@@ -1230,6 +1288,12 @@ public class PhoenixTestBuilder {
                     .append((globalViewOptions.tableProps.isEmpty() ?
                             "" :
                             globalViewOptions.tableProps));
+            if (globalViewOptions.isChangeDetectionEnabled()) {
+                if (!globalViewOptions.tableProps.isEmpty()) {
+                    statement.append(", ");
+                }
+                statement.append(CHANGE_DETECTION_ENABLED + "=true");
+            }
             LOGGER.info(statement.toString());
             return statement.toString();
         }
@@ -1268,6 +1332,12 @@ public class PhoenixTestBuilder {
                     .append(" ").append((tenantViewOptions.tableProps.isEmpty() ?
                     "" :
                     tenantViewOptions.tableProps));
+            if (tenantViewOptions.isChangeDetectionEnabled()) {
+                if (!tenantViewOptions.tableProps.isEmpty()) {
+                    statement.append(", ");
+                }
+                statement.append(CHANGE_DETECTION_ENABLED + "=true");
+            }
             LOGGER.info(statement.toString());
             return statement.toString();
         }
@@ -1355,7 +1425,11 @@ public class PhoenixTestBuilder {
             List<String> tablePKColumns = Lists.newArrayList();
             List<String> tablePKColumnTypes = Lists.newArrayList();
             List<String> tablePKColumnSort;
-            String tableProps = DDLDefaults.DEFAULT_TABLE_PROPS;
+            String tableProps = DDLDefaults.DEFAULT_MUTABLE_TABLE_PROPS;
+            boolean isMultiTenant = true;
+            Integer saltBuckets = null;
+            boolean isImmutable = false;
+            boolean isChangeDetectionEnabled = false;
 
             /*
              *****************************
@@ -1370,7 +1444,7 @@ public class PhoenixTestBuilder {
                 options.tableColumnTypes = Lists.newArrayList(DDLDefaults.COLUMN_TYPES);
                 options.tablePKColumns = Lists.newArrayList(DDLDefaults.TABLE_PK_COLUMNS);
                 options.tablePKColumnTypes = Lists.newArrayList(DDLDefaults.TABLE_PK_TYPES);
-                options.tableProps = DDLDefaults.DEFAULT_TABLE_PROPS;
+                options.tableProps = DDLDefaults.DEFAULT_MUTABLE_TABLE_PROPS;
                 return options;
             }
 
@@ -1429,6 +1503,41 @@ public class PhoenixTestBuilder {
             public void setTableProps(String tableProps) {
                 this.tableProps = tableProps;
             }
+
+            public boolean isMultiTenant() {
+                return this.isMultiTenant;
+            }
+
+            public void setMultiTenant(boolean isMultiTenant) {
+                this.isMultiTenant = isMultiTenant;
+            }
+
+            public Integer getSaltBuckets() {
+                return this.saltBuckets;
+            }
+            public void setSaltBuckets(Integer saltBuckets) {
+                this.saltBuckets = saltBuckets;
+            }
+
+            public boolean isImmutable() {
+                return isImmutable;
+            }
+
+            public void setImmutable(boolean immutable) {
+                isImmutable = immutable;
+                //default props includes a column encoding not supported in immutable tables
+                if (this.tableProps.equals(DDLDefaults.DEFAULT_MUTABLE_TABLE_PROPS)) {
+                    this.tableProps = DDLDefaults.DEFAULT_IMMUTABLE_TABLE_PROPS;
+                }
+            }
+
+            public boolean isChangeDetectionEnabled() {
+                return isChangeDetectionEnabled;
+            }
+
+            public void setChangeDetectionEnabled(boolean changeDetectionEnabled) {
+                isChangeDetectionEnabled = changeDetectionEnabled;
+            }
         }
 
         // Global View statement generation.
@@ -1441,6 +1550,7 @@ public class PhoenixTestBuilder {
             List<String> globalViewPKColumnSort;
             String tableProps = DDLDefaults.DEFAULT_TENANT_VIEW_PROPS;
             String globalViewCondition;
+            boolean isChangeDetectionEnabled = false;
 
             /*
              *****************************
@@ -1525,6 +1635,14 @@ public class PhoenixTestBuilder {
             public void setGlobalViewCondition(String globalViewCondition) {
                 this.globalViewCondition = globalViewCondition;
             }
+
+            public boolean isChangeDetectionEnabled() {
+                return isChangeDetectionEnabled;
+            }
+
+            public void setChangeDetectionEnabled(boolean changeDetectionEnabled) {
+                this.isChangeDetectionEnabled = changeDetectionEnabled;
+            }
         }
 
         // Tenant View statement generation.
@@ -1536,6 +1654,7 @@ public class PhoenixTestBuilder {
             List<String> tenantViewPKColumnTypes = Lists.newArrayList();
             List<String> tenantViewPKColumnSort;
             String tableProps = DDLDefaults.DEFAULT_TENANT_VIEW_PROPS;
+            boolean isChangeDetectionEnabled = false;
 
             /*
              *****************************
@@ -1610,6 +1729,14 @@ public class PhoenixTestBuilder {
 
             public void setTableProps(String tableProps) {
                 this.tableProps = tableProps;
+            }
+
+            public boolean isChangeDetectionEnabled() {
+                return isChangeDetectionEnabled;
+            }
+
+            public void setChangeDetectionEnabled(boolean changeDetectionEnabled) {
+                this.isChangeDetectionEnabled = changeDetectionEnabled;
             }
         }
 
