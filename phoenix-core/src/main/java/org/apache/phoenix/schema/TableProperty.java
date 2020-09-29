@@ -272,6 +272,28 @@ public enum TableProperty {
         public Object getPTableValue(PTable table) {
             return table.getPhoenixTTL();
         }
+    },
+
+    CHANGE_DETECTION_ENABLED(PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED, true, true, true) {
+        /**
+         * CHANGE_DETECTION_ENABLED is a boolean that can take TRUE or FALSE
+         */
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            } else if (value instanceof Boolean) {
+                return value;
+            } else {
+                throw new IllegalArgumentException("CHANGE_DETECTION_ENABLED property can only be" +
+                    " either true or false");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isChangeDetectionEnabled();
+        }
     }
     ;
 

@@ -795,7 +795,6 @@ public class UpsertCompiler {
                     final Scan scan = context.getScan();
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
-                    
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
@@ -935,7 +934,7 @@ public class UpsertCompiler {
                 allColumns, columnIndexes, overlapViewColumns, values, addViewColumns,
                 connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);
     }
-    
+
     private static boolean isRowTimestampSet(int[] pkSlotIndexes, PTable table) {
         checkArgument(table.getRowTimestampColPos() != -1, "Call this method only for tables with row timestamp column");
         int rowTimestampColPKSlot = table.getRowTimestampColPos();
@@ -1108,6 +1107,7 @@ public class UpsertCompiler {
             ImmutableBytesWritable ptr = context.getTempPtr();
             PTable table = tableRef.getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
+            ScanUtil.setWALAnnotationAttributes(table, scan);
             byte[] txState = table.isTransactional() ?
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 

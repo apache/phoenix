@@ -15,14 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
+package org.apache.phoenix.compat.hbase.coprocessor;
 
-public class HbaseCompatCapabilities {
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.hadoop.hbase.wal.WALKey;
 
-    public static boolean hasNewMetrics() {
-        return false;
+import java.util.HashMap;
+import java.util.Map;
+
+public class CompatIndexRegionObserver extends BaseRegionObserver {
+
+    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+        key.addExtendedAttribute(attrKey, attrValue);
     }
 
-    //HBase 1.5+ has preWALAppend() on RegionObserver (HBASE-22623)
-    public static boolean hasPreWALAppend() { return false; }
+    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+        return key.getExtendedAttribute(attrKey);
+    }
+
+    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+        return new HashMap<String, byte[]>(key.getExtendedAttributes());
+    }
+
 }

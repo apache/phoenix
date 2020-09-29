@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -44,6 +43,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -1211,7 +1211,7 @@ public class ScanUtil {
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
-        KeyValue keyValue =
+        Cell keyValue =
                 KeyValueUtil.newKeyValue(rowKey, 0,
                         rowKey.length, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY,
                         0, EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length);
@@ -1238,5 +1238,31 @@ public class ScanUtil {
         }
         Cell cell = result.get(0);
         return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+    }
+
+    /**
+     *  Put the attributes we want to annotate the WALs with (such as logical table name,
+     *  tenant, DDL timestamp, etc) on the Scan object so that on the
+     *  Ungrouped/GroupedAggregateCoprocessor side, we
+     *  annotate the mutations with them, and then they get written into the WAL as part of
+     *  the RegionObserver's doWALAppend hook.
+     * @param table Table metadata for the target table/view of the write
+     * @param scan Scan to trigger the server-side coproc
+     */
+    public static void setWALAnnotationAttributes(PTable table, Scan scan) {
+        if (table.isChangeDetectionEnabled()) {
+            if (table.getTenantId() != null) {
+                scan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    table.getTenantId().getBytes());
+            }
+            scan.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                table.getSchemaName().getBytes());
+            scan.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                table.getTableName().getBytes());
+            scan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                table.getType().getValue().getBytes());
+            scan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                Bytes.toBytes(table.getLastDDLTimestamp()));
+        }
     }
 }
