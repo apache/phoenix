@@ -84,6 +84,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MaxMutationCellSizeBytesExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -122,7 +123,7 @@ public class UpsertCompiler {
     private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
             PTable table, MultiRowMutationState mutation,
             PhoenixStatement statement, boolean useServerTimestamp, IndexMaintainer maintainer,
-            byte[][] viewConstants, byte[] onDupKeyBytes, int numSplColumns) throws SQLException {
+            byte[][] viewConstants, byte[] onDupKeyBytes, int numSplColumns, int maxCellSizeBytes) throws SQLException {
         long columnValueSize = 0;
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
@@ -139,6 +140,12 @@ public class UpsertCompiler {
         for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
             byte[] value = values[j];
             PColumn column = table.getColumns().get(columnIndexes[i]);
+            if (value.length >= maxCellSizeBytes) {
+                String rowkeyAndColumnInfo = getExceedMaxAllowanceCellRowkeyAndColumnInfo(
+                        values, columnIndexes, table, numSplColumns, column.getName().getString());
+                throw new MaxMutationCellSizeBytesExceededException(rowkeyAndColumnInfo, maxCellSizeBytes, value.length);
+            }
+
             if (SchemaUtil.isPKColumn(column)) {
                 pkValues[pkSlotIndex[i]] = value;
                 if (SchemaUtil.getPKPosition(table, column) == table.getRowTimestampColPos()) {
@@ -174,7 +181,26 @@ public class UpsertCompiler {
         } 
         mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
     }
-    
+
+    public static String getExceedMaxAllowanceCellRowkeyAndColumnInfo(byte[][] values, int[] columnIndexes, PTable table,
+                                                                      int numSplColumns, String columnName) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
+            byte[] value = values[j];
+            PColumn column = table.getColumns().get(columnIndexes[i]);
+            if (SchemaUtil.isPKColumn(column)) {
+                if (sb.length() != 0) {
+                    sb.append(" AND ");
+                }
+                sb.append(column.getName().toString() + "=" + Bytes.toString(value));
+            }
+        }
+        return String.format("Upsert data to table %s on Column %s exceed MAX cell allowance, the rowkey is %s",
+                SchemaUtil.getTableName(table.getSchemaName().toString(), table.getTableName().toString()),
+                columnName,
+                sb.toString());
+    }
+
     public static MutationState upsertSelect(StatementContext childContext, TableRef tableRef,
             RowProjector projector, ResultIterator iterator, int[] columnIndexes,
             int[] pkSlotIndexes, boolean useServerTimestamp,
@@ -187,6 +213,9 @@ public class UpsertCompiler {
         int maxSizeBytes =
                 services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        int maxCellSizeBytes =
+                services.getProps().getInt(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_CELL_SIZE_BYTES);
         int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         // we automatically flush the mutations when either auto commit is enabled, or
         // the target table is transactional (in that case changes are not visible until we commit)
@@ -253,7 +282,7 @@ public class UpsertCompiler {
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement,
                         useServerTimestamp, indexMaintainer, viewConstants, null,
-                        numSplColumns);
+                        numSplColumns, maxCellSizeBytes);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (autoFlush && rowCount % batchSize == 0) {
@@ -1267,7 +1296,11 @@ public class UpsertCompiler {
                 indexMaintainer = table.getIndexMaintainer(parentTable, connection);
                 viewConstants = IndexUtil.getViewConstants(parentTable);
             }
-            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, onDupKeyBytes, 0);
+            int maxCellSizeBytes = statement.getConnection().getQueryServices().getProps().
+                    getInt(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB,
+                            QueryServicesOptions.DEFAULT_MAX_MUTATION_CELL_SIZE_BYTES);
+            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp,
+                    indexMaintainer, viewConstants, onDupKeyBytes, 0, maxCellSizeBytes);
             return new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
         }
 

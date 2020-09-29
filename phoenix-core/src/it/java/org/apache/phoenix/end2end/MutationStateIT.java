@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -548,6 +549,63 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
             Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
             assertNotNull(admin.getTableDescriptor(TableName.valueOf(tableName)));
             assertNotNull(PhoenixRuntime.getTableNoCache(conn, tableName));
+        }
+    }
+
+    @Test
+    public void testUpsertMaxMutationCellSize()  throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB, "20");
+        try (PhoenixConnection connection =
+                (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties)) {
+            String fullTableName = generateUniqueName();
+            String pk1Name = generateUniqueName();
+            String pk2Name = generateUniqueName();
+            String ddl = "CREATE TABLE " + fullTableName +
+                    " (" +  pk1Name + " VARCHAR(15) NOT NULL, " + pk2Name + " VARCHAR(15) NOT NULL, " +
+                    "PAYLOAD1 VARCHAR, PAYLOAD2 VARCHAR,PAYLOAD3 VARCHAR " +
+                    "CONSTRAINT PK PRIMARY KEY (" + pk1Name + "," + pk2Name+ "))";
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute(ddl);
+            }
+            String sql = "UPSERT INTO " + fullTableName +
+                    " ("+ pk1Name + ","+ pk2Name + ",PAYLOAD1,PAYLOAD2,PAYLOAD2) VALUES (?,?,?,?,?)";
+            String pk1Value = generateUniqueName();
+            String pk2Value = generateUniqueName();
+            String payload1Value = generateUniqueName();
+            String payload3Value = generateUniqueName();
+
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                preparedStatement.setString(1, pk1Value);
+                preparedStatement.setString(2, pk2Value);
+                preparedStatement.setString(3, payload1Value);
+                preparedStatement.setString(4, "1234567890");
+                preparedStatement.setString(5, payload3Value);
+                preparedStatement.execute();
+                try {
+                    //should exceed the max cell/column allowance
+                    preparedStatement.setString(1, pk1Value);
+                    preparedStatement.setString(2, pk2Value);
+                    preparedStatement.setString(3, payload1Value);
+                    preparedStatement.setString(4, "12345678901234567890");
+                    preparedStatement.setString(5, payload3Value);
+                    preparedStatement.execute();
+                    fail();
+                } catch (SQLException e) {
+                    assertEquals(SQLExceptionCode.MAX_MUTATION_CELL_SIZE_BYTES_EXCEEDED.getErrorCode(),
+                            e.getErrorCode());
+                    assertTrue(e.getMessage().contains(
+                            SQLExceptionCode.MAX_MUTATION_CELL_SIZE_BYTES_EXCEEDED.getMessage()));
+                    assertTrue(e.getMessage().contains(
+                            connectionProperties.getProperty(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB)));
+                    assertTrue(e.getMessage().contains(pk1Name));
+                    assertTrue(e.getMessage().contains(pk2Name));
+                    assertTrue(e.getMessage().contains(pk1Value));
+                    assertTrue(e.getMessage().contains(pk2Value));
+                    assertFalse(e.getMessage().contains(payload1Value));
+                    assertFalse(e.getMessage().contains(payload3Value));
+                }
+            }
         }
     }
 }
