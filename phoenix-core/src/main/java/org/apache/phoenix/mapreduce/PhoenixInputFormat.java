@@ -210,9 +210,12 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
               // setting the snapshot configuration
               String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
+              Configuration config = queryPlan.getContext().getConnection().getQueryServices().getConfiguration();
               if (snapshotName != null) {
-                  PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
-                      getQueryServices().getConfiguration(), snapshotName);
+                  PhoenixConfigurationUtil.setSnapshotNameKey(config, snapshotName);
+              } else {
+                  // making sure we unset snapshot name as new job doesn't need it
+                  config.unset(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
               }
 
               return queryPlan;
