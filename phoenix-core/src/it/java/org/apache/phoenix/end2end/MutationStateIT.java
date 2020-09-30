@@ -553,18 +553,28 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testUpsertMaxMutationCellSize()  throws Exception {
+    public void testUpsertMaxColumnAllowanceForSingleCellArrayWithOffsets() throws Exception {
+        testUpsertColumnExceedsMaxAllowanceSize("SINGLE_CELL_ARRAY_WITH_OFFSETS");
+    }
+
+    @Test
+    public void testUpsertMaxColumnAllowanceForOneCellPerColumn() throws Exception {
+        testUpsertColumnExceedsMaxAllowanceSize("ONE_CELL_PER_COLUMN");
+    }
+
+    public void testUpsertColumnExceedsMaxAllowanceSize(String storageScheme) throws Exception {
         Properties connectionProperties = new Properties();
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB, "20");
+        connectionProperties.setProperty(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE, "20");
         try (PhoenixConnection connection =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties)) {
             String fullTableName = generateUniqueName();
             String pk1Name = generateUniqueName();
             String pk2Name = generateUniqueName();
-            String ddl = "CREATE TABLE " + fullTableName +
+            String ddl = "CREATE IMMUTABLE TABLE " + fullTableName +
                     " (" +  pk1Name + " VARCHAR(15) NOT NULL, " + pk2Name + " VARCHAR(15) NOT NULL, " +
                     "PAYLOAD1 VARCHAR, PAYLOAD2 VARCHAR,PAYLOAD3 VARCHAR " +
-                    "CONSTRAINT PK PRIMARY KEY (" + pk1Name + "," + pk2Name+ "))";
+                    "CONSTRAINT PK PRIMARY KEY (" + pk1Name + "," + pk2Name+ ")) " +
+                    "IMMUTABLE_STORAGE_SCHEME =" + storageScheme;
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute(ddl);
             }
@@ -582,28 +592,34 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                 preparedStatement.setString(4, "1234567890");
                 preparedStatement.setString(5, payload3Value);
                 preparedStatement.execute();
+
                 try {
-                    //should exceed the max cell/column allowance
                     preparedStatement.setString(1, pk1Value);
                     preparedStatement.setString(2, pk2Value);
                     preparedStatement.setString(3, payload1Value);
                     preparedStatement.setString(4, "12345678901234567890");
                     preparedStatement.setString(5, payload3Value);
                     preparedStatement.execute();
-                    fail();
+                    if (storageScheme.equals("ONE_CELL_PER_COLUMN")) {
+                        fail();
+                    }
                 } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.MAX_MUTATION_CELL_SIZE_BYTES_EXCEEDED.getErrorCode(),
-                            e.getErrorCode());
-                    assertTrue(e.getMessage().contains(
-                            SQLExceptionCode.MAX_MUTATION_CELL_SIZE_BYTES_EXCEEDED.getMessage()));
-                    assertTrue(e.getMessage().contains(
-                            connectionProperties.getProperty(QueryServices.MAX_MUTATION_CELL_SIZE_BYTES_ATTRIB)));
-                    assertTrue(e.getMessage().contains(pk1Name));
-                    assertTrue(e.getMessage().contains(pk2Name));
-                    assertTrue(e.getMessage().contains(pk1Value));
-                    assertTrue(e.getMessage().contains(pk2Value));
-                    assertFalse(e.getMessage().contains(payload1Value));
-                    assertFalse(e.getMessage().contains(payload3Value));
+                    if (!storageScheme.equals("ONE_CELL_PER_COLUMN")) {
+                        fail();
+                    } else {
+                        assertEquals(SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED.getErrorCode(),
+                                e.getErrorCode());
+                        assertTrue(e.getMessage().contains(
+                                SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED.getMessage()));
+                        assertTrue(e.getMessage().contains(
+                                connectionProperties.getProperty(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE)));
+                        assertTrue(e.getMessage().contains(pk1Name));
+                        assertTrue(e.getMessage().contains(pk2Name));
+                        assertTrue(e.getMessage().contains(pk1Value));
+                        assertTrue(e.getMessage().contains(pk2Value));
+                        assertFalse(e.getMessage().contains(payload1Value));
+                        assertFalse(e.getMessage().contains(payload3Value));
+                    }
                 }
             }
         }

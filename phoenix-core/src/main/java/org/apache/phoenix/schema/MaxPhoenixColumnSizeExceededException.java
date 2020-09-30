@@ -29,18 +29,18 @@ import java.sql.SQLException;
  *
  */
 
-public class MaxMutationCellSizeBytesExceededException extends SQLException  {
+public class MaxPhoenixColumnSizeExceededException extends SQLException  {
     private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.MAX_MUTATION_CELL_SIZE_BYTES_EXCEEDED;
+    private static SQLExceptionCode code = SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED;
 
-    public MaxMutationCellSizeBytesExceededException() {
+    public MaxPhoenixColumnSizeExceededException() {
         super(new SQLExceptionInfo.Builder(code).build().toString(), code.getSQLState(), code.getErrorCode(), null);
     }
 
-    public MaxMutationCellSizeBytesExceededException(String rowkeyAndColumnInfo, int maxMutationCellSizeBytes,
+    public MaxPhoenixColumnSizeExceededException(String rowkeyAndColumnInfo, int maxMutationCellSizeBytes,
                                                  int mutationCellSizeBytes) {
-        super(new SQLExceptionInfo.Builder(code).setMaxMutationCellSizeBytes(maxMutationCellSizeBytes)
-                        .setMutationCellSizeBytes(mutationCellSizeBytes).build().toString() + ". " + rowkeyAndColumnInfo,
+        super(new SQLExceptionInfo.Builder(code).setMaxPhoenixColumnSizeBytes(maxMutationCellSizeBytes)
+                        .setPhoenixColumnSizeBytes(mutationCellSizeBytes).build().toString() + ". " + rowkeyAndColumnInfo,
                 code.getSQLState(), code.getErrorCode(), null);
     }
 }
