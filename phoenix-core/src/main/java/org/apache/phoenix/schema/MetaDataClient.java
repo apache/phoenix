@@ -20,9 +20,6 @@ package org.apache.phoenix.schema;
 import static com.google.common.collect.Sets.newLinkedHashSet;
 import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -172,7 +169,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
-import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -687,7 +683,7 @@ public class MetaDataClient {
                     // Otherwise, a tenant would be required to create a VIEW first
                     // which is not really necessary unless you want to filter or add
                     // columns
-                    PTable temp = addTableToCache(result);
+                    addTableToCache(result);
                     return result;
                 } else {
                     // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
@@ -1685,7 +1681,7 @@ public class MetaDataClient {
                 requiredCols.addAll(includedColumns);
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
-                    // prevent this column from being dropped while the index is being created
+                    // prevent this column from being dropped while the view is being created
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
                             colName.toString());
                     if (!acquiredMutex) {
@@ -2860,7 +2856,7 @@ public class MetaDataClient {
                         // if the base table column is referenced in the view
                         if (isViewColumnReferenced.get(columnPosition)) {
                             // acquire the mutex using the global physical table name to
-                            // prevent this column from being dropped while the index is being created
+                            // prevent this column from being dropped while the view is being created
                             boolean acquiredMutex = writeCell(null, parentPhysicalSchemaName, parentPhysicalTableName,
                                     column.getName().getString());
                             if (!acquiredMutex) {
@@ -4729,22 +4725,20 @@ public class MetaDataClient {
         }
     }
 
-    private PTable addTableToCache(MetaDataMutationResult result) throws SQLException {
-        return addTableToCache(result, TransactionUtil.getResolvedTime(connection, result));
+    private void addTableToCache(MetaDataMutationResult result) throws SQLException {
+        addTableToCache(result, TransactionUtil.getResolvedTime(connection, result));
     }
 
-    private PTable addTableToCache(MetaDataMutationResult result, long timestamp) throws SQLException {
+    private void addTableToCache(MetaDataMutationResult result, long timestamp) throws SQLException {
         addColumnsAndIndexesFromAncestors(result, null, false);
         PTable table = result.getTable();
         connection.addTable(table, timestamp);
-        return table;
     }
 
-    private List<PFunction> addFunctionToCache(MetaDataMutationResult result) throws SQLException {
+    private void addFunctionToCache(MetaDataMutationResult result) throws SQLException {
         for(PFunction function: result.getFunctions()) {
             connection.addFunction(function);
         }
-        return result.getFunctions();
     }
 
     private void addSchemaToCache(MetaDataMutationResult result) throws SQLException {
