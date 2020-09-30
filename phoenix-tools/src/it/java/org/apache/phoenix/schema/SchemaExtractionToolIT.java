@@ -19,6 +19,8 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.ParseException;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -39,6 +41,7 @@ import java.util.HashSet;
 import java.util.Arrays;
 import java.util.Properties;
 
+import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
@@ -202,7 +205,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
                 "b_char CHAR(10) NOT NULL, " +
                 "c_var_array VARCHAR ARRAY, " +
                 "d_char_array CHAR(15) ARRAY[3] CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
-                "TTL=2592000, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1";
+                "TTL=2592000, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', REPLICATION_SCOPE=1";
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
@@ -213,7 +216,8 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     public void testCreateTableWithDefaultCFProperties() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
-        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, REPLICATION_SCOPE=1, DEFAULT_COLUMN_FAMILY=cv, SALT_BUCKETS=16, MULTI_TENANT=true";
+        String properties = "KEEP_DELETED_CELLS=TRUE, TTL=1209600, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', "
+                + "REPLICATION_SCOPE=1, DEFAULT_COLUMN_FAMILY='cv', SALT_BUCKETS=16, MULTI_TENANT=true, TIME_TEST='72HOURS'";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
@@ -233,8 +237,8 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         String properties = "\"av\".VERSIONS=2, \"bv\".VERSIONS=2, " +
-                "DATA_BLOCK_ENCODING=DIFF, " +
-                "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, MULTI_TENANT=true";
+                "DATA_BLOCK_ENCODING='DIFF', " +
+                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
@@ -253,8 +257,8 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         String properties = "\"av\".VERSIONS=2, \"bv\".VERSIONS=3, " +
-                "\"cv\".VERSIONS=4, DATA_BLOCK_ENCODING=DIFF, " +
-                "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, MULTI_TENANT=true";
+                "\"cv\".VERSIONS=4, DATA_BLOCK_ENCODING='DIFF', " +
+                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         final String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
@@ -271,13 +275,12 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testCreateTableWithMultipleCFProperties() throws Exception {
-        String tableName = generateUniqueName();
+        String tableName = "07"+generateUniqueName();
         String schemaName = generateUniqueName();
-        String properties = "\"av\".DATA_BLOCK_ENCODING=DIFF, \"bv\".DATA_BLOCK_ENCODING=DIFF, \"cv\".DATA_BLOCK_ENCODING=DIFF, " +
-                "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, MULTI_TENANT=true";
-        String simplifiedProperties = "DATA_BLOCK_ENCODING=DIFF, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, SALT_BUCKETS=16, MULTI_TENANT=true";
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String query = "create table " + pTableFullName +
+        String properties = "\"av\".DATA_BLOCK_ENCODING='DIFF', \"bv\".DATA_BLOCK_ENCODING='DIFF', \"cv\".DATA_BLOCK_ENCODING='DIFF', " +
+                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
+        String simplifiedProperties = "DATA_BLOCK_ENCODING='DIFF', IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
+        String query = "create table " + schemaName+".\""+tableName+"\"" +
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
                 "\"av\".\"_\" CHAR(1), " +
@@ -286,6 +289,11 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
+        try {
+            new SQLParser(result).parseStatement();
+        } catch (ParseException pe) {
+            fail("This should not happen!");
+        }
         Assert.assertTrue(compareProperties(simplifiedProperties, getProperties(result)));
     }
 
