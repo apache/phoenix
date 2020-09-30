@@ -78,8 +78,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
@@ -234,7 +236,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
@@ -1766,7 +1767,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             // this is a no-op (See PHOENIX-5544)
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
                 ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName,
-                        getSystemTableForChildLinks(clientVersion, env.getConfiguration()).getName());
+                        getSystemTableForChildLinks(clientVersion, env.getConfiguration())
+                                .getName());
             }
 
             byte[] parentTableKey = null;
@@ -2159,42 +2161,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         return PTableType.INDEX == tableType && parentTable.getIndexes().size() >= maxIndexesPerTable;
     }
 
-    private List<PTable> findAllChildViews(long clientTimeStamp, int clientVersion, byte[] tenantId,
-            byte[] schemaName, byte[] tableName) throws IOException, SQLException {
-        TableViewFinderResult result = new TableViewFinderResult();
-        try (Table hTable =
-                     ServerUtil.getHTableForCoprocessorScan(env,
-                             getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
-            ViewUtil.findAllRelatives(hTable, tenantId, schemaName, tableName,
-                    LinkType.CHILD_TABLE, result);
-        }
-        List<PTable> childViews = Lists.newArrayListWithExpectedSize(result.getLinks().size());
-        for (TableInfo viewInfo : result.getLinks()) {
-            byte[] viewTenantId = viewInfo.getTenantId();
-            byte[] viewSchemaName = viewInfo.getSchemaName();
-            byte[] viewName = viewInfo.getTableName();
-            PTable view;
-            Properties props = new Properties();
-            if (viewTenantId != null) {
-                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-            }
-            if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
-                props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
-            }
-            try (PhoenixConnection connection =
-                         QueryUtil.getConnectionOnServer(props, env.getConfiguration())
-                                 .unwrap(PhoenixConnection.class)) {
-                view = PhoenixRuntime.getTableNoCache(connection, SchemaUtil.getTableName(viewSchemaName, viewName));
-            }
-            if (view == null) {
-                ServerUtil.throwIOException("View not found", new TableNotFoundException(Bytes.toString(viewSchemaName),
-                        Bytes.toString(viewName)));
-            }
-            childViews.add(view);
-        }
-        return childViews;
-    }
-
     private void separateLocalAndRemoteMutations(Region region, List<Mutation> mutations,
                                                  List<Mutation> localMutations, List<Mutation> remoteMutations) {
         RegionInfo regionInfo = region.getRegionInfo();
@@ -2215,15 +2181,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         byte[][] rowKeyMetaData = new byte[3][];
         String tableType = request.getTableType();
         byte[] schemaName = null;
-        byte[] tableName = null;
+        byte[] tableOrViewName = null;
         boolean dropTableStats = false;
+        final int clientVersion = request.getClientVersion();
         try {
             List<Mutation> tableMetadata = ProtobufUtil.getMutations(request);
             List<Mutation> childLinkMutations = Lists.newArrayList();
             MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
-            tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            tableOrViewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             PTableType pTableType = PTableType.fromSerializedValue(tableType);
             // Disallow deletion of a system table
             if (pTableType == PTableType.SYSTEM) {
@@ -2236,7 +2203,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             List<byte[]> tableNamesToDelete = Lists.newArrayList();
             List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
 
-            byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
+            byte[] lockKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableOrViewName);
             Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(lockKey, region);
             if (result != null) {
@@ -2257,7 +2224,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             }
 
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
-            PTable loadedTable = doGetTable(tenantIdBytes, schemaName, tableName,
+            PTable loadedTable = doGetTable(tenantIdBytes, schemaName, tableOrViewName,
                     clientTimeStamp, null, request.getClientVersion());
             if (loadedTable == null) {
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
@@ -2266,9 +2233,80 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 return;
             }
             getCoprocessorHost().preDropTable(Bytes.toString(tenantIdBytes),
-                    SchemaUtil.getTableName(schemaName, tableName),
+                    SchemaUtil.getTableName(schemaName, tableOrViewName),
                     TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
                     getParentPhysicalTableName(loadedTable), pTableType, loadedTable.getIndexes());
+
+            if (pTableType == PTableType.TABLE || pTableType == PTableType.VIEW) {
+                // check to see if the table has any child views
+                try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
+                        getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
+                    // This call needs to be done before acquiring the row lock on the header row
+                    // for the table/view being dropped, otherwise the calls to resolve its child
+                    // views via PhoenixRuntime.getTableNoCache() will deadlock since this call
+                    // itself needs to get the parent table which needs to acquire a write lock
+                    // on the same header row
+                    Pair<List<PTable>, List<TableInfo>> descendantViews =
+                            findAllDescendantViews(hTable, env.getConfiguration(),
+                                    tenantIdBytes, schemaName, tableOrViewName, clientTimeStamp,
+                                    true);
+                    List<PTable> legitimateChildViews = descendantViews.getFirst();
+                    List<TableInfo> orphanChildViews = descendantViews.getSecond();
+                    if (!legitimateChildViews.isEmpty()) {
+                        if (!isCascade) {
+                            LOGGER.error("DROP without CASCADE on tables or views with child views "
+                                    + "is not permitted");
+                            // DROP without CASCADE on tables/views with child views is
+                            // not permitted
+                            builder.setReturnCode(
+                                    MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                        if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG &&
+                                !SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
+                                        env.getConfiguration()).equals(hTable.getName())) {
+                            // (See PHOENIX-5544) For an old client connecting to a non-upgraded
+                            // server, we disallow dropping a base table/view that has child views.
+                            LOGGER.error("Dropping a table or view that has child views is "
+                                    + "not permitted for old clients connecting to a new server "
+                                    + "with old metadata (even if CASCADE is provided). "
+                                    + "Please upgrade the client at least to  "
+                                    + MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
+                            builder.setReturnCode(
+                                    MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                    }
+
+                    // If the CASCADE option is provided and we have at least one legitimate/orphan
+                    // view stemming from this parent and the client is 4.15+ (or older but
+                    // connecting to an upgraded server), we use the SYSTEM.TASK table to
+                    // asynchronously drop child views
+                    if (isCascade && !(legitimateChildViews.isEmpty() && orphanChildViews.isEmpty())
+                            && (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
+                            SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
+                                    env.getConfiguration()).equals(hTable.getName()))) {
+                        try {
+                            PhoenixConnection conn =
+                                    QueryUtil.getConnectionOnServer(env.getConfiguration())
+                                            .unwrap(PhoenixConnection.class);
+                            Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
+                                    Bytes.toString(tenantIdBytes), Bytes.toString(schemaName),
+                                    Bytes.toString(tableOrViewName),
+                                    PTable.TaskStatus.CREATED.toString(),
+                                    null, null, null, null,
+                                    this.accessCheckEnabled);
+                        } catch (Throwable t) {
+                            LOGGER.error("Adding a task to drop child views failed!", t);
+                        }
+                    }
+                }
+            }
+
             List<RowLock> locks = Lists.newArrayList();
             try {
                 acquireLock(region, lockKey, locks);
@@ -2277,10 +2315,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
 
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
-                result =
-                        doDropTable(lockKey, tenantIdBytes, schemaName, tableName, parentTableName,
-                                PTableType.fromSerializedValue(tableType), tableMetadata, childLinkMutations,
-                                invalidateList, tableNamesToDelete, sharedTablesToDelete, isCascade, request.getClientVersion());
+                result = doDropTable(lockKey, tenantIdBytes, schemaName, tableOrViewName,
+                        parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata,
+                        childLinkMutations, invalidateList, tableNamesToDelete,
+                        sharedTablesToDelete, request.getClientVersion());
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     done.run(MetaDataMutationResult.toProto(result));
                     return;
@@ -2291,10 +2329,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
                 List<Mutation> remoteMutations = Lists.newArrayList();
-                separateLocalAndRemoteMutations(region, tableMetadata, localMutations, remoteMutations);
+                separateLocalAndRemoteMutations(region, tableMetadata, localMutations,
+                        remoteMutations);
                 if (!remoteMutations.isEmpty()) {
                     // while dropping a table all the mutations should be local
-                    String msg = "Found unexpected mutations while dropping table " + SchemaUtil.getTableName(schemaName, tableName);
+                    String msg = "Found unexpected mutations while dropping table "
+                            + SchemaUtil.getTableName(schemaName, tableOrViewName);
                     LOGGER.error(msg);
                     for (Mutation m : remoteMutations) {
                         LOGGER.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
@@ -2304,8 +2344,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 }
 
                 // drop rows from catalog on this region
-                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations, Collections.<byte[]>emptySet(),
-                    HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
 
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
@@ -2340,8 +2380,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             }
         } catch (Throwable t) {
           LOGGER.error("dropTable failed", t);
-            ProtobufUtil.setControllerException(controller,
-                    ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
+          ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
+                  SchemaUtil.getTableName(schemaName, tableOrViewName), t));
         }
     }
 
@@ -2418,10 +2458,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         return null;
     }
 
-    private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName, byte[] tableName,
-                                               byte[] parentTableName, PTableType tableType, List<Mutation> catalogMutations,
-                                               List<Mutation> childLinkMutations, List<ImmutableBytesPtr> invalidateList, List<byte[]> tableNamesToDelete,
-                                               List<SharedTableState> sharedTablesToDelete, boolean isCascade, int clientVersion)
+    private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName,
+            byte[] tableName, byte[] parentTableName, PTableType tableType,
+            List<Mutation> catalogMutations, List<Mutation> childLinkMutations,
+            List<ImmutableBytesPtr> invalidateList, List<byte[]> tableNamesToDelete,
+            List<SharedTableState> sharedTablesToDelete, int clientVersion)
             throws IOException, SQLException {
 
         Region region = env.getRegion();
@@ -2431,11 +2472,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
 
         // We always cache the latest version - fault in if not in cache
-        if (table != null
-                || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion)) != null) {
+        if (table != null || (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
+                clientVersion)) != null) {
             if (table.getTimeStamp() < clientTimeStamp) {
                 if (isTableDeleted(table) || tableType != table.getType()) {
-                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+                    return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                            EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
             } else {
                 return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
@@ -2446,13 +2488,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // there was a table, but it's been deleted. In either case we want to return.
         if (table == null) {
             if (buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
-                return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+                return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
+                        EnvironmentEdgeManager.currentTimeMillis(), null);
             }
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                    EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Make sure we're not deleting the "wrong" child
-        if (parentTableName != null && table.getParentTableName() != null && !Arrays.equals(parentTableName, table.getParentTableName().getBytes())) {
-            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
+        if (parentTableName != null && table.getParentTableName() != null &&
+                !Arrays.equals(parentTableName, table.getParentTableName().getBytes())) {
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                    EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Since we don't allow back in time DDL, we know if we have a table it's the one
         // we want to delete. FIXME: we shouldn't need a scan here, but should be able to
@@ -2467,56 +2513,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.VIEW || tableType == PTableType.SYSTEM) {
-                // check to see if the table has any child views
-                try (Table hTable =
-                        ServerUtil.getHTableForCoprocessorScan(env, getSystemTableForChildLinks(
-                                clientVersion, env.getConfiguration()))) {
-                    boolean hasChildViews =
-                            ViewUtil.hasChildViews(hTable, tenantId, schemaName, tableName,
-                                    clientTimeStamp);
-                    if (hasChildViews) {
-                        if (!isCascade) {
-                            LOGGER.error("DROP without CASCADE on tables with child views "
-                                    + "is not permitted");
-                            // DROP without CASCADE on tables with child views is not permitted
-                            return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                    EnvironmentEdgeManager.currentTimeMillis(), null);
-                        }
-                        // For 4.15+ clients and older clients connecting to an upgraded server,
-                        // add a task to drop child views of the base table.
-                        if (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
-                                SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
-                                env.getConfiguration()).equals(hTable.getName())) {
-                            try {
-                                PhoenixConnection conn =
-                                        QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                                .unwrap(PhoenixConnection.class);
-                                Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
-                                        Bytes.toString(tenantId), Bytes.toString(schemaName),
-                                        Bytes.toString(tableName),
-                                        PTable.TaskStatus.CREATED.toString(),
-                                        null, null, null, null,
-                                        this.accessCheckEnabled);
-                            } catch (Throwable t) {
-                                LOGGER.error("Adding a task to drop child views failed!", t);
-                            }
-                        } else {
-                            // (See PHOENIX-5544) For an old client connecting to a non-upgraded
-                            // server, we disallow dropping a base table that has child views.
-                            LOGGER.error("Dropping a table that has child views is not permitted "
-                                    + "for old clients connecting to a new server with old metadata."
-                                    + " Please upgrade the client to " +
-                                    MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
-                            return new MetaDataMutationResult(
-                                    MutationCode.UNALLOWED_TABLE_MUTATION,
-                                    EnvironmentEdgeManager.currentTimeMillis(), null);
-                        }
-                    }
-                }
-            }
-
-            // Add to list of HTables to delete, unless it's a view or its a shared index 
+            // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));
             } else if (tableType != PTableType.VIEW) {
@@ -2526,25 +2523,37 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             byte[][] rowKeyMetaData = new byte[5][];
             do {
                 Cell kv = results.get(LINK_TYPE_INDEX);
-                int nColumns = getVarChars(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), 0, rowKeyMetaData);
+                int nColumns = getVarChars(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+                        0, rowKeyMetaData);
                 if (nColumns == 5
                         && rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX].length > 0
-                        && Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
+                        && Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(),
+                        kv.getQualifierLength(),
                         LINK_TYPE_BYTES, 0, LINK_TYPE_BYTES.length) == 0) {
-                    LinkType linkType = LinkType.fromSerializedValue(kv.getValueArray()[kv.getValueOffset()]);
-                    if (rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0 && linkType == LinkType.INDEX_TABLE) {
+                    LinkType linkType = LinkType.fromSerializedValue(
+                            kv.getValueArray()[kv.getValueOffset()]);
+                    if (rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0 &&
+                            linkType == LinkType.INDEX_TABLE) {
                         indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-                    } else if (tableType == PTableType.VIEW && (linkType == LinkType.PARENT_TABLE || linkType == LinkType.PHYSICAL_TABLE)) {
-                        // Populate the delete mutations for parent->child link for the child view in question,
-                        // which we issue to SYSTEM.CHILD_LINK later
-                        Cell parentTenantIdCell = MetaDataUtil.getCell(results, PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES);
-                        PName parentTenantId = parentTenantIdCell != null ? PNameFactory.newName(parentTenantIdCell.getValueArray(), parentTenantIdCell.getValueOffset(), parentTenantIdCell.getValueLength()) : null;
-                        byte[] linkKey = MetaDataUtil.getChildLinkKey(parentTenantId, table.getParentSchemaName(), table.getParentTableName(), table.getTenantId(), table.getName());
+                    } else if (tableType == PTableType.VIEW && (linkType == LinkType.PARENT_TABLE ||
+                            linkType == LinkType.PHYSICAL_TABLE)) {
+                        // Populate the delete mutations for parent->child link for the child view
+                        // in question, which we issue to SYSTEM.CHILD_LINK later
+                        Cell parentTenantIdCell = MetaDataUtil.getCell(results,
+                                PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES);
+                        PName parentTenantId = parentTenantIdCell != null ?
+                                PNameFactory.newName(parentTenantIdCell.getValueArray(),
+                                        parentTenantIdCell.getValueOffset(),
+                                        parentTenantIdCell.getValueLength()) : null;
+                        byte[] linkKey = MetaDataUtil.getChildLinkKey(parentTenantId,
+                                table.getParentSchemaName(), table.getParentTableName(),
+                                table.getTenantId(), table.getName());
                         Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                         childLinkMutations.add(linkDelete);
                     }
                 }
-                Delete delete = new Delete(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(), clientTimeStamp);
+                Delete delete = new Delete(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+                        clientTimeStamp);
                 catalogMutations.add(delete);
                 results.clear();
                 scanner.next(results);
@@ -2560,87 +2569,84 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             // of the client.
             Delete delete = new Delete(indexKey, clientTimeStamp);
             catalogMutations.add(delete);
-            MetaDataMutationResult result =
-                    doDropTable(indexKey, tenantId, schemaName, indexName, tableName, PTableType.INDEX,
-                            catalogMutations, childLinkMutations, invalidateList, tableNamesToDelete, sharedTablesToDelete, false, clientVersion);
+            MetaDataMutationResult result = doDropTable(indexKey, tenantId, schemaName, indexName,
+                    tableName, PTableType.INDEX, catalogMutations, childLinkMutations,
+                    invalidateList, tableNamesToDelete, sharedTablesToDelete, clientVersion);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 return result;
             }
         }
 
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && tableType == PTableType.VIEW) {
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                    env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                PTable pTable = PhoenixRuntime.getTableNoCache(connection,
+                        table.getParentName().getString());
                 table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
             }
         }
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
-                EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete, sharedTablesToDelete);
+                EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete,
+                sharedTablesToDelete);
     }
 
     /**
-     * Validate if mutation is allowed on parent table/view
-     * based on their child views.
-     * If this method returns MetaDataMutationResult, mutation is not allowed,
-     * and returned object will contain returnCode
-     * (MutationCode) to indicate the underlying
-     * problem (validation failure code).
+     * Validate if mutation is allowed on a parent table/view based on their child views.
+     * If this method returns MetaDataMutationResult, mutation is not allowed, and returned object
+     * will contain returnCode (MutationCode) to indicate the underlying problem
+     * (validation failure code).
      *
      * @param expectedType expected type of PTable
      * @param clientTimeStamp client timestamp, e.g check
-     *     {@link MetaDataUtil#getClientTimeStamp(List)}
+     * {@link MetaDataUtil#getClientTimeStamp(List)}
      * @param tenantId tenant Id
      * @param schemaName schema name
-     * @param tableName table name
-     * @param childViews child views of table or parent view.
-     *     Usually this is an empty list
-     *     passed to this method, and this method will add
-     *     child views retrieved using
-     *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
-     * @param clientVersion client version, used to determine if
-     *     mutation is allowed.
-     * @return Optional.empty() if mutation is allowed on parent
-     *     table/view. If not allowed, returned Optional object
-     *     will contain metaDataMutationResult with MutationCode.
-     * @throws IOException if something goes wrong while retrieving
-     *     child views using
-     *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
-     * @throws SQLException if something goes wrong while retrieving
-     *     child views using
-     *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
+     * @param tableOrViewName table or view name
+     * @param childViews child views of table or parent view. Usually this is an empty list
+     *     passed to this method, and this method will add child views retrieved using
+     *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
+     *     long, boolean)}
+     * @param clientVersion client version, used to determine if mutation is allowed.
+     * @return Optional.empty() if mutation is allowed on parent table/view. If not allowed,
+     *     returned Optional object will contain metaDataMutationResult with MutationCode.
+     * @throws IOException if something goes wrong while retrieving child views using
+     *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
+     *     long, boolean)}
+     * @throws SQLException if something goes wrong while retrieving child views using
+     *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
+     *     long, boolean)}
      */
     private Optional<MetaDataMutationResult> validateIfMutationAllowedOnParent(
             final PTableType expectedType, final long clientTimeStamp,
             final byte[] tenantId, final byte[] schemaName,
-            final byte[] tableName, final List<PTable> childViews,
+            final byte[] tableOrViewName, final List<PTable> childViews,
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
-        if (expectedType == PTableType.TABLE ||
-                expectedType == PTableType.VIEW) {
-            childViews.addAll(findAllChildViews(clientTimeStamp, clientVersion,
-                tenantId, schemaName, tableName));
+        if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
+            try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
+                    getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
+                childViews.addAll(findAllDescendantViews(hTable, env.getConfiguration(),
+                        tenantId, schemaName, tableOrViewName, clientTimeStamp, false)
+                        .getFirst());
+            }
+
             if (!childViews.isEmpty()) {
-                // From 4.15 onwards we allow SYSTEM.CATALOG to split and no
-                // longer propagate parent
-                // metadata changes to child views.
-                // If the client is on a version older than 4.15 we have to
-                // block adding a column to a parent table/view as we no
-                // longer lock the parent table on the server side
-                // while creating a child view to prevent conflicting changes.
+                // From 4.15 onwards we allow SYSTEM.CATALOG to split and no longer
+                // propagate parent metadata changes to child views.
+                // If the client is on a version older than 4.15 we have to block adding a
+                // column to a parent as we no longer lock the parent on the
+                // server side while creating a child view to prevent conflicting changes.
                 // This is handled on the client side from 4.15 onwards.
-                // Also if
-                // QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is
-                // true, we block adding a column to a parent table/view so
-                // that we can rollback the upgrade if required.
+                // Also if QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true,
+                // we block adding a column to a parent so that we can rollback the
+                // upgrade if required.
                 if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
                     isMutationAllowed = false;
-                    LOGGER.error("Unable to add or drop a column as the " +
-                        "client is older than {}",
-                        MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
+                    LOGGER.error("Unable to add or drop a column as the client is older than {}",
+                            MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
                 } else if (allowSplittableSystemCatalogRollback) {
                     isMutationAllowed = false;
-                    LOGGER.error("Unable to add or drop a column as the {} " +
-                        "config is set to true",
+                    LOGGER.error("Unable to add or drop a column as the {} config is set to true",
                         QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
@@ -2663,15 +2669,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
-        byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-        byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        byte[] tableOrViewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableOrViewName);
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
         // server-side, except for indexing, we always expect the keyvalues to be standard KeyValues
-        PTableType expectedType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE,
-                new ImmutableBytesWritable());
+        PTableType expectedType = MetaDataUtil.getTableType(tableMetadata,
+                GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
         List<byte[]> tableNamesToDelete = Lists.newArrayList();
         List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
-        List<PTable> childViews = Lists.newArrayList();
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
         try {
             Region region = env.getRegion();
@@ -2682,12 +2687,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
             List<RowLock> locks = Lists.newArrayList();
             try {
-                Optional<MetaDataMutationResult> mutationResult =
-                    validateIfMutationAllowedOnParent(expectedType,
-                        clientTimeStamp, tenantId, schemaName, tableName,
+                List<PTable> childViews = Lists.newArrayList();
+                Optional<MetaDataMutationResult> mutationResult = validateIfMutationAllowedOnParent(
+                        expectedType, clientTimeStamp, tenantId, schemaName, tableOrViewName,
                         childViews, clientVersion);
-                // only if mutation is allowed, we should get Optional.empty()
-                // here
+                // only if mutation is allowed, we should get Optional.empty() here
                 if (mutationResult.isPresent()) {
                     return mutationResult.get();
                 }
@@ -2708,13 +2712,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     }
                 }
                 // Get client timeStamp from mutations
-                if (table == null
-                        && (table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion)) == null) {
+                if (table == null && (table = buildTable(key, cacheKey, region,
+                        HConstants.LATEST_TIMESTAMP, clientVersion)) == null) {
                     // if not found then call newerTableExists and add delete marker for timestamp
                     // found
                     table = buildDeletedTable(key, cacheKey, region, clientTimeStamp);
                     if (table != null) {
-                        LOGGER.info("Found newer table deleted as of " + table.getTimeStamp() + " versus client timestamp of " + clientTimeStamp);
+                        LOGGER.info("Found newer table deleted as of " + table.getTimeStamp()
+                                + " versus client timestamp of " + clientTimeStamp);
                         return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                                 EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
@@ -2727,7 +2732,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 if (parentTable != null) {
                     Properties props = new Properties();
                     if (tenantId != null) {
-                        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(tenantId));
+                        props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(tenantId));
                     }
                     if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
                         props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
@@ -2735,21 +2740,22 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     try (PhoenixConnection connection =
                                  QueryUtil.getConnectionOnServer(props, env.getConfiguration())
                                          .unwrap(PhoenixConnection.class)) {
-                        table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, parentTable);
+                        table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
+                                parentTable);
                     }
                 }
 
                 if (table.getTimeStamp() >= clientTimeStamp) {
-                    LOGGER.info("Found newer table as of " + table.getTimeStamp() + " versus client timestamp of "
-                            + clientTimeStamp);
+                    LOGGER.info("Found newer table as of " + table.getTimeStamp()
+                            + " versus client timestamp of " + clientTimeStamp);
                     return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), table);
                 } else if (isTableDeleted(table)) {
                     return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                             EnvironmentEdgeManager.currentTimeMillis(), null);
                 }
-                long expectedSeqNum = MetaDataUtil.getSequenceNumber(tableMetadata) - 1; // lookup TABLE_SEQ_NUM in
-                // tableMetaData
+                // lookup TABLE_SEQ_NUM in tableMetaData
+                long expectedSeqNum = MetaDataUtil.getSequenceNumber(tableMetadata) - 1;
 
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("For table " + Bytes.toStringBinary(key) + " expecting seqNum "
@@ -2781,19 +2787,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
                 if (!childViews.isEmpty()) {
                     // validate the add or drop column mutations
-                    result = mutator.validateWithChildViews(table, childViews, tableMetadata, schemaName, tableName);
+                    result = mutator.validateWithChildViews(table, childViews, tableMetadata,
+                            schemaName, tableOrViewName);
                     if (result != null) {
                         return result;
                     }
                 }
 
                 getCoprocessorHost().preAlterTable(Bytes.toString(tenantId),
-                        SchemaUtil.getTableName(schemaName, tableName),
+                        SchemaUtil.getTableName(schemaName, tableOrViewName),
                         TableName.valueOf(table.getPhysicalName().getBytes()),
                         getParentPhysicalTableName(table), table.getType());
 
-                result = mutator.validateAndAddMetadata(table, rowKeyMetaData, tableMetadata, region,
-                        invalidateList, locks, clientTimeStamp, clientVersion,
+                result = mutator.validateAndAddMetadata(table, rowKeyMetaData, tableMetadata,
+                        region, invalidateList, locks, clientTimeStamp, clientVersion,
                         ((ExtendedCellBuilder) env.getCellBuilder()));
                 // if the update mutation caused tables to be deleted, the mutation code returned
                 // will be MutationCode.TABLE_ALREADY_EXISTS
@@ -2802,18 +2809,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                     return result;
                 }
 
-                // drop any indexes on the base table that need the column that is going to be dropped
-                List<Pair<PTable, PColumn>> tableAndDroppedColumnPairs = mutator.getTableAndDroppedColumnPairs();
+                // drop any indexes on the base table that need the column that is going to be
+                // dropped
+                List<Pair<PTable, PColumn>> tableAndDroppedColumnPairs =
+                        mutator.getTableAndDroppedColumnPairs();
                 Iterator<Pair<PTable, PColumn>> iterator = tableAndDroppedColumnPairs.iterator();
                 while (iterator.hasNext()) {
                     Pair<PTable, PColumn> pair = iterator.next();
-                    // remove the current table and column being dropped from the list
-                    // and drop any indexes that require the column being dropped while holding the row lock
+                    // remove the current table and column being dropped from the list and drop any
+                    // indexes that require the column being dropped while holding the row lock
                     if (table.equals(pair.getFirst())) {
                         iterator.remove();
-                        result = dropIndexes(env, pair.getFirst(), invalidateList, locks, clientTimeStamp,
-                                tableMetadata, pair.getSecond(), tableNamesToDelete, sharedTablesToDelete,
-                                clientVersion);
+                        result = dropIndexes(env, pair.getFirst(), invalidateList, locks,
+                                clientTimeStamp, tableMetadata, pair.getSecond(),
+                                tableNamesToDelete, sharedTablesToDelete, clientVersion);
                         if (result != null
                                 && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                             return result;
@@ -2836,11 +2845,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 separateLocalAndRemoteMutations(region, tableMetadata, localMutations,
                         remoteMutations);
                 if (!remoteMutations.isEmpty()) {
-                    // there should only be remote mutations if we are adding a column to a view that uses encoded column qualifiers
-                    // (the remote mutations are to update the encoded column qualifier counter on the parent table)
+                    // there should only be remote mutations if we are adding a column to a view
+                    // that uses encoded column qualifiers (the remote mutations are to update the
+                    // encoded column qualifier counter on the parent table)
                     if (mutator.getMutateColumnType() == ColumnMutator.MutateColumnType.ADD_COLUMN
                             && type == PTableType.VIEW
-                            && table.getEncodingScheme() != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
+                            && table.getEncodingScheme() !=
+                            QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
                         processRemoteRegionMutations(
                                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
                                 MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
@@ -2850,7 +2861,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                                         : ByteUtil.EMPTY_BYTE_ARRAY,
                                 table.getParentTableName().getBytes());
                     } else {
-                        String msg = "Found unexpected mutations while adding or dropping column to " + fullTableName;
+                        String msg = "Found unexpected mutations while adding or dropping column "
+                                + "to " + fullTableName;
                         LOGGER.error(msg);
                         for (Mutation m : remoteMutations) {
                             LOGGER.debug("Mutation rowkey : " + Bytes.toStringBinary(m.getRow()));
@@ -2859,8 +2871,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         throw new IllegalStateException(msg);
                     }
                 }
-                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations, Collections.<byte[]>emptySet(),
-                    HConstants.NO_NONCE, HConstants.NO_NONCE);
+                mutateRowsWithLocks(this.accessCheckEnabled, region, localMutations,
+                        Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
                 // Invalidate from cache
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
@@ -2868,28 +2880,33 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // Get client timeStamp from mutations, since it may get updated by the
                 // mutateRowsWithLocks call
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
-                // if the update mutation caused tables to be deleted just return the result which will contain the table to be deleted
+                // if the update mutation caused tables to be deleted just return the result which
+                // will contain the table to be deleted
                 if (result != null
                         && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 } else {
-                    table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
+                    table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
+                            clientVersion);
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
-                        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                            PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
-                            table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                            PTable pTable = PhoenixRuntime.getTableNoCache(connection,
+                                    table.getParentName().getString());
+                            table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
+                                    table, pTable);
                         }
                     }
-                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table,
-                            tableNamesToDelete, sharedTablesToDelete);
+                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
+                            currentTime, table, tableNamesToDelete, sharedTablesToDelete);
                 }
             } finally {
                 ServerUtil.releaseRowLocks(locks);
-                // drop indexes on views that require the column being dropped
-                // these could be on a different region server so don't hold row locks while dropping them
+                // drop indexes on views that require the column being dropped. These could be on a
+                // different region server so don't hold row locks while dropping them
                 for (Pair<PTable, PColumn> pair : mutator.getTableAndDroppedColumnPairs()) {
-                    result = dropRemoteIndexes(env, pair.getFirst(), clientTimeStamp, pair.getSecond(),
-                            tableNamesToDelete, sharedTablesToDelete);
+                    result = dropRemoteIndexes(env, pair.getFirst(), clientTimeStamp,
+                            pair.getSecond(), tableNamesToDelete, sharedTablesToDelete);
                     if (result != null
                             && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                         return result;
@@ -3113,10 +3130,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     private MetaDataMutationResult dropIndexes(RegionCoprocessorEnvironment env, PTable table,
-                                               List<ImmutableBytesPtr> invalidateList, List<RowLock> locks,
-                                               long clientTimeStamp, List<Mutation> tableMetaData,
-                                               PColumn columnToDelete, List<byte[]> tableNamesToDelete,
-                                               List<SharedTableState> sharedTablesToDelete, int clientVersion)
+            List<ImmutableBytesPtr> invalidateList, List<RowLock> locks, long clientTimeStamp,
+            List<Mutation> tableMetaData, PColumn columnToDelete, List<byte[]> tableNamesToDelete,
+            List<SharedTableState> sharedTablesToDelete, int clientVersion)
             throws IOException, SQLException {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
@@ -3127,19 +3143,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         env.getConfiguration()).unwrap(PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             // ignore any indexes derived from ancestors
-            if (index.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            if (index.getName().getString().contains(
+                    QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 continue;
             }
-            byte[] tenantId = index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes();
+            byte[] tenantId = index.getTenantId() == null ?
+                    ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes();
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
             byte[] indexKey =
                     SchemaUtil.getTableKey(tenantId, index.getSchemaName().getBytes(), index
                             .getTableName().getBytes());
-            Pair<String, String> columnToDeleteInfo = new Pair<>(columnToDelete.getFamilyName().getString(),
-                    columnToDelete.getName().getString());
-            ColumnReference colDropRef = new ColumnReference(columnToDelete.getFamilyName().getBytes(),
+            Pair<String, String> columnToDeleteInfo =
+                    new Pair<>(columnToDelete.getFamilyName().getString(),
+                            columnToDelete.getName().getString());
+            ColumnReference colDropRef = new ColumnReference(
+                    columnToDelete.getFamilyName().getBytes(),
                     columnToDelete.getColumnQualifierBytes());
-            boolean isColumnIndexed = indexMaintainer.getIndexedColumnInfo().contains(columnToDeleteInfo);
+            boolean isColumnIndexed = indexMaintainer.getIndexedColumnInfo().contains(
+                    columnToDeleteInfo);
             boolean isCoveredColumn = indexMaintainer.getCoveredColumns().contains(colDropRef);
             // If index requires this column for its pk, then drop it
             if (isColumnIndexed) {
@@ -3160,11 +3181,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // occur while we're dropping it.
                 acquireLock(region, indexKey, locks);
                 List<Mutation> childLinksMutations = Lists.newArrayList();
-                MetaDataMutationResult result = doDropTable(indexKey, tenantId, index.getSchemaName().getBytes(),
-                        index.getTableName().getBytes(), table.getName().getBytes(), index.getType(),
-                        tableMetaData, childLinksMutations, invalidateList, tableNamesToDelete, sharedTablesToDelete,
-                        false, clientVersion);
-                if (result != null && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                MetaDataMutationResult result = doDropTable(indexKey, tenantId,
+                        index.getSchemaName().getBytes(), index.getTableName().getBytes(),
+                        table.getName().getBytes(), index.getType(), tableMetaData,
+                        childLinksMutations, invalidateList, tableNamesToDelete,
+                        sharedTablesToDelete, clientVersion);
+                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
                 // there should be no child links to delete since we are just dropping an index
@@ -3224,7 +3246,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 // if the index is not present on the current region make an rpc to drop it
                 Properties props = new Properties();
                 if (tenantId != null) {
-                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, Bytes.toString(tenantId));
+                    props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(tenantId));
                 }
                 if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
                     props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
