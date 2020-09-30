@@ -48,7 +48,7 @@ public class UngroupedAggregateRegionObserverTest {
         Mockito.when(context.getEnvironment()).thenReturn(env);
         Mockito.when(env.getConfiguration()).thenReturn(conf);
         ungroupObserver.preClose(context, true);
-        ungroupObserver.preRollBackSplit(context);
+        ungroupObserver.postRollBackSplit(context);
         Field fieldTag = ungroupClass.getDeclaredField("isRegionClosingOrSplitting");
         fieldTag.setAccessible(true);
         Boolean isRegionClosingOrSplitting = (Boolean) fieldTag.get(ungroupObserver);

@@ -1438,7 +1438,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * @throws IOException
      */
     @Override
-    public void preRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx) throws IOException {
+    public void postRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx) throws IOException {
         synchronized (lock) {
             isRegionClosingOrSplitting = false;
         }
