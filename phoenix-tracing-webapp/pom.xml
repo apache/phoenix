@@ -124,6 +124,9 @@
             </execution>
           </executions>
           <configuration>
+            <phantomjs>
+              <version>2.1.1</version>
+            </phantomjs>
             <!--browserVersion>FIREFOX_16</browserVersion-->
             <preloadSources combine.children="append">
               <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
