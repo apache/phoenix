@@ -337,6 +337,49 @@ public class ViewUtil {
     /**
      * Attempt to drop an orphan child view i.e. a child view for which we see a parent->child entry
      * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
+     * Its better to use this version, and trying to get the hTable Lazily instead of checking it
+     * first via HBase admin call
+     * @param env Region Coprocessor environment
+     * @param tenantIdBytes tenantId of the parent
+     * @param schemaName schema of the parent
+     * @param tableOrViewName parent table/view name
+     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
+     * @throws SQLException thrown if there is an error getting a connection to the server or
+     * an error retrieving the PTable for a child view
+     */
+    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
+                                      byte[] schemaName, byte[] tableOrViewName)
+            throws IOException, SQLException {
+        Configuration conf = env.getConfiguration();
+        Table hTable = null;
+        try {
+            byte[] sysCatOrSysChildLink = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                    conf).getName();
+            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
+                    sysCatOrSysChildLink, env.getConfiguration()));
+        } catch (Exception e){
+            try {
+                byte[] sysCatOrSysChildLink = SchemaUtil.getPhysicalTableName(
+                        SYSTEM_CHILD_LINK_NAME_BYTES, conf).getName();
+                hTable = ServerUtil.getHTableForCoprocessorScan(env,
+                        SchemaUtil.getPhysicalTableName(sysCatOrSysChildLink,
+                                env.getConfiguration()));
+            } catch (Exception e1){
+                logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
+            }
+        }
+        // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
+        if (hTable==null) {
+            return;
+        }
+        dropChildViewsCommon(env, tenantIdBytes, schemaName, tableOrViewName, hTable);
+    }
+
+
+    /**
+     * Attempt to drop an orphan child view i.e. a child view for which we see a parent->child entry
+     * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
+     * We use this version when sysCatOrSysChildLink value is known
      * @param env Region Coprocessor environment
      * @param tenantIdBytes tenantId of the parent
      * @param schemaName schema of the parent
@@ -353,7 +396,7 @@ public class ViewUtil {
         Table hTable = null;
         try {
             hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
-                            sysCatOrSysChildLink, env.getConfiguration()));
+                    sysCatOrSysChildLink, env.getConfiguration()));
         } catch (Exception e){
             logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
         }
@@ -361,6 +404,12 @@ public class ViewUtil {
         if (hTable==null) {
             return;
         }
+        dropChildViewsCommon(env, tenantIdBytes, schemaName, tableOrViewName, hTable);
+    }
+
+    public static void dropChildViewsCommon(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
+                                      byte[] schemaName, byte[] tableOrViewName, Table hTable)
+            throws IOException, SQLException {
 
         TableViewFinderResult childViewsResult;
         try {
