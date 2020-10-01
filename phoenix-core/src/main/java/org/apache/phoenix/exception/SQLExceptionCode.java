@@ -37,6 +37,7 @@ import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
+import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -509,6 +510,16 @@ public enum SQLExceptionCode {
         public SQLException newException(SQLExceptionInfo info) {
             return new MaxMutationSizeBytesExceededException(info.getMaxMutationSizeBytes(),
                     info.getMutationSizeBytes());
+        }
+    }),
+    MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED(732,
+            "LIM03", "The Phoenix Column size is bigger than maximum " +
+            "HBase client key value allowed size for ONE_CELL_PER_COLUMN table, " +
+            "try upserting column in smaller value", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new MaxPhoenixColumnSizeExceededException(info.getMessage(), info.getMaxPhoenixColumnSizeBytes(),
+                    info.getPhoenixColumnSizeBytes());
         }
     }),
     INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
