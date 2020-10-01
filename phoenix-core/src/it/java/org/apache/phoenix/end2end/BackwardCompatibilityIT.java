@@ -379,6 +379,22 @@ public class BackwardCompatibilityIT {
         ProcessBuilder pb = new ProcessBuilder(cmdParams);
         final Process p = pb.start();
         final StringBuffer sb = new StringBuffer();
+        //Capture the output stream if any from the execution of the script
+        Thread outputStreamThread = new Thread() {
+            @Override
+            public void run() {
+                try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                } catch (final Exception e) {
+                    sb.append(e.getMessage());
+                }
+            }
+        };
+        outputStreamThread.start();
         //Capture the error stream if any from the execution of the script
         Thread errorStreamThread = new Thread() {
             @Override
