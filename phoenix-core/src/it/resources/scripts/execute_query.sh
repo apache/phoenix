@@ -30,8 +30,8 @@ if [ -n $maven_home ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
-mvn dependency:get -Dartifact=org.apache.phoenix:phoenix-client:$client_version
-mvn dependency:copy -Dartifact=org.apache.phoenix:phoenix-client:$client_version \
+mvn -B dependency:get -Dartifact=org.apache.phoenix:phoenix-client:$client_version
+mvn -B dependency:copy -Dartifact=org.apache.phoenix:phoenix-client:$client_version \
 -DoutputDirectory=$tmp_dir
 
 phoenix_client_jar=$tmp_dir/phoenix-client-$client_version.jar
