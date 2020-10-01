@@ -30,3 +30,7 @@ RUN rm -rf /opt/spotbugs \
     && cd .. \
     && rm -rf ./spotbugs
 ENV SPOTBUGS_HOME /opt/spotbugs
+#####
+# Enable spotbugs prefix for maven
+#####
+RUN sed -i -e 's/<\/pluginGroups>/<pluginGroup>com.github.spotbugs<\/pluginGroup><\/pluginGroups>/' /etc/maven/settings.xml

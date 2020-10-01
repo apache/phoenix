@@ -118,6 +118,7 @@ pipeline {
                     post {
                         always {
                             // Has to be relative to WORKSPACE.
+                            junit testResults: "${WORKDIR_REL}/${PATCH_REL}/**/target/**/TEST-*.xml", allowEmptyResults: true
                             archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit"
                             archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/**/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit/**/*"
                             publishHTML target: [
