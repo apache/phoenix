@@ -71,15 +71,19 @@ pipeline {
                             timeout(time: 5, unit: 'HOURS')
                         }
                         steps {
-                            sh """#!/bin/bash
-                                ulimit -a
-                                mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
-                            """
+                            dir("HBASE_${HBASE_PROFILE}") {
+                                checkout scm
+                                sh """#!/bin/bash
+                                    ulimit -a
+                                    mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
+                                """
+                            }
                         }
                         post {
                             always {
-                                junit '**/target/surefire-reports/TEST-*.xml'
-                                junit '**/target/failsafe-reports/TEST-*.xml'
+                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt,**/target/failsafe-reports/*.txt,**/target/surefire-reports/*.dumpstream,**/target/failsafe-reports/*.dumpstream,**/target/surefire-reports/*.dump,**/target/failsafe-reports/*.dump"
+                                junit "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/TEST-*.xml"
+                                junit "HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/TEST-*.xml"
                             }
                         }
                     }
