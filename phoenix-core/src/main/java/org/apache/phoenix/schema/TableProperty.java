@@ -260,8 +260,10 @@ public enum TableProperty {
                 } else if ("NONE".equalsIgnoreCase(strValue)) {
                     return PHOENIX_TTL_NOT_DEFINED;
                 }
-            } else {
-                return value == null ? null : ((Number) value).longValue();
+            } else if (value != null) {
+                long valueInSeconds = ((Number) value).longValue();
+                // Value is specified in seconds, so convert it to ms.
+                return valueInSeconds * 1000;
             }
             return value;
         }
