@@ -81,7 +81,12 @@ pipeline {
                         }
                         post {
                             always {
-                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt,**/target/failsafe-reports/*.txt,**/target/surefire-reports/*.dumpstream,**/target/failsafe-reports/*.dumpstream,**/target/surefire-reports/*.dump,**/target/failsafe-reports/*.dump"
+                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt,\
+                                    HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/*.txt,\
+                                    HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.dumpstream,\
+                                    HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/*.dumpstream,\
+                                    HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.dump,\
+                                    HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/*.dump"
                                 junit "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/TEST-*.xml"
                                 junit "HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/TEST-*.xml"
                             }
