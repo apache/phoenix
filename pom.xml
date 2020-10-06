@@ -578,6 +578,9 @@
           <excludes>
             <!-- Header on changelog isn't normal -->
             <exclude>CHANGES</exclude>
+            <!-- create-release scripts -->
+            <exclude>dev/create-release/README.txt</exclude>
+            <exclude>dev/create-release/vote.tmpl</exclude>
             <!-- IDE configuration -->
             <exclude>dev/phoenix.importorder</exclude>
             <!-- Release L&N -->
