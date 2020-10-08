@@ -90,6 +90,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -1103,13 +1104,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             if (oldCoproc) {
                 return new IndexerRegionScanner(scanner, region, scan, env, this);
             } else {
-                return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
+                if (region.getTableDesc().hasCoprocessor(IndexRegionObserver.class.getCanonicalName())) {
+                    return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
+                } else {
+                    return new IndexRepairRegionScanner(scanner, region, scan, env, this);
+                }
             }
         }
         if (oldCoproc) {
             return new IndexerRegionScanner(innerScanner, region, scan, env, this);
         } else {
-            return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
+            if (region.getTableDesc().hasCoprocessor(IndexRegionObserver.class.getCanonicalName())) {
+                return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
+            } else {
+                return new IndexRepairRegionScanner(innerScanner, region, scan, env, this);
+            }
         }
     }
     

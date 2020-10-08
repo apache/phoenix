@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
@@ -57,6 +58,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

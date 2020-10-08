@@ -28,7 +28,7 @@ import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
 
-import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.getPerTaskIndexKeyToMutationMaps;
+import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.getPerTaskIndexMutationMaps;
 
 public class IndexRebuildRegionScannerTest{
     private static final Random RAND = new Random(7);
@@ -50,7 +50,7 @@ public class IndexRebuildRegionScannerTest{
             }
             // The last end key is always null
             endKeys[i - 1] = null;
-            List<Map<byte[], List<Mutation>>> mapList = getPerTaskIndexKeyToMutationMaps(indexKeyToMutationMap, endKeys, MAX_SPLIT_SIZE);
+            List<Map<byte[], List<Mutation>>> mapList = getPerTaskIndexMutationMaps(indexKeyToMutationMap, endKeys, MAX_SPLIT_SIZE);
             int regionIndex = 0;
             int regionCount = i;
             for (Map<byte[], List<Mutation>> map : mapList) {
