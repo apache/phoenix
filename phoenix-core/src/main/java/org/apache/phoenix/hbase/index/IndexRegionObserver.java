@@ -118,12 +118,14 @@ public class IndexRegionObserver extends BaseRegionObserver {
    * Class to represent pending data table rows
    */
   private static class PendingRow {
-      private long count = 1;
+      private int count;
       private BatchMutateContext lastContext;
 
       PendingRow(BatchMutateContext context) {
+          count = 1;
           lastContext = context;
       }
+
       public void add(BatchMutateContext context) {
           count++;
           lastContext = context;
@@ -133,7 +135,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
           count--;
       }
 
-      public long getCount() {
+      public int getCount() {
           return count;
       }
 
@@ -157,11 +159,22 @@ public class IndexRegionObserver extends BaseRegionObserver {
   public enum BatchMutatePhase {
       PRE, POST, FAILED
   }
+
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
 
+  /**
+   * The concurrent batch of mutations is a set such that every pair of batches in this set has at least one common row.
+   * Since a BatchMutateContext object of a batch is modified only after the row locks for all the rows that are mutated
+   * by this batch are acquired, there can be only one thread can acquire the locks for its batch and safely access
+   * all the batch contexts in the set of concurrent batches. Because of this, we do not read atomic variables or
+   * additional locks to serialize the access to the BatchMutateContext objects.
+   */
+
   private static class BatchMutateContext {
       private BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
+      // The max of reference counts on the pending rows of this batch at the time this batch arrives
+      private int maxPendingRowCount = 0;
       private final int clientVersion;
       // The collection of index mutations that will be applied before the data table mutations. The empty column (i.e.,
       // the verified column) will have the value false ("unverified") on these mutations
@@ -192,7 +205,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
       public Put getNextDataRowState(ImmutableBytesPtr rowKeyPtr) {
           Pair<Put, Put> rowState = dataRowStates.get(rowKeyPtr);
           if (rowState != null) {
-              return dataRowStates.get(rowKeyPtr).getSecond();
+              return rowState.getSecond();
           }
           return null;
       }
@@ -204,6 +217,10 @@ public class IndexRegionObserver extends BaseRegionObserver {
           CountDownLatch countDownLatch = new CountDownLatch(1);
           waitList.add(countDownLatch);
           return countDownLatch;
+      }
+
+      public int getMaxPendingRowCount() {
+          return maxPendingRowCount;
       }
   }
 
@@ -248,7 +265,7 @@ public class IndexRegionObserver extends BaseRegionObserver {
   private String dataTableName;
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
-  private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 1000;
+  private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
 
   @Override
   public void start(CoprocessorEnvironment e) throws IOException {
@@ -645,6 +662,9 @@ public class IndexRegionObserver extends BaseRegionObserver {
                     context.lastConcurrentBatchContext = new HashMap<>();
                 }
                 context.lastConcurrentBatchContext.put(rowKeyPtr, pendingRow.getLastContext());
+                if (context.maxPendingRowCount < pendingRow.getCount()) {
+                    context.maxPendingRowCount = pendingRow.getCount();
+                }
                 Put put = pendingRow.getLastContext().getNextDataRowState(rowKeyPtr);
                 if (put != null) {
                     context.dataRowStates.put(rowKeyPtr, new Pair<Put, Put>(put, new Put(put)));
@@ -859,7 +879,6 @@ public class IndexRegionObserver extends BaseRegionObserver {
             throws Throwable {
         boolean done;
         BatchMutatePhase phase;
-        long start = EnvironmentEdgeManager.currentTimeMillis();
         done = true;
         for (BatchMutateContext lastContext : context.lastConcurrentBatchContext.values()) {
             phase = lastContext.getCurrentPhase();
@@ -868,14 +887,16 @@ public class IndexRegionObserver extends BaseRegionObserver {
                 break;
             }
             if (phase == BatchMutatePhase.PRE) {
-                if (EnvironmentEdgeManager.currentTimeMillis() - start > concurrentMutationWaitDuration) {
-                    done = false;
-                    break;
-                }
                 CountDownLatch countDownLatch = lastContext.getCountDownLatch();
                 // Release the locks so that the previous concurrent mutation can go into the post phase
                 unlockRows(context);
-                countDownLatch.await(DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS, TimeUnit.MILLISECONDS);
+                // Wait for at most one concurrentMutationWaitDuration for each level in the dependency tree of batches.
+                // lastContext.getMaxPendingRowCount() is the depth of the subtree rooted at the batch pointed by lastContext
+                if (!countDownLatch.await((lastContext.getMaxPendingRowCount() + 1) * concurrentMutationWaitDuration,
+                        TimeUnit.MILLISECONDS)) {
+                    done = false;
+                    break;
+                }
                 // Acquire the locks again before letting the region proceed with data table updates
                 lockRows(context);
             }
