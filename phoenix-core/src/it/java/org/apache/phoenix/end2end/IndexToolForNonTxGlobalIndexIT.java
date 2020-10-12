@@ -1116,7 +1116,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // Run the index MR job and verify that the index table is built correctly
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
-            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            IndexTool indexTool = IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName, dataTableName,
+                indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, IndexTool.IndexDisableLoggingType.NONE, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -1148,9 +1149,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(1));
             IndexTool indexTool =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName,
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
                         dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE,
-                        new String[0]);
+                        IndexTool.IndexDisableLoggingType.NONE ,new String[0]);
             assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(3,
                 indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
@@ -1201,9 +1202,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
             IndexTool indexTool =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName,
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
                         dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER,
-                        "-st", String.valueOf(minTs), "-et",
+                        IndexTool.IndexDisableLoggingType.NONE, "-st", String.valueOf(minTs), "-et",
                         String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
             assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(3,
