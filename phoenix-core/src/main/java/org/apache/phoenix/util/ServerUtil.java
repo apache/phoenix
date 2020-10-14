@@ -42,11 +42,15 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.exceptions.FailedSanityCheckException;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.NoSuchColumnFamilyException;
+import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -116,6 +120,33 @@ public class ServerUtil {
                 return new DoNotRetryIOException(constructSQLErrorMessage(code, t, msg), t);
             }
         }
+    }
+
+    /**
+     * Converts a batch operation status into an IOException if the operation failed partially or completely. In cases
+     * of multiple failures, non-retriable errors are prioritized. If any part of the batch operation failed in a way
+     * that isn't retriable, an instance of the corresponding DoNotRetryIOException subtype is returned, even if other
+     * retriable errors are present. If all parts were completed successfully, null will be returned.
+     */
+    public static IOException createIOException(OperationStatus[] batchOperationStatus) {
+        IOException retriableException = null;
+        for (int i = 0; i < batchOperationStatus.length; i++) {
+            OperationStatus status = batchOperationStatus[i];
+            switch (status.getOperationStatusCode()) {
+                case SUCCESS:
+                    break;
+                case BAD_FAMILY:
+                    return new NoSuchColumnFamilyException(status.getExceptionMsg());
+                case SANITY_CHECK_FAILURE:
+                    return new FailedSanityCheckException(status.getExceptionMsg());
+                case STORE_TOO_BUSY:
+                    retriableException = new RegionTooBusyException(status.getExceptionMsg());
+                    break;
+                default:
+                    return new DoNotRetryIOException(status.getExceptionMsg());
+            }
+        }
+        return retriableException;
     }
 
     private static String constructSQLErrorMessage(SQLExceptionCode code, Throwable e, String message) {
