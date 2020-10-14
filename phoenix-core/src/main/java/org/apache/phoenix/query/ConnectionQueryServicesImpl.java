@@ -4277,12 +4277,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throws IOException,
             SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-        try {
-            getSysMutexPhysicalTableNameBytes();
-        } catch (TableNotFoundException e) {
-            throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
-                getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
-        }
         if (!writeMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null)) {
             throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
@@ -4299,8 +4293,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, familyName) :
                 SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
-            // an exception thrown
-            byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
+            // we should return false because without table, we cannot take a lock.
+            byte[] sysMutexPhysicalTableNameBytes;
+            try {
+                sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
+            } catch (TableNotFoundException e) {
+                return false;
+            }
             try (Table sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
