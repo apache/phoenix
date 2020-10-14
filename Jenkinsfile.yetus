@@ -22,7 +22,7 @@ pipeline {
     }
 
     options {
-        buildDiscarder(logRotator(daysToKeepStr: '7'))
+        buildDiscarder(logRotator(daysToKeepStr: '15', artifactDaysToKeepStr: '5'))
         timestamps()
     }
 
