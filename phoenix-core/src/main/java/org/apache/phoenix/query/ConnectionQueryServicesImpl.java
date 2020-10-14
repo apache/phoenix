@@ -4277,10 +4277,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throws IOException,
             SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-        byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
-        if(sysMutexPhysicalTableNameBytes == null) {
+        try {
+            getSysMutexPhysicalTableNameBytes();
+        } catch (TableNotFoundException e) {
             throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
-                    getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
+                getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
         }
         if (!writeMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null)) {
@@ -4294,11 +4295,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey =
-                    columnName != null
-                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
-                                familyName)
-                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null ?
+                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, familyName) :
+                SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
             byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
@@ -4338,11 +4337,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey =
-                    columnName != null
-                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
-                                familyName)
-                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null ?
+                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, familyName) :
+                SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
             byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
@@ -4365,16 +4362,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private byte[] getSysMutexPhysicalTableNameBytes() throws IOException, SQLException {
-        byte[] sysMutexPhysicalTableNameBytes = null;
-        try(Admin admin = getAdmin()) {
-            if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
-                sysMutexPhysicalTableNameBytes = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
+        try (Admin admin = getAdmin()) {
+            if (admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
+                return PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
             } else if (admin.tableExists(TableName.valueOf(
-                    SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName()))) {
-                sysMutexPhysicalTableNameBytes = SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName();
+                SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName()))) {
+                    return SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName();
             }
         }
-        return sysMutexPhysicalTableNameBytes;
+        throw new TableNotFoundException(SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME);
     }
 
     private String addColumn(String columnsToAddSoFar, String columns) {
