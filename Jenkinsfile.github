@@ -25,7 +25,7 @@ pipeline {
     options {
         // N.B. this is per-branch, which means per PR
         disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '15'))
+        buildDiscarder(logRotator(daysToKeepStr: '15', artifactDaysToKeepStr: '5'))
         timeout (time: 9, unit: 'HOURS')
         timestamps()
         skipDefaultCheckout()
