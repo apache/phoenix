@@ -73,7 +73,7 @@ public class PChar extends PDataType<String> {
         return object;
       }
       if (s.length() > maxLength) {
-        throw new DataExceedsCapacityException(this,maxLength,null);
+        throw new DataExceedsCapacityException(this, maxLength, null, null);
       }
       return Strings.padEnd(s, maxLength, ' ');
     }

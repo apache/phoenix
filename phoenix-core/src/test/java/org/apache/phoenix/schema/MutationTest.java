@@ -82,28 +82,41 @@ public class MutationTest extends BaseConnectionlessQueryTest {
             String bvalue = "01234567890123456789";
             assertEquals(20,PVarchar.INSTANCE.toBytes(bvalue).length);
             String value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉";
+            String validValue = "abcd";
+            String columnTypeInfo1 = "CHAR(3)";
+            String columnTypeInto2 = "VARBINARY(20)";
+            String columnTypeInto3 = "BINARY(20)";
+            String columnTypeInto4 = "VARCHAR(20)";
+
             assertTrue(value.length() <= maxLength2);
             assertTrue(PVarchar.INSTANCE.toBytes(value).length > maxLength2);
             conn.createStatement().execute("CREATE TABLE t1 (k1 char(" + maxLength1 + ") not null, k2 varchar(" + maxLength2 + "), "
                     + "v1 varchar(" + maxLength2 + "), v2 varbinary(" + maxLength2 + "), v3 binary(" + maxLength2 + "), constraint pk primary key (k1, k2))");
             conn.createStatement().execute("UPSERT INTO t1 VALUES('a','" + value + "', '" + value + "','" + bvalue + "','" + bvalue + "')");
             try {
-                conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('abcd','" + value + "')");
+                conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('"
+                        + validValue+ "','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(validValue));
+                assertTrue(e.getMessage().contains(columnTypeInfo1));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v2) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(columnTypeInto2));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v3) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(columnTypeInto3));
             }
             value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉碉碉";
             assertTrue(value.length() > maxLength2);
@@ -112,12 +125,16 @@ public class MutationTest extends BaseConnectionlessQueryTest {
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(columnTypeInto4));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('a','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(columnTypeInto4));
             }
         } finally {
             conn.close();
