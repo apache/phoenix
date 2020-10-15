@@ -4295,9 +4295,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey = columnName != null ?
-                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, familyName) :
-                SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null
+                ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName,
+                    columnName, familyName)
+                : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
             byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
@@ -4337,9 +4338,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey = columnName != null ?
-                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, familyName) :
-                SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null
+                ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName,
+                    columnName, familyName)
+                : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
             byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
