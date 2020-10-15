@@ -2579,9 +2579,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     }
 
     /**
-     * Validate if mutation is allowed on parent table/view based on their child views.
+     * Validate if mutation is allowed on parent table/view
+     * based on their child views.
      * If this method returns MetaDataMutationResult, mutation is not allowed,
-     * and returned object will contain returnCode (MutationCode) to indicate the underlying
+     * and returned object will contain returnCode
+     * (MutationCode) to indicate the underlying
      * problem (validation failure code).
      *
      * @param expectedType expected type of PTable
@@ -2590,57 +2592,73 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
      * @param tenantId tenant Id
      * @param schemaName schema name
      * @param tableName table name
-     * @param childViews child views of table or parent view. Usually this is an empty list
-     *     passed to this method, and this method will add child views retrieved using
+     * @param childViews child views of table or parent view.
+     *     Usually this is an empty list
+     *     passed to this method, and this method will add
+     *     child views retrieved using
      *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
-     * @param clientVersion client version, used to determine if mutation is allowed.
-     * @return Optional.empty() if mutation is allowed on parent table/view. If not allowed,
-     *     returned Optional object will contain metaDataMutationResult with MutationCode.
-     * @throws IOException if something goes wrong while retrieving child views using
+     * @param clientVersion client version, used to determine if
+     *     mutation is allowed.
+     * @return Optional.empty() if mutation is allowed on parent
+     *     table/view. If not allowed, returned Optional object
+     *     will contain metaDataMutationResult with MutationCode.
+     * @throws IOException if something goes wrong while retrieving
+     *     child views using
      *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
-     * @throws SQLException if something goes wrong while retrieving child views using
+     * @throws SQLException if something goes wrong while retrieving
+     *     child views using
      *     {@link #findAllChildViews(long, int, byte[], byte[], byte[])}
      */
     private Optional<MetaDataMutationResult> validateIfMutationAllowedOnParent(
-            final PTableType expectedType, final long clientTimeStamp, final byte[] tenantId,
-            final byte[] schemaName, final byte[] tableName, final List<PTable> childViews,
+            final PTableType expectedType, final long clientTimeStamp,
+            final byte[] tenantId, final byte[] schemaName,
+            final byte[] tableName, final List<PTable> childViews,
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
-        if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
-            childViews.addAll(findAllChildViews(clientTimeStamp, clientVersion, tenantId,
-              schemaName, tableName));
+        if (expectedType == PTableType.TABLE ||
+                expectedType == PTableType.VIEW) {
+            childViews.addAll(findAllChildViews(clientTimeStamp, clientVersion,
+                tenantId, schemaName, tableName));
             if (!childViews.isEmpty()) {
-                // From 4.15 onwards we allow SYSTEM.CATALOG to split and no longer propagate parent
+                // From 4.15 onwards we allow SYSTEM.CATALOG to split and no
+                // longer propagate parent
                 // metadata changes to child views.
-                // If the client is on a version older than 4.15 we have to block adding a column
-                // to a parent table/view as we no longer lock the parent table on the server side
-                // while creating a child view to prevent conflicting changes. This is handled on
-                // the client side from 4.15 onwards.
-                // Also if QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true, we block
-                // adding a column to a parent table/view so that we can rollback the upgrade if
-                // required.
+                // If the client is on a version older than 4.15 we have to
+                // block adding a column to a parent table/view as we no
+                // longer lock the parent table on the server side
+                // while creating a child view to prevent conflicting changes.
+                // This is handled on the client side from 4.15 onwards.
+                // Also if
+                // QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is
+                // true, we block adding a column to a parent table/view so
+                // that we can rollback the upgrade if required.
                 if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
                     isMutationAllowed = false;
-                    LOGGER.error("Unable to add or drop a column as the client is older than {}",
-                      MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
+                    LOGGER.error("Unable to add or drop a column as the " +
+                        "client is older than {}",
+                        MIN_SPLITTABLE_SYSTEM_CATALOG_VERSION);
                 } else if (allowSplittableSystemCatalogRollback) {
                     isMutationAllowed = false;
-                    LOGGER.error("Unable to add or drop a column as the {} config is set to true",
-                      QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
+                    LOGGER.error("Unable to add or drop a column as the {} " +
+                        "config is set to true",
+                        QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
         }
         if (!isMutationAllowed) {
-            MetaDataMutationResult metaDataMutationResult = new MetaDataMutationResult(
-                MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
-                EnvironmentEdgeManager.currentTimeMillis(), null);
+            MetaDataMutationResult metaDataMutationResult =
+                new MetaDataMutationResult(
+                    MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
+                    EnvironmentEdgeManager.currentTimeMillis(), null);
             return Optional.of(metaDataMutationResult);
         }
         return Optional.empty();
     }
 
-    private MetaDataMutationResult mutateColumn(List<Mutation> tableMetadata, ColumnMutator mutator,
-            int clientVersion, PTable parentTable) throws IOException {
+    private MetaDataMutationResult mutateColumn(
+            final List<Mutation> tableMetadata,
+            final ColumnMutator mutator, final int clientVersion,
+            final PTable parentTable) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -2665,9 +2683,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             List<RowLock> locks = Lists.newArrayList();
             try {
                 Optional<MetaDataMutationResult> mutationResult =
-                    validateIfMutationAllowedOnParent(expectedType, clientTimeStamp, tenantId,
-                        schemaName, tableName, childViews, clientVersion);
-                // only if mutation is allowed, we should get Optional.empty() here
+                    validateIfMutationAllowedOnParent(expectedType,
+                        clientTimeStamp, tenantId, schemaName, tableName,
+                        childViews, clientVersion);
+                // only if mutation is allowed, we should get Optional.empty()
+                // here
                 if (mutationResult.isPresent()) {
                     return mutationResult.get();
                 }
