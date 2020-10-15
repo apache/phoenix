@@ -232,7 +232,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                             expression.getSortOrder(), expression.getMaxLength(), expression.getScale(),
                             column.getMaxLength(), column.getScale())) {
                         throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
-                            column.getScale());
+                                column.getScale(), column.getName().getString());
                     }
                     column.getDataType().coerceBytes(ptr, value, expression.getDataType(), expression.getMaxLength(),
                         expression.getScale(), expression.getSortOrder(),column.getMaxLength(), column.getScale(),

@@ -1174,7 +1174,8 @@ public class SchemaUtil {
             if (ptr.getLength() < maxLength) {
                 type.pad(ptr, maxLength, column.getSortOrder());
             } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(tableName + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
+                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                        column.getScale(), column.getName().getString());
             }
         }
     }
