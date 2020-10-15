@@ -31,11 +31,13 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import java.util.logging.Logger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SchemaExtractionTool extends Configured implements Tool {
 
-    private static final Logger LOGGER = Logger.getLogger(SchemaExtractionTool.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(SchemaExtractionTool.class);
     private static final Option HELP_OPTION = new Option("h", "help",
             false, "Help");
     private static final Option TABLE_OPTION = new Option("tb", "table", true,
@@ -59,6 +61,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
         SchemaExtractionProcessor processor = new SchemaExtractionProcessor(tenantId,
                 conf, pSchemaName, pTableName);
         output = processor.process();
+        LOGGER.info("Extracted DDL: " + output);
         return 0;
     }
 
