@@ -127,51 +127,18 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         return true;
     }
 
-    private void rebuildIndexRows(Map<byte[], List<Mutation>> indexMutationMap,
-                                  List<Mutation> indexRowsToBeDeleted,
-                                  IndexToolVerificationResult verificationResult) throws IOException {
+    protected void commitBatch(List<Mutation> indexUpdates) throws IOException, InterruptedException {
+        ungroupedAggregateRegionObserver.checkForRegionClosing();
+        indexHTable.batch(indexUpdates);
+    }
+
+    protected void rebuildIndexRows(Map<byte[], List<Mutation>> indexMutationMap,
+                                    List<Mutation> indexRowsToBeDeleted,
+                                    IndexToolVerificationResult verificationResult) throws IOException {
         if (ignoreIndexRebuildForTesting) {
             return;
         }
-        try {
-            int batchSize = 0;
-            List<Mutation> indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-            for (List<Mutation> mutationList : indexMutationMap.values()) {
-                indexUpdates.addAll(mutationList);
-                batchSize += mutationList.size();
-                if (batchSize >= maxBatchSize) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
-                    indexHTable.batch(indexUpdates);
-                    batchSize = 0;
-                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-                }
-            }
-            if (batchSize > 0) {
-                ungroupedAggregateRegionObserver.checkForRegionClosing();
-                indexHTable.batch(indexUpdates);
-            }
-            batchSize = 0;
-            indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-            for (Mutation mutation : indexRowsToBeDeleted) {
-                indexUpdates.add(mutation);
-                batchSize ++;
-                if (batchSize >= maxBatchSize) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
-                    indexHTable.batch(indexUpdates);
-                    batchSize = 0;
-                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-                }
-            }
-            if (batchSize > 0) {
-                ungroupedAggregateRegionObserver.checkForRegionClosing();
-                indexHTable.batch(indexUpdates);
-            }
-            if (verify) {
-                verificationResult.setRebuiltIndexRowCount(verificationResult.getRebuiltIndexRowCount() + indexMutationMap.size());
-            }
-        } catch (Throwable t) {
-            ServerUtil.throwIOException(indexHTable.getName().toString(), t);
-        }
+        updateIndexRows(indexMutationMap, indexRowsToBeDeleted, verificationResult);
     }
 
     private Map<byte[], List<Mutation>> populateActualIndexMutationMap(Map<byte[], List<Mutation>> expectedIndexMutationMap) throws IOException {

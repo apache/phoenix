@@ -966,6 +966,52 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         expectedIndexMutationMap.putAll(invalidIndexRows);
     }
 
+    // After IndexerRegionScanner is removed, this method should become abstract
+    protected void commitBatch(List<Mutation> indexUpdates) throws IOException, InterruptedException{
+        throw new DoNotRetryIOException("This method has not been implement by the sub class");
+    }
+
+    protected void updateIndexRows(Map<byte[], List<Mutation>> indexMutationMap,
+                                    List<Mutation> indexRowsToBeDeleted,
+                                    IndexToolVerificationResult verificationResult) throws IOException {
+        try {
+            int batchSize = 0;
+            List<Mutation> indexUpdates = new ArrayList<Mutation>(maxBatchSize);
+            for (List<Mutation> mutationList : indexMutationMap.values()) {
+                indexUpdates.addAll(mutationList);
+                batchSize += mutationList.size();
+                if (batchSize >= maxBatchSize) {
+                    ungroupedAggregateRegionObserver.checkForRegionClosing();
+                    indexHTable.batch(indexUpdates);
+                    batchSize = 0;
+                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
+                }
+            }
+            if (batchSize > 0) {
+                commitBatch(indexUpdates);
+            }
+            batchSize = 0;
+            indexUpdates = new ArrayList<Mutation>(maxBatchSize);
+            for (Mutation mutation : indexRowsToBeDeleted) {
+                indexUpdates.add(mutation);
+                batchSize ++;
+                if (batchSize >= maxBatchSize) {
+                    commitBatch(indexUpdates);
+                    batchSize = 0;
+                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
+                }
+            }
+            if (batchSize > 0) {
+                commitBatch(indexUpdates);
+            }
+            if (verify) {
+                verificationResult.setRebuiltIndexRowCount(verificationResult.getRebuiltIndexRowCount() + indexMutationMap.size());
+            }
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(indexHTable.getName().toString(), t);
+        }
+    }
+
     @VisibleForTesting
     public List<Mutation> prepareActualIndexMutations(Result indexRow) throws IOException {
         Put put = null;

@@ -116,52 +116,16 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         }
     }
 
-    private void repairIndexRows(Map<byte[], List<Mutation>> indexMutationMap,
-                                 List<Mutation> indexRowsToBeDeleted,
-                                 IndexToolVerificationResult verificationResult) throws IOException {
-        try {
-            int batchSize = 0;
-            List<Mutation> indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-            for (List<Mutation> mutationList : indexMutationMap.values()) {
-                indexUpdates.addAll(mutationList);
-                batchSize += mutationList.size();
-                if (batchSize >= maxBatchSize) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
-                    region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]),
-                            HConstants.NO_NONCE, HConstants.NO_NONCE);
-                    batchSize = 0;
-                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-                }
-            }
-            if (batchSize > 0) {
-                ungroupedAggregateRegionObserver.checkForRegionClosing();
-                region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]),
-                        HConstants.NO_NONCE, HConstants.NO_NONCE);
-            }
-            batchSize = 0;
-            indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-            for (Mutation mutation : indexRowsToBeDeleted) {
-                indexUpdates.add(mutation);
-                batchSize ++;
-                if (batchSize >= maxBatchSize) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
-                    region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]),
-                            HConstants.NO_NONCE, HConstants.NO_NONCE);
-                    batchSize = 0;
-                    indexUpdates = new ArrayList<Mutation>(maxBatchSize);
-                }
-            }
-            if (batchSize > 0) {
-                ungroupedAggregateRegionObserver.checkForRegionClosing();
-                region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]),
-                        HConstants.NO_NONCE, HConstants.NO_NONCE);
-            }
-            if (verify) {
-                verificationResult.setRebuiltIndexRowCount(verificationResult.getRebuiltIndexRowCount() + indexMutationMap.size());
-            }
-        } catch (Throwable t) {
-            ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-        }
+    protected void commitBatch(List<Mutation> indexUpdates) throws IOException, InterruptedException {
+        ungroupedAggregateRegionObserver.checkForRegionClosing();
+        region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]),
+                HConstants.NO_NONCE, HConstants.NO_NONCE);
+    }
+
+    protected void repairIndexRows(Map<byte[], List<Mutation>> indexMutationMap,
+                                    List<Mutation> indexRowsToBeDeleted,
+                                    IndexToolVerificationResult verificationResult) throws IOException {
+        updateIndexRows(indexMutationMap, indexRowsToBeDeleted, verificationResult);
     }
 
     private Map<byte[], List<Mutation>> populateExpectedIndexMutationMap(Set<byte[]> dataRowKeys) throws IOException {
