@@ -48,6 +48,7 @@ pipeline {
                 always {
                     junit testResults: "component/**/target/**/TEST-*.xml", allowEmptyResults: true
                     // Has to be relative to WORKSPACE.
+                    sh "find patchprocess/ -name \\*.txt -exec gzip {} \\;"
                     archiveArtifacts artifacts: "patchprocess/*", excludes: "patchprocess/precommit"
                     archiveArtifacts artifacts: "patchprocess/**/*", excludes: "patchprocess/precommit/**/*"
                 }

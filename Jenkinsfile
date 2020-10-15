@@ -81,7 +81,8 @@ pipeline {
                         }
                         post {
                             always {
-                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt,**/target/failsafe-reports/*.txt,**/target/surefire-reports/*.dumpstream,**/target/failsafe-reports/*.dumpstream,**/target/surefire-reports/*.dump,**/target/failsafe-reports/*.dump"
+                                sh "find HBASE_${HBASE_PROFILE}/ -name \\*.txt -exec gzip {} \\;"
+                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt.gz,**/target/failsafe-reports/*.txt.gz,**/target/surefire-reports/*.dumpstream,**/target/failsafe-reports/*.dumpstream,**/target/surefire-reports/*.dump,**/target/failsafe-reports/*.dump"
                                 junit "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/TEST-*.xml"
                                 junit "HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/TEST-*.xml"
                             }
