@@ -453,13 +453,12 @@ public enum SQLExceptionCode {
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            final String reason =
-                (info.getMessage() != null ? info.getMessage() : "")
-                    + (info.getRootCause() != null ? " , rootCause: "
-                    + info.getRootCause() : "");
+            final String reason = info.getMessage() != null
+                ? info.getMessage() : OPERATION_TIMED_OUT.getMessage();
             return new SQLTimeoutException(reason,
                 OPERATION_TIMED_OUT.getSQLState(),
-                OPERATION_TIMED_OUT.getErrorCode());
+                OPERATION_TIMED_OUT.getErrorCode(),
+                info.getRootCause());
         }
     }),
     FUNCTION_UNDEFINED(6001, "42F01", "Function undefined.", new Factory() {

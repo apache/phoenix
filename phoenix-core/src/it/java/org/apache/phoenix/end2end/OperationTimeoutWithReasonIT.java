@@ -61,7 +61,8 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                  Statement stmt = conn.createStatement()) {
             stmt.execute(ddl);
-            final String dml = String.format("UPSERT INTO %s VALUES (?, ?)", tableName);
+            final String dml = String.format("UPSERT INTO %s VALUES (?, ?)",
+                tableName);
             try(PreparedStatement prepStmt = conn.prepareStatement(dml)) {
                 for (int i = 1; i <= 100; i++) {
                     prepStmt.setString(1, "key" + i);
@@ -75,7 +76,8 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
              Statement stmt = conn.createStatement()) {
             stmt.setQueryTimeout(5); // 5 sec
-            ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s", tableName));
+            ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s",
+                tableName));
             // Use custom EnvironmentEdge to timeout query with a longer delay in ms
             MyClock clock = new MyClock(10, 10000);
             EnvironmentEdgeManager.injectEdge(clock);
@@ -83,9 +85,10 @@ public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
                 rs.next();
                 fail();
             } catch (SQLException e) {
-                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
-                assertTrue(e.getMessage().contains("Query couldn't be completed in the allotted"
-                    + " time: 5000 ms"));
+                assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    e.getErrorCode());
+                assertTrue(e.getMessage().contains("Query couldn't be " +
+                    "completed in the allotted time: 5000 ms"));
             }
         } finally {
             EnvironmentEdgeManager.reset();
