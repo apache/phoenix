@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Determinism;
@@ -283,10 +284,8 @@ public class ColumnDef {
         if (!targetType.isSizeCompatible(ptr, defaultValue.getValue(), sourceType, 
                 sortOrder, defaultValue.getMaxLength(), 
                 defaultValue.getScale(), this.getMaxLength(), this.getScale())) {
-            throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(this.getColumnDefName().getColumnName())
-                    .setMessage("DEFAULT " + this.getExpression()).build()
-                    .buildException();            
+            throw new DataExceedsCapacityException(this.getDataType(), this.getMaxLength(),
+                    this.getScale(), this.getColumnDefName().getColumnName());
         }
         return true;
     }

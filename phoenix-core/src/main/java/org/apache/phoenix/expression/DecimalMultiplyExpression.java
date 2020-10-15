@@ -64,7 +64,8 @@ public class DecimalMultiplyExpression extends MultiplyExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
         }
         if (result == null) {
-            throw new DataExceedsCapacityException(PDecimal.INSTANCE, getMaxLength(), getScale());
+            throw new DataExceedsCapacityException(
+                    PDecimal.INSTANCE, getMaxLength(), getScale(), null);
         }
         ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;

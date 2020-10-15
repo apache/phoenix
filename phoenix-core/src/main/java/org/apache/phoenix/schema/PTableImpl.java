@@ -1083,7 +1083,8 @@ public class PTableImpl implements PTable {
                 Integer scale = column.getScale();
                 key.set(byteValue);
                 if (!type.isSizeCompatible(key, null, type, sortOrder, null, null, maxLength, scale)) {
-                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
+                    throw new DataExceedsCapacityException(column.getDataType(), maxLength,
+                            column.getScale(), column.getName().getString());
                 }
                 key.set(byteValue);
                 type.pad(key, maxLength, sortOrder);
@@ -1351,8 +1352,8 @@ public class PTableImpl implements PTable {
                 Integer scale = column.getScale();
                 SortOrder sortOrder = column.getSortOrder();
                 if (!type.isSizeCompatible(ptr, null, type, sortOrder, null, null, maxLength, scale)) {
-                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + 
-                            " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
+                    throw new DataExceedsCapacityException(column.getDataType(), maxLength,
+                            column.getScale(), column.getName().getString());
                 }
                 ptr.set(byteValue);
                 type.pad(ptr, maxLength, sortOrder);

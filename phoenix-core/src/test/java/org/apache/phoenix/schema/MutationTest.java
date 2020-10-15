@@ -92,18 +92,24 @@ public class MutationTest extends BaseConnectionlessQueryTest {
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains("abcd"));
+                assertTrue(e.getMessage().contains(String.valueOf(maxLength1)));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v2) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(String.valueOf(maxLength2)));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v3) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(String.valueOf(maxLength2)));
             }
             value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉碉碉";
             assertTrue(value.length() > maxLength2);
@@ -112,12 +118,16 @@ public class MutationTest extends BaseConnectionlessQueryTest {
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(String.valueOf(maxLength2)));
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('a','" + value + "')");
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                assertFalse(e.getMessage().contains(value));
+                assertTrue(e.getMessage().contains(String.valueOf(maxLength2)));
             }
         } finally {
             conn.close();

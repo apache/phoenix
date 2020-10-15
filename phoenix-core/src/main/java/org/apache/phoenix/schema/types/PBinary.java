@@ -79,7 +79,7 @@ public class PBinary extends PBinaryBase {
             return object;
         }
         if (length > maxLength) {
-            throw new DataExceedsCapacityException(this, maxLength, null);
+            throw new DataExceedsCapacityException(this, maxLength, null, null);
         }
         byte[] newBytes = new byte[maxLength];
         System.arraycopy(b, 0, newBytes, 0, length);

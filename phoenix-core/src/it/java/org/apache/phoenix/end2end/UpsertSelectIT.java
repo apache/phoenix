@@ -1677,6 +1677,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+            assertFalse(e.getMessage().contains("澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉"));
+            assertTrue(e.getMessage().contains(String.valueOf(20)));
         }
     }
 

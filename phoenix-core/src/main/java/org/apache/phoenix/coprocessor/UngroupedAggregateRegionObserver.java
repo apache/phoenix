@@ -83,6 +83,7 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -755,8 +756,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         expression.getMaxLength(), expression.getScale(),
                                         column.getMaxLength(), column.getScale())) {
                                         throw new DataExceedsCapacityException(
-                                            column.getDataType(), column.getMaxLength(),
-                                            column.getScale(), column.getName().getString(), ptr);
+                                                column.getDataType(),
+                                                column.getMaxLength(),
+                                                column.getScale(),
+                                                column.getName().getString());
                                     }
                                     column.getDataType().coerceBytes(ptr, null,
                                         expression.getDataType(), expression.getMaxLength(),

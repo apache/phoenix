@@ -45,6 +45,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -238,12 +239,8 @@ public class UpsertCompiler {
                     if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
                             SortOrder.getDefault(), precision,
                             scale, column.getMaxLength(), column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(
-                                    column.getName().getString())
-                            .setMessage("value=" + column.getDataType()
-                                    .toStringLiteral(ptr, null)).build()
-                            .buildException();
+                        throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                                column.getScale(), column.getName().getString());
                     }
                     column.getDataType().coerceBytes(ptr, value, column.getDataType(), 
                             precision, scale, SortOrder.getDefault(), 
@@ -1227,9 +1224,8 @@ public class UpsertCompiler {
                     if (!column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
                             constantExpression.getSortOrder(), constantExpression.getMaxLength(),
                             constantExpression.getScale(), column.getMaxLength(), column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
-                            .setMessage("value=" + constantExpression.toString()).build().buildException();
+                        throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                                column.getScale(), column.getName().getString());
                     }
                 }
                 column.getDataType().coerceBytes(ptr, value, constantExpression.getDataType(),
