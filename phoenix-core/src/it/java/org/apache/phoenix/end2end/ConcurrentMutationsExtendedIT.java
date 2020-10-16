@@ -381,7 +381,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
             t.start();
         }
 
-        assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+        assertTrue("Ran out of time", doneSignal.await(240, TimeUnit.SECONDS));
         verifyIndexTable(tableName, indexName, conn);
     }
 

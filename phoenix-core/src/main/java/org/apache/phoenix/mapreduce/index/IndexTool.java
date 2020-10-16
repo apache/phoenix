@@ -753,11 +753,12 @@ public class IndexTool extends Configured implements Tool {
         return job;
     }
 
-    private void createIndexToolTables(Connection connection) throws Exception {
-        IndexVerificationResultRepository resultRepo = new IndexVerificationResultRepository();
-        resultRepo.createResultTable(connection);
-        IndexVerificationOutputRepository outputRepo = new IndexVerificationOutputRepository();
-        outputRepo.createOutputTable(connection);
+    public static void createIndexToolTables(Connection connection) throws Exception {
+        try (IndexVerificationResultRepository resultRepo = new IndexVerificationResultRepository();
+            IndexVerificationOutputRepository outputRepo = new IndexVerificationOutputRepository()){
+            resultRepo.createResultTable(connection);
+            outputRepo.createOutputTable(connection);
+        }
     }
 
     @Override

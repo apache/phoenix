@@ -43,6 +43,7 @@ import java.util.concurrent.Callable;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -97,6 +98,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -1106,6 +1108,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
+    private RegionScanner getRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
+                                           final RegionCoprocessorEnvironment env, final boolean oldCoproc)
+            throws IOException {
+        if (oldCoproc) {
+            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
+        } else {
+            if (region.getTableDescriptor().hasCoprocessor(GlobalIndexChecker.class.getCanonicalName())) {
+                return new IndexRepairRegionScanner(innerScanner, region, scan, env, this);
+            } else  {
+                return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
+            }
+        }
+
+    }
     private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
                                          final RegionCoprocessorEnvironment env) throws IOException {
         boolean oldCoproc = region.getTableDescriptor().hasCoprocessor(Indexer.class.getCanonicalName());
@@ -1135,17 +1151,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             innerScanner.close();
             RegionScanner scanner = region.getScanner(rawScan);
-            if (oldCoproc) {
-                return new IndexerRegionScanner(scanner, region, scan, env, this);
-            } else {
-                return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
-            }
+            return getRegionScanner(scanner, region, scan, env, oldCoproc);
         }
-        if (oldCoproc) {
-            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
-        } else {
-            return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
-        }
+        return getRegionScanner(innerScanner, region, scan, env, oldCoproc);
     }
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,

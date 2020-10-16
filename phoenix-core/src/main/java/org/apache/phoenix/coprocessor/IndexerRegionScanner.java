@@ -63,6 +63,7 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
@@ -83,18 +84,18 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     protected Map<byte[], Put> indexKeyToDataPutMap;
     protected UngroupedAggregateRegionObserver.MutationList mutations;
     private boolean partialRebuild = false;
-    private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
 
     IndexerRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                           final RegionCoprocessorEnvironment env,
                           UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
-        super(innerScanner, region, scan, env);
+        super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
+        indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+        indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
                 new ThreadPoolBuilder("IndexVerify",
                         env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,
                         DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS).setCoreTimeout(
                         INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
-        this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         if (scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING) == null) {
             partialRebuild = true;
         }
