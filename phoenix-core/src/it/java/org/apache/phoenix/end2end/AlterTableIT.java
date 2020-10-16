@@ -66,7 +66,9 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -1329,7 +1331,68 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
         }
     }
-	
+
+    @Test
+    public void testAddThenDropColumnTableDDLTimestamp() throws Exception {
+        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " ENTITY_ID integer NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
+            + " ) " + generateDDLOptions("");
+
+        String columnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL3 varchar(50) NULL ";
+        String columnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableDDL);
+            //first get the original DDL timestamp when we created the table
+            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName, startTS,
+                conn);
+            Thread.sleep(1);
+            //now add a column and make sure the timestamp updates
+            conn.createStatement().execute(columnAddDDL);
+            tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName,
+                tableDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(columnDropDDL);
+            CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName,
+                tableDDLTimestamp + 1 , conn);
+        }
+    }
+
+    @Test
+    public void testSetPropertyDoesntUpdateDDLTimestamp() throws Exception {
+        Properties props = new Properties();
+        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " ENTITY_ID integer NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
+            + " ) " + generateDDLOptions("");
+
+        String setPropertyDDL = "ALTER TABLE " + dataTableFullName +
+            " SET UPDATE_CACHE_FREQUENCY=300000 ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(tableDDL);
+            //first get the original DDL timestamp when we created the table
+            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName, startTS,
+                conn);
+            Thread.sleep(1);
+            //now change a property and make sure the timestamp DOES NOT update
+            conn.createStatement().execute(setPropertyDDL);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertNotNull(table);
+            assertNotNull(table.getLastDDLTimestamp());
+            assertEquals(tableDDLTimestamp, table.getLastDDLTimestamp().longValue());
+        }
+    }
+
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";

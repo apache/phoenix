@@ -31,6 +31,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -45,6 +46,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -1204,7 +1206,7 @@ public class UpgradeUtil {
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConn = null;
         boolean isMetaConnUsingQueryConn = true;
-    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG
         try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
         		PhoenixConnection upsertConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP)) {
             LOGGER.info("Upgrading metadata to add parent links for indexes on views");
@@ -2597,5 +2599,24 @@ public class UpgradeUtil {
             LOGGER.error(String.format(
                     "Upgrade/change VIEW_INDEX_ID data type failed: %s. ",e.getMessage()));
         }
+    }
+
+    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's DDL timestamp equal to its
+    // last updated row timestamp.
+    public static void bootstrapLastDDLTimestamp(Connection metaConnection) throws SQLException  {
+        String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
+            ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+        final String upsertSql =
+            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
+        LAST_DDL_TIMESTAMP + ")" + " " +
+            "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
+                "WHERE " + TABLE_TYPE + " " + " in " + "('" + PTableType.TABLE.getSerializedValue()
+                + "', '" + PTableType.VIEW.getSerializedValue() + "')";
+        LOGGER.info("Setting DDL timestamps for tables and views to row timestamps");
+        try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
+            stmt.execute();
+            metaConnection.commit();
+        }
+        LOGGER.info("Setting DDL timestamps for tables and views is complete");
     }
 }

@@ -106,6 +106,29 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
 
+    public static Put getLastDDLTimestampUpdate(byte[] tableHeaderRowKey,
+                                                     long clientTimestamp,
+                                                     long lastDDLTimestamp) {
+        //use client timestamp as the timestamp of the Cell, to match the other Cells that might
+        // be created by this DDL. But the actual value will be a _server_ timestamp
+        Put p = new Put(tableHeaderRowKey, clientTimestamp);
+        byte[] lastDDLTimestampBytes = PLong.INSTANCE.toBytes(lastDDLTimestamp);
+        p.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES, lastDDLTimestampBytes);
+        return p;
+    }
+
+    /**
+     * Checks if a table is meant to be queried directly (and hence is relevant to external
+     * systems tracking Phoenix schema)
+     * @param tableType
+     * @return True if a table or view, false otherwise (such as for an index, system table, or
+     * subquery)
+     */
+    public static boolean isTableDirectlyQueried(PTableType tableType) {
+        return tableType.equals(PTableType.TABLE) || tableType.equals(PTableType.VIEW);
+    }
+
     public static class ClientServerCompatibility {
 
         private int errorCode;

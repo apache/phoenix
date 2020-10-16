@@ -60,11 +60,13 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -72,8 +74,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
@@ -1216,5 +1216,255 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertNull(results.next());
         }
     }
-    
+
+    @Test
+    public void testAddThenDropColumnTableDDLTimestamp() throws Exception {
+        Properties props = new Properties();
+        String schemaName = SCHEMA1;
+        String dataTableName = "T_" + generateUniqueName();
+        String viewName = "V_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+
+        String tableDDL = generateDDL("CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " %s ID char(1) NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
+            + " ) %s");
+
+        String viewDDL = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName;
+
+        String columnAddDDL = "ALTER VIEW " + viewFullName + " ADD COL3 varchar(50) NULL ";
+        String columnDropDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL3 ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(tableDDL);
+            //first get the original DDL timestamp when we created the table
+            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName, startTS,
+                conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(viewDDL);
+            tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, tableDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            //now add a column and make sure the timestamp updates
+            conn.createStatement().execute(columnAddDDL);
+            tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName,
+                tableDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(columnDropDDL);
+            CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName,
+                tableDDLTimestamp + 1 , conn);
+        }
+    }
+
+    @Test
+    public void testLastDDLTimestampForDivergedViews() throws Exception {
+        //Phoenix allows users to "drop" columns from views that are inherited from their ancestor
+        // views or tables. These columns are then excluded from the view schema, and the view is
+        // considered "diverged" from its parents, and so no longer inherit any additional schema
+        // changes that are applied to their ancestors. This test make sure that this behavior
+        // extends to DDL timestamp
+        String schemaName = SCHEMA1;
+        String dataTableName = "T_" + generateUniqueName();
+        String viewName = "V_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+
+        String tableDDL = generateDDL("CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " %s ID char(1) NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint,"
+            + " COL3 bigint,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1)"
+            + " ) %s");
+
+        String viewDDL = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName;
+
+        String divergeDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL2";
+        String viewColumnAddDDL = "ALTER VIEW " + viewFullName + " ADD COL4 varchar(50) NULL ";
+        String viewColumnDropDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL4 ";
+        String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL5 varchar" +
+            "(50) NULL";
+        String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableDDL);
+            long tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
+            conn.createStatement().execute(viewDDL);
+            long viewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, viewFullName);
+            Thread.sleep(1);
+            conn.createStatement().execute(divergeDDL);
+            //verify table DDL timestamp DID NOT change
+            assertEquals(tableDDLTimestamp, CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName));
+            //verify view DDL timestamp changed
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(viewColumnAddDDL);
+            //verify DDL timestamp changed because we added a column to the view
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(viewColumnDropDDL);
+            //verify DDL timestamp changed because we dropped a column from the view
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(tableColumnAddDDL);
+            //verify DDL timestamp DID change because we added a column from the base table
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+            //and that it did change because we dropped a column from the base table
+            conn.createStatement().execute(tableColumnDropDDL);
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+        }
+    }
+
+    @Test
+    public void testLastDDLTimestampWithChildViews() throws Exception {
+        Assume.assumeTrue(isMultiTenant);
+        Properties props = new Properties();
+        String schemaName = SCHEMA1;
+        String dataTableName = "T_" + generateUniqueName();
+        String globalViewName = "V_" + generateUniqueName();
+        String tenantViewName = "V_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String globalViewFullName = SchemaUtil.getTableName(schemaName, globalViewName);
+        String tenantViewFullName = SchemaUtil.getTableName(schemaName, tenantViewName);
+
+        String tableDDL = generateDDL("CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " %s ID char(1) NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
+            + " ) %s");
+
+        //create a table with a child global view, who then has a child tenant view
+        String globalViewDDL =
+            "CREATE VIEW " + globalViewFullName + " AS SELECT * FROM " + dataTableFullName;
+
+        String tenantViewDDL =
+            "CREATE VIEW " + tenantViewFullName + " AS SELECT * FROM " + globalViewFullName;
+
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        long tableDDLTimestamp, globalViewDDLTimestamp;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableDDL);
+            conn.createStatement().execute(globalViewDDL);
+            tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
+            globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, globalViewFullName);
+        }
+        props.setProperty(TENANT_ID_ATTRIB, TENANT1);
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+            tenantConn.createStatement().execute(tenantViewDDL);
+        }
+        // First, check that adding a child view to the base table didn't change the base table's
+        // timestamp, and that adding a child tenant view to the global view didn't change the
+        // global view's timestamp
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            long newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
+            assertEquals(tableDDLTimestamp, newTableDDLTimestamp);
+
+            long newGlobalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, globalViewFullName);
+            assertEquals(globalViewDDLTimestamp, newGlobalViewDDLTimestamp);
+        }
+        Thread.sleep(1);
+        //now add / drop a column from the tenant view and make sure it doesn't change its
+        // ancestors' timestamps
+        String tenantViewColumnAddDDL = "ALTER VIEW " + tenantViewFullName + " ADD COL3 varchar" +
+            "(50) " + "NULL ";
+        String tenantViewColumnDropDDL = "ALTER VIEW " + tenantViewFullName + " DROP COLUMN COL3 ";
+
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+            tenantConn.createStatement().execute(tenantViewColumnAddDDL);
+            long newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn, dataTableFullName);
+            assertEquals(tableDDLTimestamp, newTableDDLTimestamp);
+
+            long afterTenantColumnAddViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                globalViewFullName);
+            assertEquals(globalViewDDLTimestamp, afterTenantColumnAddViewDDLTimestamp);
+
+            tenantConn.createStatement().execute(tenantViewColumnDropDDL);
+            //update the tenant view timestamp (we'll need it later)
+            long afterTenantColumnDropTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                dataTableFullName);
+            assertEquals(tableDDLTimestamp, afterTenantColumnDropTableDDLTimestamp);
+
+            long afterTenantColumnDropViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                globalViewFullName);
+            assertEquals(globalViewDDLTimestamp, afterTenantColumnDropViewDDLTimestamp);
+        }
+        Thread.sleep(1);
+        //now add / drop a column from the base table and make sure it changes the timestamps for
+        // both the global view (its child) and the tenant view (its grandchild)
+        String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL4 varchar" +
+            "(50) " + "NULL ";
+        String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL4 ";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableColumnAddDDL);
+            tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+                long tenantViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                    tenantViewFullName);
+                assertEquals(tableDDLTimestamp, tenantViewDDLTimestamp);
+            }
+            globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn,
+                globalViewFullName);
+            assertEquals(tableDDLTimestamp, globalViewDDLTimestamp);
+
+            conn.createStatement().execute(tableColumnDropDDL);
+            tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+                long tenantViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                    tenantViewFullName);
+                assertEquals(tableDDLTimestamp, tenantViewDDLTimestamp);
+            }
+            globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn,
+                globalViewFullName);
+            assertEquals(tableDDLTimestamp, globalViewDDLTimestamp);
+        }
+
+        //now add / drop a column from the global view and make sure it doesn't change its
+        // parent (the base table) but does change the timestamp for its child (the tenant view)
+        String globalViewColumnAddDDL = "ALTER VIEW " + globalViewFullName + " ADD COL5 varchar" +
+            "(50) " + "NULL ";
+        String globalViewColumnDropDDL = "ALTER VIEW " + globalViewFullName + " DROP COLUMN COL5 ";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(globalViewColumnAddDDL);
+            globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, globalViewFullName);
+            long newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn,
+                dataTableFullName);
+            //table DDL timestamp shouldn't have changed
+            assertEquals(tableDDLTimestamp, newTableDDLTimestamp);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+                long tenantViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                    tenantViewFullName);
+                //but tenant timestamp should have changed
+                assertEquals(globalViewDDLTimestamp, tenantViewDDLTimestamp);
+            }
+
+            conn.createStatement().execute(globalViewColumnDropDDL);
+            globalViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, globalViewFullName);
+            newTableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn,
+                dataTableFullName);
+            //table DDL timestamp shouldn't have changed
+            assertEquals(tableDDLTimestamp, newTableDDLTimestamp);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+                long tenantViewDDLTimestamp = CreateTableIT.getLastDDLTimestamp(tenantConn,
+                    tenantViewFullName);
+                //but tenant timestamp should have changed
+                assertEquals(globalViewDDLTimestamp, tenantViewDDLTimestamp);
+            }
+        }
+
+    }
+
+
+
 }

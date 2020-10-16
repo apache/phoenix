@@ -60,12 +60,13 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -909,6 +910,40 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
             assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
         }
+    }
+
+    @Test
+    public void testCreateTableDDLTimestamp() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String ddl =
+            "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+                + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
+                + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
+                + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            verifyLastDDLTimestamp(dataTableFullName, startTS, conn);
+        }
+    }
+
+    public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {
+        long endTS = EnvironmentEdgeManager.currentTimeMillis();
+        //Now try the PTable API
+        long ddlTimestamp = getLastDDLTimestamp(conn, dataTableFullName);
+        assertTrue("PTable DDL Timestamp not in the right range!",
+            ddlTimestamp >= startTS && ddlTimestamp <= endTS);
+        return ddlTimestamp;
+    }
+
+    public static long getLastDDLTimestamp(Connection conn, String dataTableFullName) throws SQLException {
+        PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+        assertNotNull("PTable is null!", table);
+        assertNotNull("DDL timestamp is null!", table.getLastDDLTimestamp());
+        return table.getLastDDLTimestamp();
     }
 
     private int checkGuidePostWidth(String tableName) throws Exception {

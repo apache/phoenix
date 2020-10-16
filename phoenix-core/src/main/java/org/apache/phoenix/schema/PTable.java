@@ -638,7 +638,8 @@ public interface PTable extends PMetaDataEntity {
     
     /**
      * Get the column with the given column qualifier.
-     * @param column qualifier bytes
+     * @param cf column family bytes
+     * @param cq qualifier bytes
      * @return the PColumn with the given column qualifier
      * @throws ColumnNotFoundException if no column with the given column qualifier can be found
      * @throws AmbiguousColumnException if multiple columns are found with the given column qualifier
@@ -818,6 +819,12 @@ public interface PTable extends PMetaDataEntity {
      * @return If the view has overridden the TTL set at the parent entity level.
      */
     boolean hasViewModifiedPhoenixTTL();
+
+    /**
+     * @return the last timestamp at which this entity had its data shape created or modified (e
+     * .g, create entity, adding or dropping a column. Not affected by changing table properties
+     */
+    Long getLastDDLTimestamp();
 
     /**
      * Class to help track encoded column qualifier counters per column family.
