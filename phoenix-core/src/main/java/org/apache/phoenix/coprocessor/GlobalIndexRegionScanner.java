@@ -96,6 +96,11 @@ import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 
+/**
+ * This is an abstract region scanner which is used to scan index or data table rows locally. From the data table rows,
+ * expected index table mutations are generated. These expected index mutations are used for both repairing and
+ * rebuilding index table rows and also verifying them.
+ */
 public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalIndexRegionScanner.class);
 

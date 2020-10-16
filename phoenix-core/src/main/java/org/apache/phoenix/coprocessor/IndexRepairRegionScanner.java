@@ -64,6 +64,12 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
 
+/**
+ * This is an index table region scanner which scans index table rows locally and then extracts data table row keys
+ * from them. Using the data table row keys, the data table rows are scanned using the HBase client available to
+ * region servers. From the data table rows, expected index table mutations are generated. These expected
+ * index mutations are used for both repairing the index table rows and verifying them.
+ */
 public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScanner.class);

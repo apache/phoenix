@@ -59,7 +59,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Maps;
-
+/**
+ * This is a data table region scanner which scans data table rows locally. From the data table rows, expected
+ * index table mutations are generated. These expected index mutations are used for both rebuilding index table
+ * rows and also verifying them. The HBase client available to region servers are used to update or verify index
+ * table rows.
+ */
 public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
