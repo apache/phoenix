@@ -293,7 +293,8 @@ public class AddColumnMutator implements ColumnMutator {
                                                          List<ImmutableBytesPtr> invalidateList,
                                                          List<Region.RowLock> locks,
                                                          long clientTimeStamp,
-                                                         long clientVersion) {
+                                                         final long clientVersion,
+                                                         final boolean isAddingColumns) {
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
@@ -337,7 +338,7 @@ public class AddColumnMutator implements ColumnMutator {
                         family.getPColumnForColumnNameBytes(colName);
                     } else if (colName!=null && colName.length > 0) {
                         addingPKColumn = true;
-                        table.getPKColumn(new String(colName));
+                        table.getPKColumn(Bytes.toString(colName));
                     } else {
                         continue;
                     }
@@ -398,6 +399,17 @@ public class AddColumnMutator implements ColumnMutator {
                                 rowKeyMetaData[SCHEMA_NAME_INDEX],
                                 rowKeyMetaData[TABLE_NAME_INDEX])));
             }
+        }
+        if (isAddingColumns) {
+            //We're changing the application-facing schema by adding a column, so update the DDL
+            // timestamp
+            long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            if (MetaDataUtil.isTableQueryable(table.getType())) {
+                additionalTableMetadataMutations.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
+                    clientTimeStamp, serverTimestamp));
+            }
+            //we don't need to update the DDL timestamp for child views, because when we look up
+            // a PTable, we'll take the max timestamp of a view and all its ancestors
         }
         tableMetaData.addAll(additionalTableMetadataMutations);
         if (type == PTableType.VIEW) {

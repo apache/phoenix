@@ -94,7 +94,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0 = MIN_TABLE_TIMESTAMP + 28;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0 = MIN_TABLE_TIMESTAMP + 29;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 31;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 33;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
     // Version below which we should disallow usage of mutable secondary indexing.
@@ -388,7 +388,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
           }
           if (proto.getFunctionCount() > 0) {
               result.wasUpdated = true;
-              for(PFunctionProtos.PFunction function: proto.getFunctionList())
+              for (PFunctionProtos.PFunction function: proto.getFunctionList())
               result.functions.add(PFunction.createFromProto(function));
           }
           if (proto.getTablesToDeleteCount() > 0) {
@@ -399,13 +399,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
             }
           }
           result.columnName = ByteUtil.EMPTY_BYTE_ARRAY;
-          if(proto.hasColumnName()){
+          if (proto.hasColumnName()){
             result.columnName = proto.getColumnName().toByteArray();
           }
-          if(proto.hasFamilyName()){
+          if (proto.hasFamilyName()){
             result.familyName = proto.getFamilyName().toByteArray();
           }
-          if(proto.getSharedTablesToDeleteCount() > 0) {
+          if (proto.getSharedTablesToDeleteCount() > 0) {
               result.sharedTablesToDelete = 
                  Lists.newArrayListWithExpectedSize(proto.getSharedTablesToDeleteCount());
               for (org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState sharedTable : 
@@ -444,10 +444,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 builder.addTablesToDelete(ByteStringer.wrap(tableName));
               }
             }
-            if(result.getColumnName() != null){
+            if (result.getColumnName() != null){
               builder.setColumnName(ByteStringer.wrap(result.getColumnName()));
             }
-            if(result.getFamilyName() != null){
+            if (result.getFamilyName() != null){
               builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
             if (result.getSharedTablesToDelete() !=null){

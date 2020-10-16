@@ -54,6 +54,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -316,6 +317,48 @@ public class ViewIT extends SplitSystemCatalogIT {
                                 transactionProvider))
                         .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
             testViewUsesTableIndex(true);
+        }
+    }
+
+    @Test
+    public void testCreateViewTimestamp() throws Exception {
+        String tenantId = null;
+        createViewTimestampHelper(tenantId);
+    }
+
+    @Test
+    public void testCreateTenantViewTimestamp() throws Exception {
+        createViewTimestampHelper(TENANT1);
+    }
+
+    private void createViewTimestampHelper(String tenantId) throws SQLException {
+        Properties props = new Properties();
+        if (tenantId != null) {
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        } else {
+            tenantId = "";
+        }
+        final String schemaName = "S_" + generateUniqueName();
+        final String tableName = "T_" + generateUniqueName();
+        final String viewName = "V_" + generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        String tableDDL =
+            "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+                + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
+                + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
+                + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
+        String viewDDL = "CREATE VIEW " + viewFullName  + " AS SELECT * " +
+            "FROM " + dataTableFullName;
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableDDL);
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(viewDDL);
+            CreateTableIT.verifyLastDDLTimestamp(viewFullName,
+                startTS,
+                conn);
         }
     }
 
