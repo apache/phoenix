@@ -339,7 +339,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return shouldVerify();
     }
 
-    protected boolean shouldVerify() throws IOException {
+    public boolean shouldVerify() throws IOException {
         // In case of read repair, proceed with rebuild
         // All other types of rebuilds/verification should be incrementally performed if appropriate param is passed
         byte[] lastVerifyTimeValue = scan.getAttribute(UngroupedAggregateRegionObserver.INDEX_RETRY_VERIFY);

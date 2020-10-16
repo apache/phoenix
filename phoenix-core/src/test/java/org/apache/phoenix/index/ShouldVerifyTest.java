@@ -56,6 +56,7 @@ public class ShouldVerifyTest {
         when(scanner.shouldVerify(any(IndexTool.IndexVerifyType.class), Matchers.<byte[]>any(), any(Scan.class),
                 any(Region.class), any(IndexMaintainer.class),
                 any(IndexVerificationResultRepository.class), anyBoolean())).thenCallRealMethod();
+        when(scanner.shouldVerify()).thenCallRealMethod();
     }
 
     @Test
