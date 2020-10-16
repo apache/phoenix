@@ -25,7 +25,7 @@ pipeline {
     options {
         // N.B. this is per-branch, which means per PR
         disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '15'))
+        buildDiscarder(logRotator(daysToKeepStr: '15', artifactDaysToKeepStr: '5'))
         timeout (time: 9, unit: 'HOURS')
         timestamps()
         skipDefaultCheckout()
@@ -119,8 +119,6 @@ pipeline {
                         always {
                             // Has to be relative to WORKSPACE.
                             junit testResults: "${WORKDIR_REL}/${PATCH_REL}/**/target/**/TEST-*.xml", allowEmptyResults: true
-                            archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit"
-                            archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/**/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit/**/*"
                             publishHTML target: [
                               allowMissing: true,
                               keepAll: true,
@@ -130,6 +128,9 @@ pipeline {
                               reportFiles: 'report.html',
                               reportName: 'PR General Check Report'
                             ]
+                            sh "find ${WORKDIR_REL}/${PATCH_REL}/ -name \\*.txt -exec gzip {} \\;"
+                            archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit"
+                            archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/**/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit/**/*"
                         }
                         // Jenkins pipeline jobs fill slaves on PRs without this :(
                         cleanup() {

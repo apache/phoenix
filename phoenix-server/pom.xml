@@ -111,7 +111,6 @@
                          This does *not* exclude transitive dependencies for these. To exclude an entire "tree"
                          of dependencies, we need to mark those as "provided" dependencies below. -->
                     <excludes>
-                        <exclude>org.apache.zookeeper:zookeeper</exclude>
                         <exclude>junit:junit</exclude>
                         <exclude>org.hamcrest:hamcrest-core</exclude>
                         <exclude>jline:jline</exclude>
@@ -399,6 +398,11 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <scope>provided</scope>
@@ -409,4 +413,23 @@
       <scope>provided</scope>
     </dependency>
   </dependencies>
+  <profiles>
+    <profile>
+      <id>phoenix-hbase-compat-2.3.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 </project>
