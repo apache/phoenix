@@ -198,6 +198,7 @@ public class PTableImpl implements PTable {
     private final long phoenixTTL;
     private final long phoenixTTLHighWaterMark;
     private final BitSet viewModifiedPropSet;
+    private final Long lastDDLTimestamp;
     private Map<String, String> propertyValues;
 
     public static class Builder {
@@ -255,6 +256,7 @@ public class PTableImpl implements PTable {
         private Boolean useStatsForParallelization;
         private long phoenixTTL;
         private long phoenixTTLHighWaterMark;
+        private Long lastDDLTimestamp;
         private Map<String, String> propertyValues = new HashMap<>();
 
         // Used to denote which properties a view has explicitly modified
@@ -592,6 +594,11 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setLastDDLTimestamp(Long lastDDLTimestamp) {
+            this.lastDDLTimestamp = lastDDLTimestamp;
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -855,6 +862,7 @@ public class PTableImpl implements PTable {
         this.phoenixTTLHighWaterMark = builder.phoenixTTLHighWaterMark;
         this.viewModifiedPropSet = builder.viewModifiedPropSet;
         this.propertyValues = builder.propertyValues;
+        this.lastDDLTimestamp = builder.lastDDLTimestamp;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -926,7 +934,8 @@ public class PTableImpl implements PTable {
                 .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency())
                 .setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL())
                 .setPhoenixTTL(table.getPhoenixTTL())
-                .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
+                .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark())
+                .setLastDDLTimestamp(table.getLastDDLTimestamp());
     }
 
     @Override
@@ -1764,6 +1773,10 @@ public class PTableImpl implements PTable {
         if (table.hasViewModifiedPhoenixTTL()) {
             viewModifiedPhoenixTTL = table.getViewModifiedPhoenixTTL();
         }
+        Long lastDDLTimestamp = null;
+        if (table.hasLastDDLTimestamp()) {
+            lastDDLTimestamp = table.getLastDDLTimestamp();
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -1813,6 +1826,7 @@ public class PTableImpl implements PTable {
                     .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
                     .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
                     .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
+                    .setLastDDLTimestamp(lastDDLTimestamp)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -1921,6 +1935,9 @@ public class PTableImpl implements PTable {
       builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
       builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
       builder.setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL());
+      if (table.getLastDDLTimestamp() != null) {
+          builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
+      }
       return builder.build();
     }
 
@@ -2036,6 +2053,11 @@ public class PTableImpl implements PTable {
 
     @Override public boolean hasViewModifiedPhoenixTTL() {
         return viewModifiedPropSet.get(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS);
+    }
+
+    @Override
+    public Long getLastDDLTimestamp() {
+        return lastDDLTimestamp;
     }
 
     private static final class KVColumnFamilyQualifier {

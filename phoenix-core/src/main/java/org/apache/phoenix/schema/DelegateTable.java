@@ -350,6 +350,11 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedPhoenixTTL();
     }
 
+    @Override
+    public Long getLastDDLTimestamp() {
+        return delegate.getLastDDLTimestamp();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

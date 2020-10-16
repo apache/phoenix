@@ -144,6 +144,7 @@ message AddColumnRequest {
   repeated bytes tableMetadataMutations = 1;
   optional int32 clientVersion = 2;
   optional PTable parentTable = 3;
+  optional bool addingColumns = 4;
 }
 
 message DropColumnRequest {
