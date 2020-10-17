@@ -60,6 +60,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
@@ -3678,6 +3679,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
                 PhoenixDatabaseMetaData.PHOENIX_TTL_HWM + " "
                         + PInteger.INSTANCE.getSqlTypeName());
+
+            boolean isNamespaceMapping =
+                    SchemaUtil.isNamespaceMappingEnabled(null,  getConfiguration());
+            String tableName = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+            if (isNamespaceMapping) {
+                tableName = tableName.replace(
+                        QueryConstants.NAME_SEPARATOR,
+                        QueryConstants.NAMESPACE_SEPARATOR);
+            }
+
+            byte[] rowKey = SchemaUtil.getColumnKey(null,
+                    QueryConstants.SYSTEM_SCHEMA_NAME,
+                    SYSTEM_CATALOG_TABLE, VIEW_INDEX_ID,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY);
+            if (UpgradeUtil.isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded
+                    (metaConnection, rowKey, tableName.getBytes())) {
+                LOGGER.info("Updating VIEW_INDEX_ID data type to BIGINT.");
+                UpgradeUtil.updateViewIndexIdColumnDataTypeFromShortToLong(
+                        metaConnection, rowKey, tableName.getBytes());
+            } else {
+                LOGGER.info("Updating VIEW_INDEX_ID data type is not needed.");
+            }
         }
         return metaConnection;
     }

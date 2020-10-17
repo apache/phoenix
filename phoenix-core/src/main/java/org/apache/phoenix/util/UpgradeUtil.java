@@ -63,6 +63,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -81,6 +82,7 @@ import javax.annotation.Nullable;
 
 import com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -2249,6 +2251,43 @@ public class UpgradeUtil {
             if (table.getType() == PTableType.TABLE) {
                 mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getLinks());
             }
+        }
+    }
+
+    public static boolean isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded(
+            PhoenixConnection metaConnection, byte[] rowKey, byte[] syscatBytes) {
+        try (Table sysTable = metaConnection.getQueryServices().getTable(syscatBytes)) {
+            Scan s = new Scan();
+            s.setRowPrefixFilter(rowKey);
+            s.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            ResultScanner scanner = sysTable.getScanner(s);
+            Result result = scanner.next();
+            Cell cell = result.getColumnLatestCell(
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            return Bytes.compareTo(CellUtil.cloneValue(cell),
+                    PInteger.INSTANCE.toBytes(Types.SMALLINT)) == 0 ? true : false;
+        } catch (Exception e) {
+            LOGGER.error(String.format("Checking VIEW_INDEX_ID data type for upgrade failed: %s. ", e.getMessage()));
+        }
+        return false;
+    }
+
+    public static void updateViewIndexIdColumnDataTypeFromShortToLong(
+            PhoenixConnection metaConnection, byte[] rowKey, byte[] syscatBytes) {
+        try(Table sysTable = metaConnection.getQueryServices().getTable(syscatBytes)) {
+            KeyValue viewIndexIdKV = new KeyValue(rowKey,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(Types.BIGINT));
+            Put viewIndexIdPut = new Put(rowKey);
+            viewIndexIdPut.add(viewIndexIdKV);
+            sysTable.put(viewIndexIdPut);
+            LOGGER.info("Updated VIEW_INDEX_ID data type from SMALLINT TO BIGINT.");
+        } catch (Exception e) {
+            LOGGER.error(String.format("Upgrade/change VIEW_INDEX_ID data type failed: %s. ",e.getMessage()));
         }
     }
 
