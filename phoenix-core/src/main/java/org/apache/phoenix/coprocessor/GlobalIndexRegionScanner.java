@@ -66,7 +66,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,7 +114,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     public static final String PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS =
             "phoenix.index.mr.log.beyond.max.lookback.errors";
     public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
-    private static boolean ignoreIndexRebuildForTesting  = false;
     protected final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
 
     protected IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;
@@ -986,8 +984,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 indexUpdates.addAll(mutationList);
                 batchSize += mutationList.size();
                 if (batchSize >= maxBatchSize) {
-                    ungroupedAggregateRegionObserver.checkForRegionClosing();
-                    indexHTable.batch(indexUpdates);
+                    commitBatch(indexUpdates);
                     batchSize = 0;
                     indexUpdates = new ArrayList<Mutation>(maxBatchSize);
                 }

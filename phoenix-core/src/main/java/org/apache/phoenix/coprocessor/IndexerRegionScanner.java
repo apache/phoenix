@@ -35,11 +35,8 @@ import java.util.concurrent.Future;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-
-import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -65,7 +62,6 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -87,7 +83,6 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     protected Map<byte[], Put> indexKeyToDataPutMap;
     protected UngroupedAggregateRegionObserver.MutationList mutations;
     private boolean partialRebuild = false;
-    private UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
 
     IndexerRegionScanner (final RegionScanner innerScanner, final Region region, final Scan scan,
                           final RegionCoprocessorEnvironment env,

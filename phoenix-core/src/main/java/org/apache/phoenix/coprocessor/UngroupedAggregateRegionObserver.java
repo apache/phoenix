@@ -99,6 +99,7 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
@@ -1072,6 +1073,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
+    private RegionScanner getRegionScanner(final RegionScanner innerScanner, final Region region, final Scan scan,
+                                           final RegionCoprocessorEnvironment env, final boolean oldCoproc)
+            throws IOException {
+        if (oldCoproc) {
+            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
+        } else {
+            if (region.getTableDesc().hasCoprocessor(GlobalIndexChecker.class.getCanonicalName())) {
+                return new IndexRepairRegionScanner(innerScanner, region, scan, env, this);
+            } else {
+                return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
+            }
+        }
+    }
+
     private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
                                          final RegionCoprocessorEnvironment env) throws IOException {
         boolean oldCoproc = region.getTableDesc().hasCoprocessor(Indexer.class.getCanonicalName());
@@ -1101,25 +1116,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             innerScanner.close();
             RegionScanner scanner = region.getScanner(rawScan);
-            if (oldCoproc) {
-                return new IndexerRegionScanner(scanner, region, scan, env, this);
-            } else {
-                if (region.getTableDesc().hasCoprocessor(IndexRegionObserver.class.getCanonicalName())) {
-                    return new IndexRebuildRegionScanner(scanner, region, scan, env, this);
-                } else {
-                    return new IndexRepairRegionScanner(scanner, region, scan, env, this);
-                }
-            }
+            return getRegionScanner(scanner, region, scan, env, oldCoproc);
         }
-        if (oldCoproc) {
-            return new IndexerRegionScanner(innerScanner, region, scan, env, this);
-        } else {
-            if (region.getTableDesc().hasCoprocessor(IndexRegionObserver.class.getCanonicalName())) {
-                return new IndexRebuildRegionScanner(innerScanner, region, scan, env, this);
-            } else {
-                return new IndexRepairRegionScanner(innerScanner, region, scan, env, this);
-            }
-        }
+        return getRegionScanner(innerScanner, region, scan, env, oldCoproc);
     }
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
