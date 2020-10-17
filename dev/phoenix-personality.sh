@@ -140,7 +140,7 @@ function personality_modules
 
   # Running with threads>1 seems to trigger some problem in the build, but since we
   # spend 80+% of the time in phoenix-core, it wouldn't help much anyway
-  extra="--threads=1 -DPhoenixPatchProcess"
+  extra="--threads=1 -DPhoenixPatchProcess -Dskip.embedded"
   if [[ "${PATCH_BRANCH}" = 4* ]]; then
     extra="${extra} -Dhttps.protocols=TLSv1.2"
   fi

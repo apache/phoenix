@@ -75,7 +75,7 @@ pipeline {
                                 checkout scm
                                 sh """#!/bin/bash
                                     ulimit -a
-                                    mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B
+                                    mvn clean verify -Dskip.embedded -Dhbase.profile=${HBASE_PROFILE} -B
                                 """
                             }
                         }
