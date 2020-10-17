@@ -49,7 +49,7 @@
             </goals>
             <configuration>
               <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
+              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
                 <argument>

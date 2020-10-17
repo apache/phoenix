@@ -24,11 +24,10 @@
      <!-- Add the client & mapreduce jars. Expects the client jar packaging phase to already be run,
       which is determined by specification order in the pom. -->
     <fileSet>
-      <directory>${project.basedir}/../phoenix-client/target</directory>
+      <directory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
         <include>phoenix-client-${project.version}.jar</include>
-        <include>phoenix-client.jar</include>
       </includes>
     </fileSet>
     <fileSet>
@@ -36,7 +35,6 @@
       <outputDirectory>/</outputDirectory>
       <includes>
         <include>phoenix-server-${project.version}.jar</include>
-        <include>phoenix-server.jar</include>
       </includes>
     </fileSet>
     <fileSet>
