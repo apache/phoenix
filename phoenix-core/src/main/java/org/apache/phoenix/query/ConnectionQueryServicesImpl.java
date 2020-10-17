@@ -61,6 +61,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
@@ -285,6 +286,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
@@ -3746,6 +3748,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
                     PhoenixDatabaseMetaData.PHOENIX_TTL_HWM + " "
                             + PInteger.INSTANCE.getSqlTypeName());
+
+            boolean isNamespaceMapping =
+                    SchemaUtil.isNamespaceMappingEnabled(null,  getConfiguration());
+            String tableName = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+            if (isNamespaceMapping) {
+                tableName = tableName.replace(
+                        QueryConstants.NAME_SEPARATOR,
+                        QueryConstants.NAMESPACE_SEPARATOR);
+            }
+            byte[] tableBytes = StringUtil.toBytes(tableName);
+            byte[] rowKey = SchemaUtil.getColumnKey(null,
+                    QueryConstants.SYSTEM_SCHEMA_NAME,
+                    SYSTEM_CATALOG_TABLE, VIEW_INDEX_ID,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY);
+            if (UpgradeUtil.isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded
+                    (metaConnection, rowKey, tableBytes)) {
+                LOGGER.info("Updating VIEW_INDEX_ID data type to BIGINT.");
+                UpgradeUtil.updateViewIndexIdColumnDataTypeFromShortToLong(
+                        metaConnection, rowKey, tableBytes);
+            } else {
+                LOGGER.info("Updating VIEW_INDEX_ID data type is not needed.");
+            }
         }
         return metaConnection;
     }
