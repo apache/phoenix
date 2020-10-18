@@ -544,7 +544,11 @@ public enum SQLExceptionCode {
 
     INCORRECT_INDEX_NAME(906, "43M17", "The list contains one or more incorrect index name(s)"),
 
-    NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX(907, "43M18", "CASCADE INDEX feature is not supported for local index");
+    NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX(907, "43M18",
+        "CASCADE INDEX feature is not supported for local index"),
+
+    INVALID_REGION_SPLIT_POLICY(908, "43M19",
+        "REGION SPLIT POLICY is incorrect.");
 
     private final int errorCode;
     private final String sqlState;
