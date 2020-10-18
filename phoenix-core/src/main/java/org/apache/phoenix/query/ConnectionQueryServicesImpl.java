@@ -116,6 +116,7 @@ import java.util.regex.Pattern;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -192,6 +193,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.exception.InvalidRegionSplitPolicyException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -248,6 +250,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
 import org.apache.phoenix.schema.SystemStatsSplitPolicy;
+import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
@@ -1451,7 +1454,51 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return null; // will never make it here
     }
-    
+
+    /**
+     * If given TableDescriptorBuilder belongs to SYSTEM.TASK and if the table
+     * still does not have split policy setup as SystemTaskSplitPolicy, set
+     * it up and return true, else return false. This method is expected
+     * to return true only if it updated split policy (which should happen
+     * once during initial upgrade).
+     *
+     * @param tdBuilder table descriptor builder
+     * @return return true if split policy of SYSTEM.TASK is updated to
+     *     SystemTaskSplitPolicy.
+     * @throws SQLException If SYSTEM.TASK already has custom split policy
+     *     set up other than SystemTaskSplitPolicy
+     */
+    @VisibleForTesting
+    public boolean updateAndConfirmSplitPolicyForTask(
+            final TableDescriptorBuilder tdBuilder) throws SQLException {
+        boolean isTaskTable = false;
+        TableName sysTaskTable = SchemaUtil
+            .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME,
+                props);
+        if (tdBuilder.build().getTableName().equals(sysTaskTable)) {
+            isTaskTable = true;
+        }
+        if (isTaskTable) {
+            final String actualSplitPolicy = tdBuilder.build()
+                .getRegionSplitPolicyClassName();
+            final String targetSplitPolicy =
+                SystemTaskSplitPolicy.class.getName();
+            if (!targetSplitPolicy.equals(actualSplitPolicy)) {
+                if (StringUtils.isNotEmpty(actualSplitPolicy)) {
+                    // Rare possibility. pre-4.16 create DDL query
+                    // doesn't have any split policy setup for SYSTEM.TASK
+                    throw new InvalidRegionSplitPolicyException(
+                        QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_TASK_TABLE,
+                        ImmutableList.of("null", targetSplitPolicy),
+                        actualSplitPolicy);
+                }
+                tdBuilder.setRegionSplitPolicyClassName(targetSplitPolicy);
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean hasTxCoprocessor(TableDescriptor descriptor) {
         for (TransactionFactory.Provider provider : TransactionFactory.Provider.available()) {
             Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
@@ -3979,7 +4026,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private PhoenixConnection upgradeSystemTask(PhoenixConnection metaConnection)
-    throws SQLException {
+            throws SQLException, IOException {
         try {
             metaConnection.createStatement().executeUpdate(getTaskDDL());
         } catch (NewerTableAlreadyExistsException ignored) {
@@ -4005,6 +4052,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 metaConnection.createStatement().executeUpdate(
                         "ALTER TABLE " + taskTableFullName + " SET " + TTL + "=" + TASK_TABLE_TTL);
                 clearCache();
+            }
+            // If SYSTEM.TASK does not have disabled regions split policy,
+            // set it up here while upgrading it
+            try (Admin admin = metaConnection.getQueryServices().getAdmin()) {
+                TableDescriptor td;
+                TableName tableName = SchemaUtil.getPhysicalTableName(
+                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME, props);
+                td = admin.getDescriptor(tableName);
+                TableDescriptorBuilder tableDescriptorBuilder =
+                    TableDescriptorBuilder.newBuilder(td);
+                if (updateAndConfirmSplitPolicyForTask(
+                        tableDescriptorBuilder)) {
+                    admin.modifyTable(tableDescriptorBuilder.build());
+                    pollForUpdatedTableDescriptor(admin,
+                        tableDescriptorBuilder.build(), tableName.getName());
+                }
+            } catch (InterruptedException | TimeoutException ite) {
+                throw new SQLException(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
+                    + " Upgrade is not confirmed");
             }
         }
         return metaConnection;

@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -61,6 +62,7 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
@@ -333,10 +335,27 @@ public class BackwardCompatibilityIT {
         executeQueriesWithCurrentVersion(QUERY_ADD_DELETE);
         assertExpectedOutput(QUERY_ADD_DELETE);
     }
-    
+
+    @Test
+    public void testUpdatedSplitPolicyForSysTask() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion,
+            CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        try (org.apache.hadoop.hbase.client.Connection conn =
+                hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
+            TableDescriptor tableDescriptor = admin.getDescriptor(
+                TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
+            assertEquals("split policy not updated with compatible client version: "
+                + compatibleClientVersion,
+                tableDescriptor.getRegionSplitPolicyClassName(),
+                SystemTaskSplitPolicy.class.getName());
+        }
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
     private void checkForPreConditions() throws Exception {
         // For the first code cut of any major version, there wouldn't be any backward compatible
-        // clients. Hence the test wouldn't run and just return true when the client  
+        // clients. Hence the test wouldn't run and just return true when the client
         // version to be tested is same as current version
         assumeFalse(compatibleClientVersion.contains(MetaDataProtocol.CURRENT_CLIENT_VERSION));
         // Make sure that cluster is clean before test execution with no system tables

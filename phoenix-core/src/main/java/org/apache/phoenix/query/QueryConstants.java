@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
 import org.apache.phoenix.schema.SystemStatsSplitPolicy;
+import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.schema.TableProperty;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
@@ -498,7 +499,7 @@ public interface QueryConstants {
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TTL_FOR_MUTEX;
 
-	String CREATE_TASK_METADATA =
+    String CREATE_TASK_METADATA =
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_TABLE + "\"(\n" +
             // PK columns
             TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
@@ -517,6 +518,8 @@ public interface QueryConstants {
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
+            TableDescriptorBuilder.SPLIT_POLICY + "='"
+                + SystemTaskSplitPolicy.class.getName() + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
 }

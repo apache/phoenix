@@ -25,8 +25,11 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
@@ -34,52 +37,56 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-public class SystemCatalogUpgradeIT extends BaseTest {
+/**
+ * Tests for upgrades of System tables.
+ */
+public class SystemTablesUpgradeIT extends BaseTest {
     private static boolean reinitialize;
     private static int countUpgradeAttempts;
     private static long systemTableVersion = MetaDataProtocol.getPriorVersion();
-    
+
     private static class PhoenixUpgradeCountingServices extends ConnectionQueryServicesImpl {
         public PhoenixUpgradeCountingServices(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
-        
+
         @Override
         protected void setUpgradeRequired() {
             super.setUpgradeRequired();
             countUpgradeAttempts++;
         }
-        
+
         @Override
         protected long getSystemTableVersion() {
             return systemTableVersion;
         }
-        
+
         @Override
         protected boolean isInitialized() {
             return !reinitialize && super.isInitialized();
         }
     }
-    
+
     public static class PhoenixUpgradeCountingDriver extends PhoenixTestDriver {
         private ConnectionQueryServices cqs;
         private final ReadOnlyProps overrideProps;
-        
+
         public PhoenixUpgradeCountingDriver(ReadOnlyProps props) {
             overrideProps = props;
         }
-        
+
         @Override
         public boolean acceptsURL(String url) throws SQLException {
             return true;
         }
-        
+
         @Override // public for testing
         public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
             if (cqs == null) {
@@ -92,7 +99,7 @@ public class SystemCatalogUpgradeIT extends BaseTest {
             return cqs;
         }
     }
-    
+
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
@@ -115,7 +122,18 @@ public class SystemCatalogUpgradeIT extends BaseTest {
         // Confirm that another connection does not increase the number of times upgrade was attempted
         DriverManager.getConnection(getUrl());
         assertEquals(wasTimestampChanged ? 1 : 0, countUpgradeAttempts);
+        // Additional test for PHOENIX-6125
+        // Confirm that SYSTEM.TASK has split policy set as
+        // SystemTaskSplitPolicy (which is extending DisabledRegionSplitPolicy
+        // as of this writing)
+        try (Admin admin = services.getAdmin()) {
+            String taskSplitPolicy = admin
+                .getDescriptor(TableName.valueOf(
+                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
+                .getRegionSplitPolicyClassName();
+            assertEquals(SystemTaskSplitPolicy.class.getName(),
+                taskSplitPolicy);
+        }
     }
-
 
 }
