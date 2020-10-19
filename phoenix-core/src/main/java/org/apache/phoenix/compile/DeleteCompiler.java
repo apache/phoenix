@@ -142,7 +142,7 @@ public class DeleteCompiler {
         final boolean autoFlush = connection.getAutoCommit() || tableRef.getTable().isTransactional();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         MultiRowMutationState mutations = new MultiRowMutationState(batchSize);
         List<MultiRowMutationState> otherMutations = null;
@@ -569,7 +569,7 @@ public class DeleteCompiler {
         }
 
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
  
         // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
         if (noQueryReqd) {
@@ -649,9 +649,9 @@ public class DeleteCompiler {
         private final PhoenixConnection connection;
         private final int maxSize;
         private final StatementContext context;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
 
-        public SingleRowDeleteMutationPlan(QueryPlan dataPlan, PhoenixConnection connection, int maxSize, int maxSizeBytes) {
+        public SingleRowDeleteMutationPlan(QueryPlan dataPlan, PhoenixConnection connection, int maxSize, long maxSizeBytes) {
             this.dataPlan = dataPlan;
             this.connection = connection;
             this.maxSize = maxSize;
@@ -733,10 +733,10 @@ public class DeleteCompiler {
         private final QueryPlan aggPlan;
         private final RowProjector projector;
         private final int maxSize;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
 
         public ServerSelectDeleteMutationPlan(QueryPlan dataPlan, PhoenixConnection connection, QueryPlan aggPlan,
-                                              RowProjector projector, int maxSize, int maxSizeBytes) {
+                                              RowProjector projector, int maxSize, long maxSizeBytes) {
             this.context = dataPlan.getContext();
             this.dataPlan = dataPlan;
             this.connection = connection;
@@ -847,14 +847,14 @@ public class DeleteCompiler {
         private final List<TableRef> otherTableRefs;
         private final TableRef projectedTableRef;
         private final int maxSize;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
         private final PhoenixConnection connection;
 
         public ClientSelectDeleteMutationPlan(TableRef targetTableRef, QueryPlan dataPlan, QueryPlan bestPlan,
                                               boolean hasPreOrPostProcessing,
                                               DeletingParallelIteratorFactory parallelIteratorFactory,
                                               List<TableRef> otherTableRefs, TableRef projectedTableRef, int maxSize,
-                                              int maxSizeBytes, PhoenixConnection connection) {
+                                              long maxSizeBytes, PhoenixConnection connection) {
             this.context = bestPlan.getContext();
             this.targetTableRef = targetTableRef;
             this.dataPlan = dataPlan;
