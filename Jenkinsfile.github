@@ -128,7 +128,7 @@ pipeline {
                               reportFiles: 'report.html',
                               reportName: 'PR General Check Report'
                             ]
-                            sh "find ${WORKDIR_REL}/${PATCH_REL}/ -name \\*.txt -exec gzip {} \\;"
+                            sh "find ${WORKDIR_REL}/${PATCH_REL}/ -name org.apache\\*.txt -exec gzip {} \\;"
                             archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit"
                             archiveArtifacts artifacts: "${WORKDIR_REL}/${PATCH_REL}/**/*", excludes: "${WORKDIR_REL}/${PATCH_REL}/precommit/**/*"
                         }
