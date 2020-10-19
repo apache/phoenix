@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -67,6 +64,9 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -329,6 +329,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         byte[] qualifier = CellUtil.cloneQualifier(cell);
         return set.contains(qualifier);
     }
+
     @VisibleForTesting
     public boolean shouldVerify(IndexTool.IndexVerifyType verifyType,
                                 byte[] indexRowKey, Scan scan, Region region, IndexMaintainer indexMaintainer,

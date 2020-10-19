@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.index;
 
-import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
 import java.util.List;
