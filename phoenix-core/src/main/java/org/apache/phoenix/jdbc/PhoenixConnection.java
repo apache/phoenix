@@ -328,7 +328,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         int maxSize = this.services.getProps().getInt(
                 QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        int maxSizeBytes = this.services.getProps().getInt(
+        long maxSizeBytes = this.services.getProps().getLong(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
@@ -589,7 +589,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return metaData.getTableRef(key);
     }
 
-    protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
+    protected MutationState newMutationState(int maxSize, long maxSizeBytes) {
         return new MutationState(maxSize, maxSizeBytes, this);
     }
 
