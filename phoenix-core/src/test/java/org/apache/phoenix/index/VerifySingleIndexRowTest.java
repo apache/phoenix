@@ -357,7 +357,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     @Test
     public void testVerifySingleIndexRow_expiredIndexRowCount_nonZero() throws IOException {
         IndexToolVerificationResult.PhaseResult
-                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0,0,0);
+                expectedPR = new IndexToolVerificationResult.PhaseResult(0, 1, 0, 0, 0, 0, 0, 0, 0, 0);
         try {
             for (Map.Entry<byte[], List<Mutation>>
                     entry : indexKeyToMutationMap.entrySet()) {
@@ -510,7 +510,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         assertTrue(rebuildScanner.verifySingleIndexRow(indexRow.getRow(), actualMutations,
                 indexKeyToMutationMap.get(indexRow.getRow()), mostRecentIndexRowKeys, Collections.EMPTY_LIST, actualPR, false));
         // validIndexRowCount = 1
-        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0);
+        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         assertTrue(actualPR.equals(expectedPR));
     }
 
@@ -566,7 +566,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         // Report this validation as a failure
         assertFalse(rebuildScanner.verifySingleIndexRow(indexRow.getRow(), actualMutations, expectedMutations, mostRecentIndexRowKeys, new ArrayList<Mutation>(), actualPR, true));
         // beyondMaxLookBackInvalidIndexRowCount = 1
-        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(0, 0, 0, 0, 0, 1, 0, 0);
+        IndexToolVerificationResult.PhaseResult expectedPR = new IndexToolVerificationResult.PhaseResult(0, 0, 0, 0, 0, 1, 0, 0, 0, 0);
         assertTrue(actualPR.equals(expectedPR));
     }
 
@@ -580,11 +580,11 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private IndexToolVerificationResult.PhaseResult getValidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0);
+        return new IndexToolVerificationResult.PhaseResult(1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     private IndexToolVerificationResult.PhaseResult getInvalidPhaseResult() {
-        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1, 0, 0, 0, 0);
+        return new IndexToolVerificationResult.PhaseResult(0, 0, 0, 1, 0, 0, 0, 0, 0, 0);
     }
 
     private void initializeLocalMockitoSetup(Map.Entry<byte[], List<Mutation>> entry,

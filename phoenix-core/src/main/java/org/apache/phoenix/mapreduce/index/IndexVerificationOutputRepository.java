@@ -92,6 +92,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public enum IndexVerificationErrorType {
         INVALID_ROW,
         MISSING_ROW,
+        EXTRA_ROW,
         EXTRA_CELLS,
         BEYOND_MAX_LOOKBACK_INVALID,
         BEYOND_MAX_LOOKBACK_MISSING,
