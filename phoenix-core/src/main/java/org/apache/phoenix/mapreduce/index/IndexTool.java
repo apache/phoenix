@@ -51,7 +51,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -192,6 +191,14 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
+    /**
+     * Which table to use as the source table
+     */
+    public enum SourceTable {
+        DATA_TABLE_SOURCE,
+        INDEX_TABLE_SOURCE;
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
     private String schemaName;
@@ -200,6 +207,7 @@ public class IndexTool extends Configured implements Tool {
     private boolean isPartialBuild, isForeground;
     private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
     private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
+    private SourceTable sourceTable = SourceTable.DATA_TABLE_SOURCE;
     private String qDataTable;
     private String qIndexTable;
     private boolean useSnapshot;
@@ -285,6 +293,11 @@ public class IndexTool extends Configured implements Tool {
         , "Disable logging of failed verification rows for BEFORE, " +
         "AFTER, or BOTH verify jobs");
 
+    private static final Option USE_INDEX_TABLE_AS_SOURCE_OPTION =
+        new Option("fi", "from-index", false,
+            "To verify every row in the index table has a corresponding row in the data table. " +
+                "Only supported for global indexes. This option is applicable to BEFORE and ONLY type verification jobs");
+
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
     public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
@@ -293,7 +306,6 @@ public class IndexTool extends Configured implements Tool {
 
     public static final String FEATURE_NOT_APPLICABLE = "start-time/end-time and retry verify feature are only "
             + "applicable for local or non-transactional global indexes";
-
 
     public static final String RETRY_VERIFY_NOT_APPLICABLE = "retry verify feature accepts "
             + "non-zero ts set in the past and ts must be present in PHOENIX_INDEX_TOOL_RESULT table";
@@ -323,6 +335,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(END_TIME_OPTION);
         options.addOption(RETRY_VERIFY_OPTION);
         options.addOption(DISABLE_LOGGING_OPTION);
+        options.addOption(USE_INDEX_TABLE_AS_SOURCE_OPTION);
         return options;
     }
 
@@ -377,6 +390,12 @@ public class IndexTool extends Configured implements Tool {
         if (splitIndex && cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt())) {
             throw new IllegalStateException("Cannot split index for a partial rebuild, as the index table is dropped");
         }
+        if (!isFromIndexCompatibleWithVerifyOption(cmdLine)) {
+            throw new IllegalStateException("Can't use index table as source when no index " +
+                "verification or the wrong kind of index verification has been requested. " +
+                "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] " +
+                "Supported types ONLY,BEFORE");
+        }
         if (loggingDisabledMismatchesVerifyOption(cmdLine)){
             throw new IllegalStateException("Can't disable index verification logging when no " +
                 "index verification or the wrong kind of index verification has been requested. " +
@@ -422,6 +441,26 @@ public class IndexTool extends Configured implements Tool {
         return false;
     }
 
+    private boolean isFromIndexCompatibleWithVerifyOption(CommandLine cmdLine) {
+        if (!cmdLine.hasOption(USE_INDEX_TABLE_AS_SOURCE_OPTION.getOpt())) {
+            return true;
+        }
+
+        // -fi only works with -v ONLY and -v BEFORE
+
+        // default -v option is NONE which is not supported
+        if (!cmdLine.hasOption(VERIFY_OPTION.getOpt())) {
+            return false;
+        }
+        String verifyValue = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
+        IndexVerifyType verifyType = IndexVerifyType.fromValue(verifyValue);
+
+        if (!verifyType.equals(IndexVerifyType.BEFORE) && !verifyType.equals(IndexVerifyType.ONLY)) {
+            return false;
+        }
+        return true;
+    }
+
     private void printHelpAndExit(String errorMessage, Options options) {
         System.err.println(errorMessage);
         printHelpAndExit(options, 1);
@@ -444,6 +483,8 @@ public class IndexTool extends Configured implements Tool {
     public IndexTool.IndexDisableLoggingType getDisableLoggingType() {
         return disableLoggingType;
     }
+
+    public IndexTool.SourceTable getSourceTable() { return sourceTable; }
 
     class JobFactory {
         Connection connection;
@@ -692,6 +733,7 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
+            PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
             if (startTime != null) {
                 PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
             }
@@ -849,6 +891,7 @@ public class IndexTool extends Configured implements Tool {
         boolean retryVerify = cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
         boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
+        boolean useIndexTableAsSource = cmdLine.hasOption(USE_INDEX_TABLE_AS_SOURCE_OPTION.getOpt());
 
         if (useTenantId) {
             tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -875,6 +918,11 @@ public class IndexTool extends Configured implements Tool {
                         cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()));
             }
         }
+
+        if (useIndexTableAsSource) {
+            sourceTable = SourceTable.INDEX_TABLE_SOURCE;
+        }
+
         schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
         dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
         indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());

@@ -125,6 +125,8 @@ public final class PhoenixConfigurationUtil {
 
     public static final String INDEX_TOOL_INDEX_TABLE_NAME = "phoenix.mr.index_tool.index.table.name";
 
+    public static final String INDEX_TOOL_SOURCE_TABLE = "phoenix.mr.index_tool.source.table";
+
     public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
 
     public static final String SCRUTINY_BATCH_SIZE = "phoenix.mr.scrutiny.batch.size";
@@ -658,6 +660,19 @@ public final class PhoenixConfigurationUtil {
     public static String getIndexToolIndexTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
+    }
+
+    public static void setIndexToolSourceTable(Configuration configuration,
+            IndexTool.SourceTable sourceTable) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(sourceTable);
+        configuration.set(INDEX_TOOL_SOURCE_TABLE, sourceTable.name());
+    }
+
+    public static IndexTool.SourceTable getIndexToolSourceTable(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return IndexTool.SourceTable.valueOf(configuration.get(INDEX_TOOL_SOURCE_TABLE,
+            IndexTool.SourceTable.DATA_TABLE_SOURCE.name()));
     }
 
     public static void setScrutinySourceTable(Configuration configuration,

@@ -34,9 +34,8 @@ import org.mockito.MockitoAnnotations;
 
 import static org.apache.phoenix.mapreduce.index.IndexTool.FEATURE_NOT_APPLICABLE;
 import static org.apache.phoenix.mapreduce.index.IndexTool.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
-import static org.junit.Assert.assertEquals;
 import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
-import static org.mockito.Mockito.mock;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
 public class IndexToolTest extends BaseTest {
@@ -333,6 +332,55 @@ public class IndexToolTest extends BaseTest {
                 startTime, endTime, disableType, null);
         exceptionRule.expect(IllegalStateException.class);
         CommandLine cmdLine = it.parseOptions(args);
+    }
+
+    @Test
+    public void testIndexToolDefaultSource() throws Exception {
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String [] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
+                startTime , endTime);
+        CommandLine cmdLine = it.parseOptions(args);
+        it.populateIndexToolAttributes(cmdLine);
+        assertEquals(IndexTool.SourceTable.DATA_TABLE_SOURCE, it.getSourceTable());
+    }
+
+    @Test
+    public void testIndexToolFromIndexSource() throws Exception {
+        verifyFromIndexOption(IndexTool.IndexVerifyType.ONLY);
+        verifyFromIndexOption(IndexTool.IndexVerifyType.BEFORE);
+    }
+
+    @Test
+    public void testIndexToolFromIndexSourceWith_Wrong_VerifyOption() throws Exception {
+        verifyFromIndexException(IndexTool.IndexVerifyType.NONE);
+        verifyFromIndexException(IndexTool.IndexVerifyType.AFTER);
+        verifyFromIndexException(IndexTool.IndexVerifyType.BOTH);
+    }
+
+    private void verifyFromIndexException(IndexTool.IndexVerifyType verifyType) {
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String[] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, verifyType,
+                startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, null, true);
+        exceptionRule.expect(IllegalStateException.class);
+        CommandLine cmdLine = it.parseOptions(args);
+    }
+
+    private void verifyFromIndexOption(IndexTool.IndexVerifyType verifyType) throws Exception {
+        Long startTime = 1L;
+        Long endTime = 10L;
+        String[] args =
+            IndexToolIT.getArgValues(true, true, schema,
+                dataTable, indexTable, tenantId, verifyType,
+                startTime, endTime, IndexTool.IndexDisableLoggingType.BEFORE, null, true);
+        CommandLine cmdLine = it.parseOptions(args);
+        it.populateIndexToolAttributes(cmdLine);
+        assertEquals(IndexTool.SourceTable.INDEX_TABLE_SOURCE, it.getSourceTable());
     }
 
 }
