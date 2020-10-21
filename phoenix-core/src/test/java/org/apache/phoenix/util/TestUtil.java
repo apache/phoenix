@@ -840,10 +840,16 @@ public class TestUtil {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
            
             Put put = new Put(markerRowKey);
-            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            long timestamp = 0L;
+            // We do not want to wait an hour because of PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY
+            // So set the timestamp of the put and delete as early as possible
+            put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES, timestamp,
+                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.put(put);
             Delete delete = new Delete(markerRowKey);
-            delete.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            delete.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES, timestamp);
             htable.delete(delete);
             htable.close();
             if (table.isTransactional()) {
