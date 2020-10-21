@@ -4155,7 +4155,10 @@ public class MetaDataClient {
         // TODO: add support to specify tenant owned indexes in the DDL statement with CASCADE executed with Global connection
         for (PTable index : indexesPTable) {
             int iPos = indexToColumnSizeMap.get(index);
-            PColumn iColumn = newColumn(iPos, indexColDef, null, "", false, null, willBeImmutableRows);
+            EncodedCQCounter cqCounterToUse = index.getEncodedCQCounter();
+            Integer encodedCQ = index.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + iPos) : cqCounterToUse.getNextQualifier(familyName);
+            byte[] columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(indexColDef.getColumnDefName().getColumnName(), encodedCQ, index, indexColDef.isPK());
+            PColumn iColumn = newColumn(iPos, indexColDef, null, index.getDefaultFamilyName() == null ? null : index.getDefaultFamilyName().getString(), false, columnQualifierBytes, willBeImmutableRows);
             indexColumn.put(index, iColumn);
             indexToColumnSizeMap.put(index, iPos+1);
         }

@@ -18,13 +18,23 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Rule;
@@ -45,6 +55,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -358,6 +369,41 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         }
         rs.close();
         p.close();
+    }
+
+    @Test
+    public void testAddColumnHBaseLevel() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = "TBL_" + generateUniqueName();
+            String idxName = "IND_" + generateUniqueName();
+            String baseTableDDL = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 CHAR(15) CONSTRAINT NAME_PK PRIMARY KEY(PK1))";
+            conn.createStatement().execute(baseTableDDL);
+            String indexDDL = "CREATE INDEX " + idxName + " ON " + tableName + " (PK1) include (V1, V2) ";
+            conn.createStatement().execute(indexDDL);
+            String upsert = "UPSERT INTO " + tableName + " (PK1, V1, V2) VALUES ('PK1',  'V1', 'V2')";
+            conn.createStatement().executeUpdate(upsert);
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            HTableInterface table = cqs.getTable(Bytes.toBytes(idxName));
+            String alterTable = "ALTER TABLE " + tableName + " ADD V3 VARCHAR CASCADE INDEX ALL";
+            conn.createStatement().execute(alterTable);
+            String upsert2 = "UPSERT INTO " + tableName + " (PK1, V1, V2,V3) VALUES ('PK2',  'V1', 'V2', 'V3')";
+            conn.createStatement().executeUpdate(upsert2);
+            try {
+                Scan scan = new Scan();
+                scan.setRaw(true);
+                scan.setMaxVersions();
+                int count=0;
+                ResultScanner scanner = table.getScanner(scan);
+                for (Result result = scanner.next(); result != null; result = scanner.next()) {
+                    count+=result.listCells().size();
+                }
+                assertEquals(7, count);
+            } catch (Exception e) {
+                //ignore
+            }
+        }
     }
 
 }
