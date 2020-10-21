@@ -4443,7 +4443,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    private Table getSysMutexTable() throws SQLException, IOException {
+    @VisibleForTesting
+    public Table getSysMutexTable() throws SQLException, IOException {
         String table = SYSTEM_MUTEX_NAME;
         TableName tableName = TableName.valueOf(table);
         try (Admin admin = getAdmin()) {
