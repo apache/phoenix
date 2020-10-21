@@ -18,8 +18,6 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -34,7 +32,6 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Rule;
@@ -68,19 +65,21 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     public ExpectedException exception = ExpectedException.none();
     private static Connection conn;
     private Properties prop;
-    private boolean isViewIndex;
+    private boolean isViewIndex, mutable;
     private String phoenixObjectName;
     private String indexNames;
     private final String tableDDLOptions;
-    String fullIndexNameOne, fullIndexNameTwo;
+    String fullIndexNameOne, fullIndexNameTwo, fullTableName;
 
 
     public AlterAddCascadeIndexIT(boolean isViewIndex, boolean mutable) {
         this.isViewIndex = isViewIndex;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
+
             optionBuilder.append(" IMMUTABLE_ROWS=true");
         }
+        this.mutable = mutable;
         this.tableDDLOptions = optionBuilder.toString();
     }
 
@@ -105,7 +104,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         String tableName = "T_"+generateUniqueName();
         String viewName = "V_"+generateUniqueName();
         String fullViewName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
-        String fullTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        fullTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " (\n" +
                 "      state CHAR(2) NOT NULL,\n" +
                 "      city VARCHAR NOT NULL,\n" +
@@ -157,10 +156,19 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 6, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 5, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 5, columnIndexArray, false);
+            if (mutable) {
+                assertNumberOfHBaseCells( "_IDX_"+fullTableName,6);
+            }
+            else {
+                assertNumberOfHBaseCells( "_IDX_"+fullTableName,4);
+            }
         } else {
             assertDBODefinition(conn, phoenixObjectName, PTableType.TABLE, 4, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 4, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 4, columnIndexArray, false);
+            assertNumberOfHBaseCells( fullIndexNameOne,2);
+            assertNumberOfHBaseCells( fullIndexNameOne,2);
+
         }
 
     }
@@ -371,39 +379,24 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         p.close();
     }
 
-    @Test
-    public void testAddColumnHBaseLevel() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            String tableName = "TBL_" + generateUniqueName();
-            String idxName = "IND_" + generateUniqueName();
-            String baseTableDDL = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 CHAR(15) CONSTRAINT NAME_PK PRIMARY KEY(PK1))";
-            conn.createStatement().execute(baseTableDDL);
-            String indexDDL = "CREATE INDEX " + idxName + " ON " + tableName + " (PK1) include (V1, V2) ";
-            conn.createStatement().execute(indexDDL);
-            String upsert = "UPSERT INTO " + tableName + " (PK1, V1, V2) VALUES ('PK1',  'V1', 'V2')";
-            conn.createStatement().executeUpdate(upsert);
+    public void assertNumberOfHBaseCells(String tableName, int expected) {
+        try {
             ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            HTableInterface table = cqs.getTable(Bytes.toBytes(idxName));
-            String alterTable = "ALTER TABLE " + tableName + " ADD V3 VARCHAR CASCADE INDEX ALL";
-            conn.createStatement().execute(alterTable);
-            String upsert2 = "UPSERT INTO " + tableName + " (PK1, V1, V2,V3) VALUES ('PK2',  'V1', 'V2', 'V3')";
-            conn.createStatement().executeUpdate(upsert2);
-            try {
-                Scan scan = new Scan();
-                scan.setRaw(true);
-                scan.setMaxVersions();
-                int count=0;
-                ResultScanner scanner = table.getScanner(scan);
-                for (Result result = scanner.next(); result != null; result = scanner.next()) {
-                    count+=result.listCells().size();
-                }
-                assertEquals(7, count);
-            } catch (Exception e) {
-                //ignore
+            HTableInterface table = cqs.getTable(Bytes.toBytes(tableName));
+
+            Scan scan = new Scan();
+            scan.setRaw(true);
+            scan.setMaxVersions();
+            int count=0;
+            ResultScanner scanner = table.getScanner(scan);
+            for (Result result = scanner.next(); result != null; result = scanner.next()) {
+                count+=result.listCells().size();
             }
+            assertEquals(expected, count);
+        } catch (Exception e) {
+            //ignore
         }
+
     }
 
 }
