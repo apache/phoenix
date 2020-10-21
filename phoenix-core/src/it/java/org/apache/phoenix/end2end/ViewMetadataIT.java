@@ -20,7 +20,10 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.TaskRegionObserver.TASK_DETAILS;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MODIFY_VIEW_PK;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -28,6 +31,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -41,6 +46,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -52,24 +59,32 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost;
+import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.end2end.ViewIT.TestMetaDataRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ViewUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -80,6 +95,18 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
+    final static String BASE_TABLE_SCHEMA = "S";
+    final static String CHILD_VIEW_LEVEL_1_SCHEMA = "S1";
+    private final static String CHILD_VIEW_LEVEL_2_SCHEMA = "S2";
+    private final static String CHILD_VIEW_LEVEL_3_SCHEMA = "S3";
+    final static String CREATE_BASE_TABLE_DDL =
+            "CREATE TABLE %s.%s (A INTEGER NOT NULL PRIMARY KEY, B INTEGER, C INTEGER)";
+    final static String CREATE_CHILD_VIEW_LEVEL_1_DDL =
+            "CREATE VIEW %s.%s (NEW_COL1 INTEGER) AS SELECT * FROM %s.%s WHERE B > 10";
+    final static String CREATE_CHILD_VIEW_LEVEL_2_DDL =
+            "CREATE VIEW %s.%s (NEW_COL2 INTEGER) AS SELECT * FROM %s.%s WHERE NEW_COL1=5";
+    final static String CREATE_CHILD_VIEW_LEVEL_3_DDL =
+            "CREATE VIEW %s.%s (NEW_COL3 INTEGER) AS SELECT * FROM %s.%s WHERE NEW_COL2=10";
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -294,7 +321,286 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         }
     }
 
-    private void runDropChildViewsTask() {
+    @Test
+    public void testAlterTableIsResilientToOrphanLinks() throws SQLException {
+        final String parent1TableName = generateUniqueName();
+        final String parent2TableName = generateUniqueName();
+        final String viewName = "V_" + generateUniqueName();
+        // Note that this column name is the same as the new column on the child view
+        final String alterTableDDL = "ALTER TABLE %s ADD NEW_COL1 VARCHAR";
+        createOrphanLink(SCHEMA1, parent1TableName, parent2TableName, SCHEMA2, viewName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            // Should not fail since this table is unrelated to the view in spite of
+            // the orphan parent->child link
+            stmt.execute(String.format(alterTableDDL,
+                    SchemaUtil.getTableName(SCHEMA1, parent2TableName)));
+            try {
+                stmt.execute(String.format(alterTableDDL,
+                        SchemaUtil.getTableName(SCHEMA1, parent1TableName)));
+                fail("Adding column should be disallowed since there is a conflicting column type "
+                        + "on the child view");
+            } catch (SQLException sqlEx) {
+                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), sqlEx.getErrorCode());
+            }
+        }
+    }
+
+    @Test
+    public void testDropTableIsResilientToOrphanLinks() throws SQLException {
+        final String parent1TableName = generateUniqueName();
+        final String parent2TableName = generateUniqueName();
+        final String viewName = "V_" + generateUniqueName();
+        final String dropTableNoCascadeDDL = "DROP TABLE %s ";
+        createOrphanLink(SCHEMA1, parent1TableName, parent2TableName, SCHEMA2, viewName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            // Should not fail since this table is unrelated to the view in spite of
+            // the orphan parent->child link
+            stmt.execute(String.format(dropTableNoCascadeDDL,
+                    SchemaUtil.getTableName(SCHEMA1, parent2TableName)));
+            try {
+                stmt.execute(String.format(dropTableNoCascadeDDL,
+                        SchemaUtil.getTableName(SCHEMA1, parent1TableName)));
+                fail("Drop table without cascade should fail since there is a child view");
+            } catch (SQLException sqlEx) {
+                assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), sqlEx.getErrorCode());
+            }
+        }
+    }
+
+    /**
+     * Create a view hierarchy:
+     *
+     *              _____ parent1 ____                                 _____ parent2 ____
+     *             /         |        \                               /         |        \
+     *    level1view1   level1view3  level1view4            level1view2   level1view5  level1view6
+     *         |                                                 |
+     *  t001.level2view1                                 t001.level2view2
+     *                                                           |
+     *                                                   t001.level3view1
+     *
+     * We induce orphan links by recreating the same view names on top of different parents
+     */
+    @Test
+    public void testViewHierarchyWithOrphanLinks() throws Exception {
+        final List<TableInfo> expectedLegitChildViewsListForParent1 = new ArrayList<>();
+        final List<TableInfo> expectedLegitChildViewsListForParent2 = new ArrayList<>();
+        final String tenantId = "t001";
+        final String parent1TableName = "P1_" + generateUniqueName();
+        final String parent2TableName = "P2_" + generateUniqueName();
+
+        final String level1ViewName1 = "L1_V_1_" + generateUniqueName();
+        final String level1ViewName2 = "L1_V_2_" + generateUniqueName();
+        final String level1ViewName3 = "L1_V_3_" + generateUniqueName();
+        final String level1ViewName4 = "L1_V_4_" + generateUniqueName();
+        final String level1ViewName5 = "L1_V_5_" + generateUniqueName();
+        final String level1ViewName6 = "L1_V_6_" + generateUniqueName();
+
+        final String level2ViewName1 = "L2_V_1_" + generateUniqueName();
+        final String level2ViewName2 = "L2_V_2_" + generateUniqueName();
+
+        final String level3ViewName1 = "L3_V_1_" + generateUniqueName();
+        createOrphanLink(BASE_TABLE_SCHEMA, parent1TableName, parent2TableName,
+                CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName1);
+
+        // Create other legit views on top of parent1 and parent2
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName3,
+                    BASE_TABLE_SCHEMA, parent1TableName));
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName4,
+                    BASE_TABLE_SCHEMA, parent1TableName));
+
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName2,
+                    BASE_TABLE_SCHEMA, parent2TableName));
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName5,
+                    BASE_TABLE_SCHEMA, parent2TableName));
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName6,
+                    BASE_TABLE_SCHEMA, parent2TableName));
+        }
+        Properties props = new Properties();
+        props.put(TENANT_ID_ATTRIB, tenantId);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_2_DDL,
+                    CHILD_VIEW_LEVEL_2_SCHEMA, level2ViewName1,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName1));
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_2_DDL,
+                    CHILD_VIEW_LEVEL_2_SCHEMA, level2ViewName2,
+                    CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName2));
+
+            // Try to recreate the same view on a different global view to create an orphan link
+            try {
+                conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_2_DDL,
+                        CHILD_VIEW_LEVEL_2_SCHEMA, level2ViewName2,
+                        CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName1));
+                fail("Creating the same view again should have failed");
+            } catch (TableAlreadyExistsException ignored) {
+                // expected
+            }
+            // Create a third level view
+            conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_3_DDL,
+                    CHILD_VIEW_LEVEL_3_SCHEMA, level3ViewName1,
+                    CHILD_VIEW_LEVEL_2_SCHEMA, level2ViewName2));
+        }
+        // Populate all expected legitimate views in depth-first order
+        expectedLegitChildViewsListForParent1.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName1.getBytes()));
+        expectedLegitChildViewsListForParent1.add(new TableInfo(tenantId.getBytes(),
+                CHILD_VIEW_LEVEL_2_SCHEMA.getBytes(), level2ViewName1.getBytes()));
+        expectedLegitChildViewsListForParent1.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName3.getBytes()));
+        expectedLegitChildViewsListForParent1.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName4.getBytes()));
+
+        expectedLegitChildViewsListForParent2.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName2.getBytes()));
+        expectedLegitChildViewsListForParent2.add(new TableInfo(tenantId.getBytes(),
+                CHILD_VIEW_LEVEL_2_SCHEMA.getBytes(), level2ViewName2.getBytes()));
+        expectedLegitChildViewsListForParent2.add(new TableInfo(tenantId.getBytes(),
+                CHILD_VIEW_LEVEL_3_SCHEMA.getBytes(), level3ViewName1.getBytes()));
+        expectedLegitChildViewsListForParent2.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName5.getBytes()));
+        expectedLegitChildViewsListForParent2.add(new TableInfo(null,
+                CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName6.getBytes()));
+
+        /*
+            After this setup, SYSTEM.CHILD_LINK parent->child linking rows will look like this:
+            parent1->level1view1
+            parent1->level1view3
+            parent1->level1view4
+
+            parent2->level1view1 (orphan)
+            parent2->level1view2
+            parent2->level1view5
+            parent2->level1view6
+
+            level1view1->t001.level2view1
+            level1view1->t001.level2view2 (orphan)
+            level1view2->t001.level2view2
+
+            t001.level2view2->t001.level3view1
+         */
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
+                    SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(), cqs.getProps()).getName())) {
+                Pair<List<PTable>, List<TableInfo>> allDescendants =
+                        ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
+                                EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                                parent1TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                List<PTable> legitChildViews = allDescendants.getFirst();
+                List<TableInfo> orphanViews = allDescendants.getSecond();
+                // All of the orphan links are legit views of the other parent so they don't count
+                // as orphan views for this parent
+                assertTrue(orphanViews.isEmpty());
+                assertLegitChildViews(expectedLegitChildViewsListForParent1, legitChildViews);
+
+                allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
+                        cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                        parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                legitChildViews = allDescendants.getFirst();
+                orphanViews = allDescendants.getSecond();
+                // All of the orphan links are legit views of the other parent so they don't count
+                // as orphan views for this parent
+                assertTrue(orphanViews.isEmpty());
+                assertLegitChildViews(expectedLegitChildViewsListForParent2, legitChildViews);
+
+                // Drop one of the legitimate level 1 views that was on top of parent1
+                conn.createStatement().execute(String.format("DROP VIEW %s.%s CASCADE",
+                        CHILD_VIEW_LEVEL_1_SCHEMA, level1ViewName1));
+                // The view hierarchy rooted at this view is 2 levels deep so we must run the
+                // DropChildViewsTask twice to clear out views level by level
+                runDropChildViewsTask();
+                runDropChildViewsTask();
+
+                expectedLegitChildViewsListForParent1.clear();
+                expectedLegitChildViewsListForParent1.add(new TableInfo(
+                        null, CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName3.getBytes()));
+                expectedLegitChildViewsListForParent1.add(new TableInfo(
+                        null, CHILD_VIEW_LEVEL_1_SCHEMA.getBytes(), level1ViewName4.getBytes()));
+
+                allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
+                        cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                        parent1TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                legitChildViews = allDescendants.getFirst();
+                orphanViews = allDescendants.getSecond();
+                assertLegitChildViews(expectedLegitChildViewsListForParent1, legitChildViews);
+                assertTrue(orphanViews.isEmpty());
+
+                allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
+                        cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                        parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                legitChildViews = allDescendants.getFirst();
+                orphanViews = allDescendants.getSecond();
+
+                // We prune orphan branches and so we will not explore any more orphan links that
+                // stem from the first found orphan
+                assertEquals(1, orphanViews.size());
+                assertEquals(0, orphanViews.get(0).getTenantId().length);
+                assertEquals(CHILD_VIEW_LEVEL_1_SCHEMA,
+                        Bytes.toString(orphanViews.get(0).getSchemaName()));
+                assertEquals(level1ViewName1, Bytes.toString(orphanViews.get(0).getTableName()));
+                assertLegitChildViews(expectedLegitChildViewsListForParent2, legitChildViews);
+            }
+        }
+    }
+
+    private void assertLegitChildViews(List<TableInfo> expectedList, List<PTable> actualList) {
+        assertEquals(expectedList.size(), actualList.size());
+        for (int i=0; i<expectedList.size(); i++) {
+            TableInfo expectedChild = expectedList.get(i);
+            byte[] expectedTenantId = expectedChild.getTenantId();
+            PName actualTenantId = actualList.get(i).getTenantId();
+            assertTrue((expectedTenantId == null && actualTenantId == null) ||
+                    ((actualTenantId != null && expectedTenantId != null) &&
+                            Arrays.equals(actualTenantId.getBytes(), expectedTenantId)));
+            assertEquals(Bytes.toString(expectedChild.getSchemaName()),
+                    actualList.get(i).getSchemaName().getString());
+            assertEquals(Bytes.toString(expectedChild.getTableName()),
+                    actualList.get(i).getTableName().getString());
+        }
+    }
+
+    // Create 2 base tables and attempt to create the same view on top of both. The second view
+    // creation will fail, however an orphan parent->child link will be created inside
+    // SYSTEM.CHILD_LINK between parent2 and the view
+    static void createOrphanLink(String parentSchema, String parent1, String parent2,
+            String viewSchema, String viewName) throws SQLException {
+
+        final String querySysChildLink =
+                "SELECT * FROM SYSTEM.CHILD_LINK WHERE TABLE_SCHEM='%s' AND "
+                        + "TABLE_NAME='%s' AND COLUMN_FAMILY='%s' AND " + LINK_TYPE + " = " +
+                        PTable.LinkType.CHILD_TABLE.getSerializedValue();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(String.format(CREATE_BASE_TABLE_DDL, parentSchema, parent1));
+            stmt.execute(String.format(CREATE_BASE_TABLE_DDL, parentSchema, parent2));
+            stmt.execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL, viewSchema, viewName,
+                    parentSchema, parent1));
+            try {
+                stmt.execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL, viewSchema, viewName,
+                        parentSchema, parent2));
+                fail("Creating the same view again should have failed");
+            } catch (TableAlreadyExistsException ignored) {
+                // expected
+            }
+
+            // Confirm that the orphan parent->child link exists after the second view creation
+            ResultSet rs = stmt.executeQuery(String.format(querySysChildLink, parentSchema,
+                    parent2, SchemaUtil.getTableName(viewSchema, viewName)));
+            assertTrue(rs.next());
+        }
+    }
+
+    void runDropChildViewsTask() {
         // Run DropChildViewsTask to complete the tasks for dropping child views
         TaskRegionObserver.SelfHealingTask task = new TaskRegionObserver.SelfHealingTask(
                 TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
@@ -429,8 +735,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         for (int i = 0; i < numTasks; i++) {
             Timestamp maxTs = new Timestamp(HConstants.LATEST_TIMESTAMP);
             assertNotEquals("Should have got a valid timestamp", maxTs, rs.getTimestamp(2));
-            assertTrue("Task should be completed",
-                    PTable.TaskStatus.COMPLETED.toString().equals(rs.getString(6)));
+            assertEquals("Task should be completed", PTable.TaskStatus.COMPLETED.toString(),
+                    rs.getString(6));
             assertNotNull("Task end time should not be null", rs.getTimestamp(7));
             String taskData = rs.getString(9);
             assertTrue("Task data should contain final status", taskData != null &&
@@ -524,7 +830,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             fail();
         }
         catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
 
         // drop table cascade should succeed
@@ -712,7 +1018,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
 

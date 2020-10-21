@@ -46,6 +46,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -212,8 +213,8 @@ public class UpsertCompiler {
         ConnectionQueryServices services = connection.getQueryServices();
         int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        int maxSizeBytes =
-                services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+        long maxSizeBytes =
+                services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         int maxHBaseClientKeyValueSize =
                 services.getProps().getInt(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE,
@@ -269,12 +270,8 @@ public class UpsertCompiler {
                     if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
                             SortOrder.getDefault(), precision,
                             scale, column.getMaxLength(), column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(
-                                    column.getName().getString())
-                            .setMessage("value=" + column.getDataType()
-                                    .toStringLiteral(ptr, null)).build()
-                            .buildException();
+                        throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                                column.getScale(), column.getName().getString());
                     }
                     column.getDataType().coerceBytes(ptr, value, column.getDataType(), 
                             precision, scale, SortOrder.getDefault(), 
@@ -370,7 +367,7 @@ public class UpsertCompiler {
         final PhoenixConnection connection = statement.getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         List<ColumnName> columnNodes = upsert.getColumns();
         TableRef tableRefToBe = null;
         PTable table = null;
@@ -1056,12 +1053,12 @@ public class UpsertCompiler {
         private final QueryPlan aggPlan;
         private final RowProjector aggProjector;
         private final int maxSize;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
 
         public ServerUpsertSelectMutationPlan(QueryPlan queryPlan, TableRef tableRef, QueryPlan originalQueryPlan,
                                               StatementContext context, PhoenixConnection connection,
                                               Scan scan, QueryPlan aggPlan, RowProjector aggProjector,
-                                              int maxSize, int maxSizeBytes) {
+                                              int maxSize, long maxSizeBytes) {
             this.queryPlan = queryPlan;
             this.tableRef = tableRef;
             this.originalQueryPlan = originalQueryPlan;
@@ -1179,14 +1176,14 @@ public class UpsertCompiler {
         private final boolean useServerTimestamp;
         private final byte[] onDupKeyBytes;
         private final int maxSize;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
 
         public UpsertValuesMutationPlan(StatementContext context, TableRef tableRef, int nodeIndexOffset,
                                         List<Expression> constantExpressions, List<PColumn> allColumns,
                                         int[] columnIndexes, Set<PColumn> overlapViewColumns, byte[][] values,
                                         Set<PColumn> addViewColumns, PhoenixConnection connection,
                                         int[] pkSlotIndexes, boolean useServerTimestamp, byte[] onDupKeyBytes,
-                                        int maxSize, int maxSizeBytes) {
+                                        int maxSize, long maxSizeBytes) {
             this.context = context;
             this.tableRef = tableRef;
             this.nodeIndexOffset = nodeIndexOffset;
@@ -1258,9 +1255,8 @@ public class UpsertCompiler {
                     if (!column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
                             constantExpression.getSortOrder(), constantExpression.getMaxLength(),
                             constantExpression.getScale(), column.getMaxLength(), column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
-                            .setMessage("value=" + constantExpression.toString()).build().buildException();
+                        throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                                column.getScale(), column.getName().getString());
                     }
                 }
                 column.getDataType().coerceBytes(ptr, value, constantExpression.getDataType(),
@@ -1342,9 +1338,9 @@ public class UpsertCompiler {
         private final int[] pkSlotIndexes;
         private final boolean useServerTimestamp;
         private final int maxSize;
-        private final int maxSizeBytes;
+        private final long maxSizeBytes;
 
-        public ClientUpsertSelectMutationPlan(QueryPlan queryPlan, TableRef tableRef, QueryPlan originalQueryPlan, UpsertingParallelIteratorFactory parallelIteratorFactory, RowProjector projector, int[] columnIndexes, int[] pkSlotIndexes, boolean useServerTimestamp, int maxSize, int maxSizeBytes) {
+        public ClientUpsertSelectMutationPlan(QueryPlan queryPlan, TableRef tableRef, QueryPlan originalQueryPlan, UpsertingParallelIteratorFactory parallelIteratorFactory, RowProjector projector, int[] columnIndexes, int[] pkSlotIndexes, boolean useServerTimestamp, int maxSize, long maxSizeBytes) {
             this.queryPlan = queryPlan;
             this.tableRef = tableRef;
             this.originalQueryPlan = originalQueryPlan;

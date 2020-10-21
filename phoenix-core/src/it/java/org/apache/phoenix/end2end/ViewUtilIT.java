@@ -17,13 +17,17 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
@@ -31,15 +35,23 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
+import static org.apache.phoenix.end2end.ViewMetadataIT.BASE_TABLE_SCHEMA;
+import static org.apache.phoenix.end2end.ViewMetadataIT.CHILD_VIEW_LEVEL_1_SCHEMA;
+import static org.apache.phoenix.end2end.ViewMetadataIT.CREATE_BASE_TABLE_DDL;
+import static org.apache.phoenix.end2end.ViewMetadataIT.CREATE_CHILD_VIEW_LEVEL_1_DDL;
+import static org.apache.phoenix.end2end.ViewMetadataIT.createOrphanLink;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
 
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
@@ -66,7 +78,8 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String leafViewName1 = schema + "." + generateUniqueName();
         String leafViewName2 = schema + "." + generateUniqueName();
 
-        String tableDDLQuery = "CREATE TABLE " + fullTableName + " (A BIGINT PRIMARY KEY, B BIGINT)";
+        String tableDDLQuery = "CREATE TABLE " + fullTableName
+                + " (A BIGINT PRIMARY KEY, B BIGINT)";
         String viewDDLQuery = "CREATE VIEW %s AS SELECT * FROM %s";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -81,10 +94,10 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                     String.format(viewDDLQuery, leafViewName2, thirdLevelViewName));
 
             try (PhoenixConnection phoenixConnection =
-                    DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
-                Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
-                        SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
-                                phoenixConnection.getQueryServices().getProps()).getName());
+                    DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+                            SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
+                                    phoenixConnection.getQueryServices().getProps()).getName())) {
 
                 assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         tenantIdInBytes, schemaInBytes,
@@ -120,7 +133,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String tenantId = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        tenantProps.setProperty(TENANT_ID_ATTRIB, tenantId);
         TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
@@ -151,17 +164,19 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                 tenantConn.createStatement().execute(
                         String.format(viewDDL, tenantViewOnGlobalView, globalViewName));
                 tenantConn.createStatement().execute(
-                        String.format(viewDDL, tenantViewOnMultiTenantTable1, multiTenantTableName));
+                        String.format(viewDDL, tenantViewOnMultiTenantTable1,
+                                multiTenantTableName));
                 tenantConn.createStatement().execute(
-                        String.format(viewDDL, tenantViewOnMultiTenantTable2, multiTenantTableName));
+                        String.format(viewDDL, tenantViewOnMultiTenantTable2,
+                                multiTenantTableName));
                 tenantConn.createStatement().execute(viewIndexDDL);
             }
 
             try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class)) {
-                Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
-                        SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
-                                phoenixConnection.getQueryServices().getProps()).getName());
+                    props).unwrap(PhoenixConnection.class);
+                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+                            SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
+                                    phoenixConnection.getQueryServices().getProps()).getName())) {
 
                 assertTrue(ViewUtil.hasChildViews(catalogOrChildTable,
                         emptyTenantIdInBytes, schemaInBytes,
@@ -205,7 +220,8 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         String leafViewName2 = schema + "." + generateUniqueName();
         int NUMBER_OF_VIEWS = 3;
 
-        String tableDDLQuery = "CREATE TABLE " + fullTableName + " (A BIGINT PRIMARY KEY, B BIGINT)";
+        String tableDDLQuery = "CREATE TABLE " + fullTableName
+                + " (A BIGINT PRIMARY KEY, B BIGINT)";
         String viewDDLQuery = "CREATE VIEW %s AS SELECT * FROM %s";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -218,10 +234,10 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
                     String.format(viewDDLQuery, leafViewName2, middleLevelViewName));
 
             try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class)) {
-                Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
-                        SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
-                                phoenixConnection.getQueryServices().getProps()).getName());
+                    props).unwrap(PhoenixConnection.class);
+                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+                            SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
+                                    phoenixConnection.getQueryServices().getProps()).getName())) {
 
                 TableViewFinderResult result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, tenantIdInBytes, schemaInBytes,
@@ -259,10 +275,10 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tenantId1 = generateUniqueName();
         Properties tenantProps1 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        tenantProps1.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId1);
+        tenantProps1.setProperty(TENANT_ID_ATTRIB, tenantId1);
         String tenantId2 = generateUniqueName();
         Properties tenantProps2 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        tenantProps2.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
+        tenantProps2.setProperty(TENANT_ID_ATTRIB, tenantId2);
         TableName catalogOrChildTableName = ViewUtil.getSystemTableForChildLinks(0, config);
         String schema = generateUniqueName();
         byte[] schemaInBytes = schema.getBytes(StandardCharsets.UTF_8);
@@ -297,10 +313,10 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             }
 
             try (PhoenixConnection phoenixConnection = DriverManager.getConnection(getUrl(),
-                    props).unwrap(PhoenixConnection.class)) {
-                Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
-                        SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
-                                phoenixConnection.getQueryServices().getProps()).getName());
+                    props).unwrap(PhoenixConnection.class);
+                    Table catalogOrChildTable = phoenixConnection.getQueryServices().getTable(
+                            SchemaUtil.getPhysicalName(catalogOrChildTableName.toBytes(),
+                                    phoenixConnection.getQueryServices().getProps()).getName())) {
 
                 TableViewFinderResult result = new TableViewFinderResult();
                 ViewUtil.findAllRelatives(catalogOrChildTable, emptyTenantIdInBytes, schemaInBytes,
@@ -333,4 +349,96 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testFindLegitChildViews() throws Exception {
+        final String parentTable = generateUniqueName();
+        List<String> childViewNames = new ArrayList<>(3);
+        childViewNames.add("A_" + generateUniqueName());
+        childViewNames.add("B_" + generateUniqueName());
+        childViewNames.add("C_" + generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(String.format(CREATE_BASE_TABLE_DDL, BASE_TABLE_SCHEMA,
+                    parentTable));
+            for (String childViewName : childViewNames) {
+                conn.createStatement().execute(String.format(CREATE_CHILD_VIEW_LEVEL_1_DDL,
+                        CHILD_VIEW_LEVEL_1_SCHEMA, childViewName, BASE_TABLE_SCHEMA, parentTable));
+            }
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
+                    SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(), cqs.getProps()).getName())) {
+                Pair<List<PTable>, List<TableInfo>> allDescendants =
+                        ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
+                                EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                                parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, true);
+                assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
+                List<PTable> childViews = allDescendants.getFirst();
+                assertEquals("Just 1 legit child view expected", 1, childViews.size());
+                PTable childView = childViews.get(0);
+
+                // Should have got the first child view as per alphabetical ordering of the
+                // linking row scan result
+                assertEquals(CHILD_VIEW_LEVEL_1_SCHEMA, childView.getSchemaName().getString());
+                assertEquals(childViewNames.get(0), childView.getTableName().getString());
+                assertEquals(BASE_TABLE_SCHEMA, childView.getParentSchemaName().getString());
+                assertEquals(parentTable, childView.getParentTableName().getString());
+
+                allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
+                        cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                        parentTable.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
+                childViews = allDescendants.getFirst();
+                assertEquals("All child views expected", childViewNames.size(), childViews.size());
+                for (int i=0; i<childViewNames.size(); i++) {
+                    childView = childViews.get(i);
+                    assertEquals(CHILD_VIEW_LEVEL_1_SCHEMA, childView.getSchemaName().getString());
+                    assertEquals(childViewNames.get(i), childView.getTableName().getString());
+                    assertEquals(BASE_TABLE_SCHEMA, childView.getParentSchemaName().getString());
+                    assertEquals(parentTable, childView.getParentTableName().getString());
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testOrphanViewDetection() throws Exception {
+        final String parent1TableName = generateUniqueName();
+        final String parent2TableName = generateUniqueName();
+        final String viewName = "V_" + generateUniqueName();
+        createOrphanLink(BASE_TABLE_SCHEMA, parent1TableName, parent2TableName,
+                CHILD_VIEW_LEVEL_1_SCHEMA, viewName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (Table childLinkTable = cqs.getTable(SchemaUtil.getPhysicalName(
+                    SYSTEM_LINK_HBASE_TABLE_NAME.toBytes(), cqs.getProps()).getName())) {
+                // The view is a legitimate child of parent1, so it should not be counted as
+                // neither a legitimate view of parent2, nor an orphan view of parent2
+                Pair<List<PTable>, List<TableInfo>> allDescendants =
+                        ViewUtil.findAllDescendantViews(childLinkTable, cqs.getConfiguration(),
+                                EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                                parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                assertTrue("No orphan views expected", allDescendants.getSecond().isEmpty());
+                assertTrue("No legitimate views expected", allDescendants.getFirst().isEmpty());
+
+                // Drop that view
+                conn.createStatement().execute(String.format("DROP VIEW %s.%s",
+                        CHILD_VIEW_LEVEL_1_SCHEMA,
+                        viewName));
+
+                // Now this view is no longer a legitimate child view of parent1 either, so the
+                // orphan parent2->view link should show up as an orphan view of parent2
+                allDescendants = ViewUtil.findAllDescendantViews(childLinkTable,
+                        cqs.getConfiguration(), EMPTY_BYTE_ARRAY, BASE_TABLE_SCHEMA.getBytes(),
+                        parent2TableName.getBytes(), HConstants.LATEST_TIMESTAMP, false);
+                assertTrue("No legitimate views expected", allDescendants.getFirst().isEmpty());
+                List<TableInfo> orphanViews = allDescendants.getSecond();
+                assertEquals("1 orphan view expected", 1, orphanViews.size());
+                assertEquals(CHILD_VIEW_LEVEL_1_SCHEMA,
+                        Bytes.toString(orphanViews.get(0).getSchemaName()));
+                assertEquals(viewName, Bytes.toString(orphanViews.get(0).getTableName()));
+            }
+        }
+    }
+
 }

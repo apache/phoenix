@@ -74,7 +74,7 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
         if (getDataType() != null && arrayExpr.getScale() != null && otherExpr.getScale() != null
                 && otherExpr.getScale() > arrayExpr.getScale()) {
             throw new DataExceedsCapacityException(baseDataType, arrayExpr.getMaxLength(),
-                    arrayExpr.getScale());
+                    arrayExpr.getScale(), null);
         }
         init();
     }

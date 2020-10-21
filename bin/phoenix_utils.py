@@ -117,7 +117,7 @@ def setPath():
         pherf_conf_path = os.path.join(current_dir, "..", "phoenix-pherf", "config")
 
     global phoenix_jar_path
-    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
+    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-client-parent" , "phoenix-client", "target","*")
 
     global phoenix_client_jar
     phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_jar_path)

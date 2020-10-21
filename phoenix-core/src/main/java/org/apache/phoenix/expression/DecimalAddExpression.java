@@ -74,7 +74,7 @@ public class DecimalAddExpression extends AddExpression {
             result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
         }
         if (result == null) {
-            throw new DataExceedsCapacityException(PDecimal.INSTANCE, maxLength, scale);
+            throw new DataExceedsCapacityException(PDecimal.INSTANCE, maxLength, scale, null);
         }
         ptr.set(PDecimal.INSTANCE.toBytes(result));
         return true;
