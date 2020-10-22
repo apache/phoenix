@@ -82,7 +82,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     
     private String dataTableName;
 
-    // In this class we depend on the major compaction to be done instantly
+    // In this class we depend on the major compaction to remove every deleted row
     // so wo are overwriting the PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY to 0
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
