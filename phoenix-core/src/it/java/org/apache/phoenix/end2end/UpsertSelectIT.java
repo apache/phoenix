@@ -1680,7 +1680,6 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
-            assertFalse(e.getMessage().contains(invalidValue));
             assertTrue(e.getMessage().contains(columnTypeInfo));
         }
     }
