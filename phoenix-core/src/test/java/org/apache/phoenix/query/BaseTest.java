@@ -629,6 +629,9 @@ public abstract class BaseTest {
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
+        if (conf.getLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_ROWS, 0) == 0) {
+            conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_ROWS, 2);
+        }
         return conf;
     }
 

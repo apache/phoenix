@@ -17,14 +17,10 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.CHECK_VERSION_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
-import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
 
@@ -36,7 +32,6 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -54,10 +49,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -78,28 +71,17 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
-import org.apache.phoenix.expression.aggregator.Aggregator;
-import org.apache.phoenix.expression.aggregator.Aggregators;
-import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
-import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -110,47 +92,26 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.NoOpStatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
-import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
-import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
-import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.transaction.PhoenixTransactionContext;
-import org.apache.phoenix.transaction.PhoenixTransactionProvider;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
-import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -159,15 +120,11 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
-import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Ints;
-
 
 /**
  * Region observer that aggregates ungrouped rows(i.e. SQL query with aggregation function and no GROUP BY).
@@ -214,18 +171,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @GuardedBy("lock")
     private boolean isRegionClosingOrSplitting = false;
     private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
-    private KeyValueBuilder kvBuilder;
     private Configuration upsertSelectConfig;
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
-    private IndexWriter globalIndexRebuildWriter;
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
-        // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
-        // be able to get a single backing buffer for a KeyValue.
-        this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
         /*
          * We need to create a copy of region's configuration since we don't want any side effect of
          * setting the RpcControllerFactory.
@@ -250,6 +202,30 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
+    public Configuration getUpsertSelectConfig() {
+        return upsertSelectConfig;
+    }
+    public void incrementScansReferenceCount() throws IOException{
+        synchronized (lock) {
+            if (isRegionClosingOrSplitting) {
+                throw new IOException("Temporarily unable to write from scan because region is closing or splitting");
+            }
+            scansReferenceCount++;
+            lock.notifyAll();
+        }
+    }
+
+    public void decrementScansReferenceCount() {
+        synchronized (lock) {
+            scansReferenceCount--;
+            if (scansReferenceCount < 0) {
+                LOGGER.warn(
+                        "Scan reference count went below zero. Something isn't correct. Resetting it back to zero");
+                scansReferenceCount = 0;
+            }
+            lock.notifyAll();
+        }
+    }
     public void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
         try {
             commitBatch(region, localRegionMutations, blockingMemstoreSize);
@@ -268,7 +244,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
+    public void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
       if (mutations.isEmpty()) {
           return;
       }
@@ -290,7 +266,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
-    private void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, byte[] clientVersionBytes, boolean useIndexProto) {
+    public static void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, byte[] clientVersionBytes, boolean useIndexProto) {
         for (Mutation m : mutations) {
            if (indexMaintainersPtr != null) {
                m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
@@ -397,7 +373,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
    }
     
     @Override
-    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException, SQLException {
+    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
+                                              final RegionScanner s) throws IOException, SQLException {
         final RegionCoprocessorEnvironment env = c.getEnvironment();
         final Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
@@ -424,39 +401,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             });
         }
-
-        PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
         boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         int offsetToBe = 0;
         if (localIndexScan) {
-            /*
-             * For local indexes, we need to set an offset on row key expressions to skip
-             * the region start key.
-             */
             offsetToBe = region.getRegionInfo().getStartKey().length != 0 ? region.getRegionInfo().getStartKey().length :
-                region.getRegionInfo().getEndKey().length;
-            ScanUtil.setRowKeyOffset(scan, offsetToBe);
+                    region.getRegionInfo().getEndKey().length;
         }
         final int offset = offsetToBe;
-        
-        PTable projectedTable = null;
-        PTable writeToTable = null;
-        byte[][] values = null;
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
-        if (isDescRowKeyOrderUpgrade) {
-            LOGGER.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
-            projectedTable = deserializeTable(descRowKeyTableBytes);
-            try {
-                writeToTable = PTableImpl.builderWithColumns(projectedTable,
-                        getColumnsToClone(projectedTable))
-                        .setRowKeyOrderOptimizable(true)
-                        .build();
-            } catch (SQLException e) {
-                ServerUtil.throwIOException("Upgrade failed", e); // Impossible
-            }
-            values = new byte[projectedTable.getPKColumns().size()][];
-        }
         boolean useProto = false;
         byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
         useProto = localIndexBytes != null;
@@ -464,44 +417,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         }
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
-        MutationList indexMutations = localIndexBytes == null ? new MutationList() : new MutationList(1024);
-        
         RegionScanner theScanner = s;
-        
-        byte[] replayMutations = scan.getAttribute(BaseScannerRegionObserver.REPLAY_WRITES);
-        byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
-        byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
-        PhoenixTransactionProvider txnProvider = null;
-        if (txState != null) {
-            int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
-            txnProvider = TransactionFactory.getTransactionProvider(txState, clientVersion);
-        }
-        List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
-        boolean isUpsert = false;
         boolean isDelete = false;
-        byte[] deleteCQ = null;
-        byte[] deleteCF = null;
-        byte[] emptyCF = null;
-        HTable targetHTable = null;
-        boolean isPKChanging = false;
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        if (upsertSelectTable != null) {
-            isUpsert = true;
-            projectedTable = deserializeTable(upsertSelectTable);
-            targetHTable = new HTable(upsertSelectConfig, projectedTable.getPhysicalName().getBytes());
-            selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
-            values = new byte[projectedTable.getPKColumns().size()][];
-            isPKChanging = ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
-        } else {
+        if (upsertSelectTable == null) {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
-            if (!isDelete) {
-                deleteCF = scan.getAttribute(BaseScannerRegionObserver.DELETE_CF);
-                deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
-            }
-            emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
         TupleProjector tupleProjector = null;
         byte[][] viewConstants = null;
@@ -516,402 +437,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
-                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
-                        region, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
-        } 
-        
+                    getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
+                            region, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
+        }
+
         if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
         }
-        
-        int maxBatchSize = 0;
-        long maxBatchSizeBytes = 0L;
-        MutationList mutations = new MutationList();
-        boolean needToWrite = false;
-        Configuration conf = env.getConfiguration();
-
-        /**
-         * Slow down the writes if the memstore size more than
-         * (hbase.hregion.memstore.block.multiplier - 1) times hbase.hregion.memstore.flush.size
-         * bytes. This avoids flush storm to hdfs for cases like index building where reads and
-         * write happen to all the table regions in the server.
-         */
-        final long blockingMemStoreSize = getBlockingMemstoreSize(region, conf) ;
-
-        boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
-        if(buildLocalIndex) {
-            checkForLocalIndexColumnFamilies(region, indexMaintainers);
-        }
-        if (isDescRowKeyOrderUpgrade || isDelete || isUpsert
-                || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
-            needToWrite = true;
-            if((isUpsert && (targetHTable == null ||
-                    !targetHTable.getName().equals(region.getTableDesc().getTableName())))) {
-                needToWrite = false;
-            }
-            maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            mutations = new MutationList(Ints.saturatedCast(maxBatchSize + maxBatchSize / 10));
-            maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
-                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
-        }
-        boolean hasMore;
-        int rowCount = 0;
-        boolean hasAny = false;
-        boolean acquiredLock = false;
-        boolean incrScanRefCount = false;
-        Aggregators aggregators = null;
-        Aggregator[] rowAggregators = null;
-        final RegionScanner innerScanner = theScanner;
-        final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
-        try (MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
-            aggregators = ServerAggregators.deserialize(
-                    scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf, em);
-            rowAggregators = aggregators.getAggregators();
-            Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
-            Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
-            }
-            boolean useIndexProto = true;
-            byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
-            // for backward compatiblity fall back to look by the old attribute
-            if (indexMaintainersPtr == null) {
-                indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
-                useIndexProto = false;
-            }
-    
-            if(needToWrite) {
-                synchronized (lock) {
-                    if (isRegionClosingOrSplitting) {
-                        throw new IOException("Temporarily unable to write from scan because region is closing or splitting");
-                    }
-                    scansReferenceCount++;
-                    incrScanRefCount = true;
-                    lock.notifyAll();
-                }
-            }
-            region.startRegionOperation();
-            acquiredLock = true;
-            synchronized (innerScanner) {
-                do {
-                    List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
-                    // Results are potentially returned even when the return value of s.next is false
-                    // since this is an indication of whether or not there are more values after the
-                    // ones returned
-                    hasMore = innerScanner.nextRaw(results);
-                    if (!results.isEmpty()) {
-                        rowCount++;
-                        result.setKeyValues(results);
-                        if (isDescRowKeyOrderUpgrade) {
-                            Arrays.fill(values, null);
-                            Cell firstKV = results.get(0);
-                            RowKeySchema schema = projectedTable.getRowKeySchema();
-                            int maxOffset = schema.iterator(firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), ptr);
-                            for (int i = 0; i < schema.getFieldCount(); i++) {
-                                Boolean hasValue = schema.next(ptr, i, maxOffset);
-                                if (hasValue == null) {
-                                    break;
-                                }
-                                Field field = schema.getField(i);
-                                if (field.getSortOrder() == SortOrder.DESC) {
-                                    // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
-                                    if (field.getDataType().isArrayType()) {
-                                        field.getDataType().coerceBytes(ptr, null, field.getDataType(),
-                                            field.getMaxLength(), field.getScale(), field.getSortOrder(), 
-                                            field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
-                                    }
-                                    // Special case for re-writing DESC CHAR or DESC BINARY, to force the re-writing of trailing space characters
-                                    else if (field.getDataType() == PChar.INSTANCE || field.getDataType() == PBinary.INSTANCE) {
-                                        int len = ptr.getLength();
-                                        while (len > 0 && ptr.get()[ptr.getOffset() + len - 1] == StringUtil.SPACE_UTF8) {
-                                            len--;
-                                        }
-                                        ptr.set(ptr.get(), ptr.getOffset(), len);
-                                        // Special case for re-writing DESC FLOAT and DOUBLE, as they're not inverted like they should be (PHOENIX-2171)
-                                    } else if (field.getDataType() == PFloat.INSTANCE || field.getDataType() == PDouble.INSTANCE) {
-                                        byte[] invertedBytes = SortOrder.invert(ptr.get(), ptr.getOffset(), ptr.getLength());
-                                        ptr.set(invertedBytes);
-                                    }
-                                } else if (field.getDataType() == PBinary.INSTANCE) {
-                                    // Remove trailing space characters so that the setValues call below will replace them
-                                    // with the correct zero byte character. Note this is somewhat dangerous as these
-                                    // could be legit, but I don't know what the alternative is.
-                                    int len = ptr.getLength();
-                                    while (len > 0 && ptr.get()[ptr.getOffset() + len - 1] == StringUtil.SPACE_UTF8) {
-                                        len--;
-                                    }
-                                    ptr.set(ptr.get(), ptr.getOffset(), len);                                        
-                                }
-                                values[i] = ptr.copyBytes();
-                            }
-                            writeToTable.newKey(ptr, values);
-                            if (Bytes.compareTo(
-                                firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), 
-                                ptr.get(),ptr.getOffset() + offset,ptr.getLength()) == 0) {
-                                continue;
-                            }
-                            byte[] newRow = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                            if (offset > 0) { // for local indexes (prepend region start key)
-                                byte[] newRowWithOffset = new byte[offset + newRow.length];
-                                System.arraycopy(firstKV.getRowArray(), firstKV.getRowOffset(), newRowWithOffset, 0, offset);;
-                                System.arraycopy(newRow, 0, newRowWithOffset, offset, newRow.length);
-                                newRow = newRowWithOffset;
-                            }
-                            byte[] oldRow = Bytes.copy(firstKV.getRowArray(), firstKV.getRowOffset(), firstKV.getRowLength());
-                            for (Cell cell : results) {
-                                // Copy existing cell but with new row key
-                                Cell newCell = new KeyValue(newRow, 0, newRow.length,
-                                    cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
-                                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                                switch (KeyValue.Type.codeToType(cell.getTypeByte())) {
-                                case Put:
-                                    // If Put, point delete old Put
-                                    Delete del = new Delete(oldRow);
-                                    del.addDeleteMarker(new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
-                                        cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                                        cell.getQualifierArray(), cell.getQualifierOffset(),
-                                        cell.getQualifierLength(), cell.getTimestamp(), KeyValue.Type.Delete,
-                                        ByteUtil.EMPTY_BYTE_ARRAY, 0, 0));
-                                    mutations.add(del);
-
-                                    Put put = new Put(newRow);
-                                    put.add(newCell);
-                                    mutations.add(put);
-                                    break;
-                                case Delete:
-                                case DeleteColumn:
-                                case DeleteFamily:
-                                case DeleteFamilyVersion:
-                                    Delete delete = new Delete(newRow);
-                                    delete.addDeleteMarker(newCell);
-                                    mutations.add(delete);
-                                    break;
-                                }
-                            }
-                        } else if (buildLocalIndex) {
-                            for (IndexMaintainer maintainer : indexMaintainers) {
-                                if (!results.isEmpty()) {
-                                    result.getKey(ptr);
-                                    ValueGetter valueGetter =
-                                            maintainer.createGetterFromKeyValues(
-                                                ImmutableBytesPtr.copyBytesIfNecessary(ptr),
-                                                results);
-                                    Put put = maintainer.buildUpdateMutation(kvBuilder,
-                                        valueGetter, ptr, results.get(0).getTimestamp(),
-                                        env.getRegion().getRegionInfo().getStartKey(),
-                                        env.getRegion().getRegionInfo().getEndKey());
-
-                                    if (txnProvider != null) {
-                                        put = txnProvider.markPutAsCommitted(put, ts, ts);
-                                    }
-                                    indexMutations.add(put);
-                                }
-                            }
-                            result.setKeyValues(results);
-                        } else if (isDelete) {
-                            // FIXME: the version of the Delete constructor without the lock
-                            // args was introduced in 0.94.4, thus if we try to use it here
-                            // we can no longer use the 0.94.2 version of the client.
-                            Cell firstKV = results.get(0);
-                            Delete delete = new Delete(firstKV.getRowArray(),
-                                firstKV.getRowOffset(), firstKV.getRowLength(),ts);
-                            if (replayMutations != null) {
-                                delete.setAttribute(REPLAY_WRITES, replayMutations);
-                            }
-                            mutations.add(delete);
-                            // force tephra to ignore this deletes
-                            delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
-                        } else if (isUpsert) {
-                            Arrays.fill(values, null);
-                            int bucketNumOffset = 0;
-                            if (projectedTable.getBucketNum() != null) {
-                                values[0] = new byte[] { 0 };
-                                bucketNumOffset = 1;
-                            }
-                            int i = bucketNumOffset;
-                            List<PColumn> projectedColumns = projectedTable.getColumns();
-                            for (; i < projectedTable.getPKColumns().size(); i++) {
-                                Expression expression = selectExpressions.get(i - bucketNumOffset);
-                                if (expression.evaluate(result, ptr)) {
-                                    values[i] = ptr.copyBytes();
-                                    // If SortOrder from expression in SELECT doesn't match the
-                                    // column being projected into then invert the bits.
-                                    if (expression.getSortOrder() !=
-                                            projectedColumns.get(i).getSortOrder()) {
-                                        SortOrder.invert(values[i], 0, values[i], 0,
-                                            values[i].length);
-                                    }
-                                }else{
-                                    values[i] = ByteUtil.EMPTY_BYTE_ARRAY;
-                                }
-                            }
-                            projectedTable.newKey(ptr, values);
-                            PRow row = projectedTable.newRow(kvBuilder, ts, ptr, false);
-                            for (; i < projectedColumns.size(); i++) {
-                                Expression expression = selectExpressions.get(i - bucketNumOffset);
-                                if (expression.evaluate(result, ptr)) {
-                                    PColumn column = projectedColumns.get(i);
-                                    if (!column.getDataType().isSizeCompatible(ptr, null,
-                                        expression.getDataType(), expression.getSortOrder(),
-                                        expression.getMaxLength(), expression.getScale(),
-                                        column.getMaxLength(), column.getScale())) {
-                                        throw new DataExceedsCapacityException(
-                                                column.getDataType(),
-                                                column.getMaxLength(),
-                                                column.getScale(),
-                                                column.getName().getString());
-                                    }
-                                    column.getDataType().coerceBytes(ptr, null,
-                                        expression.getDataType(), expression.getMaxLength(),
-                                        expression.getScale(), expression.getSortOrder(), 
-                                        column.getMaxLength(), column.getScale(),
-                                        column.getSortOrder(), projectedTable.rowKeyOrderOptimizable());
-                                    byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                                    row.setValue(column, bytes);
-                                }
-                            }
-                            for (Mutation mutation : row.toRowMutations()) {
-                                if (replayMutations != null) {
-                                    mutation.setAttribute(REPLAY_WRITES, replayMutations);
-                                } else if (txnProvider != null && projectedTable.getType() == PTableType.INDEX) {
-                                    mutation = txnProvider.markPutAsCommitted((Put)mutation, ts, ts);
-                                }
-                                mutations.add(mutation);
-                            }
-                            for (i = 0; i < selectExpressions.size(); i++) {
-                                selectExpressions.get(i).reset();
-                            }
-                        } else if (deleteCF != null && deleteCQ != null) {
-                            // No need to search for delete column, since we project only it
-                            // if no empty key value is being set
-                            if (emptyCF == null ||
-                                    result.getValue(deleteCF, deleteCQ) != null) {
-                                Delete delete = new Delete(results.get(0).getRowArray(),
-                                    results.get(0).getRowOffset(),
-                                    results.get(0).getRowLength());
-                                delete.deleteColumns(deleteCF,  deleteCQ, ts);
-                                // force tephra to ignore this deletes
-                                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
-                                mutations.add(delete);
-                            }
-                        }
-                        if (emptyCF != null) {
-                            /*
-                             * If we've specified an emptyCF, then we need to insert an empty
-                             * key value "retroactively" for any key value that is visible at
-                             * the timestamp that the DDL was issued. Key values that are not
-                             * visible at this timestamp will not ever be projected up to
-                             * scans past this timestamp, so don't need to be considered.
-                             * We insert one empty key value per row per timestamp.
-                             */
-                            Set<Long> timeStamps =
-                                    Sets.newHashSetWithExpectedSize(results.size());
-                            for (Cell kv : results) {
-                                long kvts = kv.getTimestamp();
-                                if (!timeStamps.contains(kvts)) {
-                                    Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
-                                        kv.getRowLength());
-                                    put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
-                                        ByteUtil.EMPTY_BYTE_ARRAY);
-                                    mutations.add(put);
-                                }
-                            }
-                        }
-                        if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
-                                txState, targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
-                            mutations.clear();
-                        }
-                        // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
-
-                        if (ServerUtil.readyToCommit(indexMutations.size(), indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                            setIndexAndTransactionProperties(indexMutations, indexUUID, indexMaintainersPtr, txState, clientVersionBytes, useIndexProto);
-                            commitBatch(region, indexMutations, blockingMemStoreSize);
-                            indexMutations.clear();
-                        }
-                        aggregators.aggregate(rowAggregators, result);
-                        hasAny = true;
-                    }
-                } while (hasMore);
-                if (!mutations.isEmpty()) {
-                    commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
-                        targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
-                    mutations.clear();
-                }
-
-                if (!indexMutations.isEmpty()) {
-                    commitBatch(region, indexMutations, blockingMemStoreSize);
-                    indexMutations.clear();
-                }
-            }
-        } finally {
-            if (needToWrite && incrScanRefCount) {
-                synchronized (lock) {
-                    scansReferenceCount--;
-                    if (scansReferenceCount < 0) {
-                        LOGGER.warn(
-                            "Scan reference count went below zero. Something isn't correct. Resetting it back to zero");
-                        scansReferenceCount = 0;
-                    }
-                    lock.notifyAll();
-                }
-            }
-            try {
-                if (targetHTable != null) {
-                    try {
-                        targetHTable.close();
-                    } catch (IOException e) {
-                        LOGGER.error("Closing table: " + targetHTable + " failed: ", e);
-                    }
-                }
-            } finally {
-                try {
-                    innerScanner.close();
-                } finally {
-                    if (acquiredLock) region.closeRegionOperation();
-                }
-            }
-        }
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
-        }
-
-        final boolean hadAny = hasAny;
-        KeyValue keyValue = null;
-        if (hadAny) {
-            byte[] value = aggregators.toBytes(rowAggregators);
-            keyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length);
-        }
-        final KeyValue aggKeyValue = keyValue;
-
-        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
-            private boolean done = !hadAny;
-
-            @Override
-            public boolean isFilterDone() {
-                return done;
-            }
-
-            @Override
-            public boolean next(List<Cell> results) throws IOException {
-                if (done) return false;
-                done = true;
-                results.add(aggKeyValue);
-                return false;
-            }
-
-            @Override
-            public long getMaxResultSize() {
-                return scan.getMaxResultSize();
-            }
-        };
+        RegionScanner scanner = new UngroupedAggregateRegionScanner(c, theScanner,region, scan, env, this);
         return scanner;
 
     }
 
-    private void checkForLocalIndexColumnFamilies(Region region,
+    public static void checkForLocalIndexColumnFamilies(Region region,
             List<IndexMaintainer> indexMaintainers) throws IOException {
         HTableDescriptor tableDesc = region.getTableDesc();
         String schemaName =
@@ -942,7 +480,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commit(final Region region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
+    public void commit(final Region region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
             byte[] indexMaintainersPtr, byte[] txState, final HTable targetHTable, boolean useIndexProto,
                         boolean isPKChanging, byte[] clientVersionBytes)
             throws IOException {
@@ -1067,7 +605,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return scanner;
     }
 
-    private static PTable deserializeTable(byte[] b) {
+    public static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);
             return PTableImpl.createFromProto(ptableProto);
@@ -1272,7 +810,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private static List<Expression> deserializeExpressions(byte[] b) {
+    public static List<Expression> deserializeExpressions(byte[] b) {
         ByteArrayInputStream stream = new ByteArrayInputStream(b);
         try {
             DataInputStream input = new DataInputStream(stream);
