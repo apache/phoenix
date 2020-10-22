@@ -75,6 +75,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
@@ -82,6 +83,7 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -1329,11 +1331,12 @@ public class UpgradeUtil {
     }
 
     private static void syncUpdateCacheFreqForIndexesOfTable(PTable baseTable,
-            PreparedStatement stmt) throws SQLException {
+            PreparedStatement stmt, String tenantId) throws SQLException {
         for (PTable index : baseTable.getIndexes()) {
             if (index.getUpdateCacheFrequency() == baseTable.getUpdateCacheFrequency()) {
                 continue;
             }
+            stmt.setString(1, tenantId);
             stmt.setString(2, index.getSchemaName().getString());
             stmt.setString(3, index.getTableName().getString());
             stmt.setLong(4, baseTable.getUpdateCacheFrequency());
@@ -1359,9 +1362,9 @@ public class UpgradeUtil {
                     newConn.getTenantId().getBytes() : null;
 
             PreparedStatement stmt =
-                    newConn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
-            stmt.setString(1, Bytes.toString(tenantId));
-            syncUpdateCacheFreqForIndexesOfTable(table, stmt);
+                newConn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
+            syncUpdateCacheFreqForIndexesOfTable(table, stmt,
+                Bytes.toString(tenantId));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
             for (int i=0; i<2; i++) {
@@ -1375,18 +1378,9 @@ public class UpgradeUtil {
                             LinkType.CHILD_TABLE, childViewsResult);
 
                     // Iterate over the chain of child views
-                    for (TableInfo viewInfo: childViewsResult.getLinks()) {
-                        PTable view;
-                        String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(),
-                                viewInfo.getTableName());
-                        try {
-                            view = PhoenixRuntime.getTable(newConn, viewName);
-                        } catch (TableNotFoundException e) {
-                            // Ignore
-                            LOGGER.error("Error getting PTable for view: " + viewInfo, e);
-                            continue;
-                        }
-                        syncUpdateCacheFreqForIndexesOfTable(view, stmt);
+                    for (TableInfo tableInfo : childViewsResult.getLinks()) {
+                        getViewAndSyncCacheFreqForIndexes(newConn, stmt,
+                            tableInfo);
                     }
                     break;
                 } catch (TableNotFoundException ex) {
@@ -1400,6 +1394,44 @@ public class UpgradeUtil {
             stmt.executeBatch();
             newConn.commit();
         }
+    }
+
+    private static void getViewAndSyncCacheFreqForIndexes(
+            final PhoenixConnection newConn,
+            final PreparedStatement stmt, final TableInfo tableInfo)
+            throws SQLException {
+        final String viewName = SchemaUtil.getTableName(
+            tableInfo.getSchemaName(), tableInfo.getTableName());
+        final String viewTenantId = Bytes.toString(tableInfo.getTenantId());
+        final Optional<PTable> view;
+        if (StringUtils.isNotEmpty(viewTenantId)) {
+            Properties props = new Properties(newConn.getClientInfo());
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, viewTenantId);
+            // use tenant connection to resolve tenant views
+            try (PhoenixConnection tenantConn =
+                    new PhoenixConnection(newConn, props)) {
+                view = resolveView(viewName, tenantConn);
+            }
+        } else {
+            view = resolveView(viewName, newConn);
+        }
+        if (view.isPresent()) {
+            syncUpdateCacheFreqForIndexesOfTable(view.get(), stmt,
+                viewTenantId);
+        }
+    }
+
+    private static Optional<PTable> resolveView(final String viewName,
+            final PhoenixConnection conn) throws SQLException {
+        PTable view;
+        try {
+            view = PhoenixRuntime.getTable(conn, viewName);
+        } catch (TableNotFoundException e) {
+            // Ignore
+            LOGGER.error("Error getting PTable for view: {}", viewName, e);
+            return Optional.empty();
+        }
+        return Optional.of(view);
     }
 
     /**
