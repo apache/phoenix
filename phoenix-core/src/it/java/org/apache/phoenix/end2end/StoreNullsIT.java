@@ -64,6 +64,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -74,6 +75,7 @@ import org.junit.runners.Parameterized.Parameters;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class StoreNullsIT extends ParallelStatsDisabledIT {
     
