@@ -97,7 +97,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
@@ -2595,8 +2594,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
      *     long, boolean)}
      * @param clientVersion client version, used to determine if mutation is allowed.
-     * @return Optional.empty() if mutation is allowed on parent table/view. If not allowed,
-     *     returned Optional object will contain metaDataMutationResult with MutationCode.
+     * @return null if mutation is allowed on parent table/view. If not allowed,
+     *     returned object will contain metaDataMutationResult with MutationCode.
      * @throws IOException if something goes wrong while retrieving
      *     child views using
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
@@ -2605,7 +2604,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      *     {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
      *     long, boolean)}
      */
-    private Optional<MetaDataMutationResult> validateIfMutationAllowedOnParent(
+    private MetaDataMutationResult validateIfMutationAllowedOnParent(
             final PTableType expectedType, final long clientTimeStamp,
             final byte[] tenantId, final byte[] schemaName,
             final byte[] tableOrViewName, final List<PTable> childViews,
@@ -2645,9 +2644,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 new MetaDataMutationResult(
                     MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                     EnvironmentEdgeManager.currentTimeMillis(), null);
-            return Optional.of(metaDataMutationResult);
+            return metaDataMutationResult;
         }
-        return Optional.empty();
+        return null;
     }
 
     private MetaDataMutationResult mutateColumn(
@@ -2677,12 +2676,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<RowLock> locks = Lists.newArrayList();
             try {
                 List<PTable> childViews = Lists.newArrayList();
-                Optional<MetaDataMutationResult> mutationResult = validateIfMutationAllowedOnParent(
+                MetaDataMutationResult mutationResult = validateIfMutationAllowedOnParent(
                         expectedType, clientTimeStamp, tenantId, schemaName, tableOrViewName,
                         childViews, clientVersion);
                 // only if mutation is allowed, we should get Optional.empty() here
-                if (mutationResult.isPresent()) {
-                    return mutationResult.get();
+                if (mutationResult != null) {
+                    return mutationResult;
                 }
 
                 acquireLock(region, key, locks);
