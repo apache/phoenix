@@ -335,6 +335,8 @@ public enum SQLExceptionCode {
     ABOVE_INDEX_NON_ASYNC_THRESHOLD(1097, "44A34", "The estimated read size for index creation "
             + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
             + " limit or create ASYNC index."),
+    CANNOT_SET_OR_ALTER_PHOENIX_TTL(10953, "44A35", "Cannot set or alter "
+            + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
