@@ -4335,19 +4335,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * making use of HBase's checkAndPut api.
      *
      * @return true if client won the race, false otherwise
-     * @throws IOException
      * @throws SQLException
      */
     @VisibleForTesting
     public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp)
-            throws IOException,
-            SQLException {
+            throws SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-        byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
-        if(sysMutexPhysicalTableNameBytes == null) {
-            throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
-                    getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
-        }
         if (!writeMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null)) {
             throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
@@ -4360,15 +4353,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey =
-                    columnName != null
-                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
-                                familyName)
-                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null
+                ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName,
+                    columnName, familyName)
+                : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
-            byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
-            try (HTableInterface sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+            try (Table sysMutexTable = getSysMutexTable()) {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
                 byte[] value = MUTEX_LOCKED;
@@ -4404,15 +4395,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         try {
-            byte[] rowKey =
-                    columnName != null
-                            ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
-                                familyName)
-                            : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
+            byte[] rowKey = columnName != null
+                ? SchemaUtil.getColumnKey(tenantId, schemaName, tableName,
+                    columnName, familyName)
+                : SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             // at this point the system mutex table should have been created or
             // an exception thrown
-            byte[] sysMutexPhysicalTableNameBytes = getSysMutexPhysicalTableNameBytes();
-            try (HTableInterface sysMutexTable = getTable(sysMutexPhysicalTableNameBytes)) {
+            try (Table sysMutexTable = getSysMutexTable()) {
                 byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
                 byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
                 Delete delete = new Delete(rowKey);
@@ -4430,17 +4419,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    private byte[] getSysMutexPhysicalTableNameBytes() throws IOException, SQLException {
-        byte[] sysMutexPhysicalTableNameBytes = null;
-        try(HBaseAdmin admin = getAdmin()) {
-            if(admin.tableExists(PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME)) {
-                sysMutexPhysicalTableNameBytes = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES;
-            } else if (admin.tableExists(TableName.valueOf(
-                    SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName()))) {
-                sysMutexPhysicalTableNameBytes = SchemaUtil.getPhysicalTableName(SYSTEM_MUTEX_NAME, props).getName();
+    @VisibleForTesting
+    public Table getSysMutexTable() throws SQLException, IOException {
+        String table = SYSTEM_MUTEX_NAME;
+        TableName tableName = TableName.valueOf(table);
+        try (HBaseAdmin admin = getAdmin()) {
+            if (!admin.tableExists(tableName)) {
+                table = table.replace(QueryConstants.NAME_SEPARATOR,
+                  QueryConstants.NAMESPACE_SEPARATOR);
+                tableName = TableName.valueOf(table);
             }
+            return connection.getTable(tableName);
         }
-        return sysMutexPhysicalTableNameBytes;
     }
 
     private String addColumn(String columnsToAddSoFar, String columns) {

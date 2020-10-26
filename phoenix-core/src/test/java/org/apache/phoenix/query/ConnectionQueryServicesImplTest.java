@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -41,12 +42,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TableNotFoundException;
+import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.PhoenixIOException;
@@ -75,6 +79,15 @@ public class ConnectionQueryServicesImplTest {
     @Mock
     private ReadOnlyProps readOnlyProps;
 
+    @Mock
+    private ClusterConnection mockConn;
+
+    @Mock
+    private HTableInterface mockTable;
+
+    @Mock
+    private Configuration mockConf;
+
     public static final HTableDescriptor SYS_TASK_TDB =
         new HTableDescriptor(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
     public static final HTableDescriptor SYS_TASK_TDB_SP =
@@ -89,12 +102,16 @@ public class ConnectionQueryServicesImplTest {
             .getDeclaredField("props");
         props.setAccessible(true);
         props.set(mockCqs, readOnlyProps);
+        props = ConnectionQueryServicesImpl.class.getDeclaredField("connection");
+        props.setAccessible(true);
+        props.set(mockCqs, mockConn);
         when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
             .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))
             .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB_SP))
             .thenCallRealMethod();
+        when(mockCqs.getSysMutexTable()).thenCallRealMethod();
     }
 
     @SuppressWarnings("unchecked")
@@ -188,5 +205,31 @@ public class ConnectionQueryServicesImplTest {
                 + " , actual split policy: abc tableName=SYSTEM.TASK",
                 e.getMessage());
         }
+    }
+
+    @Test
+    public void testGetSysMutexTableWithName() throws Exception {
+        when(mockAdmin.tableExists(any(TableName.class))).thenReturn(true);
+        when(mockConn.getTable(TableName.valueOf("SYSTEM.MUTEX")))
+            .thenReturn(mockTable);
+        when(mockCqs.getAdmin()).thenReturn(mockAdmin);
+        assertSame(mockCqs.getSysMutexTable(), mockTable);
+        verify(mockAdmin, Mockito.times(1)).tableExists(any(TableName.class));
+        verify(mockConn, Mockito.times(1))
+            .getTable(TableName.valueOf("SYSTEM.MUTEX"));
+        verify(mockCqs, Mockito.times(1)).getAdmin();
+    }
+
+    @Test
+    public void testGetSysMutexTableWithNamespace() throws Exception {
+        when(mockAdmin.tableExists(any(TableName.class))).thenReturn(false);
+        when(mockConn.getTable(TableName.valueOf("SYSTEM:MUTEX")))
+          .thenReturn(mockTable);
+        when(mockCqs.getAdmin()).thenReturn(mockAdmin);
+        assertSame(mockCqs.getSysMutexTable(), mockTable);
+        verify(mockAdmin, Mockito.times(1)).tableExists(any(TableName.class));
+        verify(mockConn, Mockito.times(1))
+          .getTable(TableName.valueOf("SYSTEM:MUTEX"));
+        verify(mockCqs, Mockito.times(1)).getAdmin();
     }
 }
