@@ -107,29 +107,12 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}</finalName>
+            <finalName>phoenix-${project.version}-bin</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
               <descriptors>
                 <descriptor>src/build/package-to-tar-all.xml</descriptor>
-              </descriptors>
-              <tarLongFileMode>posix</tarLongFileMode>
-            </configuration>
-          </execution>
-          <execution>
-            <id>package-to-source-tar</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-            <finalName>phoenix-${project.version}-source</finalName>
-              <attach>false</attach>
-              <tarLongFileMode>gnu</tarLongFileMode>
-              <appendAssemblyId>false</appendAssemblyId>
-              <descriptors>
-                <descriptor>src/build/src.xml</descriptor>
               </descriptors>
               <tarLongFileMode>posix</tarLongFileMode>
             </configuration>
