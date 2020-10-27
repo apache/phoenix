@@ -20,7 +20,11 @@ package org.apache.phoenix.query;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
+import com.google.common.collect.TreeBasedTable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -31,9 +35,13 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Arrays.asList;
@@ -186,7 +194,44 @@ public class PhoenixTestBuilder {
     // Test Data supplier interface for test writers to provide custom data.
     public interface DataSupplier {
         // return the values to be used for upserting data into the underlying entity.
-        List<Object> getValues(int rowIndex);
+        List<Object> getValues(int rowIndex) throws Exception;
+    }
+
+    // A Data Reader to be used in tests to read test data from test db.
+    public interface DataReader {
+        // returns the columns that need to be projected during DML queries,
+        List<String> getValidationColumns();
+
+        void setValidationColumns(List<String> validationColumns);
+
+        // returns the columns that represent the pk/unique key for this data set,
+        List<String> getRowKeyColumns();
+
+        void setRowKeyColumns(List<String> rowKeyColumns);
+
+        // returns the connection to be used for DML queries.
+        Connection getConnection();
+
+        // The connection to be used for the Reader.
+        // Please make sure the connection is closed after use or called with try-with resources.
+        void setConnection(Connection connection);
+
+        // returns the target entity - whether to use the table, global-view, the tenant-view or
+        // an index table.
+        String getTargetEntity();
+
+        void setTargetEntity(String targetEntity);
+
+        // Build the DML statement and return the SQL string.
+        String getDML();
+
+        String setDML(String dmlStatement);
+
+        // template method to read a batch of rows using the above sql.
+        void readRows() throws SQLException;
+
+        // Get the data that was read as a Table.
+        Table<String, String, Object> getDataTable();
     }
 
     // A Data Writer to be used in tests to upsert sample data (@see TestDataSupplier) into the sample schema.
@@ -205,6 +250,8 @@ public class PhoenixTestBuilder {
         // returns the connection to be used for upserting rows.
         Connection getConnection();
 
+        // The connection to be used for the Writer.
+        // Please make sure the connection is closed after use or called with try-with resources.
         void setConnection(Connection connection);
 
         // returns the target entity - whether to use the table, global-view or the tenant-view.
@@ -212,13 +259,318 @@ public class PhoenixTestBuilder {
 
         void setTargetEntity(String targetEntity);
 
+        // returns the columns that is set asthe pk/unique key for this data set,
+        List<String> getRowKeyColumns();
+
+        void setRowKeyColumns(List<String> rowKeyColumns);
+
         // return the data provider for this writer
         DataSupplier getTestDataSupplier();
 
-        // template method to upsert rows using the above info.
-        void upsertRow(int rowIndex) throws SQLException;
-
         void setDataSupplier(DataSupplier dataSupplier);
+
+        // template method to upsert a single row using the above info.
+        List<Object> upsertRow(int rowIndex) throws SQLException;
+
+        // template method to upsert a batch of rows using the above info.
+        void upsertRows(int startRowIndex, int numRows) throws SQLException;
+
+        // Get the data that was written as a Table
+        Table<String, String, Object> getDataTable();
+    }
+
+    // Provides template method for returning result set
+    public static abstract class AbstractDataReader implements DataReader {
+        Table<String, String, Object> dataTable = TreeBasedTable.create();
+
+        public Table<String, String, Object> getDataTable() {
+            return dataTable;
+        }
+
+        // Read batch of rows
+        public void readRows() throws SQLException {
+            dataTable.clear();
+            String sql = getDML();
+            Connection connection = getConnection();
+            try (Statement stmt = connection.createStatement()) {
+
+                final PhoenixStatement pstmt = stmt.unwrap(PhoenixStatement.class);
+                ResultSet rs = pstmt.executeQuery(sql);
+                List<String> cols = getValidationColumns();
+                List<Object> values = Lists.newArrayList();
+                Set<String> rowKeys = getRowKeyColumns() == null || getRowKeyColumns().isEmpty() ?
+                        Sets.<String>newHashSet() :
+                        Sets.newHashSet(getRowKeyColumns());
+                List<String> rowKeyParts = Lists.newArrayList();
+                while (rs.next()) {
+                    for (String col : cols) {
+                        Object val = rs.getObject(col);
+                        values.add(val);
+                        if (rowKeys.isEmpty()) {
+                            rowKeyParts.add(val.toString());
+                        }
+                        else if (rowKeys.contains(col)) {
+                            rowKeyParts.add(val.toString());
+                        }
+                    }
+
+                    String rowKey = Joiner.on("-").join(rowKeyParts);
+                    for (int v = 0; v < values.size(); v++) {
+                        dataTable.put(rowKey,cols.get(v), values.get(v));
+                    }
+                    values.clear();
+                    rowKeyParts.clear();
+                }
+                LOGGER.info(String.format("########## rows: %d", dataTable.rowKeySet().size()));
+
+            } catch (SQLException e) {
+                LOGGER.error(String.format(" Error [%s] initializing Reader. ",
+                        e.getMessage()));
+                throw e;
+            }
+        }
+    }
+
+    // An implementation of the DataReader.
+    public static class BasicDataReader extends AbstractDataReader {
+
+        Connection connection;
+        String targetEntity;
+        String dmlStatement;
+        List<String> validationColumns;
+        List<String> rowKeyColumns;
+
+
+        @Override public String getDML() {
+            return this.dmlStatement;
+        }
+
+        @Override public String setDML(String dmlStatement) {
+            return this.dmlStatement = dmlStatement;
+        }
+
+        // returns the columns that need to be projected during DML queries,
+        @Override public List<String> getValidationColumns() {
+            return this.validationColumns;
+        }
+
+        @Override public void setValidationColumns(List<String> validationColumns) {
+            this.validationColumns = validationColumns;
+        }
+
+        // returns the columns that is set as the pk/unique key for this data set,
+        @Override public  List<String> getRowKeyColumns() {
+            return this.rowKeyColumns;
+        }
+
+        @Override public void setRowKeyColumns(List<String> rowKeyColumns) {
+            this.rowKeyColumns = rowKeyColumns;
+        }
+
+        @Override public Connection getConnection() {
+            return connection;
+        }
+
+        @Override public void setConnection(Connection connection) {
+            this.connection = connection;
+        }
+
+        @Override public String getTargetEntity() {
+            return targetEntity;
+        }
+
+        @Override public void setTargetEntity(String targetEntity) {
+            this.targetEntity = targetEntity;
+        }
+    }
+
+
+    // Provides template method for upserting rows
+    public static abstract class AbstractDataWriter implements DataWriter {
+        Table<String, String, Object> dataTable = TreeBasedTable.create();
+
+        public Table<String, String, Object> getDataTable() {
+            return dataTable;
+        }
+
+        // Upsert one row.
+        public List<Object> upsertRow(int rowIndex) throws SQLException {
+            List<String> upsertColumns = Lists.newArrayList();
+            List<Object> upsertValues = Lists.newArrayList();
+
+            List<Object> rowValues = null;
+            try {
+                rowValues = getTestDataSupplier().getValues(rowIndex);
+            } catch (Exception e) {
+                throw new SQLException(e);
+            }
+
+            if (getColumnPositionsToUpdate().isEmpty()) {
+                upsertColumns.addAll(getUpsertColumns());
+                upsertValues.addAll(rowValues);
+            } else {
+                List<String> columnsToUpdate = getUpsertColumns();
+                for (int i : getColumnPositionsToUpdate()) {
+                    upsertColumns.add(columnsToUpdate.get(i));
+                    upsertValues.add(rowValues.get(i));
+                }
+            }
+            StringBuilder buf = new StringBuilder("UPSERT INTO ");
+            buf.append(getTargetEntity());
+            buf.append(" (").append(Joiner.on(",").join(upsertColumns)).append(") VALUES(");
+
+            for (int i = 0; i < upsertValues.size(); i++) {
+                buf.append("?,");
+            }
+            buf.setCharAt(buf.length() - 1, ')');
+            LOGGER.debug(buf.toString());
+
+            Connection connection = getConnection();
+            try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+                for (int i = 0; i < upsertValues.size(); i++) {
+                    //TODO : handle null values
+                    stmt.setObject(i + 1, upsertValues.get(i));
+                }
+                stmt.execute();
+                connection.commit();
+            }
+            return upsertValues;
+        }
+
+        // Upsert batch of rows.
+        public void upsertRows(int startRowIndex, int numRows) throws SQLException {
+            dataTable.clear();
+            List<String> upsertColumns = Lists.newArrayList();
+            List<Integer> rowKeyPositions = Lists.newArrayList();
+
+            // Figure out the upsert columns based on whether this is a full or partial row update.
+            boolean isFullRowUpdate = getColumnPositionsToUpdate().isEmpty();
+            if (isFullRowUpdate) {
+                upsertColumns.addAll(getUpsertColumns());
+            } else {
+                List<String> tmpColumns = getUpsertColumns();
+                for (int i : getColumnPositionsToUpdate()) {
+                    upsertColumns.add(tmpColumns.get(i));
+                }
+            }
+
+            Set<String> rowKeys = getRowKeyColumns() == null || getRowKeyColumns().isEmpty() ?
+                    Sets.<String>newHashSet(getUpsertColumns()) :
+                    Sets.newHashSet(getRowKeyColumns());
+
+            StringBuilder buf = new StringBuilder("UPSERT INTO ");
+            buf.append(getTargetEntity());
+            buf.append(" (").append(Joiner.on(",").join(upsertColumns)).append(") VALUES(");
+            for (int i = 0; i < upsertColumns.size(); i++) {
+                buf.append("?,");
+                if (rowKeys.contains(upsertColumns.get(i))) {
+                    rowKeyPositions.add(i);
+                }
+            }
+            buf.setCharAt(buf.length() - 1, ')');
+            LOGGER.debug (buf.toString());
+
+            Connection connection = getConnection();
+            try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+
+                for (int r = startRowIndex; r < startRowIndex + numRows; r++) {
+                    List<Object> upsertValues = Lists.newArrayList();
+                    List<Object> rowValues = null;
+                    try {
+                        rowValues = getTestDataSupplier().getValues(r);
+                    } catch (Exception e) {
+                        throw new SQLException(e);
+                    }
+                    if (isFullRowUpdate) {
+                        upsertValues.addAll(rowValues);
+                    } else {
+                        for (int c : getColumnPositionsToUpdate()) {
+                            upsertValues.add(rowValues.get(c));
+                        }
+                    }
+
+                    List<String> rowKeyParts = Lists.newArrayList();
+                    for (int position : rowKeyPositions) {
+                        if (upsertValues.get(position) != null) {
+                            rowKeyParts.add(upsertValues.get(position).toString());
+                        }
+                    }
+                    String rowKey = Joiner.on("-").join(rowKeyParts);
+
+                    for (int v = 0; v < upsertValues.size(); v++) {
+                        //TODO : handle null values
+                        stmt.setObject(v + 1, upsertValues.get(v));
+                        if (upsertValues.get(v) != null) {
+                            dataTable.put(rowKey,upsertColumns.get(v), upsertValues.get(v));
+                        }
+                    }
+                    stmt.addBatch();
+                }
+                stmt.executeBatch();
+                connection.commit();
+            }
+        }
+
+    }
+
+    // An implementation of the DataWriter.
+    public static class BasicDataWriter extends AbstractDataWriter {
+        List<String> upsertColumns = Lists.newArrayList();
+        List<Integer> columnPositionsToUpdate = Lists.newArrayList();
+        DataSupplier dataSupplier;
+        Connection connection;
+        String targetEntity;
+        List<String> rowKeyColumns;
+
+        @Override public List<String> getUpsertColumns() {
+            return upsertColumns;
+        }
+
+        @Override public void setUpsertColumns(List<String> upsertColumns) {
+            this.upsertColumns = upsertColumns;
+        }
+
+        @Override public List<Integer> getColumnPositionsToUpdate() {
+            return columnPositionsToUpdate;
+        }
+
+        @Override public void setColumnPositionsToUpdate(List<Integer> columnPositionsToUpdate) {
+            this.columnPositionsToUpdate = columnPositionsToUpdate;
+        }
+
+        @Override public Connection getConnection() {
+            return connection;
+        }
+
+        @Override public void setConnection(Connection connection) {
+            this.connection = connection;
+        }
+
+        @Override public String getTargetEntity() {
+            return targetEntity;
+        }
+
+        @Override public void setTargetEntity(String targetEntity) {
+            this.targetEntity = targetEntity;
+        }
+
+        // returns the columns that is set as the pk/unique key for this data set,
+        @Override public  List<String> getRowKeyColumns() {
+            return this.rowKeyColumns;
+        }
+
+        @Override public void setRowKeyColumns(List<String> rowKeyColumns) {
+            this.rowKeyColumns = rowKeyColumns;
+        }
+
+        @Override public DataSupplier getTestDataSupplier() {
+            return dataSupplier;
+        }
+
+        @Override public void setDataSupplier(DataSupplier dataSupplier) {
+            this.dataSupplier = dataSupplier;
+        }
+
     }
 
     /**
@@ -260,101 +612,14 @@ public class PhoenixTestBuilder {
         public static String DEFAULT_GLOBAL_VIEW_INDEX_PROPS = "";
         public static String DEFAULT_TENANT_VIEW_PROPS = "";
         public static String DEFAULT_TENANT_VIEW_INDEX_PROPS = "";
-        public static String DEFAULT_KP = "0EC";
+        public static String DEFAULT_KP = "ECZ";
         public static String DEFAULT_SCHEMA_NAME = "TEST_ENTITY";
-        public static String DEFAULT_TENANT_ID_FMT = "00D0t%03d%s";
+        public static String DEFAULT_TENANT_ID_FMT = "00D0t%04d%s";
+        public static String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s_%s";
+        public static String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
 
         public static String DEFAULT_CONNECT_URL = "jdbc:phoenix:localhost";
 
-    }
-
-    // Provides template method for upserting rows
-    public static abstract class AbstractDataWriter implements DataWriter {
-
-        public void upsertRow(int rowIndex) throws SQLException {
-            List<String> upsertColumns = Lists.newArrayList();
-            List<Object> upsertValues = Lists.newArrayList();
-
-            if (getColumnPositionsToUpdate().isEmpty()) {
-                upsertColumns.addAll(getUpsertColumns());
-                upsertValues.addAll(getTestDataSupplier().getValues(rowIndex));
-            } else {
-                List<String> tmpColumns = getUpsertColumns();
-                List<Object> tmpValues = getTestDataSupplier().getValues(rowIndex);
-                for (int i : getColumnPositionsToUpdate()) {
-                    upsertColumns.add(tmpColumns.get(i));
-                    upsertValues.add(tmpValues.get(i));
-                }
-            }
-            StringBuilder buf = new StringBuilder("UPSERT INTO ");
-            buf.append(getTargetEntity());
-            buf.append(" (").append(Joiner.on(",").join(upsertColumns)).append(") VALUES(");
-
-            for (int i = 0; i < upsertValues.size(); i++) {
-                buf.append("?,");
-            }
-            buf.setCharAt(buf.length() - 1, ')');
-
-            LOGGER.info(buf.toString());
-
-            Connection connection = getConnection();
-            try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
-                for (int i = 0; i < upsertValues.size(); i++) {
-                    stmt.setObject(i + 1, upsertValues.get(i));
-                }
-                stmt.execute();
-                connection.commit();
-            }
-        }
-    }
-
-    // An implementation of the TestDataWriter.
-    public static class BasicDataWriter extends AbstractDataWriter {
-        List<String> upsertColumns = Lists.newArrayList();
-        List<Integer> columnPositionsToUpdate = Lists.newArrayList();
-        DataSupplier dataSupplier;
-        Connection connection;
-        String targetEntity;
-
-        @Override public List<String> getUpsertColumns() {
-            return upsertColumns;
-        }
-
-        @Override public void setUpsertColumns(List<String> upsertColumns) {
-            this.upsertColumns = upsertColumns;
-        }
-
-        @Override public List<Integer> getColumnPositionsToUpdate() {
-            return columnPositionsToUpdate;
-        }
-
-        @Override public void setColumnPositionsToUpdate(List<Integer> columnPositionsToUpdate) {
-            this.columnPositionsToUpdate = columnPositionsToUpdate;
-        }
-
-        @Override public Connection getConnection() {
-            return connection;
-        }
-
-        @Override public void setConnection(Connection connection) {
-            this.connection = connection;
-        }
-
-        @Override public String getTargetEntity() {
-            return targetEntity;
-        }
-
-        @Override public void setTargetEntity(String targetEntity) {
-            this.targetEntity = targetEntity;
-        }
-
-        @Override public DataSupplier getTestDataSupplier() {
-            return dataSupplier;
-        }
-
-        @Override public void setDataSupplier(DataSupplier dataSupplier) {
-            this.dataSupplier = dataSupplier;
-        }
     }
 
     /**
@@ -521,12 +786,12 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE TABLE IF NOT EXISTS " +
-		// tableName +
-		// "(" +
-		// 		dataColumns +
-		// 		" CONSTRAINT pk PRIMARY KEY (" + pk + ")
-		// 	)  " +
-		// 	(dataProps.isEmpty() ? "" : dataProps;
+        // tableName +
+        // "(" +
+        // 		dataColumns +
+        // 		" CONSTRAINT pk PRIMARY KEY (" + pk + ")
+        // 	)  " +
+        // 	(dataProps.isEmpty() ? "" : dataProps;
         public SchemaBuilder withTableDefaults() {
             tableEnabled = true;
             tableCreated = false;
@@ -535,11 +800,11 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE TABLE IF NOT EXISTS " +
-		// tableName +
-		// "(" +
-		// 		dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + ")
-		// 	)  " +
-		// 	(dataProps.isEmpty() ? "" : dataProps;
+        // tableName +
+        // "(" +
+        // 		dataColumns + " CONSTRAINT pk PRIMARY KEY (" + pk + ")
+        // 	)  " +
+        // 	(dataProps.isEmpty() ? "" : dataProps;
         public SchemaBuilder withTableOptions(TableOptions options) {
             tableEnabled = true;
             tableCreated = false;
@@ -548,8 +813,8 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withSimpleGlobalView() {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -558,10 +823,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// "(" +
-		// 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
-		// 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // "(" +
+        // 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
+        // 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withGlobalViewDefaults() {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -570,10 +835,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW IF NOT EXISTS " +
-		// globalViewName +
-		// "(" +
-		// 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
-		// 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
+        // globalViewName +
+        // "(" +
+        // 		globalViewColumns + " CONSTRAINT pk PRIMARY KEY (" + globalViewPK + ")
+        // 	) AS SELECT * FROM " + tableName + " WHERE " + globalViewCondition;
         public SchemaBuilder withGlobalViewOptions(GlobalViewOptions options) {
             globalViewEnabled = true;
             globalViewCreated = false;
@@ -590,10 +855,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW  IF NOT EXISTS " +
-		// tenantViewName +
-		// "(" +
-		// 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
-		// 	) AS SELECT * FROM " + globalViewName;
+        // tenantViewName +
+        // "(" +
+        // 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
+        // 	) AS SELECT * FROM " + globalViewName;
         public SchemaBuilder withTenantViewDefaults() {
             tenantViewEnabled = true;
             tenantViewCreated = false;
@@ -602,10 +867,10 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE VIEW  IF NOT EXISTS " +
-		// tenantViewName +
-		// "(" +
-		// 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
-		// 	) AS SELECT * FROM " + globalViewName;
+        // tenantViewName +
+        // "(" +
+        // 		tenantViewColumns + " CONSTRAINT pk PRIMARY KEY (" + tenantViewPK + ")
+        // 	) AS SELECT * FROM " + globalViewName;
         public SchemaBuilder withTenantViewOptions(TenantViewOptions options) {
             tenantViewEnabled = true;
             tenantViewCreated = false;
@@ -614,8 +879,8 @@ public class PhoenixTestBuilder {
         }
 
         // "CREATE INDEX IF NOT EXISTS
-		// "IDX_T_T000001"
-		// ON "TEST_ENTITY"."T_T000001"(COL1) INCLUDE (COL3)"
+        // "IDX_T_T000001"
+        // ON "TEST_ENTITY"."T_T000001"(COL1) INCLUDE (COL3)"
         public SchemaBuilder withTableIndexDefaults() {
             tableIndexEnabled = true;
             tableIndexCreated = false;
@@ -689,9 +954,9 @@ public class PhoenixTestBuilder {
         }
 
         // Build method for creating new tenants with existing table,
-		// global and tenant view definitions.
+        // global and tenant view definitions.
         // If the tenant view definition is not changed then
-		// the same view is created with different names for different tenants.
+        // the same view is created with different names for different tenants.
         public void buildWithNewTenant() throws Exception {
             tenantViewCreated = false;
             tenantViewIndexCreated = false;
@@ -706,9 +971,9 @@ public class PhoenixTestBuilder {
         }
 
         // Build method for creating new tenant views with existing table,
-		// global and tenant view definitions.
+        // global and tenant view definitions.
         // If the tenant view definition is not changed then
-		// the same view is created with different names.
+        // the same view is created with different names.
         public void buildNewView() throws Exception {
             tenantViewCreated = false;
             tenantViewIndexCreated = false;
@@ -735,39 +1000,67 @@ public class PhoenixTestBuilder {
                 this.connectOptions = new ConnectOptions();
             }
 
+            if (this.globalViewOptions == null) {
+                this.globalViewOptions = new GlobalViewOptions();
+            }
+
+            if (this.globalViewIndexOptions == null) {
+                this.globalViewIndexOptions = new GlobalViewIndexOptions();
+            }
+
+            if (this.tenantViewOptions == null) {
+                this.tenantViewOptions = new TenantViewOptions();
+            }
+
+            if (this.tenantViewIndexOptions == null) {
+                this.tenantViewIndexOptions = new TenantViewIndexOptions();
+            }
+
             if (connectOptions.useGlobalConnectionOnly
                     && connectOptions.useTenantConnectionForGlobalView) {
                 throw new IllegalArgumentException(
-                		"useTenantConnectionForGlobalView and useGlobalConnectionOnly both cannot be true");
+                        "useTenantConnectionForGlobalView and useGlobalConnectionOnly both cannot be true");
             }
 
-            String tableName = SchemaUtil.getEscapedArgument("T_" + dataOptions.uniqueName);
-            String globalViewName = SchemaUtil.getEscapedArgument("V_" + dataOptions.uniqueName);
+            String tableName = SchemaUtil.normalizeIdentifier(dataOptions.getTableName());
+            String globalViewName = SchemaUtil.normalizeIdentifier(dataOptions.getGlobalViewName());
+            String tableSchemaNameToUse = tableOptions.getSchemaName();
+            String globalViewSchemaNameToUse = globalViewOptions.getSchemaName();
+            String tenantViewSchemaNameToUse = tenantViewOptions.getSchemaName();
+
+            // If schema name is overridden by specifying it in data options then use it.
+            if ((dataOptions.getSchemaName() != null) && (!dataOptions.getSchemaName().isEmpty())) {
+                tableSchemaNameToUse = dataOptions.getSchemaName();
+                globalViewSchemaNameToUse = dataOptions.getSchemaName();
+                tenantViewSchemaNameToUse = dataOptions.getSchemaName();
+            }
+
             String
                     tableSchemaName =
-                    tableEnabled ? SchemaUtil.getEscapedArgument(tableOptions.schemaName) : "";
+                    tableEnabled ? SchemaUtil.normalizeIdentifier(tableSchemaNameToUse) : "";
             String
                     globalViewSchemaName =
                     globalViewEnabled ?
-                            SchemaUtil.getEscapedArgument(globalViewOptions.schemaName) :
+                            SchemaUtil.normalizeIdentifier(globalViewSchemaNameToUse) :
                             "";
             String
                     tenantViewSchemaName =
                     tenantViewEnabled ?
-                            SchemaUtil.getEscapedArgument(tenantViewOptions.schemaName) :
+                            SchemaUtil.normalizeIdentifier(tenantViewSchemaNameToUse) :
                             "";
             entityTableName = SchemaUtil.getTableName(tableSchemaName, tableName);
             entityGlobalViewName = SchemaUtil.getTableName(globalViewSchemaName, globalViewName);
 
             // Derive the keyPrefix to use.
-            entityKeyPrefix =
+            entityKeyPrefix = dataOptions.getKeyPrefix() != null && !dataOptions.getKeyPrefix().isEmpty()?
+                    dataOptions.getKeyPrefix() :
                     connectOptions.useGlobalConnectionOnly ?
                             (String.format("Z%02d", dataOptions.getViewNumber())) :
                             (tenantViewEnabled && !globalViewEnabled ?
                                     (String.format("Z%02d", dataOptions.getViewNumber())) :
                                     DDLDefaults.DEFAULT_KP);
 
-            String tenantViewName = SchemaUtil.getEscapedArgument(entityKeyPrefix);
+            String tenantViewName = SchemaUtil.normalizeIdentifier(entityKeyPrefix);
             entityTenantViewName = SchemaUtil.getTableName(tenantViewSchemaName, tenantViewName);
             String globalViewCondition = String.format("KP = '%s'", entityKeyPrefix);
 
@@ -787,7 +1080,7 @@ public class PhoenixTestBuilder {
                 if (tableIndexEnabled && !tableIndexCreated) {
                     String
                             indexOnTableName =
-                            SchemaUtil.getEscapedArgument(String.format("IDX_%s",
+                            SchemaUtil.normalizeIdentifier(String.format("IDX_%s",
                                     SchemaUtil.normalizeIdentifier(tableName)));
                     globalConnection.createStatement().execute(
                             buildCreateIndexStmt(indexOnTableName, entityTableName,
@@ -862,15 +1155,15 @@ public class PhoenixTestBuilder {
             statement.append(isLocal ?
                     "CREATE LOCAL INDEX IF NOT EXISTS " :
                     "CREATE INDEX IF NOT EXISTS ")
-					.append(indexName)
-					.append(" ON ")
+                    .append(indexName)
+                    .append(" ON ")
                     .append(onEntityName)
-					.append("(")
-					.append(Joiner.on(",").join(indexColumns))
+                    .append("(")
+                    .append(Joiner.on(",").join(indexColumns))
                     .append(") ")
-					.append(includeColumns.isEmpty() ?
-						"" :
-						"INCLUDE (" + Joiner.on(",").join(includeColumns) + ") ")
+                    .append(includeColumns.isEmpty() ?
+                            "" :
+                            "INCLUDE (" + Joiner.on(",").join(includeColumns) + ") ")
                     .append((indexProps.isEmpty() ? "" : indexProps));
 
             LOGGER.info(statement.toString());
@@ -1549,10 +1842,15 @@ public class PhoenixTestBuilder {
 
         public static class DataOptions {
             String uniqueName = "";
+            String uniqueNamePrefix = "";
             String tenantIdFormat = DDLDefaults.DEFAULT_TENANT_ID_FMT;
+            String keyPrefix = "";
             int viewNumber = 0;
             AtomicInteger viewCounter = new AtomicInteger(0);
             String tenantId = "";
+            String schemaName = DDLDefaults.DEFAULT_SCHEMA_NAME;
+            String tableName = "";
+            String globalViewName = "";
 
             /*
              *****************************
@@ -1562,10 +1860,18 @@ public class PhoenixTestBuilder {
 
             public static DataOptions withDefaults() {
                 DataOptions options = new DataOptions();
-                options.uniqueName = generateUniqueName();
+                options.uniqueName = generateUniqueName().substring(1);
                 options.viewCounter = new AtomicInteger(0);
                 options.tenantId =
                         String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
+                                options.uniqueName);
+                options.tableName =
+                        String.format("%s%s",
+                                options.uniqueNamePrefix.isEmpty() ? "T_" : options.uniqueNamePrefix,
+                                options.uniqueName);
+                options.globalViewName =
+                        String.format("%s%s",
+                                options.uniqueNamePrefix.isEmpty() ? "GV_" : options.uniqueNamePrefix,
                                 options.uniqueName);
                 return options;
             }
@@ -1600,6 +1906,58 @@ public class PhoenixTestBuilder {
 
             public void setTenantId(String tenantId) {
                 this.tenantId = tenantId;
+            }
+
+            public String getUniqueNamePrefix() {
+                return uniqueNamePrefix;
+            }
+
+            public void setUniqueNamePrefix(String uniqueNamePrefix) {
+                this.uniqueNamePrefix = uniqueNamePrefix;
+            }
+
+            public String getKeyPrefix() {
+                return keyPrefix;
+            }
+
+            public void setKeyPrefix(String keyPrefix) {
+                this.keyPrefix = keyPrefix;
+            }
+
+            public void setViewNumber(int viewNumber) {
+                this.viewNumber = viewNumber;
+            }
+
+            public AtomicInteger getViewCounter() {
+                return viewCounter;
+            }
+
+            public void setViewCounter(AtomicInteger viewCounter) {
+                this.viewCounter = viewCounter;
+            }
+
+            public String getTableName() {
+                return tableName;
+            }
+
+            public void setTableName(String tableName) {
+                this.tableName = tableName;
+            }
+
+            public String getGlobalViewName() {
+                return globalViewName;
+            }
+
+            public void setGlobalViewName(String globalViewName) {
+                this.globalViewName = globalViewName;
+            }
+
+            public String getSchemaName() {
+                return schemaName;
+            }
+
+            public void setSchemaName(String schemaName) {
+                this.schemaName = schemaName;
             }
         }
     }

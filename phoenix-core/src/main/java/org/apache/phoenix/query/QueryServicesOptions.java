@@ -97,6 +97,7 @@ import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
+import static org.apache.phoenix.query.QueryServices.*;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -159,6 +160,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
     public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
+    public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = true;
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
@@ -456,6 +458,7 @@ public class QueryServicesOptions {
             .setIfUnset(TxConstants.TX_PRE_014_CHANGESET_KEY, Boolean.FALSE.toString())
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
+            .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
