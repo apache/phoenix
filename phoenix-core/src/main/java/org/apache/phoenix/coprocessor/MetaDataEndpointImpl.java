@@ -60,7 +60,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -118,13 +117,11 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.ColumnPrefixFilter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcServer.Call;
@@ -135,7 +132,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.util.SimplePositionedByteRange;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
@@ -2645,19 +2641,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
-            if (settingNewPhoenixTTLAttribute(tableMetadata, PHOENIX_TTL_BYTES)) {
-                // Disallow if the parent has PHOENIX_TTL set.
-                if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
-                    isSchemaMutationAllowed = false;
-                }
-
-                // Since we do not allow propagation of PHOENIX_TTL values during ALTER for now.
-                // If a child view exists and the parent previously had a PHOENIX_TTL value set then that
-                // implies that the child view too has a valid PHOENIX_TTL (non zero).
-                // In this case we do not allow for ALTER of the parent view PHOENIX_TTL value.
-                if (!childViews.isEmpty()) {
-                    isSchemaMutationAllowed = false;
-                }
+            // Validate PHOENIX_TTL property settings for views only.
+            if (expectedType == PTableType.VIEW) {
+                isSchemaMutationAllowed = validatePhoenixTTLAttributeSettingForView(
+                        parentTable, childViews, tableMetadata, PHOENIX_TTL_BYTES);
             }
         }
         if (!isMutationAllowed) {
@@ -2954,7 +2941,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     // Checks whether a non-zero PHOENIX_TTL value is being set.
-    private boolean settingNewPhoenixTTLAttribute(List<Mutation> tableMetadata, byte[] phoenixTtlBytes) {
+    private boolean validatePhoenixTTLAttributeSettingForView(
+            final PTable parentTable,
+            final List<PTable> childViews,
+            final List<Mutation> tableMetadata,
+            final byte[] phoenixTtlBytes) {
+        boolean hasNewPhoenixTTLAttribute = false;
+        boolean isSchemaMutationAllowed = true;
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
                 Put p = (Put)m;
@@ -2963,11 +2956,28 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     Cell cell = cells.get(0);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    return newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
                 }
             }
         }
-        return false;
+
+        if (hasNewPhoenixTTLAttribute) {
+            // Disallow if the parent has PHOENIX_TTL set.
+            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
+                isSchemaMutationAllowed = false;
+            }
+
+            // Since we do not allow propagation of PHOENIX_TTL values during ALTER for now.
+            // If a child view exists and this view previously had a PHOENIX_TTL value set
+            // then that implies that the child view too has a valid PHOENIX_TTL (non zero).
+            // In this case we do not allow for ALTER of the view's PHOENIX_TTL value.
+            if (!childViews.isEmpty()) {
+                isSchemaMutationAllowed = false;
+            }
+        }
+        return isSchemaMutationAllowed;
+
+
     }
 
     public static class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {

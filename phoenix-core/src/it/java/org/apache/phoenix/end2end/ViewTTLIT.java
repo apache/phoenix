@@ -62,31 +62,25 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     private static final String ORG_ID_FMT = "00D0x000%s";
     private static final String ID_FMT = "00A0y000%07d";
-    private static final String
-            PHOENIX_TTL_HEADER_SQL =
-            "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG "
-                    + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
+    private static final String PHOENIX_TTL_HEADER_SQL = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG "
+            + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
 
-    private static final String
-            ALTER_PHOENIX_TTL_SQL =
-            "ALTER VIEW \"%s\".\"%s\" set PHOENIX_TTL=%s";
+    private static final String ALTER_PHOENIX_TTL_SQL
+            = "ALTER VIEW \"%s\".\"%s\" set PHOENIX_TTL=%s";
 
-    private static final String
-            ALTER_SQL_WITH_NO_TTL =
-            "ALTER VIEW \"%s\".\"%s\" ADD IF NOT EXISTS %s CHAR(10)";
+    private static final String ALTER_SQL_WITH_NO_TTL
+            = "ALTER VIEW \"%s\".\"%s\" ADD IF NOT EXISTS %s CHAR(10)";
 
     // Scans the HBase rows directly for the view ttl related header rows column and asserts
     private void assertViewHeaderRowsHavePhoenixTTLRelatedCells(String schemaName,
             long minTimestamp, boolean rawScan, int expectedRows) throws IOException, SQLException {
 
         FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
-        RowFilter
-                schemaNameFilter =
-                new RowFilter(CompareFilter.CompareOp.EQUAL, new SubstringComparator(schemaName));
-        QualifierFilter
-                phoenixTTLQualifierFilter =
-                new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-                        new BinaryComparator(PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES));
+        RowFilter schemaNameFilter = new RowFilter(CompareFilter.CompareOp.EQUAL,
+                new SubstringComparator(schemaName));
+        QualifierFilter phoenixTTLQualifierFilter = new QualifierFilter(
+                CompareFilter.CompareOp.EQUAL,
+                new BinaryComparator(PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES));
         filterList.addFilter(schemaNameFilter);
         filterList.addFilter(phoenixTTLQualifierFilter);
         try (Table tbl = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
@@ -99,9 +93,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             ResultScanner scanner = tbl.getScanner(allRows);
             int numMatchingRows = 0;
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
-                numMatchingRows +=
-                        result.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                                PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES) ? 1 : 0;
+                numMatchingRows += result.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES) ? 1 : 0;
             }
             assertEquals(String.format("Expected rows do not match for table = %s at timestamp %d",
                     Bytes.toString(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES),
@@ -115,15 +108,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             Statement stmt = connection.createStatement();
-            String
-                    tenantClause =
-                    tenantId == null || tenantId.isEmpty() ?
-                            "TENANT_ID IS NULL" :
-                            String.format("TENANT_ID = '%s'", tenantId);
-            String
-                    sql =
-                    String.format(PHOENIX_TTL_HEADER_SQL, tenantClause, schemaName, tableName,
-                            tableType);
+            String tenantClause = tenantId == null || tenantId.isEmpty() ?
+                    "TENANT_ID IS NULL" :
+                    String.format("TENANT_ID = '%s'", tenantId);
+            String sql = String
+                    .format(PHOENIX_TTL_HEADER_SQL, tenantClause, schemaName, tableName, tableType);
             stmt.execute(sql);
             ResultSet rs = stmt.getResultSet();
             long actualTTLValueReturned = rs.next() ? rs.getLong(1) : 0;
@@ -153,18 +142,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // Phoenix TTL is set to 300s => 300000 ms
         globalViewOptions.setTableProps("PHOENIX_TTL=300");
 
-        SchemaBuilder.GlobalViewIndexOptions
-                globalViewIndexOptions =
-                SchemaBuilder.GlobalViewIndexOptions.withDefaults();
+        SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions
+                = SchemaBuilder.GlobalViewIndexOptions.withDefaults();
         globalViewIndexOptions.setLocal(false);
 
         TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
         if (tenantViewOptions != null) {
             tenantViewWithOverrideOptions = tenantViewOptions;
         }
-        TenantViewIndexOptions
-                tenantViewIndexOverrideOptions =
-                TenantViewIndexOptions.withDefaults();
+        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
         if (tenantViewIndexOptions != null) {
             tenantViewIndexOverrideOptions = tenantViewIndexOptions;
         }
@@ -189,9 +175,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
 
-        SchemaBuilder.GlobalViewIndexOptions
-                globalViewIndexOptions =
-                SchemaBuilder.GlobalViewIndexOptions.withDefaults();
+        SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions
+                = SchemaBuilder.GlobalViewIndexOptions.withDefaults();
         globalViewIndexOptions.setLocal(false);
 
         TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
@@ -200,9 +185,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         if (tenantViewOptions != null) {
             tenantViewWithOverrideOptions = tenantViewOptions;
         }
-        TenantViewIndexOptions
-                tenantViewIndexOverrideOptions =
-                TenantViewIndexOptions.withDefaults();
+        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
         if (tenantViewIndexOptions != null) {
             tenantViewIndexOverrideOptions = tenantViewIndexOptions;
         }
@@ -227,9 +210,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         if (tenantViewOptions != null) {
             tenantViewOverrideOptions = tenantViewOptions;
         }
-        TenantViewIndexOptions
-                tenantViewIndexOverrideOptions =
-                TenantViewIndexOptions.withDefaults();
+        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
         if (tenantViewIndexOptions != null) {
             tenantViewIndexOverrideOptions = tenantViewIndexOptions;
         }
@@ -290,9 +271,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
         tenantViewIndexOptions.setIndexProps("PHOENIX_TTL=1000");
         try {
-            final SchemaBuilder
-                    schemaBuilder =
-                    createLevel1TenantView(null, tenantViewIndexOptions);
+            final SchemaBuilder schemaBuilder = createLevel1TenantView(null,
+                    tenantViewIndexOptions);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY.getErrorCode(),
@@ -309,17 +289,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are being set,
@@ -339,22 +314,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                globalViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are being set,
@@ -382,17 +350,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 3 deleted rows - one for Table, one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are not being set or being set to zero,
@@ -415,17 +378,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 3 deleted rows - one for Table, one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are not being set or being set to zero,
@@ -441,9 +399,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(tenantURL)) {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
-                String
-                        sql =
-                        String.format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
+                String sql = String
+                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
                 stmt.execute(sql);
             }
         }
@@ -465,9 +422,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
             // Phoenix TTL is set to 120s => 120000 ms
             tenantViewWithOverrideOptions.setTableProps("PHOENIX_TTL=120");
-            final SchemaBuilder
-                    schemaBuilder =
-                    createLevel2TenantViewWithGlobalLevelTTL(tenantViewWithOverrideOptions, null);
+            final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(
+                    tenantViewWithOverrideOptions, null);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL.getErrorCode(),
@@ -482,22 +438,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                globalViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are being set,
@@ -519,9 +468,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(tenantURL)) {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
-                String
-                        sql =
-                        String.format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
+                String sql = String
+                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
                 stmt.execute(sql);
                 fail();
             }
@@ -538,22 +486,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithTenantLevelTTL(null, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                globalViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are being set,
@@ -568,9 +509,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
-                String
-                        sql =
-                        String.format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "120");
+                String sql = String
+                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "120");
                 stmt.execute(sql);
                 fail();
             }
@@ -587,22 +527,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithTenantLevelTTL(null, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                globalViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
         // Since the PHOENIX_TTL property values are being set,
@@ -617,26 +550,20 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // ALTER global view
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = connection.createStatement()) {
-                String
-                        sql =
-                        String.format(ALTER_SQL_WITH_NO_TTL, schemaName, globalViewName, "COL_30");
+                String sql = String
+                        .format(ALTER_SQL_WITH_NO_TTL, schemaName, globalViewName, "COL_30");
                 stmt.execute(sql);
             }
-        } catch (SQLException e) {
-            fail();
         }
 
         // ALTER tenant view
         String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
         try (Connection connection = DriverManager.getConnection(tenantURL)) {
             try (Statement stmt = connection.createStatement()) {
-                String
-                        sql =
-                        String.format(ALTER_SQL_WITH_NO_TTL, schemaName, tenantViewName, "COL_100");
+                String sql = String
+                        .format(ALTER_SQL_WITH_NO_TTL, schemaName, tenantViewName, "COL_100");
                 stmt.execute(sql);
             }
-        } catch (SQLException e) {
-            fail();
         }
 
     }
@@ -646,29 +573,21 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
-        String
-                schemaName =
-                stripQuotes(SchemaUtil
-                        .getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String
-                globalViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
-        String
-                tenantViewName =
-                stripQuotes(SchemaUtil
-                        .getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String schemaName = stripQuotes(
+                SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
+        String globalViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
+        String tenantViewName = stripQuotes(
+                SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
         String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String
-                indexOnTenantViewName =
-                String.format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
+        String indexOnTenantViewName = String
+                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 'NONE'
-                String
-                        sql =
-                        String.format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "'NONE'");
+                String sql = String
+                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "'NONE'");
                 stmt.execute(sql);
             }
         }
