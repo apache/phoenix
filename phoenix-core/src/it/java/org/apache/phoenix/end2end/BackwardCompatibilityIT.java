@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -112,6 +113,11 @@ public class BackwardCompatibilityIT {
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static String url;
+
+    private enum UpgradeProps {
+        NONE,
+        SET_MAX_LOOK_BACK_AGE
+    }
 
     public BackwardCompatibilityIT(String compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
@@ -179,7 +185,7 @@ public class BackwardCompatibilityIT {
     public void testUpsertWithOldClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_CREATE_ADD);
     }
 
@@ -187,7 +193,17 @@ public class BackwardCompatibilityIT {
     public void testCreateDivergedViewWithOldClientReadFromNewClient() throws Exception {
         // Create a base table, view and make it diverge from an old client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW, UpgradeProps.NONE);
+        assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+    }
+
+    @Test
+    public void testCreateDivergedViewWithOldClientReadWithMaxLookBackAge()
+            throws Exception {
+        // Create a base table, view and make it diverge from an old client
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW,
+            UpgradeProps.SET_MAX_LOOK_BACK_AGE);
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }
 
@@ -214,15 +230,15 @@ public class BackwardCompatibilityIT {
 
     @Test
     public void testCreateDivergedViewWithNewClientReadFromOldClient() throws Exception {
-        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW, UpgradeProps.NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_DIVERGED_VIEW);
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }
 
     @Test
     public void testCreateDivergedViewWithNewClientReadFromNewClient() throws Exception {
-        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(CREATE_DIVERGED_VIEW, UpgradeProps.NONE);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }
 
@@ -237,7 +253,7 @@ public class BackwardCompatibilityIT {
     @Test
     public void testSelectWithOldClient() throws Exception {
         // Insert data with new client and read with old client
-        executeQueriesWithCurrentVersion(CREATE_ADD);
+        executeQueriesWithCurrentVersion(CREATE_ADD, UpgradeProps.NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
         assertExpectedOutput(QUERY_CREATE_ADD);
     }
@@ -249,18 +265,43 @@ public class BackwardCompatibilityIT {
      * 3. New Client reads the data inserted by the old client 
      * 4. New Client inserts more data into the tables created by old client 
      * 5. Old Client reads the data inserted by new client
+     * Use phoenix.max.lookback.age.seconds config and ensure that upgrade
+     * is not impacted by the config.
      * 
+     * @throws Exception thrown if any errors encountered during query execution or file IO
+     */
+    @Test
+    public void testSelectUpsertWithNewClientWithMaxLookBackAge() throws Exception {
+        // Insert data with old client and read with new client
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD, UpgradeProps.SET_MAX_LOOK_BACK_AGE);
+        assertExpectedOutput(QUERY_CREATE_ADD);
+
+        // Insert more data with new client and read with old client
+        executeQueriesWithCurrentVersion(ADD_DATA, UpgradeProps.SET_MAX_LOOK_BACK_AGE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ADD_DATA);
+        assertExpectedOutput(QUERY_ADD_DATA);
+    }
+
+    /**
+     * Scenario:
+     * 1. Old Client connects to the updated server
+     * 2. Old Client creates tables and inserts data
+     * 3. New Client reads the data inserted by the old client
+     * 4. New Client inserts more data into the tables created by old client
+     * 5. Old Client reads the data inserted by new client
+     *
      * @throws Exception thrown if any errors encountered during query execution or file IO
      */
     @Test
     public void testSelectUpsertWithNewClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Insert more data with new client and read with old client
-        executeQueriesWithCurrentVersion(ADD_DATA);
+        executeQueriesWithCurrentVersion(ADD_DATA, UpgradeProps.NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_ADD_DATA);
         assertExpectedOutput(QUERY_ADD_DATA);
     }
@@ -278,13 +319,13 @@ public class BackwardCompatibilityIT {
     @Test
     public void testSelectUpsertWithOldClient() throws Exception {
         // Insert data with new client and read with old client
-        executeQueriesWithCurrentVersion(CREATE_ADD);
+        executeQueriesWithCurrentVersion(CREATE_ADD, UpgradeProps.NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
         assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Insert more data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, ADD_DATA);
-        executeQueriesWithCurrentVersion(QUERY_ADD_DATA);
+        executeQueriesWithCurrentVersion(QUERY_ADD_DATA, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_ADD_DATA);
     }
 
@@ -301,7 +342,7 @@ public class BackwardCompatibilityIT {
     public void testUpsertDeleteWithOldClient() throws Exception {
         // Insert data with old client and read with new client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_ADD);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_ADD, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Deletes with the old client
@@ -322,13 +363,13 @@ public class BackwardCompatibilityIT {
     @Test
     public void testUpsertDeleteWithNewClient() throws Exception {
         // Insert data with old client and read with new client
-        executeQueriesWithCurrentVersion(CREATE_ADD);
+        executeQueriesWithCurrentVersion(CREATE_ADD, UpgradeProps.NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_CREATE_ADD);
         assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Deletes with the new client
-        executeQueriesWithCurrentVersion(ADD_DELETE);
-        executeQueriesWithCurrentVersion(QUERY_ADD_DELETE);
+        executeQueriesWithCurrentVersion(ADD_DELETE, UpgradeProps.NONE);
+        executeQueriesWithCurrentVersion(QUERY_ADD_DELETE, UpgradeProps.NONE);
         assertExpectedOutput(QUERY_ADD_DELETE);
     }
 
@@ -336,7 +377,8 @@ public class BackwardCompatibilityIT {
     public void testUpdatedSplitPolicyForSysTask() throws Exception {
         executeQueryWithClientVersion(compatibleClientVersion,
             CREATE_DIVERGED_VIEW);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW,
+            UpgradeProps.NONE);
         try (org.apache.hadoop.hbase.client.Connection conn =
                 hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
             HTableDescriptor tableDescriptor = admin.getTableDescriptor(
@@ -433,8 +475,19 @@ public class BackwardCompatibilityIT {
     }
 
     // Executes the SQL commands listed in the given operation file from the sql_files directory
-    private void executeQueriesWithCurrentVersion(String operation) throws Exception {
+    private void executeQueriesWithCurrentVersion(String operation,
+            UpgradeProps upgradeProps) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        if (UpgradeProps.SET_MAX_LOOK_BACK_AGE.equals(upgradeProps)) {
+            // any value < 31 is enough to test relaxing the MaxLookBack age
+            // checks during an upgrade because during upgrade, SCN for the
+            // connection is set to be the phoenix version timestamp
+            // (31 as of now: MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 / MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0)
+            // Hence, keeping value: 15
+            props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                Integer.toString(15));
+        }
+
         try (Connection conn = DriverManager.getConnection(url, props)) {
             StringBuilder sb = new StringBuilder();
             try (BufferedReader reader =
