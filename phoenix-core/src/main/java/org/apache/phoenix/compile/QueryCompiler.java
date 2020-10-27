@@ -183,6 +183,11 @@ public class QueryCompiler {
             return;
         }
         PhoenixConnection conn = statement.getConnection();
+        if (conn.isRunningUpgrade()) {
+            // PHOENIX-6179 : if upgrade is going on, we don't need to
+            // perform MaxLookBackAge check
+            return;
+        }
         Long scn = conn.getSCN();
         if (scn == null) {
             return;
