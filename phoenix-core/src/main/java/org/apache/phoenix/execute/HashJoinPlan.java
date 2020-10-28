@@ -387,8 +387,6 @@ public class HashJoinPlan extends DelegateQueryPlan {
             double outputRows = RowCountVisitor.limit(rows, delegate.getLimit());
             double outputBytes = rowWidth * outputRows;
             if (!delegate.getOrderBy().getOrderByExpressions().isEmpty()) {
-                int parallelLevel2 = CostUtil.estimateParallelLevel(
-                        delegate instanceof ScanPlan, getContext().getConnection().getQueryServices());
                 Cost orderByCost = CostUtil.estimateOrderByCost(
                         bytes, outputBytes, parallelLevel);
                 cost = cost.plus(orderByCost);
