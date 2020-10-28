@@ -22,8 +22,10 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.GROUPED_AGGREGATE_PAGE_SIZE_IN_MS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_SPILLABLE;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -62,6 +64,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
@@ -71,6 +74,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -168,11 +172,22 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             if (limitBytes != null) {
                 limit = PInteger.INSTANCE.getCodec().decodeInt(limitBytes, 0, SortOrder.getDefault());
             }
+            long pageSizeInMs = Long.MAX_VALUE;
+            if (scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGING) != null) {
+                byte[] pageSizeFromScan =
+                        scan.getAttribute(BaseScannerRegionObserver.AGGREGATE_PAGE_IN_MS);
+                if (pageSizeFromScan != null) {
+                    pageSizeInMs = Bytes.toLong(pageSizeFromScan);
+                } else {
+                    pageSizeInMs = c.getEnvironment().getConfiguration().getLong(GROUPED_AGGREGATE_PAGE_SIZE_IN_MS,
+                                    QueryServicesOptions.DEFAULT_GROUPED_AGGREGATE_PAGE_SIZE_IN_MS);
+                }
+            }
             if (keyOrdered) { // Optimize by taking advantage that the rows are
                               // already in the required group by key order
-                return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit);
+                return scanOrdered(c, scan, innerScanner, expressions, aggregators, limit, pageSizeInMs);
             } else { // Otherwse, collect them all up in an in memory map
-                return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit);
+                return scanUnordered(c, scan, innerScanner, expressions, aggregators, limit, pageSizeInMs);
             }
         }
     }
@@ -356,6 +371,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
 
     }
+
     private static final class GroupByCacheFactory {
         public static final GroupByCacheFactory INSTANCE = new GroupByCacheFactory();
 
@@ -379,9 +395,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      * aggregating as we go.
      * @param limit TODO
      */
-    private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
+    private RegionScanner scanUnordered(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
             final RegionScanner scanner, final List<Expression> expressions,
-            final ServerAggregators aggregators, long limit) throws IOException {
+            final ServerAggregators aggregators, final long limit, final long pageSizeInMs) throws IOException {
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Grouped aggregation over unordered rows with scan " + scan
@@ -398,66 +414,84 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             (int) (Bytes.toInt(estDistValsBytes) * 1.5f));
         }
         
-        Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
-        boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
+        final Pair<Integer, Integer> minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
+        final boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
         final boolean spillableEnabled =
                 conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
         final PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
 
-        GroupByCache groupByCache =
+        final GroupByCache groupByCache =
                 GroupByCacheFactory.INSTANCE.newCache(
                         env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                         aggregators, estDistVals);
-        boolean success = false;
-        try {
-            boolean hasMore;
-            Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-            if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(LogUtil.addCustomAnnotations(
-                        "Spillable groupby enabled: " + spillableEnabled,
-                        ScanUtil.getCustomAnnotations(scan)));
-            }
-            Region region = c.getEnvironment().getRegion();
-            boolean acquiredLock = false;
-            try {
-                region.startRegionOperation();
-                acquiredLock = true;
-                synchronized (scanner) {
-                    do {
-                        List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
-                        // Results are potentially returned even when the return
-                        // value of s.next is false
-                        // since this is an indication of whether or not there are
-                        // more values after the
-                        // ones returned
-                        hasMore = scanner.nextRaw(results);
-                        if (!results.isEmpty()) {
-                            result.setKeyValues(results);
-                            ImmutableBytesPtr key =
-                                TupleUtil.getConcatenatedValue(result, expressions);
-                            Aggregator[] rowAggregators = groupByCache.cache(key);
-                            // Aggregate values here
-                            aggregators.aggregate(rowAggregators, result);
-                        }
-                    } while (hasMore && groupByCache.size() < limit);
+        return new BaseRegionScanner(scanner) {
+            RegionScanner regionScanner = null;
+            @Override
+            public boolean next(List<Cell> resultsToReturn) throws IOException {
+                boolean hasMore;
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                long now;
+                Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug(LogUtil.addCustomAnnotations(
+                            "Spillable groupby enabled: " + spillableEnabled,
+                            ScanUtil.getCustomAnnotations(scan)));
                 }
-            }  finally {
-                if (acquiredLock) region.closeRegionOperation();
+                Region region = c.getEnvironment().getRegion();
+                boolean acquiredLock = false;
+                try {
+                    region.startRegionOperation();
+                    acquiredLock = true;
+                    synchronized (scanner) {
+                        if (regionScanner != null) {
+                            return regionScanner.next(resultsToReturn);
+                        }
+                        do {
+                            List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) : new ArrayList<Cell>();
+                            // Results are potentially returned even when the return
+                            // value of s.next is false
+                            // since this is an indication of whether or not there are
+                            // more values after the
+                            // ones returned
+                            hasMore = scanner.nextRaw(results);
+                            if (!results.isEmpty()) {
+                                result.setKeyValues(results);
+                                ImmutableBytesPtr key =
+                                        TupleUtil.getConcatenatedValue(result, expressions);
+                                Aggregator[] rowAggregators = groupByCache.cache(key);
+                                // Aggregate values here
+                                aggregators.aggregate(rowAggregators, result);
+                            }
+                            now = EnvironmentEdgeManager.currentTimeMillis();
+                        } while (hasMore && groupByCache.size() < limit && (now - startTime) < pageSizeInMs);
+                        if (hasMore && groupByCache.size() < limit && (now - startTime) >= pageSizeInMs) {
+                            // Return a dummy result as we have processed a page worth of rows
+                            // but we are not ready to aggregate
+                            getDummyResult(resultsToReturn);
+                            return true;
+                        }
+                        regionScanner = groupByCache.getScanner(scanner);
+                        // Do not sort here, but sort back on the client instead
+                        // The reason is that if the scan ever extends beyond a region
+                        // (which can happen if we're basing our parallelization split
+                        // points on old metadata), we'll get incorrect query results.
+                        return regionScanner.next(resultsToReturn);
+                    }
+                } finally {
+                    if (acquiredLock) region.closeRegionOperation();
+                }
             }
 
-            RegionScanner regionScanner = groupByCache.getScanner(scanner);
-
-            // Do not sort here, but sort back on the client instead
-            // The reason is that if the scan ever extends beyond a region
-            // (which can happen if we're basing our parallelization split
-            // points on old metadata), we'll get incorrect query results.
-            success = true;
-            return regionScanner;
-        } finally {
-            if (!success) {
-                Closeables.closeQuietly(groupByCache);
+            @Override
+            public void close() throws IOException {
+                if (regionScanner != null) {
+                    regionScanner.close();
+                } else {
+                    Closeables.closeQuietly(groupByCache);
+                }
             }
-        }
+
+        };
     }
     
     /**
@@ -468,7 +502,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
      */
     private RegionScanner scanOrdered(final ObserverContext<RegionCoprocessorEnvironment> c,
             final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
-            final ServerAggregators aggregators, final long limit) throws IOException {
+            final ServerAggregators aggregators, final long limit, final long pageSizeInMs) throws IOException {
 
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
@@ -488,6 +522,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 boolean hasMore;
                 boolean atLimit;
                 boolean aggBoundary = false;
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                long now;
                 Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
                 ImmutableBytesPtr key = null;
                 Aggregator[] rowAggregators = aggregators.getAggregators();
@@ -527,12 +563,18 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             atLimit = rowCount + countOffset >= limit;
                             // Do rowCount + 1 b/c we don't have to wait for a complete
                             // row in the case of a DISTINCT with a LIMIT
-                        } while (hasMore && !aggBoundary && !atLimit);
+                            now = EnvironmentEdgeManager.currentTimeMillis();
+                        } while (hasMore && !aggBoundary && !atLimit && (now - startTime) < pageSizeInMs);
                     }
                 } finally {
                     if (acquiredLock) region.closeRegionOperation();
                 }
-
+                if (hasMore && !aggBoundary && !atLimit && (now - startTime) >= pageSizeInMs) {
+                    // Return a dummy result as we have processed a page worth of rows
+                    // but we are not ready to aggregate
+                    getDummyResult(results);
+                    return true;
+                }
                 if (currentKey != null) {
                     byte[] value = aggregators.toBytes(rowAggregators);
                     KeyValue keyValue =
