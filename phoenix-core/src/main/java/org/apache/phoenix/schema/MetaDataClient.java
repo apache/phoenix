@@ -2954,7 +2954,9 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setBoolean(28, useStatsForParallelizationProp);
             }
-            if (parent != null && parent.getType() == PTableType.VIEW && tableType == PTableType.INDEX) {
+            if (indexType == IndexType.LOCAL ||
+                    (parent != null && parent.getType() == PTableType.VIEW
+                            && tableType == PTableType.INDEX)) {
                 tableUpsert.setInt(29, viewIndexIdType.getSqlType());
             } else {
                 tableUpsert.setNull(29, Types.NULL);
