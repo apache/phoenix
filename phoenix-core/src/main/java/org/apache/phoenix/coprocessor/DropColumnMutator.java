@@ -132,23 +132,27 @@ public class DropColumnMutator implements ColumnMutator {
                 if (existingViewColumn != null && view.getViewStatement() != null) {
                     ParseNode viewWhere =
                             new SQLParser(view.getViewStatement()).parseQuery().getWhere();
-                    PhoenixConnection conn = QueryUtil.getConnectionOnServer(conf).unwrap(
-                            PhoenixConnection.class);
-                    PhoenixStatement statement = new PhoenixStatement(conn);
-                    TableRef baseTableRef = new TableRef(view);
-                    ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
-                    StatementContext context = new StatementContext(statement, columnResolver);
-                    Expression whereExpression = WhereCompiler.compile(context, viewWhere);
-                    Expression colExpression =
-                            new ColumnRef(baseTableRef, existingViewColumn.getPosition())
-                                    .newColumnExpression();
-                    MetaDataEndpointImpl.ColumnFinder columnFinder =
-                            new MetaDataEndpointImpl.ColumnFinder(colExpression);
-                    whereExpression.accept(columnFinder);
-                    if (columnFinder.getColumnFound()) {
-                        return new MetaDataProtocol.MetaDataMutationResult(
+                    try (PhoenixConnection conn =
+                            QueryUtil.getConnectionOnServer(conf)
+                                .unwrap(PhoenixConnection.class)) {
+                        PhoenixStatement statement = new PhoenixStatement(conn);
+                        TableRef baseTableRef = new TableRef(view);
+                        ColumnResolver columnResolver =
+                            FromCompiler.getResolver(baseTableRef);
+                        StatementContext context =
+                            new StatementContext(statement, columnResolver);
+                        Expression whereExpression =
+                            WhereCompiler.compile(context, viewWhere);
+                        Expression colExpression = new ColumnRef(baseTableRef,
+                            existingViewColumn.getPosition()).newColumnExpression();
+                        MetaDataEndpointImpl.ColumnFinder columnFinder =
+                          new MetaDataEndpointImpl.ColumnFinder(colExpression);
+                        whereExpression.accept(columnFinder);
+                        if (columnFinder.getColumnFound()) {
+                            return new MetaDataProtocol.MetaDataMutationResult(
                                 MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                                 EnvironmentEdgeManager.currentTimeMillis(), table);
+                        }
                     }
                 }
 

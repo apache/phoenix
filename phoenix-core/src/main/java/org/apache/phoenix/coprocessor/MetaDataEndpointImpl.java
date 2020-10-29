@@ -2290,16 +2290,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             && (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
                             SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
                                     env.getConfiguration()).equals(hTable.getName()))) {
-                        try {
-                            PhoenixConnection conn =
-                                    QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                            .unwrap(PhoenixConnection.class);
+                        try (PhoenixConnection conn =
+                                QueryUtil.getConnectionOnServer(env.getConfiguration())
+                                    .unwrap(PhoenixConnection.class)) {
                             Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
-                                    Bytes.toString(tenantIdBytes), Bytes.toString(schemaName),
-                                    Bytes.toString(tableOrViewName),
-                                    PTable.TaskStatus.CREATED.toString(),
-                                    null, null, null, null,
-                                    this.accessCheckEnabled);
+                                Bytes.toString(tenantIdBytes),
+                                Bytes.toString(schemaName),
+                                Bytes.toString(tableOrViewName),
+                                PTable.TaskStatus.CREATED.toString(),
+                                null, null, null, null,
+                                this.accessCheckEnabled);
                         } catch (Throwable t) {
                             LOGGER.error("Adding a task to drop child views failed!", t);
                         }
@@ -3201,6 +3201,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
         }
+        if (connection != null) {
+            connection.close();
+        }
         return null;
     }
 
@@ -3267,6 +3270,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                 clearRemoteTableFromCache(clientTimeStamp, index.getSchemaName() != null ?
                         index.getSchemaName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY, index.getTableName().getBytes());
             }
+        }
+        if (connection != null) {
+            connection.close();
         }
         return null;
     }
