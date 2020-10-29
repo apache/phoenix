@@ -19,10 +19,12 @@ package org.apache.phoenix.index;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.end2end.IndexToolIT;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexScrutiny;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -344,31 +346,13 @@ public class IndexToolTest extends BaseTest {
                 startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
-        assertEquals(IndexTool.SourceTable.DATA_TABLE_SOURCE, it.getSourceTable());
+        assertEquals(IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE, it.getSourceTable());
     }
 
     @Test
     public void testIndexToolFromIndexSource() throws Exception {
         verifyFromIndexOption(IndexTool.IndexVerifyType.ONLY);
         verifyFromIndexOption(IndexTool.IndexVerifyType.BEFORE);
-    }
-
-    @Test
-    public void testIndexToolFromIndexSourceWith_Wrong_VerifyOption() throws Exception {
-        verifyFromIndexException(IndexTool.IndexVerifyType.NONE);
-        verifyFromIndexException(IndexTool.IndexVerifyType.AFTER);
-        verifyFromIndexException(IndexTool.IndexVerifyType.BOTH);
-    }
-
-    private void verifyFromIndexException(IndexTool.IndexVerifyType verifyType) {
-        Long startTime = 1L;
-        Long endTime = 10L;
-        String[] args =
-            IndexToolIT.getArgValues(true, true, schema,
-                dataTable, indexTable, tenantId, verifyType,
-                startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, null, true);
-        exceptionRule.expect(IllegalStateException.class);
-        CommandLine cmdLine = it.parseOptions(args);
     }
 
     private void verifyFromIndexOption(IndexTool.IndexVerifyType verifyType) throws Exception {
@@ -380,7 +364,7 @@ public class IndexToolTest extends BaseTest {
                 startTime, endTime, IndexTool.IndexDisableLoggingType.BEFORE, null, true);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
-        assertEquals(IndexTool.SourceTable.INDEX_TABLE_SOURCE, it.getSourceTable());
+        assertEquals(IndexScrutinyTool.SourceTable.INDEX_TABLE_SOURCE, it.getSourceTable());
     }
 
 }

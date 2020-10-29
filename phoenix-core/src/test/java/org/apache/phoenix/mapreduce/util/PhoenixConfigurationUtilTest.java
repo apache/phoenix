@@ -25,7 +25,7 @@ import java.sql.DriverManager;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.mapreduce.index.IndexTool.SourceTable;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
