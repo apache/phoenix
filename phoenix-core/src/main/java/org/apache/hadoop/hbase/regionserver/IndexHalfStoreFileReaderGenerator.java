@@ -276,24 +276,22 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 scan.addFamily(s.getColumnFamilyDescriptor().getName());
             }
         }
-        try {
-            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
-                    .unwrap(PhoenixConnection.class);
+        try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDescriptor());
             final List<IndexMaintainer> maintainers = Lists
-                    .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
+                .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
             for (PTable index : dataPTable.getIndexes()) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     maintainers.add(index.getIndexMaintainer(dataPTable, conn));
                 }
             }
-            return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
-                    maintainers, store.getColumnFamilyDescriptor().getName(),env.getConfiguration());
-            
-
+            return new DataTableLocalIndexRegionScanner(
+                env.getRegion().getScanner(scan), env.getRegion(), maintainers,
+                store.getColumnFamilyDescriptor().getName(),
+                env.getConfiguration());
         } catch (SQLException e) {
             throw new IOException(e);
-
         }
     }
 }
