@@ -2079,6 +2079,13 @@ public class MetaDataClient {
                     }
                 }
 
+                // Cannot set PHOENIX_TTL if parent has already defined it.
+                if (tableType == VIEW  && parent != null && parent.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+
                 if (tableType != VIEW) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY)
                             .setSchemaName(schemaName)
@@ -3446,6 +3453,10 @@ public class MetaDataClient {
             }
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_TABLE)
             .setSchemaName(schemaName).setTableName(tableName).setFamilyName(familyName).setColumnName(columnName).setMessage(msg).build().buildException();
+        case UNALLOWED_SCHEMA_MUTATION:
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL)
+                    .setSchemaName(schemaName).setTableName(tableName).build().buildException();
         case NO_OP:
         case COLUMN_ALREADY_EXISTS:
         case COLUMN_NOT_FOUND:

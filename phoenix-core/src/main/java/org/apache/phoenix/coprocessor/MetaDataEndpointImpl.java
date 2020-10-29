@@ -2617,11 +2617,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
      *     long, boolean)}
      */
     private Optional<MetaDataMutationResult> validateIfMutationAllowedOnParent(
+            final PTable parentTable,
+            final List<Mutation> tableMetadata,
             final PTableType expectedType, final long clientTimeStamp,
             final byte[] tenantId, final byte[] schemaName,
             final byte[] tableOrViewName, final List<PTable> childViews,
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
+        boolean isSchemaMutationAllowed = true;
         if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
             try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
                     getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
@@ -2650,12 +2653,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
+            // Validate PHOENIX_TTL property settings for views only.
+            if (expectedType == PTableType.VIEW) {
+                isSchemaMutationAllowed = validatePhoenixTTLAttributeSettingForView(
+                        parentTable, childViews, tableMetadata, PHOENIX_TTL_BYTES);
+            }
         }
         if (!isMutationAllowed) {
             MetaDataMutationResult metaDataMutationResult =
                 new MetaDataMutationResult(
                     MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                     EnvironmentEdgeManager.currentTimeMillis(), null);
+            return Optional.of(metaDataMutationResult);
+        }
+        if (!isSchemaMutationAllowed) {
+            MetaDataMutationResult metaDataMutationResult =
+                    new MetaDataMutationResult(
+                            MetaDataProtocol.MutationCode.UNALLOWED_SCHEMA_MUTATION,
+                            EnvironmentEdgeManager.currentTimeMillis(), null);
             return Optional.of(metaDataMutationResult);
         }
         return Optional.empty();
@@ -2689,6 +2704,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             try {
                 List<PTable> childViews = Lists.newArrayList();
                 Optional<MetaDataMutationResult> mutationResult = validateIfMutationAllowedOnParent(
+                        parentTable, tableMetadata,
                         expectedType, clientTimeStamp, tenantId, schemaName, tableOrViewName,
                         childViews, clientVersion);
                 // only if mutation is allowed, we should get Optional.empty() here
@@ -2935,6 +2951,46 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             queryServices.clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, schemaName, tableName,
                     clientTimeStamp);
         }
+    }
+
+    // Checks whether a non-zero PHOENIX_TTL value is being set.
+    private boolean validatePhoenixTTLAttributeSettingForView(
+            final PTable parentTable,
+            final List<PTable> childViews,
+            final List<Mutation> tableMetadata,
+            final byte[] phoenixTtlBytes) {
+        boolean hasNewPhoenixTTLAttribute = false;
+        boolean isSchemaMutationAllowed = true;
+        for (Mutation m : tableMetadata) {
+            if (m instanceof Put) {
+                Put p = (Put)m;
+                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, phoenixTtlBytes);
+                if (cells != null && cells.size() > 0) {
+                    Cell cell = cells.get(0);
+                    long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
+                            cell.getValueOffset(), cell.getValueLength());
+                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                }
+            }
+        }
+
+        if (hasNewPhoenixTTLAttribute) {
+            // Disallow if the parent has PHOENIX_TTL set.
+            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
+                isSchemaMutationAllowed = false;
+            }
+
+            // Since we do not allow propagation of PHOENIX_TTL values during ALTER for now.
+            // If a child view exists and this view previously had a PHOENIX_TTL value set
+            // then that implies that the child view too has a valid PHOENIX_TTL (non zero).
+            // In this case we do not allow for ALTER of the view's PHOENIX_TTL value.
+            if (!childViews.isEmpty()) {
+                isSchemaMutationAllowed = false;
+            }
+        }
+        return isSchemaMutationAllowed;
+
+
     }
 
     public static class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
