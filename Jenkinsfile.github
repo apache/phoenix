@@ -56,6 +56,7 @@ pipeline {
         //WORKDIR_REL_JDK8_HADOOP3_CHECK = 'yetus-jdk8-hadoop3-check'
         //WORKDIR_REL_JDK11_HADOOP3_CHECK = 'yetus-jdk11-hadoop3-check'
         GITHUB_USE_TOKEN = 'true'
+        //GITHUB_USER='dummy'
     }
 
     parameters {
@@ -102,10 +103,15 @@ pipeline {
                         dir("${WORKDIR}") {
                             withCredentials([
                                 usernamePassword(
-                                  credentialsId: 'c06659ac-4c77-499f-9b9d-485f1b58792c',
+                                  credentialsId: '683f5dcf-5552-4b28-9fb1-6a6b77cf53dd',
                                   passwordVariable: 'GITHUB_PASSWORD',
                                   usernameVariable: 'GITHUB_USER'
                                 )]) {
+//                            withCredentials([
+//                                string(
+//                                  credentialsId: '683f5dcf-5552-4b28-9fb1-6a6b77cf53dd',
+//                                  variable: 'GITHUB_PASSWORD',
+//                                )]) {
                                 sh label: 'test-patch', script: '''#!/bin/bash -e
                                     hostname -a ; pwd ; ls -la
                                     printenv 2>&1 | sort
