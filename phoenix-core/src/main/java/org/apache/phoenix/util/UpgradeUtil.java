@@ -1234,11 +1234,11 @@ public class UpgradeUtil {
                     // metaConn eligible for closure
                     isMetaConnUsingQueryConn = false;
                 }
-                String schemaName = rs.getString("TABLE_SCHEM");
-                String parentTableName = rs.getString("TABLE_NAME");
+                String schemaName = rs.getString(TABLE_SCHEM);
+                String parentTableName = rs.getString(TABLE_NAME);
                 String fullParentTableName =
                     SchemaUtil.getTableName(schemaName, parentTableName);
-                String indexName = rs.getString("COLUMN_FAMILY");
+                String indexName = rs.getString(COLUMN_FAMILY);
                 PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
                 if (table == null) {
                     throw new TableNotFoundException(fullParentTableName);
