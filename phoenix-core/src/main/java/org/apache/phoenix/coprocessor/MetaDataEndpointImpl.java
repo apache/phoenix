@@ -2648,11 +2648,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
         }
         if (!isMutationAllowed) {
-            MetaDataMutationResult metaDataMutationResult =
-                new MetaDataMutationResult(
+            return new MetaDataMutationResult(
                     MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                     EnvironmentEdgeManager.currentTimeMillis(), null);
-            return metaDataMutationResult;
         }
         if (!isSchemaMutationAllowed) {
             MetaDataMutationResult metaDataMutationResult =
