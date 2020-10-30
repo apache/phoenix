@@ -764,7 +764,7 @@ public class ViewUtil {
      * If the same column is present in the parent and child
      * (for table metadata created before PHOENIX-3534 or when
      * {@link org.apache.phoenix.query.QueryServices#ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK} is
-     * enabled) we choose the child column over the parent column.
+     * enabled) we choose the latest column.
      * Note that we don't need to call this method for views created before 4.15 since they
      * already contain all the columns from their ancestors.
      * @param view PTable of the view
@@ -779,6 +779,7 @@ public class ViewUtil {
         List<PColumn> currAncestorTableCols = PTableImpl.getColumnsToClone(parentTable);
         if (currAncestorTableCols != null) {
             // add the ancestor columns in reverse order so that the final column list
+            // (reversed outside of this method invocation)
             // contains ancestor columns and then the view columns in the right order
             for (int j = currAncestorTableCols.size() - 1; j >= 0; j--) {
                 PColumn ancestorColumn = currAncestorTableCols.get(j);
@@ -820,10 +821,23 @@ public class ViewUtil {
                         if (!isDiverged && ancestorColumn.getTimestamp() >
                                 existingColumn.getTimestamp()) {
                             allColumns.remove(existingColumnIndex);
-                            allColumns.add(ancestorColumn);
+                            // Remove the existing column and add the ancestor
+                            // column at the end and make sure to mark it as
+                            // derived
+                            allColumns.add(new PColumnImpl(ancestorColumn, true,
+                                    ancestorColumn.getPosition()));
+                        } else {
+                            // Since this is a column from the ancestor,
+                            // mark it as derived
+                            allColumns.set(existingColumnIndex,
+                                    new PColumnImpl(existingColumn, true,
+                                            existingColumn.getPosition()));
                         }
                     } else {
-                        allColumns.add(ancestorColumn);
+                        // Since this is a column from the ancestor,
+                        // mark it as derived
+                        allColumns.add(new PColumnImpl(ancestorColumn, true,
+                                ancestorColumn.getPosition()));
                     }
                 }
             }
