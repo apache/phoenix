@@ -377,7 +377,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         PhoenixConnection upgradeConn = conn.unwrap(PhoenixConnection.class);
         // Simulate an upgrade by setting the upgrade flag
         upgradeConn.setRunningUpgrade(true);
-        syncTableAndIndexProperties(upgradeConn, upgradeConn.getQueryServices().getAdmin());
+        syncTableAndIndexProperties(upgradeConn);
         for (String t: createdTables) {
             verifyHBaseColumnFamilyProperties(t, conn, false, false);
         }

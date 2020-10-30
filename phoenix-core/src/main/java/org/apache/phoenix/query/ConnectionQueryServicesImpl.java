@@ -3865,7 +3865,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Synchronize necessary properties amongst all column families of a base table
             // and its indexes. See PHOENIX-3955
             if (syncAllTableAndIndexProps) {
-                syncTableAndIndexProperties(metaConnection, getAdmin());
+                syncTableAndIndexProperties(metaConnection);
             }
 
             // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
