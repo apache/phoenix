@@ -2543,12 +2543,13 @@ public class UpgradeUtil {
         }
     }
 
-    public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
-        String tableString = SYSTEM_CATALOG_NAME;
+    public static String getSysTableSnapshotName(
+            long currentSystemTableTimestamp, String tableName) {
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
         String date = formatter.format(new Date(EnvironmentEdgeManager.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
-        return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
+        return String.format("SNAPSHOT_%s_%s_TO_%s_%s", tableName,
+            upgradingFrom, CURRENT_CLIENT_VERSION, date);
     }
     
     public static boolean isNoUpgradeSet(Properties props) {
