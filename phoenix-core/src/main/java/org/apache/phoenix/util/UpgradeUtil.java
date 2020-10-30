@@ -1190,7 +1190,9 @@ public class UpgradeUtil {
     }
     
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
-    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+        PhoenixConnection metaConn = null;
+        boolean isMetaConnUsingQueryConn = true;
+    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG
         try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
         		PhoenixConnection upsertConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP)) {
             LOGGER.info("Upgrading metadata to add parent links for indexes on views");
@@ -1199,36 +1201,56 @@ public class UpgradeUtil {
 			String createViewIndexLink = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY, LINK_TYPE) VALUES (?,?,?,?,?) ";
             ResultSet rs = queryConn.createStatement().executeQuery(indexQuery);
             String prevTenantId = null;
-            PhoenixConnection metaConn = queryConn;
+            metaConn = queryConn;
             Properties props = new Properties(queryConn.getClientInfo());
-			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(HConstants.LATEST_TIMESTAMP));
             while (rs.next()) {
-            	String tenantId = rs.getString("TENANT_ID");
-				if (!java.util.Objects.equals(prevTenantId, tenantId)) {
-					prevTenantId = tenantId;
-					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-            		metaConn = new PhoenixConnection(oldMetaConnection, props); 
-            	}
-            	String schemaName = rs.getString("TABLE_SCHEM");
-            	String parentTableName = rs.getString("TABLE_NAME");
-            	String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
-            	String indexName = rs.getString("COLUMN_FAMILY");
-            	PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
-            	if (table==null) {
-            		throw new TableNotFoundException(fullParentTableName);
-            	}
-            	if (table.getType().equals(PTableType.VIEW)) {
-            		PreparedStatement prepareStatement = upsertConn.prepareStatement(createViewIndexLink);
-            		prepareStatement.setString(1, tenantId);
-            		prepareStatement.setString(2, schemaName);
-            		prepareStatement.setString(3, indexName);
-            		prepareStatement.setString(4, parentTableName);
-            		prepareStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
-            		prepareStatement.execute();
-            		upsertConn.commit();
-            	}
+                String tenantId = rs.getString("TENANT_ID");
+                if (!java.util.Objects.equals(prevTenantId, tenantId)) {
+                    prevTenantId = tenantId;
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    // guard again queryConn because we don't want to close
+                    // queryConn if metaConn was assigned queryConn at
+                    // this point
+                    if (!isMetaConnUsingQueryConn) {
+                        metaConn.close();
+                    }
+                    metaConn = new PhoenixConnection(oldMetaConnection, props);
+                    // now that we have reassigned metaConn, make
+                    // isMetaConnUsingQueryConn false so that we make
+                    // metaConn eligible for closure
+                    isMetaConnUsingQueryConn = false;
+                }
+                String schemaName = rs.getString(TABLE_SCHEM);
+                String parentTableName = rs.getString(TABLE_NAME);
+                String fullParentTableName =
+                    SchemaUtil.getTableName(schemaName, parentTableName);
+                String indexName = rs.getString(COLUMN_FAMILY);
+                PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
+                if (table == null) {
+                    throw new TableNotFoundException(fullParentTableName);
+                }
+                if (table.getType().equals(PTableType.VIEW)) {
+                    PreparedStatement prepareStatement =
+                        upsertConn.prepareStatement(createViewIndexLink);
+                    prepareStatement.setString(1, tenantId);
+                    prepareStatement.setString(2, schemaName);
+                    prepareStatement.setString(3, indexName);
+                    prepareStatement.setString(4, parentTableName);
+                    prepareStatement.setByte(5,
+                        LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+                    prepareStatement.execute();
+                    upsertConn.commit();
+                }
             }
             queryConn.getQueryServices().clearCache();
+        } finally {
+            // while iterating through ResultSet, if metaConn was reassigned
+            // anytime, we need to close the last reassigned tenant connection
+            if (!isMetaConnUsingQueryConn) {
+                metaConn.close();
+            }
         }
     }
 
@@ -1426,45 +1448,67 @@ public class UpgradeUtil {
      * with each other and also in sync with all the table's indexes
      * See PHOENIX-3955
      * @param conn Phoenix connection
-     * @param admin HBase admin used for getting existing tables and their descriptors
-     * @throws SQLException
-     * @throws IOException
+     * @throws SQLException if something goes wrong while retrieving Admin,
+     *     Table or while calling underlying utilities like
+     *     {@link #syncUpdateCacheFreqAllIndexes(PhoenixConnection, PTable)} ,
+     *     {@link #addTableDescIfPropsChanged(HTableDescriptor,
+     *         HColumnDescriptor, Map, Set)} ,
+     *     {@link #syncGlobalIndexesForTable(ConnectionQueryServices, PTable,
+     *         HColumnDescriptor, Map, Set)} ,
+     *     {@link #syncViewIndexTable(ConnectionQueryServices, PTable,
+     *         HColumnDescriptor, Map, Set)}
+     * @throws IOException if something goes wrong while retrieving Admin,
+     *     performing admin operations or while performing sync of updated
+     *     cache frequencies for indexes using
+     *     {@link #syncUpdateCacheFreqAllIndexes(PhoenixConnection, PTable)}
      */
-    public static void syncTableAndIndexProperties(PhoenixConnection conn, Admin admin)
-    throws SQLException, IOException {
-        Set<HTableDescriptor> tableDescriptorsToSynchronize = new HashSet<>();
-        for (HTableDescriptor origTableDesc : admin.listTables()) {
-            if (MetaDataUtil.isViewIndex(origTableDesc.getTableName().getNameWithNamespaceInclAsString())) {
-                // Ignore physical view index tables since we handle them for each base table already
-                continue;
-            }
-            PTable table;
-            String fullTableName = SchemaUtil.getPhysicalTableName(
+    public static void syncTableAndIndexProperties(PhoenixConnection conn)
+            throws SQLException, IOException {
+        try (Admin admin = conn.getQueryServices().getAdmin()) {
+            Set<HTableDescriptor> tableDescriptorsToSynchronize =
+                new HashSet<>();
+            for (HTableDescriptor origTableDesc : admin.listTables()) {
+                if (MetaDataUtil.isViewIndex(origTableDesc.getTableName()
+                        .getNameWithNamespaceInclAsString())) {
+                    // Ignore physical view index tables since we handle them
+                    // for each base table already
+                    continue;
+                }
+                PTable table;
+                String fullTableName = SchemaUtil.getPhysicalTableName(
                     origTableDesc.getTableName().getName(),
-                    SchemaUtil.isNamespaceMappingEnabled(
-                            null, conn.getQueryServices().getProps())).getNameAsString();
-            try {
-                // Use this getTable API to get the latest PTable
-                table = PhoenixRuntime.getTable(conn, null, fullTableName);
-            } catch (TableNotFoundException e) {
-                // Ignore tables not mapped to a Phoenix Table
-                LOGGER.warn("Error getting PTable for HBase table: " + fullTableName);
-                continue;
-            }
-            if (table.getType() == PTableType.INDEX) {
-                // Ignore global index tables since we handle them for each base table already
-                continue;
-            }
-            syncUpdateCacheFreqAllIndexes(conn, table);
-            HColumnDescriptor defaultColFam = origTableDesc.getFamily(SchemaUtil.getEmptyColumnFamily(table));
-            Map<String, Object> syncedProps = MetaDataUtil.getSyncedProps(defaultColFam);
+                    SchemaUtil.isNamespaceMappingEnabled(null,
+                        conn.getQueryServices().getProps())).getNameAsString();
+                try {
+                    // Use this getTable API to get the latest PTable
+                    table = PhoenixRuntime.getTable(conn, null, fullTableName);
+                } catch (TableNotFoundException e) {
+                    // Ignore tables not mapped to a Phoenix Table
+                    LOGGER.warn("Error getting PTable for HBase table: {}",
+                        fullTableName);
+                    continue;
+                }
+                if (table.getType() == PTableType.INDEX) {
+                    // Ignore global index tables since we handle them for
+                    // each base table already
+                    continue;
+                }
+                syncUpdateCacheFreqAllIndexes(conn, table);
+                HColumnDescriptor defaultColFam = origTableDesc
+                    .getFamily(SchemaUtil.getEmptyColumnFamily(table));
+                Map<String, Object> syncedProps =
+                    MetaDataUtil.getSyncedProps(defaultColFam);
 
-            addTableDescIfPropsChanged(origTableDesc, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-            syncGlobalIndexesForTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-            syncViewIndexTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-        }
-        for (HTableDescriptor t: tableDescriptorsToSynchronize) {
-            admin.modifyTable(t.getTableName(), t);
+                addTableDescIfPropsChanged(origTableDesc, defaultColFam,
+                    syncedProps, tableDescriptorsToSynchronize);
+                syncGlobalIndexesForTable(conn.getQueryServices(), table,
+                    defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+                syncViewIndexTable(conn.getQueryServices(), table,
+                    defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+            }
+            for (HTableDescriptor t : tableDescriptorsToSynchronize) {
+                admin.modifyTable(t.getTableName(), t);
+            }
         }
     }
 
