@@ -1685,12 +1685,17 @@ public class MetaDataClient {
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
                     // prevent this column from being dropped while the view is being created
+                    String colNameSeparatedByDot = colName.getColumnName()
+                            .replace(QueryConstants.NAMESPACE_SEPARATOR,
+                                     QueryConstants.NAME_SEPARATOR);
+                    // indexed column name have a ':' between the column family and column name
+                    // We would like to have '.' like in other column names
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
-                            colName.toString());
+                            colNameSeparatedByDot);
                     if (!acquiredMutex) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
-                    acquiredColumnMutexSet.add(colName.toString());
+                    acquiredColumnMutexSet.add(colNameSeparatedByDot);
                 }
             }
 
@@ -2860,11 +2865,11 @@ public class MetaDataClient {
                             // acquire the mutex using the global physical table name to
                             // prevent this column from being dropped while the view is being created
                             boolean acquiredMutex = writeCell(null, parentPhysicalSchemaName, parentPhysicalTableName,
-                                    column.getName().getString());
+                                    column.toString());
                             if (!acquiredMutex) {
                                 throw new ConcurrentTableMutationException(parentPhysicalSchemaName, parentPhysicalTableName);
                             }
-                            acquiredColumnMutexSet.add(column.getName().getString());
+                            acquiredColumnMutexSet.add(column.toString());
                         }
                     }
                     Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
@@ -3983,11 +3988,11 @@ public class MetaDataClient {
                     // prevent creating the same column on a table or view with
                     // a conflicting type etc
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
-                        pColumn.getName().getString());
+                        pColumn.toString());
                     if (!acquiredMutex) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
-                    acquiredColumnMutexSet.add(pColumn.getName().getString());
+                    acquiredColumnMutexSet.add(pColumn.toString());
                 }
                 MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table,
                         getParentTable(table), properties, colFamiliesForPColumnsToBeAdded, columns);
@@ -4318,11 +4323,12 @@ public class MetaDataClient {
                                 .setColumnName(columnToDrop.getName().getString()).build().buildException();
                     }
                     columnsToDrop.add(new ColumnRef(columnRef.getTableRef(), columnToDrop.getPosition()));
-                    boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName, columnToDrop.getName().getString());
+                    boolean acquiredMutex = writeCell(null, physicalSchemaName,
+                            physicalTableName, columnToDrop.toString());
                     if (!acquiredMutex) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
-                    acquiredColumnMutexSet.add(columnToDrop.getName().getString());
+                    acquiredColumnMutexSet.add(columnToDrop.toString());
                 }
 
                 dropColumnMutations(table, tableColumnsToDrop);
