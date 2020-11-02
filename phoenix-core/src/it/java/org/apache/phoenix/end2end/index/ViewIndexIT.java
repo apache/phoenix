@@ -44,6 +44,9 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -278,6 +281,64 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     @Test
     public void testCoprocsOnGlobalNonMTImmutableViewIndex() throws Exception {
         testCoprocsOnGlobalViewIndexHelper(false, false);
+    }
+
+    @Test
+    public void testDroppingColumnWhileCreatingIndex() throws Exception {
+        String schemaName = "S1";
+        String tableName = generateUniqueName();
+        String viewSchemaName = "S1";
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String indexName = "IND_" + generateUniqueName();
+        String viewName = "VIEW_" + generateUniqueName();
+        String fullViewName = SchemaUtil.getTableName(viewSchemaName, viewName);
+
+        createBaseTable(schemaName, tableName, false, null, null, true);
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+            conn.commit();
+
+            final AtomicInteger exceptionCode = new AtomicInteger();
+            final CountDownLatch doneSignal = new CountDownLatch(2);
+            Runnable r1 = new Runnable() {
+
+                @Override public void run() {
+                    try {
+                        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullViewName + " (v1)");
+                    } catch (SQLException e) {
+                        exceptionCode.set(e.getErrorCode());
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+            Runnable r2 = new Runnable() {
+
+                @Override public void run() {
+                    try {
+                        conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
+                    } catch (SQLException e) {
+                        exceptionCode.set(e.getErrorCode());
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+            Thread t1 = new Thread(r1);
+            t1.start();
+            Thread t2 = new Thread(r2);
+            t2.start();
+
+            t1.join();
+            t2.join();
+            doneSignal.await(60, TimeUnit.SECONDS);
+            assertEquals(exceptionCode.get(), 301);
+        }
     }
 
     private void testCoprocsOnGlobalViewIndexHelper(boolean multiTenant, boolean mutable) throws SQLException, IOException {
