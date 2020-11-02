@@ -17,16 +17,13 @@
  */
 package org.apache.phoenix.replication;
 
-import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.replication.WALCellFilter;
 import org.apache.hadoop.hbase.replication.WALEntryFilter;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.SchemaUtil;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Standard replication of the SYSTEM.CATALOG table can be dangerous because schemas
@@ -35,36 +32,40 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * be copied. This WALEntryFilter will only allow tenant-owned rows in SYSTEM.CATALOG to
  * be replicated. Data from all other tables is automatically passed.
  */
-public class SystemCatalogWALEntryFilter implements WALEntryFilter {
+public class SystemCatalogWALEntryFilter implements
+    WALEntryFilter, WALCellFilter {
+  /**
+   * This is an optimization to just skip the cell filter if we do not care
+   * about cell filter for certain WALEdits.
+   */
+  private boolean skipCellFilter;
 
   @Override
   public WAL.Entry filter(WAL.Entry entry) {
-
-    //if the WAL.Entry's table isn't System.Catalog or System.Child_Link, it auto-passes this filter
-    //TODO: when Phoenix drops support for pre-1.3 versions of HBase, redo as a WALCellFilter
+    // We use the WALCellFilter to filter the cells from entry, WALEntryFilter
+    // should not block anything
+    // if the WAL.Entry's table isn't System.Catalog or System.Child_Link,
+    // it auto-passes this filter
     if (!SchemaUtil.isMetaTable(entry.getKey().getTableName().getName())){
-      return entry;
-    }
-
-    List<Cell> cells = entry.getEdit().getCells();
-    List<Cell> cellsToRemove = Lists.newArrayList();
-    for (Cell cell : cells) {
-      if (!isTenantRowCell(cell)){
-        cellsToRemove.add(cell);
-      }
-    }
-    cells.removeAll(cellsToRemove);
-    if (cells.size() > 0) {
-      return entry;
+      skipCellFilter = true;
     } else {
-      return null;
+      skipCellFilter = false;
     }
+    return entry;
+  }
+
+  @Override
+  public Cell filterCell(final WAL.Entry entry, final Cell cell) {
+    if (skipCellFilter) {
+      return cell;
+    }
+    return isTenantRowCell(cell) ? cell : null;
   }
 
   private boolean isTenantRowCell(Cell cell) {
-    ImmutableBytesWritable key =
-        new ImmutableBytesWritable(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
-    //rows in system.catalog that aren't tenant-owned will have a leading separator byte
-    return key.get()[key.getOffset()] != QueryConstants.SEPARATOR_BYTE;
+    // rows in system.catalog that aren't tenant-owned 
+    // will have a leading separator byte
+    return cell.getRowArray()[cell.getRowOffset()]
+        != QueryConstants.SEPARATOR_BYTE;
   }
 }
