@@ -1976,10 +1976,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     @Override
     public int getFetchSize() throws SQLException {
-	if (fetchSize>0)
-                return fetchSize;
-        else
-        	return connection.getQueryServices().getProps().getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
+        if (fetchSize > 0) {
+            return fetchSize;
+        } else {
+            return connection.getQueryServices().getProps()
+                .getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB,
+                    QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
+        }
     }
 
     @Override
