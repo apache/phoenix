@@ -1895,28 +1895,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Avoid the client-server RPC if this is not a view creation
         if (!childLinkMutations.isEmpty()) {
             // Send mutations for parent-child links to SYSTEM.CHILD_LINK
-            // We invoke this using the parent table's key since child links are keyed by parent
-            final MetaDataMutationResult result = childLinkMetaDataCoprocessorExec(SchemaUtil.getTableKey(parentTable),
-                    new Batch.Call<ChildLinkMetaDataService, MetaDataResponse>() {
-                        @Override
-                        public MetaDataResponse call(ChildLinkMetaDataService instance) throws IOException {
-                            ServerRpcController controller = new ServerRpcController();
-                            BlockingRpcCallback<MetaDataResponse> rpcCallback =
-                                    new BlockingRpcCallback<>();
-                            CreateViewAddChildLinkRequest.Builder builder =
-                                    CreateViewAddChildLinkRequest.newBuilder();
-                            for (Mutation m: childLinkMutations) {
-                                MutationProto mp = ProtobufUtil.toProto(m);
-                                builder.addTableMetadataMutations(mp.toByteString());
-                            }
-                            CreateViewAddChildLinkRequest build = builder.build();
-                            instance.createViewAddChildLink(controller, build, rpcCallback);
-                            if (controller.getFailedOn() != null) {
-                                throw controller.getFailedOn();
-                            }
-                            return rpcCallback.get();
-                        }
-                    } );
+            // We invoke this using rowKey available in the first element
+            // of childLinkMutations.
+            final byte[] rowKey = childLinkMutations.get(0).getRow();
+            final MetaDataMutationResult result =
+                childLinkMetaDataCoprocessorExec(rowKey,
+                    new ChildLinkMetaDataServiceCallBack(childLinkMutations));
 
             switch (result.getMutationCode()) {
                 case UNABLE_TO_CREATE_CHILD_LINK:
@@ -3219,9 +3203,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             try (PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                                          scnProps, newEmptyMetaData())) {
-                                try {
+                                try (Statement statement =
+                                        metaConnection.createStatement()) {
                                     metaConnection.setRunningUpgrade(true);
-                                    metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
+                                    statement.executeUpdate(
+                                        getSystemCatalogTableDDL());
                                 } catch (NewerTableAlreadyExistsException ignore) {
                                     // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed
                                     // timestamp. A TableAlreadyExistsException is not thrown, since the table only exists
