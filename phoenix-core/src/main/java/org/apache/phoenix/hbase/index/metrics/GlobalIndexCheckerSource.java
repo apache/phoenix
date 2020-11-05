@@ -44,6 +44,10 @@ public interface GlobalIndexCheckerSource extends BaseSource {
     String INDEX_REPAIR_FAILURE_TIME = "indexRepairFailureTime";
     String INDEX_REPAIR_FAILURE_TIME_DESC = "Histogram for the time in milliseconds for index row repair failures";
 
+    String UNVERIFIED_INDEX_ROW_AGE = "unverifiedIndexRowAge";
+    String UNVERIFIED_INDEX_ROW_AGE_DESC = "Histogram for the age in " +
+        "milliseconds for unverified row soon after it is repaired";
+
     /**
      * Increments the number of index rows inspected for verified status
      * @param indexName Name of the index
@@ -55,6 +59,13 @@ public interface GlobalIndexCheckerSource extends BaseSource {
      * @param indexName Name of the index
      */
     void incrementIndexRepairs(String indexName);
+
+    /**
+     * Updates the index age of unverified row histogram
+     * @param indexName name of the index
+     * @param time time taken in milliseconds
+     */
+    void updateUnverifiedIndexRowAge(String indexName, long time);
 
     /**
      * Increments the number of index repair failures
