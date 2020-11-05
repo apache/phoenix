@@ -27,6 +27,7 @@ import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -178,11 +179,23 @@ public class IndexMetricsIT extends ParallelStatsDisabledIT {
         verifyHistogram(GlobalIndexCheckerSource.INDEX_REPAIR_FAILURE_TIME, registry);
         verifyHistogram(getIndexCounterName(GlobalIndexCheckerSource.INDEX_REPAIR_FAILURE_TIME),
             registry);
+
+        long ageOfUnverifiedRow = EnvironmentEdgeManager.currentTimeMillis() - TIME_VAL;
+        metricSource.updateUnverifiedIndexRowAge(INDEX_NAME, ageOfUnverifiedRow);
+        verifyHistogram(GlobalIndexCheckerSource.UNVERIFIED_INDEX_ROW_AGE, registry,
+            ageOfUnverifiedRow);
+        verifyHistogram(getIndexCounterName(GlobalIndexCheckerSource.UNVERIFIED_INDEX_ROW_AGE),
+            registry, ageOfUnverifiedRow);
     }
 
     private void verifyHistogram(String counterName, DynamicMetricsRegistry registry) {
+        verifyHistogram(counterName, registry, TIME_VAL);
+    }
+
+    private void verifyHistogram(String counterName,
+            DynamicMetricsRegistry registry, long max) {
         MutableHistogram histogram = registry.getHistogram(counterName);
-        assertEquals(TIME_VAL, histogram.getMax());
+        assertEquals(max, histogram.getMax());
     }
 
     private void verifyCounter(String counterName, DynamicMetricsRegistry registry) {

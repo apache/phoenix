@@ -31,6 +31,7 @@ public class GlobalIndexCheckerSourceImpl extends BaseSourceImpl implements Glob
 
     private final MetricHistogram indexRepairTimeHisto;
     private final MetricHistogram indexRepairFailureTimeHisto;
+    private final MetricHistogram unverifiedIndexRowAge;
 
     public GlobalIndexCheckerSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
@@ -48,6 +49,8 @@ public class GlobalIndexCheckerSourceImpl extends BaseSourceImpl implements Glob
 
         indexRepairTimeHisto = getMetricsRegistry().newHistogram(INDEX_REPAIR_TIME, INDEX_REPAIR_TIME_DESC);
         indexRepairFailureTimeHisto = getMetricsRegistry().newHistogram(INDEX_REPAIR_FAILURE_TIME, INDEX_REPAIR_FAILURE_TIME_DESC);
+        unverifiedIndexRowAge = getMetricsRegistry().newHistogram(
+            UNVERIFIED_INDEX_ROW_AGE, UNVERIFIED_INDEX_ROW_AGE_DESC);
     }
 
     /**
@@ -72,6 +75,18 @@ public class GlobalIndexCheckerSourceImpl extends BaseSourceImpl implements Glob
     public void incrementIndexRepairFailures(String indexName) {
         incrementIndexSpecificCounter(INDEX_REPAIR_FAILURE, indexName);
         indexRepairFailures.incr();
+    }
+
+    /**
+     * Updates the index age of unverified row histogram
+     * @param indexName name of the index
+     * @param time time taken in milliseconds
+     */
+    public void updateUnverifiedIndexRowAge(final String indexName,
+            final long time) {
+        incrementIndexSpecificHistogram(UNVERIFIED_INDEX_ROW_AGE, indexName,
+            time);
+        unverifiedIndexRowAge.add(time);
     }
 
     /**
