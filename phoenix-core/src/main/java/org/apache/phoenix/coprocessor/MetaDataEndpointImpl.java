@@ -3370,11 +3370,28 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES, HConstants.LATEST_TIMESTAMP, null,
                             request.getClientVersion());
         } catch (Throwable t) {
-            LOGGER.error("loading system catalog table inside getVersion failed", t);
-            ProtobufUtil.setControllerException(controller,
-                    ServerUtil.createIOException(
-                            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
-                                    isTablesMappingEnabled).toString(), t));
+            boolean isErrorSwallowed = false;
+            if (t instanceof SQLException &&
+                    ((SQLException) t).getErrorCode() == SQLExceptionCode.GET_TABLE_ERROR.getErrorCode()) {
+                Region region = env.getRegion();
+                final byte[] key = SchemaUtil.getTableKey(
+                        ByteUtil.EMPTY_BYTE_ARRAY,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
+                if (!region.getRegionInfo().containsRow(key) &&
+                        request.getClientVersion() < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                    LOGGER.debug("The pre-4.15 client is trying to get SYSTEM.CATALOG " +
+                            "region that contains head row");
+                    isErrorSwallowed = true;
+                }
+            }
+            if (!isErrorSwallowed) {
+                LOGGER.error("loading system catalog table inside getVersion failed", t);
+                ProtobufUtil.setControllerException(controller,
+                        ServerUtil.createIOException(
+                                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                        isTablesMappingEnabled).toString(), t));
+            }
         }
         // In case this is the first connection, system catalog does not exist, and so we don't
         // set the optional system catalog timestamp.
