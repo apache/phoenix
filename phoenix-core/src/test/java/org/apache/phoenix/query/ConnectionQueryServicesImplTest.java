@@ -113,6 +113,8 @@ public class ConnectionQueryServicesImplTest {
             .thenCallRealMethod();
         when(mockCqs.getSysMutexTable()).thenCallRealMethod();
         when(mockCqs.getAdmin()).thenCallRealMethod();
+        when(mockCqs.getTable(Mockito.any())).thenCallRealMethod();
+        when(mockCqs.getTableIfExists(Mockito.any())).thenCallRealMethod();
     }
 
     @SuppressWarnings("unchecked")

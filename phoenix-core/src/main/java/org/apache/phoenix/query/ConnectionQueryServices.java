@@ -73,6 +73,22 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public Table getTable(byte[] tableName) throws SQLException;
 
+    /**
+     * Get Table by the given name. It is the responsibility of callers
+     * to close the returned Table interface. This method uses additional Admin
+     * API to ensure if table exists before returning Table interface from
+     * Connection. If table does not exist, this method will throw
+     * {@link org.apache.phoenix.schema.TableNotFoundException}
+     *
+     * @param tableName the name of the Table
+     * @return Table interface
+     * @throws SQLException If something goes wrong while retrieving table
+     *     interface from connection managed by implementor. If table does not
+     *     exist, {@link org.apache.phoenix.schema.TableNotFoundException} will
+     *     be thrown.
+     */
+    Table getTableIfExists(byte[] tableName) throws SQLException;
+
     public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
