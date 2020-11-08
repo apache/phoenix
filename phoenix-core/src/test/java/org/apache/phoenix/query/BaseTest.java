@@ -1553,9 +1553,9 @@ public abstract class BaseTest {
     }
     
     /**
-     * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
+     * Disable and drop all non system tables
      */
-    private static void disableAndDropNonSystemTables() throws Exception {
+    protected static void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
         Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {

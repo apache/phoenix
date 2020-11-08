@@ -213,6 +213,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
+    public Table getTableIfExists(byte[] tableName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {
