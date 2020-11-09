@@ -215,8 +215,8 @@ if [[ "$1" == "publish-dist" ]]; then
   echo "Packaging release source tarballs"
   make_src_release "${PROJECT}" "${RELEASE_VERSION}"
 
-  # we do not have binary tarballs for phoenix-thirdparty
-  if [[ "${PROJECT}" != "phoenix-thirdparty" ]]; then
+  # we do not have binary tarballs for phoenix-thirdparty, omid and tephra
+  if [[ "${PROJECT}" != "phoenix-thirdparty" && "${PROJECT}" != "phoenix-omid" && "${PROJECT}" != "phoenix-tephra" ]]; then
     make_binary_release "${PROJECT}" "${RELEASE_VERSION}"
   fi
 

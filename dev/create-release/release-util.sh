@@ -25,6 +25,7 @@ if [ -n "${GPG_KEY}" ]; then
 fi
 # Maven Profiles for publishing snapshots and release to Maven Central and Dist
 PUBLISH_PROFILES=("-P" "apache-release,release")
+OMID_VARIANTS=( "-Phbase-1" "-Phbase-2" )
 
 set -e
 
@@ -636,12 +637,22 @@ function kick_gpg_agent {
 # Do maven command to set version into local pom
 function maven_set_version { #input: <version_to_set>
   local this_version="$1"
-  echo "${MVN[@]}" versions:set -DnewVersion="$this_version"
-  "${MVN[@]}" versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
-  #Hacking around nonstandard maven submodules
+  # Omid needs an hbase profile for tagging (doesn't matter which one, the shims need special handling anyway)
+  if [[ "$PROJECT" == "phoenix-omid" ]]; then
+    local variant="${OMID_VARIANTS[1]}"
+  fi
+  echo "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version"
+  "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
+  #Hacking around nonstandard maven submodules for phoenix only
   for i in phoenix-hbase-compat-*; do
     if [ -e "$i" ]; then
-     "${MVN[@]}" -pl $i versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
+     "${MVN[@]}" ${variant:+"$variant"} -pl $i versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
+    fi
+  done
+  #Omid has an even more nonstandard maven structure, and needs more hacks
+  for i in hbase-shims/hbase-*; do
+    if [ -e "$i" ]; then
+     sed -i -e "0,\#<version>.*</version>#{s##<version>${this_version}</version>#}" $i/pom.xml
     fi
   done
 }
@@ -683,17 +694,25 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
   if ! is_dry_run; then
     mvn_goals=("${mvn_goals[@]}" deploy)
   fi
-  echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" \
-      "${mvn_goals[@]}"
-  echo "Logging to ${mvn_log_file}.  This will take a while..."
-  rm -f "$mvn_log_file"
-  # The tortuous redirect in the next command allows mvn's stdout and stderr to go to mvn_log_file,
-  # while also sending stderr back to the caller.
-  # shellcheck disable=SC2094
-  if ! "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" \
-      "${mvn_goals[@]}" 1>> "$mvn_log_file" 2> >( tee -a "$mvn_log_file" >&2 ); then
-    error "Deploy build failed, for details see log at '$mvn_log_file'."
+  # Omid needs to be deployed twice for HBase 1 and 2
+  if [[ "$PROJECT" == "phoenix-omid" ]]; then
+    local variants=( "${OMID_VARIANTS[@]}" )
+  else
+    local variants=( "" )
   fi
+  for variant in "${variants[@]}"; do
+    echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
+        "${mvn_goals[@]}"
+    echo "Logging to ${mvn_log_file}.  This will take a while..."
+    rm -f "$mvn_log_file"
+    # The tortuous redirect in the next command allows mvn's stdout and stderr to go to mvn_log_file,
+    # while also sending stderr back to the caller.
+    # shellcheck disable=SC2094
+    if ! "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
+        "${mvn_goals[@]}" 1>> "$mvn_log_file" 2> >( tee -a "$mvn_log_file" >&2 ); then
+      error "Deploy build failed, for details see log at '$mvn_log_file'."
+    fi
+  done
   echo "BUILD SUCCESS."
   stop_step "${timing_token}"
   return 0
