@@ -641,14 +641,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                             IndexTool.IndexVerifyType verifyType, Long startTime,
                                             Long endTime, Long incrementalVerify) {
         return getArgList(directApi, useSnapshot, schemaName, dataTable, indxTable, tenantId,
-            verifyType, startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, incrementalVerify);
+            verifyType, startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, incrementalVerify, false);
     }
 
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
                             String dataTable, String indxTable, String tenantId,
                             IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime,
                                             IndexTool.IndexDisableLoggingType disableLoggingType,
-                                            Long incrementalVerify) {
+                                            Long incrementalVerify, boolean useIndexTableAsSource) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("-s");
@@ -692,6 +692,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add("-rv");
             args.add(String.valueOf(incrementalVerify));
         }
+
+        if (useIndexTableAsSource) {
+            args.add("-fi");
+        }
+
         args.add("-op");
         args.add("/tmp/" + UUID.randomUUID().toString());
         return args;
@@ -708,7 +713,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                         String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType,
                                         IndexTool.IndexDisableLoggingType disableLoggingType) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
-                tenantId, verifyType, null, null, disableLoggingType, null);
+                tenantId, verifyType, null, null, disableLoggingType, null, false);
         return args.toArray(new String[0]);
     }
 
@@ -727,7 +732,19 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                          IndexTool.IndexDisableLoggingType disableLoggingType,
                                          Long incrementalVerify ) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
-            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify);
+            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify, false);
+        return args.toArray(new String[0]);
+    }
+
+    public static String [] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
+        String dataTable, String indexTable, String tenantId,
+        IndexTool.IndexVerifyType verifyType, Long startTime,
+        Long endTime,
+        IndexTool.IndexDisableLoggingType disableLoggingType,
+        Long incrementalVerify,
+        boolean useIndexTableAsSource) {
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
+            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify, useIndexTableAsSource);
         return args.toArray(new String[0]);
     }
 
