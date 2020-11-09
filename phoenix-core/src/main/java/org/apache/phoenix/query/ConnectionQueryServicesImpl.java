@@ -127,6 +127,7 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -486,12 +487,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
-            return HBaseFactoryProvider.getHTableFactory().getTable(tableName, connection, null);
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(tableName), SchemaUtil.getTableNameFromFullName(tableName));
+            return HBaseFactoryProvider.getHTableFactory().getTable(tableName,
+                connection, null);
         } catch (IOException e) {
             throw new SQLException(e);
         }
+    }
+
+    @Override
+    public Table getTableIfExists(byte[] tableName) throws SQLException {
+        try (Admin admin = getAdmin()) {
+            if (!admin.tableExists(TableName.valueOf(tableName))) {
+                throw new TableNotFoundException(
+                    SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+            }
+        } catch (IOException e) {
+            throw new SQLException(e);
+        }
+        return getTable(tableName);
     }
 
     @Override
@@ -4498,17 +4512,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @VisibleForTesting
-    public Table getSysMutexTable() throws SQLException, IOException {
-        String table = SYSTEM_MUTEX_NAME;
-        TableName tableName = TableName.valueOf(table);
-        try (HBaseAdmin admin = getAdmin()) {
-            if (!admin.tableExists(tableName)) {
-                table = table.replace(QueryConstants.NAME_SEPARATOR,
-                  QueryConstants.NAMESPACE_SEPARATOR);
-                tableName = TableName.valueOf(table);
-            }
-            return connection.getTable(tableName);
+    public Table getSysMutexTable() throws SQLException {
+        String tableNameAsString = SYSTEM_MUTEX_NAME;
+        Table table;
+        try {
+            table = getTableIfExists(Bytes.toBytes(tableNameAsString));
+        } catch (TableNotFoundException e) {
+            tableNameAsString = tableNameAsString.replace(
+                QueryConstants.NAME_SEPARATOR,
+                QueryConstants.NAMESPACE_SEPARATOR);
+            // if SYSTEM.MUTEX does not exist, we don't need to check
+            // for the existence of SYSTEM:MUTEX as it must exist, hence
+            // we can call getTable() here instead of getTableIfExists()
+            table = getTable(Bytes.toBytes(tableNameAsString));
         }
+        return table;
     }
 
     private String addColumn(String columnsToAddSoFar, String columns) {

@@ -48,12 +48,15 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -1440,5 +1443,74 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             stmt.execute(alterDdl2);
         }
     }
+
+    @Test
+    public void testTableExists() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices cqs =
+                conn.unwrap(PhoenixConnection.class).getQueryServices();
+            String tableName = "randomTable";
+            // table never existed, still cqs.getTable() does not throw TNFE
+            Table randomTable = cqs.getTable(Bytes.toBytes(tableName));
+            assertNotNull(randomTable);
+            assertEquals(randomTable.getName(), TableName.valueOf(tableName));
+            try {
+                // this is correct check for existence of table
+                cqs.getTableIfExists(Bytes.toBytes(tableName));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                assertEquals(tableName, e.getTableName());
+            }
+
+            String fullTableName1 = SchemaUtil.getTableName(schemaName,
+                dataTableName);
+            String ddl = "CREATE TABLE " + fullTableName1
+                + " (col1 INTEGER PRIMARY KEY, col2 INTEGER)";
+            conn.createStatement().execute(ddl);
+            String schemaName2 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+            String fullTableName2 = SchemaUtil.getTableName(schemaName2,
+                tableName2);
+            ddl = "CREATE TABLE " + fullTableName2
+                + " (col1 INTEGER PRIMARY KEY, col2 INTEGER)";
+            conn.createStatement().execute(ddl);
+
+            // table does exist and cqs.getTable() does not throw TNFE
+            Table table1 = cqs.getTable(Bytes.toBytes(fullTableName1));
+            assertNotNull(table1);
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName1));
+            } catch (TableNotFoundException e) {
+                fail("Should not throw TableNotFoundException");
+            }
+
+            disableAndDropNonSystemTables();
+            // tables have been dropped, still cqs.getTable()
+            // does not throw TNFE for tableName1 and tableName2
+            Table t1 = cqs.getTable(Bytes.toBytes(fullTableName1));
+            assertEquals(t1.getName().getNameAsString(), fullTableName1);
+            Table t2 = cqs.getTable(Bytes.toBytes(fullTableName2));
+            assertEquals(t2.getName().getNameAsString(), fullTableName2);
+
+            // this is correct check for existence of table
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName1));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                // match table and schema
+                assertEquals(dataTableName, e.getTableName());
+                assertEquals(schemaName, e.getSchemaName());
+            }
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName2));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                // match table and schema
+                assertEquals(tableName2, e.getTableName());
+                assertEquals(schemaName2, e.getSchemaName());
+            }
+
+        }
+    }
+
 }
- 

@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
@@ -72,6 +73,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         return getDelegate().getTable(tableName);
+    }
+
+    @Override
+    public Table getTableIfExists(byte[] tableName) throws SQLException {
+        return getDelegate().getTableIfExists(tableName);
     }
 
     @Override

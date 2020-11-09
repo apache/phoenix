@@ -58,6 +58,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -112,6 +113,8 @@ public class ConnectionQueryServicesImplTest {
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB_SP))
             .thenCallRealMethod();
         when(mockCqs.getSysMutexTable()).thenCallRealMethod();
+        when(mockCqs.getTable(Matchers.<byte[]>any())).thenCallRealMethod();
+        when(mockCqs.getTableIfExists(Matchers.<byte[]>any())).thenCallRealMethod();
     }
 
     @SuppressWarnings("unchecked")
@@ -210,26 +213,22 @@ public class ConnectionQueryServicesImplTest {
     @Test
     public void testGetSysMutexTableWithName() throws Exception {
         when(mockAdmin.tableExists(any(TableName.class))).thenReturn(true);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM.MUTEX")))
-            .thenReturn(mockTable);
         when(mockCqs.getAdmin()).thenReturn(mockAdmin);
+        when(mockCqs.getTable(Bytes.toBytes("SYSTEM.MUTEX"))).thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any(TableName.class));
-        verify(mockConn, Mockito.times(1))
-            .getTable(TableName.valueOf("SYSTEM.MUTEX"));
         verify(mockCqs, Mockito.times(1)).getAdmin();
+        verify(mockCqs, Mockito.times(2)).getTable(Matchers.<byte[]>any());
     }
 
     @Test
     public void testGetSysMutexTableWithNamespace() throws Exception {
         when(mockAdmin.tableExists(any(TableName.class))).thenReturn(false);
-        when(mockConn.getTable(TableName.valueOf("SYSTEM:MUTEX")))
-          .thenReturn(mockTable);
         when(mockCqs.getAdmin()).thenReturn(mockAdmin);
+        when(mockCqs.getTable(Bytes.toBytes("SYSTEM:MUTEX"))).thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any(TableName.class));
-        verify(mockConn, Mockito.times(1))
-          .getTable(TableName.valueOf("SYSTEM:MUTEX"));
         verify(mockCqs, Mockito.times(1)).getAdmin();
+        verify(mockCqs, Mockito.times(2)).getTable(Matchers.<byte[]>any());
     }
 }
