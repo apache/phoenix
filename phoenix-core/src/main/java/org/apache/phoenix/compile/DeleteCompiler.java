@@ -913,18 +913,13 @@ public class DeleteCompiler {
                     // Return total number of rows that have been deleted from the table. In the case of auto commit being off
                     // the mutations will all be in the mutation state of the current connection. We need to divide by the
                     // total number of tables we updated as otherwise the client will get an inflated result.
+                    // MutationState.join() ignores index rows in row count so totalRowCount calculated above will
+                    // reflect data table always and index table only if the bestPlan uses index table.
                     int totalTablesUpdateClientSide = 1; // data table is always updated
                     PTable bestTable = bestPlan.getTableRef().getTable();
                     // global immutable tables are also updated client side (but don't double count the data table)
                     if (bestPlan != dataPlan && isMaintainedOnClient(bestTable)) {
                         totalTablesUpdateClientSide++;
-                    }
-                    for (TableRef otherTableRef : otherTableRefs) {
-                        PTable otherTable = otherTableRef.getTable();
-                        // Don't double count the data table here (which morphs when it becomes a projected table, hence this check)
-                        if (projectedTableRef != otherTableRef && isMaintainedOnClient(otherTable)) {
-                            totalTablesUpdateClientSide++;
-                        }
                     }
                     MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount/totalTablesUpdateClientSide);
 
