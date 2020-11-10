@@ -205,7 +205,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public Configuration getUpsertSelectConfig() {
         return upsertSelectConfig;
     }
-    public void incrementScansReferenceCount() throws IOException{
+    void incrementScansReferenceCount() throws IOException{
         synchronized (lock) {
             if (isRegionClosingOrSplitting) {
                 throw new IOException("Temporarily unable to write from scan because region is closing or splitting");
@@ -215,7 +215,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public void decrementScansReferenceCount() {
+    void decrementScansReferenceCount() {
         synchronized (lock) {
             scansReferenceCount--;
             if (scansReferenceCount < 0) {
@@ -226,7 +226,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             lock.notifyAll();
         }
     }
-    public void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
+    void commitBatchWithRetries(final Region region, final List<Mutation> localRegionMutations, final long blockingMemstoreSize) throws IOException {
         try {
             commitBatch(region, localRegionMutations, blockingMemstoreSize);
         } catch (IOException e) {
@@ -244,7 +244,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
+    void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
       if (mutations.isEmpty()) {
           return;
       }
@@ -444,9 +444,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (j != null)  {
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
         }
-        RegionScanner scanner = new UngroupedAggregateRegionScanner(c, theScanner,region, scan, env, this);
-        return scanner;
-
+        return new UngroupedAggregateRegionScanner(c, theScanner,region, scan, env, this);
     }
 
     public static void checkForLocalIndexColumnFamilies(Region region,
