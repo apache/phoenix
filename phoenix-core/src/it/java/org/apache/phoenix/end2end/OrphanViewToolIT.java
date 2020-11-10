@@ -43,8 +43,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.OrphanViewTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -53,7 +55,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
-public class OrphanViewToolIT extends ParallelStatsDisabledIT {
+public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);
 
     private final boolean isMultiTenant;
@@ -124,6 +126,11 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
     @Parameters(name="OrphanViewToolIT_multiTenant={0}") // name is used by failsafe as file name in reports
     public static synchronized Collection<Boolean> data() {
         return Arrays.asList(false, true);
+    }
+
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
 
     @AfterClass
