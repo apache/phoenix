@@ -168,10 +168,10 @@ import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
+import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
-import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
@@ -1094,6 +1094,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else if (SchemaUtil.isTaskTable(tableName)) {
                 if(!descriptor.hasCoprocessor(TaskRegionObserver.class.getName())) {
                     descriptor.addCoprocessor(TaskRegionObserver.class.getName(), null, priority, null);
+                }
+                if (!descriptor.hasCoprocessor(
+                        TaskMetaDataEndpoint.class.getName())) {
+                    descriptor.addCoprocessor(TaskMetaDataEndpoint.class.getName(),
+                        null, priority, null);
                 }
             } else if (SchemaUtil.isChildLinkTable(tableName)) {
                 if (!descriptor.hasCoprocessor(ChildLinkMetaDataEndpoint.class.getName())) {
@@ -4146,7 +4151,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 TableName tableName = SchemaUtil.getPhysicalTableName(
                     PhoenixDatabaseMetaData.SYSTEM_TASK_NAME, props);
                 td = admin.getTableDescriptor(tableName);
+                boolean isTableDescUpdated = false;
                 if (updateAndConfirmSplitPolicyForTask(td)) {
+                    isTableDescUpdated = true;
+                }
+                if (!td.hasCoprocessor(TaskMetaDataEndpoint.class.getName())) {
+                    int priority = props.getInt(
+                        QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
+                        QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
+                    td.addCoprocessor(
+                        TaskMetaDataEndpoint.class.getName(), null, priority,
+                        null);
+                    isTableDescUpdated = true;
+                }
+                if (isTableDescUpdated) {
                     admin.modifyTable(tableName, td);
                     pollForUpdatedTableDescriptor(admin,
                         td, tableName.getName());

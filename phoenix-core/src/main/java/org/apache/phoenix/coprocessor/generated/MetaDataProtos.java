@@ -117,6 +117,10 @@ public final class MetaDataProtos {
      * <code>UNABLE_TO_DELETE_CHILD_LINK = 25;</code>
      */
     UNABLE_TO_DELETE_CHILD_LINK(25, 25),
+    /**
+     * <code>UNABLE_TO_UPSERT_TASK = 26;</code>
+     */
+    UNABLE_TO_UPSERT_TASK(26, 26),
     ;
 
     /**
@@ -223,6 +227,10 @@ public final class MetaDataProtos {
      * <code>UNABLE_TO_DELETE_CHILD_LINK = 25;</code>
      */
     public static final int UNABLE_TO_DELETE_CHILD_LINK_VALUE = 25;
+    /**
+     * <code>UNABLE_TO_UPSERT_TASK = 26;</code>
+     */
+    public static final int UNABLE_TO_UPSERT_TASK_VALUE = 26;
 
 
     public final int getNumber() { return value; }
@@ -255,6 +263,7 @@ public final class MetaDataProtos {
         case 23: return UNABLE_TO_CREATE_CHILD_LINK;
         case 24: return UNABLE_TO_UPDATE_PARENT_TABLE;
         case 25: return UNABLE_TO_DELETE_CHILD_LINK;
+        case 26: return UNABLE_TO_UPSERT_TASK;
         default: return null;
       }
     }
@@ -18048,7 +18057,7 @@ public final class MetaDataProtos {
       "cheRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaNa" +
       "me\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTim" +
       "estamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033C" +
-      "learTableFromCacheResponse*\332\005\n\014MutationC" +
+      "learTableFromCacheResponse*\365\005\n\014MutationC" +
       "ode\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_N" +
       "OT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLU",
       "MN_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_" +
@@ -18066,31 +18075,32 @@ public final class MetaDataProtos {
       "#\n\037CANNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n\020" +
       "TOO_MANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_C" +
       "HILD_LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_T" +
-      "ABLE\020\030\022\037\n\033UNABLE_TO_DELETE_CHILD_LINK\020\0312" +
-      "\345\006\n\017MetaDataService\022/\n\010getTable\022\020.GetTab" +
-      "leRequest\032\021.MetaDataResponse\0227\n\014getFunct" +
-      "ions\022\024.GetFunctionsRequest\032\021.MetaDataRes" +
-      "ponse\0221\n\tgetSchema\022\021.GetSchemaRequest\032\021.",
-      "MetaDataResponse\0225\n\013createTable\022\023.Create" +
-      "TableRequest\032\021.MetaDataResponse\022;\n\016creat" +
-      "eFunction\022\026.CreateFunctionRequest\032\021.Meta" +
-      "DataResponse\0227\n\014createSchema\022\024.CreateSch" +
-      "emaRequest\032\021.MetaDataResponse\0221\n\tdropTab" +
-      "le\022\021.DropTableRequest\032\021.MetaDataResponse" +
-      "\0223\n\ndropSchema\022\022.DropSchemaRequest\032\021.Met" +
-      "aDataResponse\0227\n\014dropFunction\022\024.DropFunc" +
-      "tionRequest\032\021.MetaDataResponse\0221\n\taddCol" +
-      "umn\022\021.AddColumnRequest\032\021.MetaDataRespons",
-      "e\0223\n\ndropColumn\022\022.DropColumnRequest\032\021.Me" +
-      "taDataResponse\022?\n\020updateIndexState\022\030.Upd" +
-      "ateIndexStateRequest\032\021.MetaDataResponse\022" +
-      "5\n\nclearCache\022\022.ClearCacheRequest\032\023.Clea" +
-      "rCacheResponse\0225\n\ngetVersion\022\022.GetVersio" +
-      "nRequest\032\023.GetVersionResponse\022P\n\023clearTa" +
-      "bleFromCache\022\033.ClearTableFromCacheReques" +
-      "t\032\034.ClearTableFromCacheResponseBB\n(org.a" +
-      "pache.phoenix.coprocessor.generatedB\016Met" +
-      "aDataProtosH\001\210\001\001\240\001\001"
+      "ABLE\020\030\022\037\n\033UNABLE_TO_DELETE_CHILD_LINK\020\031\022" +
+      "\031\n\025UNABLE_TO_UPSERT_TASK\020\0322\345\006\n\017MetaDataS" +
+      "ervice\022/\n\010getTable\022\020.GetTableRequest\032\021.M" +
+      "etaDataResponse\0227\n\014getFunctions\022\024.GetFun" +
+      "ctionsRequest\032\021.MetaDataResponse\0221\n\tgetS",
+      "chema\022\021.GetSchemaRequest\032\021.MetaDataRespo" +
+      "nse\0225\n\013createTable\022\023.CreateTableRequest\032" +
+      "\021.MetaDataResponse\022;\n\016createFunction\022\026.C" +
+      "reateFunctionRequest\032\021.MetaDataResponse\022" +
+      "7\n\014createSchema\022\024.CreateSchemaRequest\032\021." +
+      "MetaDataResponse\0221\n\tdropTable\022\021.DropTabl" +
+      "eRequest\032\021.MetaDataResponse\0223\n\ndropSchem" +
+      "a\022\022.DropSchemaRequest\032\021.MetaDataResponse" +
+      "\0227\n\014dropFunction\022\024.DropFunctionRequest\032\021" +
+      ".MetaDataResponse\0221\n\taddColumn\022\021.AddColu",
+      "mnRequest\032\021.MetaDataResponse\0223\n\ndropColu" +
+      "mn\022\022.DropColumnRequest\032\021.MetaDataRespons" +
+      "e\022?\n\020updateIndexState\022\030.UpdateIndexState" +
+      "Request\032\021.MetaDataResponse\0225\n\nclearCache" +
+      "\022\022.ClearCacheRequest\032\023.ClearCacheRespons" +
+      "e\0225\n\ngetVersion\022\022.GetVersionRequest\032\023.Ge" +
+      "tVersionResponse\022P\n\023clearTableFromCache\022" +
+      "\033.ClearTableFromCacheRequest\032\034.ClearTabl" +
+      "eFromCacheResponseBB\n(org.apache.phoenix" +
+      ".coprocessor.generatedB\016MetaDataProtosH\001",
+      "\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
