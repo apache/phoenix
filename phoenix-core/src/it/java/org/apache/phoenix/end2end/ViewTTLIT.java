@@ -81,6 +81,7 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.DEFAULT_SC
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 public class ViewTTLIT extends ParallelStatsDisabledIT {
@@ -88,6 +89,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     private static final String ORG_ID_FMT = "00D0x000%s";
     private static final String ID_FMT = "00A0y000%07d";
+    private static final String ZID_FMT = "00B0y000%07d";
     private static final String PHOENIX_TTL_HEADER_SQL = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
 
@@ -97,6 +99,16 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final String ALTER_SQL_WITH_NO_TTL
             = "ALTER VIEW \"%s\".\"%s\" ADD IF NOT EXISTS %s CHAR(10)";
     private static final int DEFAULT_NUM_ROWS = 5;
+
+    private static final String COL1_FMT = "a%05d";
+    private static final String COL2_FMT = "b%05d";
+    private static final String COL3_FMT = "c%05d";
+    private static final String COL4_FMT = "d%05d";
+    private static final String COL5_FMT = "e%05d";
+    private static final String COL6_FMT = "f%05d";
+    private static final String COL7_FMT = "g%05d";
+    private static final String COL8_FMT = "h%05d";
+    private static final String COL9_FMT = "i%05d";
 
     // Scans the HBase rows directly for the view ttl related header rows column and asserts
     private void assertViewHeaderRowsHavePhoenixTTLRelatedCells(String schemaName,
@@ -254,7 +266,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
      * -----------------
      */
 
-    @Test public void testWithBasicGlobalViewWithNoPhoenixTTLDefined() throws Exception {
+    @Test
+    public void testWithBasicGlobalViewWithNoPhoenixTTLDefined() throws Exception {
 
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
@@ -271,7 +284,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, true, 2);
     }
 
-    @Test public void testPhoenixTTLWithTableLevelTTLFails() throws Exception {
+    @Test
+    public void testPhoenixTTLWithTableLevelTTLFails() throws Exception {
 
         // Define the test schema.
         // 1. Table with default columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
@@ -293,7 +307,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testPhoenixTTLWithViewIndexFails() throws Exception {
+    @Test
+    public void testPhoenixTTLWithViewIndexFails() throws Exception {
 
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
         tenantViewIndexOptions.setIndexProps("PHOENIX_TTL=1000");
@@ -307,7 +322,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testPhoenixTTLForLevelOneView() throws Exception {
+    @Test
+    public void testPhoenixTTLForLevelOneView() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
@@ -335,7 +351,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
-    @Test public void testPhoenixTTLForLevelTwoView() throws Exception {
+    @Test
+    public void testPhoenixTTLForLevelTwoView() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
@@ -368,7 +385,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 PTableType.INDEX.getSerializedValue(), 300000);
     }
 
-    @Test public void testPhoenixTTLForWhenTTLIsZero() throws Exception {
+    @Test
+    public void testPhoenixTTLForWhenTTLIsZero() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
@@ -396,7 +414,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
-    @Test public void testPhoenixTTLWithAlterView() throws Exception {
+    @Test
+    public void testPhoenixTTLWithAlterView() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
@@ -444,7 +463,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
-    @Test public void testCreateViewWithParentPhoenixTTLFails() throws Exception {
+    @Test
+    public void testCreateViewWithParentPhoenixTTLFails() throws Exception {
         try {
             TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
             // Phoenix TTL is set to 120s => 120000 ms
@@ -458,7 +478,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testAlterViewWithParentPhoenixTTLFails() throws Exception {
+    @Test
+    public void testAlterViewWithParentPhoenixTTLFails() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Phoenix TTL is set to 300s
@@ -506,7 +527,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testAlterViewWithChildLevelPhoenixTTLFails() throws Exception {
+    @Test
+    public void testAlterViewWithChildLevelPhoenixTTLFails() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Phoenix TTL is set to 300s
@@ -547,7 +569,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testAlterViewWithNoPhoenixTTLSucceed() throws Exception {
+    @Test
+    public void testAlterViewWithNoPhoenixTTLSucceed() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Phoenix TTL is set to 300s
@@ -595,7 +618,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
-    @Test public void testResetPhoenixTTL() throws Exception {
+    @Test
+    public void testResetPhoenixTTL() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
@@ -637,7 +661,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
 
-    @Test public void testWithTenantViewAndNoGlobalView() throws Exception {
+    @Test
+    public void testWithTenantViewAndNoGlobalView() throws Exception {
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
         TableOptions tableOptions = TableOptions.withDefaults();
@@ -657,10 +682,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String zid = String.format("00A0y000%07d", rowIndex);
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String zid = String.format(ID_FMT, rowIndex);
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
                 return Lists.newArrayList(new Object[] { zid, col7, col8, col9 });
             }
         };
@@ -694,7 +719,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testWithSQLUsingIndexWithCoveredColsUpdates() throws Exception {
+    @Test
+    public void testWithSQLUsingIndexWithCoveredColsUpdates() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -738,17 +764,17 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String id = String.format("00A0y000%07d", rowIndex);
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String id = String.format(ID_FMT, rowIndex);
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 // Store the col4 data to be used later in a where clause
                 outerCol4s.add(col4);
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists
                         .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
@@ -792,7 +818,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
      *
      * @throws Exception
      */
-    @Test public void testWithSQLUsingIndexAndNoCoveredColsUpdates() throws Exception {
+    @Test
+    public void testWithSQLUsingIndexAndNoCoveredColsUpdates() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -834,17 +861,17 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String id = String.format("00A0y000%07d", rowIndex);
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String id = String.format(ID_FMT, rowIndex);
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 // Store the col4 data to be used later in a where clause
                 outerCol4s.add(col4);
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists
                         .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
@@ -890,12 +917,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
-                    String id = String.format("00A0y000%07d", rowIndex);
-                    String zid = String.format("00B0y000%07d", rowIndex);
-                    String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                     return Lists.newArrayList(new Object[] { id, zid, col5, col7, col8, col9 });
                 }
@@ -925,7 +952,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
      *
      * @throws Exception
      */
-    @Test public void testWithSQLUsingIndexAndMultiLevelViews() throws Exception {
+    @Test
+    public void testWithSQLUsingIndexAndMultiLevelViews() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -981,17 +1009,17 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String id = String.format("00A0y000%07d", rowIndex);
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String id = String.format(ID_FMT, rowIndex);
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 // Store the col4 data to be used later in a where clause
                 outerCol4s.add(col4);
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists
                         .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
@@ -1037,12 +1065,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
-                    String id = String.format("00A0y000%07d", rowIndex);
-                    String zid = String.format("00B0y000%07d", rowIndex);
-                    String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                     return Lists.newArrayList(new Object[] { id, zid, col5, col7, col8, col9 });
                 }
@@ -1065,7 +1093,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testWithVariousSQLs() throws Exception {
+    @Test
+    public void testWithVariousSQLs() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -1101,18 +1130,18 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
 
         // Define the test data.
-        final String groupById = String.format("00A0y000%07d", 0);
+        final String groupById = String.format(ID_FMT, 0);
         DataSupplier dataSupplier = new DataSupplier() {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists.newArrayList(
                         new Object[] { groupById, zid, col4, col5, col6, col7, col8, col9 });
@@ -1161,7 +1190,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testWithVariousSQLsForMultipleTenants() throws Exception {
+    @Test
+    public void testWithVariousSQLsForMultipleTenants() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -1201,18 +1231,18 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             schemaBuilder.buildWithNewTenant();
 
             // Define the test data.
-            final String groupById = String.format("00A0y000%07d", 0);
+            final String groupById = String.format(ID_FMT, 0);
             DataSupplier dataSupplier = new DataSupplier() {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
-                    String zid = String.format("00B0y000%07d", rowIndex);
-                    String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                     return Lists.newArrayList(
                             new Object[] { groupById, zid, col4, col5, col6, col7, col8, col9 });
@@ -1262,7 +1292,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testWithVariousSQLsForMultipleViews() throws Exception {
+    @Test
+    public void testWithVariousSQLsForMultipleViews() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -1299,10 +1330,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
-                    String zid = String.format("00B0y000%07d", rowIndex);
-                    String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                     return Lists.newArrayList(new Object[] { zid, col7, col8, col9 });
                 }
@@ -1350,7 +1381,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testWithTenantViewAndGlobalViewAndVariousOptions() throws Exception {
+    @Test
+    public void testWithTenantViewAndGlobalViewAndVariousOptions() throws Exception {
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
 
@@ -1406,17 +1438,17 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
                         @Override public List<Object> getValues(int rowIndex) {
                             Random rnd = new Random();
-                            String id = String.format("00A0y000%07d", rowIndex);
-                            String zid = String.format("00B0y000%07d", rowIndex);
-                            String col1 = String.format("a%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col2 = String.format("b%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col3 = String.format("c%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                            String id = String.format(ID_FMT, rowIndex);
+                            String zid = String.format(ZID_FMT, rowIndex);
+                            String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                             return Lists.newArrayList(
                                     new Object[] { id, zid, col1, col2, col3, col4, col5, col6,
@@ -1483,13 +1515,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     /**
      * ************************************************************
-     * Case 1: Build schema with TTL set by the tenant view.
+     * Case: Build schema with TTL set by the tenant view.
      * TTL for GLOBAL_VIEW - 300000ms (not set)
      * TTL for TENANT_VIEW - 300000ms
      * ************************************************************
      */
 
-    @Test public void testGlobalAndTenantViewTTLInheritance1() throws Exception {
+    @Test
+    public void testGlobalAndTenantViewTTLInheritance1() throws Exception {
         // PHOENIX TTL is set in seconds (for e.g 200 secs)
         long tenantPhoenixTTL = 200;
 
@@ -1526,9 +1559,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         /**
          * ************************************************************
-         * Case 1: Build schema with TTL set by the tenant view.
-         * TTL for GLOBAL_VIEW - 300000ms (not set)
-         * TTL for TENANT_VIEW - 30000ms
+         * Build schema with TTL set by the tenant view.
          * ************************************************************
          */
 
@@ -1538,21 +1569,21 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).buildWithNewTenant();
 
         // Define the test data.
-        final String id = String.format("00A0y000%07d", 0);
+        final String id = String.format(ID_FMT, 0);
         DataSupplier dataSupplier = new DataSupplier() {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col1 = String.format("a%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col2 = String.format("b%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col3 = String.format("c%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists.newArrayList(
                         new Object[] { id, zid, col1, col2, col3, col4, col5, col6, col7, col8,
@@ -1599,13 +1630,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     /**
      * ************************************************************
-     * Case 2: Build schema with TTL set by the global view.
+     * Case: Build schema with TTL set by the global view.
      * TTL for GLOBAL_VIEW - 300000ms
      * TTL for TENANT_VIEW - 300000ms (not set, uses global view ttl)
      * ************************************************************
      */
 
-    @Test public void testGlobalAndTenantViewTTLInheritance2() throws Exception {
+    @Test
+    public void testGlobalAndTenantViewTTLInheritance2() throws Exception {
         // PHOENIX TTL is set in seconds (for e.g 300 secs)
         long globalPhoenixTTL = 300;
 
@@ -1642,9 +1674,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         /**
          * ************************************************************
-         * Case 2: Build schema with TTL set by the global view.
-         * TTL for GLOBAL_VIEW - 300000ms
-         * TTL for TENANT_VIEW - 300000ms (not set, uses global view ttl)
+         * Case: Build schema with TTL set by the global view.
          * ************************************************************
          */
 
@@ -1654,21 +1684,21 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).buildWithNewTenant();
 
         // Define the test data.
-        final String id = String.format("00A0y000%07d", 0);
+        final String id = String.format(ID_FMT, 0);
         DataSupplier dataSupplier = new DataSupplier() {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String zid = String.format("00B0y000%07d", rowIndex);
-                String col1 = String.format("a%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col2 = String.format("b%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col3 = String.format("c%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col4 = String.format("d%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col5 = String.format("e%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format("f%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
                 return Lists.newArrayList(
                         new Object[] { id, zid, col1, col2, col3, col4, col5, col6, col7, col8,
@@ -1713,7 +1743,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test public void testDeleteIfExpiredOnTenantView() throws Exception {
+    @Test
+    public void testDeleteIfExpiredOnTenantView() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -1734,10 +1765,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
-                String zid = String.format("00A0y000%07d", rowIndex);
-                String col7 = String.format("g%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format("h%05d", rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format("i%05d", rowIndex + rnd.nextInt(MAX_ROWS));
+                String zid = String.format(ZID_FMT, rowIndex);
+                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
                 return Lists.newArrayList(new Object[] { zid, col7, col8, col9 });
             }
         };
@@ -1783,13 +1814,13 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Deleted rows should not be fetched", fetchedData.rowKeySet().size() == 0);
+            assertEquals("Deleted rows should not be fetched", 0,fetchedData.rowKeySet().size());
         }
     }
 
     private void upsertDataAndRunValidations(long phoenixTTL, int numRowsToUpsert,
             DataWriter dataWriter, DataReader dataReader, SchemaBuilder schemaBuilder)
-            throws IOException, SQLException {
+            throws Exception {
 
         //Insert for the first time and validate them.
         validateExpiredRowsAreNotReturnedUsingData(phoenixTTL, upsertData(dataWriter, numRowsToUpsert),
@@ -1814,7 +1845,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Fetched data should not be null", fetchedData != null);
+            assertNotNull("Fetched data should not be null", fetchedData);
             assertTrue("Rows should exists before expiration", fetchedData.rowKeySet().size() > 0);
         }
 
@@ -1828,8 +1859,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Fetched data should not be null", fetchedData != null);
-            assertTrue("Expired rows should not be fetched", fetchedData.rowKeySet().size() == 0);
+            assertNotNull("Fetched data should not be null", fetchedData);
+            assertEquals("Expired rows should not be fetched", 0, fetchedData.rowKeySet().size());
         }
     }
 
@@ -1850,8 +1881,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Upserted data should not be null", upsertedData != null);
-            assertTrue("Fetched data should not be null", fetchedData != null);
+            assertNotNull("Upserted data should not be null", upsertedData);
+            assertNotNull("Fetched data should not be null", fetchedData);
 
             verifyRowsBeforeTTLExpiration(upsertedData, fetchedData);
         }
@@ -1864,8 +1895,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Fetched data should not be null", fetchedData != null);
-            assertTrue("Expired rows should not be fetched", fetchedData.rowKeySet().size() == 0);
+            assertNotNull("Fetched data should not be null", fetchedData);
+            assertEquals("Expired rows should not be fetched", 0, fetchedData.rowKeySet().size());
         }
 
     }
@@ -1887,7 +1918,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Fetched data should not be null", fetchedData != null);
+            assertNotNull("Fetched data should not be null", fetchedData);
             assertTrue("Rows should exists before ttl expiration (now)",
                     fetchedData.rowKeySet().size() > 0);
         }
@@ -1900,7 +1931,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertTrue("Fetched data should not be null", fetchedData != null);
+            assertNotNull("Fetched data should not be null", fetchedData);
             assertTrue("Rows should exists before ttl expiration (probe-timestamp)",
                     fetchedData.rowKeySet().size() > 0);
         }
@@ -1912,27 +1943,27 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         Set<String> upsertedRowKeys = upsertedData.rowKeySet();
         Set<String> fetchedRowKeys = fetchedData.rowKeySet();
-        assertTrue("Upserted row keys should not be null", upsertedRowKeys != null);
-        assertTrue("Fetched row keys should not be null", fetchedRowKeys != null);
-        assertTrue(String.format("Rows upserted and fetched do not match, upserted=%d, fetched=%d",
+        assertNotNull("Upserted row keys should not be null", upsertedRowKeys);
+        assertNotNull("Fetched row keys should not be null", fetchedRowKeys);
+        assertEquals(String.format("Rows upserted and fetched do not match, upserted=%d, fetched=%d",
                 upsertedRowKeys.size(), fetchedRowKeys.size()),
-                upsertedRowKeys.equals(fetchedRowKeys));
+                upsertedRowKeys, fetchedRowKeys);
 
         Set<String> fetchedCols = fetchedData.columnKeySet();
         for (String rowKey : fetchedRowKeys) {
             for (String columnKey : fetchedCols) {
                 Object upsertedValue = upsertedData.get(rowKey, columnKey);
                 Object fetchedValue = fetchedData.get(rowKey, columnKey);
-                assertTrue("Upserted values should not be null", upsertedValue != null);
-                assertTrue("Fetched values should not be null", fetchedValue != null);
-                assertTrue("Values upserted and fetched do not match",
-                        upsertedValue.equals(fetchedValue));
+                assertNotNull("Upserted values should not be null", upsertedValue);
+                assertNotNull("Fetched values should not be null", fetchedValue);
+                assertEquals("Values upserted and fetched do not match",
+                        upsertedValue, fetchedValue);
             }
         }
     }
 
     private com.google.common.collect.Table<String, String, Object> upsertData(
-            DataWriter dataWriter, int numRowsToUpsert) throws SQLException {
+            DataWriter dataWriter, int numRowsToUpsert) throws Exception {
         // Upsert rows
         dataWriter.upsertRows(1, numRowsToUpsert);
         return dataWriter.getDataTable();

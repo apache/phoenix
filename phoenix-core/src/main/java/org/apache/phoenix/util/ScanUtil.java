@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -975,13 +976,11 @@ public class ScanUtil {
     public static boolean isServerSideMaskingEnabled(PhoenixConnection phoenixConnection) {
         String isServerSideMaskingSet = phoenixConnection.getClientInfo(
                 QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED);
-        boolean isServerSideMaskingEnabled = phoenixConnection.getQueryServices()
+        return (phoenixConnection.getQueryServices()
                 .getConfiguration().getBoolean(
                         QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED,
                         QueryServicesOptions.DEFAULT_SERVER_SIDE_MASKING_ENABLED) ||
-                ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet)));
-        return isServerSideMaskingEnabled;
-
+                ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
     public static long getPhoenixTTL(Scan scan) {
@@ -1189,4 +1188,31 @@ public class ScanUtil {
         }
     }
 
+
+    public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
+        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
+                cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
+                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
+    }
+
+    public static long getMaxTimestamp(List<Cell> cellList) {
+        long maxTs = 0;
+        long ts = 0;
+        Iterator<Cell> cellIterator = cellList.iterator();
+        while (cellIterator.hasNext()) {
+            Cell cell = cellIterator.next();
+            ts = cell.getTimestamp();
+            if (ts > maxTs) {
+                maxTs = ts;
+            }
+        }
+        return maxTs;
+    }
+
+    public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
+        long ts = cell.getTimestamp();
+        long ttl = ScanUtil.getPhoenixTTL(scan);
+        return ts + ttl < nowTS;
+    }
 }

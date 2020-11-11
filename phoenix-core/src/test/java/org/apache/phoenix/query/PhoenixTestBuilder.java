@@ -38,7 +38,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -270,10 +269,10 @@ public class PhoenixTestBuilder {
         void setDataSupplier(DataSupplier dataSupplier);
 
         // template method to upsert a single row using the above info.
-        List<Object> upsertRow(int rowIndex) throws SQLException;
+        List<Object> upsertRow(int rowIndex) throws Exception;
 
         // template method to upsert a batch of rows using the above info.
-        void upsertRows(int startRowIndex, int numRows) throws SQLException;
+        void upsertRows(int startRowIndex, int numRows) throws Exception;
 
         // Get the data that was written as a Table
         Table<String, String, Object> getDataTable();
@@ -394,17 +393,12 @@ public class PhoenixTestBuilder {
         }
 
         // Upsert one row.
-        public List<Object> upsertRow(int rowIndex) throws SQLException {
+        public List<Object> upsertRow(int rowIndex) throws Exception {
             List<String> upsertColumns = Lists.newArrayList();
             List<Object> upsertValues = Lists.newArrayList();
 
             List<Object> rowValues = null;
-            try {
-                rowValues = getTestDataSupplier().getValues(rowIndex);
-            } catch (Exception e) {
-                throw new SQLException(e);
-            }
-
+            rowValues = getTestDataSupplier().getValues(rowIndex);
             if (getColumnPositionsToUpdate().isEmpty()) {
                 upsertColumns.addAll(getUpsertColumns());
                 upsertValues.addAll(rowValues);
@@ -438,7 +432,7 @@ public class PhoenixTestBuilder {
         }
 
         // Upsert batch of rows.
-        public void upsertRows(int startRowIndex, int numRows) throws SQLException {
+        public void upsertRows(int startRowIndex, int numRows) throws Exception {
             dataTable.clear();
             List<String> upsertColumns = Lists.newArrayList();
             List<Integer> rowKeyPositions = Lists.newArrayList();
@@ -476,11 +470,7 @@ public class PhoenixTestBuilder {
                 for (int r = startRowIndex; r < startRowIndex + numRows; r++) {
                     List<Object> upsertValues = Lists.newArrayList();
                     List<Object> rowValues = null;
-                    try {
-                        rowValues = getTestDataSupplier().getValues(r);
-                    } catch (Exception e) {
-                        throw new SQLException(e);
-                    }
+                    rowValues = getTestDataSupplier().getValues(r);
                     if (isFullRowUpdate) {
                         upsertValues.addAll(rowValues);
                     } else {
@@ -578,47 +568,47 @@ public class PhoenixTestBuilder {
      */
     public static class DDLDefaults {
         public static final int MAX_ROWS = 10000;
-        public static List<String> TABLE_PK_TYPES = asList("CHAR(15)", "CHAR(3)");
-        public static List<String> GLOBAL_VIEW_PK_TYPES = asList("CHAR(15)");
-        public static List<String> TENANT_VIEW_PK_TYPES = asList("CHAR(15)");
+        public static final List<String> TABLE_PK_TYPES = asList("CHAR(15)", "CHAR(3)");
+        public static final List<String> GLOBAL_VIEW_PK_TYPES = asList("CHAR(15)");
+        public static final List<String> TENANT_VIEW_PK_TYPES = asList("CHAR(15)");
 
-        public static List<String> COLUMN_TYPES = asList("VARCHAR", "VARCHAR", "VARCHAR");
-        public static List<String> TABLE_COLUMNS = asList("COL1", "COL2", "COL3");
-        public static List<String> GLOBAL_VIEW_COLUMNS = asList("COL4", "COL5", "COL6");
-        public static List<String> TENANT_VIEW_COLUMNS = asList("COL7", "COL8", "COL9");
+        public static final List<String> COLUMN_TYPES = asList("VARCHAR", "VARCHAR", "VARCHAR");
+        public static final List<String> TABLE_COLUMNS = asList("COL1", "COL2", "COL3");
+        public static final List<String> GLOBAL_VIEW_COLUMNS = asList("COL4", "COL5", "COL6");
+        public static final List<String> TENANT_VIEW_COLUMNS = asList("COL7", "COL8", "COL9");
 
-        public static List<String> TABLE_COLUMN_FAMILIES = asList(null, null, null);
-        public static List<String> GLOBAL_VIEW_COLUMN_FAMILIES = asList(null, null, null);
-        public static List<String> TENANT_VIEW_COLUMN_FAMILIES = asList(null, null, null);
+        public static final List<String> TABLE_COLUMN_FAMILIES = asList(null, null, null);
+        public static final List<String> GLOBAL_VIEW_COLUMN_FAMILIES = asList(null, null, null);
+        public static final List<String> TENANT_VIEW_COLUMN_FAMILIES = asList(null, null, null);
 
-        public static List<String> TABLE_PK_COLUMNS = asList("OID", "KP");
-        public static List<String> GLOBAL_VIEW_PK_COLUMNS = asList("ID");
-        public static List<String> TENANT_VIEW_PK_COLUMNS = asList("ZID");
+        public static final List<String> TABLE_PK_COLUMNS = asList("OID", "KP");
+        public static final List<String> GLOBAL_VIEW_PK_COLUMNS = asList("ID");
+        public static final List<String> TENANT_VIEW_PK_COLUMNS = asList("ZID");
 
-        public static List<String> TABLE_INDEX_COLUMNS = asList("COL1");
-        public static List<String> TABLE_INCLUDE_COLUMNS = asList("COL3");
+        public static final List<String> TABLE_INDEX_COLUMNS = asList("COL1");
+        public static final List<String> TABLE_INCLUDE_COLUMNS = asList("COL3");
 
-        public static List<String> GLOBAL_VIEW_INDEX_COLUMNS = asList("COL4");
-        public static List<String> GLOBAL_VIEW_INCLUDE_COLUMNS = asList("COL6");
+        public static final List<String> GLOBAL_VIEW_INDEX_COLUMNS = asList("COL4");
+        public static final List<String> GLOBAL_VIEW_INCLUDE_COLUMNS = asList("COL6");
 
-        public static List<String> TENANT_VIEW_INDEX_COLUMNS = asList("COL9");
-        public static List<String> TENANT_VIEW_INCLUDE_COLUMNS = asList("COL7");
+        public static final List<String> TENANT_VIEW_INDEX_COLUMNS = asList("COL9");
+        public static final List<String> TENANT_VIEW_INCLUDE_COLUMNS = asList("COL7");
 
-        public static String
+        public static final String
                 DEFAULT_TABLE_PROPS =
                 "COLUMN_ENCODED_BYTES=0, MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='Z'";
-        public static String DEFAULT_TABLE_INDEX_PROPS = "";
-        public static String DEFAULT_GLOBAL_VIEW_PROPS = "";
-        public static String DEFAULT_GLOBAL_VIEW_INDEX_PROPS = "";
-        public static String DEFAULT_TENANT_VIEW_PROPS = "";
-        public static String DEFAULT_TENANT_VIEW_INDEX_PROPS = "";
-        public static String DEFAULT_KP = "ECZ";
-        public static String DEFAULT_SCHEMA_NAME = "TEST_ENTITY";
-        public static String DEFAULT_TENANT_ID_FMT = "00D0t%04d%s";
-        public static String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s_%s";
-        public static String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
+        public static final String DEFAULT_TABLE_INDEX_PROPS = "";
+        public static final String DEFAULT_GLOBAL_VIEW_PROPS = "";
+        public static final String DEFAULT_GLOBAL_VIEW_INDEX_PROPS = "";
+        public static final String DEFAULT_TENANT_VIEW_PROPS = "";
+        public static final String DEFAULT_TENANT_VIEW_INDEX_PROPS = "";
+        public static final String DEFAULT_KP = "ECZ";
+        public static final String DEFAULT_SCHEMA_NAME = "TEST_ENTITY";
+        public static final String DEFAULT_TENANT_ID_FMT = "00D0t%04d%s";
+        public static final String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s_%s";
+        public static final String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
 
-        public static String DEFAULT_CONNECT_URL = "jdbc:phoenix:localhost";
+        public static final String DEFAULT_CONNECT_URL = "jdbc:phoenix:localhost";
 
     }
 

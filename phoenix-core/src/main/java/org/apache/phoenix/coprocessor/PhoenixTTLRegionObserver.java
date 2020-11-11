@@ -17,16 +17,12 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -41,6 +37,8 @@ import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixTTLSource;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -53,7 +51,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
  * Coprocessor that checks whether the row is expired based on the TTL spec.
  */
 public class PhoenixTTLRegionObserver extends BaseRegionObserver {
-    private static final Log LOG = LogFactory.getLog(PhoenixTTLRegionObserver.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PhoenixTTLRegionObserver.class);
     private MetricsPhoenixTTLSource metricSource;
 
     @Override public void start(CoprocessorEnvironment e) throws IOException {
@@ -71,24 +69,29 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
 
         if (!ScanUtil.isMaskTTLExpiredRows(scan) && !ScanUtil.isDeleteTTLExpiredRows(scan)) {
             return s;
-        }
-
-        if (ScanUtil.isMaskTTLExpiredRows(scan)) {
+        } else if (ScanUtil.isMaskTTLExpiredRows(scan) && ScanUtil.isDeleteTTLExpiredRows(scan)) {
+            throw new IOException("Both mask and delete expired rows property cannot be set");
+        } else if (ScanUtil.isMaskTTLExpiredRows(scan)) {
             metricSource.incrementMaskExpiredRequestCount();
-        }
-
-        if (ScanUtil.isDeleteTTLExpiredRows(scan)) {
+            scan.setAttribute(PhoenixTTLRegionScanner.MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR,
+                    Bytes.toBytes(String.format("MASK-EXPIRED-%d",
+                            metricSource.getMaskExpiredRequestCount())));
+        } else if (ScanUtil.isDeleteTTLExpiredRows(scan)) {
             metricSource.incrementDeleteExpiredRequestCount();
+            scan.setAttribute(PhoenixTTLRegionScanner.MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR,
+                    Bytes.toBytes(String.format("DELETE-EXPIRED-%d",
+                            metricSource.getMaskExpiredRequestCount())));
         }
-
-        scan.setAttribute(PhoenixTTLRegionScanner.MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR,
-                Bytes.toBytes(metricSource.getMaskExpiredRequestCount()));
-
-        LOG.debug(String.format(
+        LOG.trace(String.format(
                 "********** PHOENIX-TTL: PhoenixTTLRegionObserver::postScannerOpen TTL for table = "
-                        + "[%s], scan = [%s], PHOENIX_TTL = %d ***************, numRequests=%d",
+                        + "[%s], scan = [%s], PHOENIX_TTL = %d ***************, "
+                        + "numMaskExpiredRequestCount=%d, "
+                        + "numDeleteExpiredRequestCount=%d",
                 s.getRegionInfo().getTable().getNameAsString(), scan.toJSON(Integer.MAX_VALUE),
-                ScanUtil.getPhoenixTTL(scan), metricSource.getMaskExpiredRequestCount()));
+                ScanUtil.getPhoenixTTL(scan),
+                metricSource.getMaskExpiredRequestCount(),
+                metricSource.getDeleteExpiredRequestCount()
+        ));
         return new PhoenixTTLRegionScanner(c.getEnvironment(), scan, s);
     }
 
@@ -109,7 +112,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         private final long now;
         private final boolean deleteIfExpired;
         private final boolean maskIfExpired;
-        private final long requestId;
+        private final String requestId;
         private long numRowsExpired;
         private long numRowsScanned;
         private long numRowsDeleted;
@@ -120,7 +123,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             this.scan = scan;
             this.scanner = scanner;
             byte[] requestIdBytes = scan.getAttribute(MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR);
-            this.requestId = Bytes.toLong(requestIdBytes);
+            this.requestId = Bytes.toString(requestIdBytes);
 
             deleteIfExpired = ScanUtil.isDeleteTTLExpiredRows(scan);
             maskIfExpired = !deleteIfExpired && ScanUtil.isMaskTTLExpiredRows(scan);
@@ -149,36 +152,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         }
 
         @Override public boolean next(List<Cell> result) throws IOException {
-            try {
-                boolean hasMore;
-                do {
-                    hasMore = scanner.next(result);
-                    if (result.isEmpty()) {
-                        break;
-                    }
-                    numRowsScanned++;
-                    if (maskIfExpired && checkRowNotExpired(result)) {
-                        break;
-                    }
-
-                    if (deleteIfExpired && deleteRowIfExpired(result)) {
-                        numRowsDeleted++;
-                        break;
-                    }
-                    // skip this row
-                    // 1. if the row has expired (checkRowNotExpired returned false)
-                    // 2. if the row was not deleted (deleteRowIfExpired returned false and
-                    //  do not want it to count towards the deleted count)
-                    if (maskIfExpired) {
-                        numRowsExpired++;
-                    }
-                    result.clear();
-                } while (hasMore);
-                return hasMore;
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-                return false; // impossible
-            }
+            return doNext(result, false);
         }
 
         @Override public boolean next(List<Cell> result, ScannerContext scannerContext)
@@ -196,7 +170,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         @Override public void close() throws IOException {
             if (!reported) {
                 LOG.debug(String.format(
-                        "***** PHOENIX-TTL-SCAN-STATS-CLOSE: " + "request-id:[%d] = [%d, %d, %d]",
+                        "PHOENIX-TTL-SCAN-STATS-ON-CLOSE: " + "request-id:[%s] = [%d, %d, %d]",
                         this.requestId, this.numRowsScanned, this.numRowsExpired,
                         this.numRowsDeleted));
                 reported = true;
@@ -221,10 +195,14 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         }
 
         @Override public boolean nextRaw(List<Cell> result) throws IOException {
+            return doNext(result, true);
+        }
+
+        private boolean doNext(List<Cell> result, boolean raw) throws IOException {
             try {
                 boolean hasMore;
                 do {
-                    hasMore = scanner.nextRaw(result);
+                    hasMore = raw ? scanner.nextRaw(result) : scanner.next(result);
                     if (result.isEmpty()) {
                         break;
                     }
@@ -274,10 +252,12 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             boolean isRowExpired = !checkRowNotExpired(cellList);
             if (isRowExpired) {
                 long ttl = ScanUtil.getPhoenixTTL(this.scan);
-                long ts = getMaxTimestamp(cellList);
-                LOG.debug(String.format(
-                        "** PHOENIX-TTL: Deleting region = %s, row = %s, delete-ts = %d, max-ts = %d ** ",
-                        region.getRegionInfo().getTable().getNameAsString(), Bytes.toString(rowKey),
+                long ts = ScanUtil.getMaxTimestamp(cellList);
+                LOG.trace(String.format(
+                        "PHOENIX-TTL: Deleting row = [%s] belonging to table = %s, "
+                                + "delete-ts = %d, max-ts = %d",
+                        Bytes.toString(rowKey),
+                        region.getRegionInfo().getTable().getNameAsString(),
                         now - ttl, ts));
                 Delete del = new Delete(rowKey, now - ttl);
                 Mutation[] mutations = new Mutation[] { del };
@@ -285,32 +265,6 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
                 return true;
             }
             return false;
-        }
-
-        private boolean isEmptyColumn(Cell cell) {
-            return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                    cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
-                    Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                            cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
-        }
-
-        // TODO : Remove it after we verify all SQLs include the empty column.
-        // Before we added ScanUtil.addEmptyColumnToScan
-        // some queries like select count(*) did not include the empty column in scan,
-        // thus this method was the fallback in those cases.
-        private boolean checkEmptyColumnNotExpired(byte[] rowKey) throws IOException {
-            LOG.warn("Scan " + scan + " did not return the empty column for " + region
-                    .getRegionInfo().getTable().getNameAsString());
-            Get get = new Get(rowKey);
-            get.setTimeRange(minTimestamp, maxTimestamp);
-            get.addColumn(emptyCF, emptyCQ);
-            Result result = region.get(get);
-            if (result.isEmpty()) {
-                LOG.warn("The empty column does not exist in a row in " + region.getRegionInfo()
-                        .getTable().getNameAsString());
-                return false;
-            }
-            return !isTTLExpired(result.getColumnLatestCell(emptyCF, emptyCQ));
         }
 
         /**
@@ -328,41 +282,21 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             Iterator<Cell> cellIterator = cellList.iterator();
             while (cellIterator.hasNext()) {
                 cell = cellIterator.next();
-                if (isEmptyColumn(cell)) {
-                    LOG.debug(String.format("** PHOENIX-TTL: Row expired for [%s], expired = %s **",
-                            cell.toString(), isTTLExpired(cell)));
+                if (ScanUtil.isEmptyColumn(cell, this.emptyCF, this.emptyCQ)) {
+                    LOG.trace(String.format("** PHOENIX-TTL: Row expired for [%s], expired = %s **",
+                            cell.toString(), ScanUtil.isTTLExpired(cell, this.scan, this.now)));
                     // Empty column is not supposed to be returned to the client
                     // except when it is the only column included in the scan.
                     if (cellListSize > 1) {
                         cellIterator.remove();
                     }
-                    return !isTTLExpired(cell);
+                    return !ScanUtil.isTTLExpired(cell, this.scan, this.now);
                 }
             }
-            byte[] rowKey = new byte[cell.getRowLength()];
-            System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowKey, 0,
-                    cell.getRowLength());
-            return checkEmptyColumnNotExpired(rowKey);
+            LOG.warn("The empty column does not exist in a row in " + region.getRegionInfo()
+                    .getTable().getNameAsString());
+            return true;
         }
 
-        private long getMaxTimestamp(List<Cell> cellList) {
-            long maxTs = 0;
-            long ts = 0;
-            Iterator<Cell> cellIterator = cellList.iterator();
-            while (cellIterator.hasNext()) {
-                Cell cell = cellIterator.next();
-                ts = cell.getTimestamp();
-                if (ts > maxTs) {
-                    maxTs = ts;
-                }
-            }
-            return maxTs;
-        }
-
-        private boolean isTTLExpired(Cell cell) {
-            long ts = cell.getTimestamp();
-            long ttl = ScanUtil.getPhoenixTTL(this.scan);
-            return ts + ttl < now;
-        }
     }
 }
