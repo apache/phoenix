@@ -31,7 +31,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_ROWS;
+import static org.apache.phoenix.query.QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.io.IOException;
@@ -101,6 +101,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
@@ -115,7 +116,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionScanner.class);
 
-    protected long pageSizeInRows = Long.MAX_VALUE;
+    protected long pageSizeInMs = Long.MAX_VALUE;
     protected int maxBatchSize = 0;
     protected Scan scan;
     protected RegionScanner innerScanner;
@@ -170,11 +171,11 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             byte[] pageSizeFromScan =
                     scan.getAttribute(BaseScannerRegionObserver.AGGREGATE_PAGE_ROWS);
             if (pageSizeFromScan != null) {
-                pageSizeInRows = Bytes.toLong(pageSizeFromScan);
+                pageSizeInMs = Bytes.toLong(pageSizeFromScan);
             } else {
-                pageSizeInRows =
-                        conf.getLong(UNGROUPED_AGGREGATE_PAGE_SIZE_IN_ROWS,
-                                QueryServicesOptions.DEFAULT_UNGROUPED_AGGREGATE_PAGE_SIZE_IN_ROWS);
+                pageSizeInMs =
+                        conf.getLong(UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS,
+                                QueryServicesOptions.DEFAULT_UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS);
             }
         }
         ts = scan.getTimeRange().getMax();
@@ -535,6 +536,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     @Override
     public boolean next(List<Cell> resultsToReturn) throws IOException {
         boolean hasMore;
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Configuration conf = env.getConfiguration();
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
         try (MemoryManager.MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
@@ -543,7 +545,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             Aggregator[] rowAggregators = aggregators.getAggregators();
             aggregators.reset(rowAggregators);
             Cell lastCell = null;
-            int rowCount = 0;
             boolean hasAny = false;
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
@@ -564,7 +565,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         hasMore = innerScanner.nextRaw(results);
                         if (!results.isEmpty()) {
                             lastCell = results.get(0);
-                            rowCount++;
                             result.setKeyValues(results);
                             if (isDescRowKeyOrderUpgrade) {
                                 if (!descRowKeyOrderUpgrade(results, ptr, mutations)) {
@@ -605,7 +605,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                             aggregators.aggregate(rowAggregators, result);
                             hasAny = true;
                         }
-                    } while (hasMore && rowCount < pageSizeInRows);
+                    } while (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) < pageSizeInMs);
+
                     if (!mutations.isEmpty()) {
                         ungroupedAggregateRegionObserver.commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                 targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
