@@ -169,6 +169,7 @@ import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
+import org.apache.phoenix.coprocessor.SyscatRegionObserver;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
@@ -1140,6 +1141,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
+            if (Arrays.equals(tableName, SYSTEM_CATALOG_NAME_BYTES)) {
+                if (!descriptor.hasCoprocessor(SyscatRegionObserver.class.getName())) {
+                    descriptor.addCoprocessor(
+                            SyscatRegionObserver.class.getName(), null, priority, null);
+                }
+            }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -3775,6 +3782,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 );
             } else {
                 LOGGER.info("Updating VIEW_INDEX_ID data type is not needed.");
+            }
+
+            try (HBaseAdmin admin = metaConnection.getQueryServices().getAdmin()) {
+                HTableDescriptor htd;
+                TableName syscatPhysicalTableName = SchemaUtil.getPhysicalTableName(
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props);
+                htd = admin.getTableDescriptor(syscatPhysicalTableName);
+                if (!htd.hasCoprocessor(SyscatRegionObserver.class.getName())) {
+                    int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
+                            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
+                    htd.addCoprocessor(SyscatRegionObserver.class.getName(), null, priority, null);
+                    admin.modifyTable(syscatPhysicalTableName, htd);
+                    pollForUpdatedTableDescriptor(admin, htd, syscatPhysicalTableName.getName());
+                }
             }
         }
         return metaConnection;
