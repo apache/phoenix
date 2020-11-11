@@ -276,7 +276,22 @@ public class DeleteCompiler {
 
             // If auto flush is true, this last batch will be committed upon return
             int nCommittedRows = autoFlush ? (rowCount / batchSize * batchSize) : 0;
-            MutationState state = new MutationState(tableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
+
+            // tableRef can be index if the index table is selected by the query plan or if we do the DELETE
+            // directly on the index table. In other cases it refers to the data table
+            MutationState tableState =
+                new MutationState(tableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
+            MutationState state;
+            if (otherTableRefs.isEmpty()) {
+                state = tableState;
+            } else {
+                state = new MutationState(maxSize, maxSizeBytes, connection);
+                // if there are other table references we need to start with an empty mutation state and
+                // then join the other states. We only need to count the data table rows that will be deleted.
+                // MutationState.join() correctly maintains that accounting and ignores the index table rows.
+                // This way we always return the correct number of rows that are deleted.
+                state.join(tableState);
+            }
             for (int i = 0; i < otherTableRefs.size(); i++) {
                 MutationState indexState = new MutationState(otherTableRefs.get(i), otherMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                 state.join(indexState);
@@ -911,17 +926,8 @@ public class DeleteCompiler {
                         totalRowCount += PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                     }
                     // Return total number of rows that have been deleted from the table. In the case of auto commit being off
-                    // the mutations will all be in the mutation state of the current connection. We need to divide by the
-                    // total number of tables we updated as otherwise the client will get an inflated result.
-                    // MutationState.join() ignores index rows in row count so totalRowCount calculated above will
-                    // reflect data table always and index table only if the bestPlan uses index table.
-                    int totalTablesUpdateClientSide = 1; // data table is always updated
-                    PTable bestTable = bestPlan.getTableRef().getTable();
-                    // global immutable tables are also updated client side (but don't double count the data table)
-                    if (bestPlan != dataPlan && isMaintainedOnClient(bestTable)) {
-                        totalTablesUpdateClientSide++;
-                    }
-                    MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount/totalTablesUpdateClientSide);
+                    // the mutations will all be in the mutation state of the current connection.
+                    MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount);
 
                     // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
                     state.setReadMetricQueue(context.getReadMetricsQueue());

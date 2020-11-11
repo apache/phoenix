@@ -899,6 +899,39 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       }
   }
 
+    @Test
+    public void testDeleteCount_nonPK() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = "TBL_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = "IND_" + generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) "
+                + this.tableDDLOptions);
+
+            conn.createStatement().execute(String.format(
+                "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName, dataTableFullName));
+
+            PreparedStatement dataPreparedStatement =
+                conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
+            for (int i = 1; i <= 10; i++) {
+                dataPreparedStatement.setInt(1, i);
+                dataPreparedStatement.setInt(2, i + 1);
+                dataPreparedStatement.setInt(3, i * 2);
+                dataPreparedStatement.execute();
+            }
+            conn.commit();
+
+            PreparedStatement deleteStmt =
+                conn.prepareStatement("DELETE FROM " + dataTableFullName + " WHERE VAL1 > 6");
+            assertEquals(5, deleteStmt.executeUpdate());
+            conn.commit();
+        }
+    }
+
 private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {
     PreparedStatement stmt = tenantConn.prepareStatement(dml);
       stmt.setString(1, "00000000000000" + String.valueOf(i));
