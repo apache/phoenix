@@ -629,7 +629,8 @@ public abstract class BaseTest {
         if (conf.getLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
             conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
             // This results in processing one row at a time in each next operation of the aggregate region
-            // scanner, i.e.,  one row pages
+            // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
+            // within one page; 0ms page is equivalent to one-row page.
         }
         return conf;
     }
