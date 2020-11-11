@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -31,7 +32,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
@@ -51,8 +51,7 @@ import org.junit.experimental.categories.Category;
  * Tests various scenarios when
  * {@link QueryServices#ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK}
  * is set to true and SYSTEM.CATALOG should not be allowed to split.
- * Note that this config must
- * be set on both the client and server
+ * Note that this config must be set on both the client and server
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemCatalogRollbackEnabledIT extends BaseTest {
@@ -100,37 +99,34 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
+    private void assertNumRegions(HBaseTestingUtility testUtil,
+            TableName tableName, int expectedNumRegions) throws IOException {
+        RegionLocator rl = testUtil.getConnection().getRegionLocator(tableName);
+        assertEquals(expectedNumRegions, rl.getAllRegionLocations().size());
+    }
 
     /**
      * Make sure that SYSTEM.CATALOG cannot be split if
      * {@link QueryServices#SYSTEM_CATALOG_SPLITTABLE} is false
      */
     @Test
-    public void testSystemTableDoesNotSplit() throws Exception {
+    public void testSystemCatalogDoesNotSplit() throws Exception {
         HBaseTestingUtility testUtil = getUtility();
         for (int i=0; i<10; i++) {
             createTableAndTenantViews("schema"+i+".table_"+i);
         }
         TableName systemCatalog = TableName.valueOf(
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-        RegionLocator rl = testUtil.getConnection()
-                .getRegionLocator(systemCatalog);
-        assertEquals(1, rl.getAllRegionLocations().size());
-        try {
-            // now attempt to split SYSTEM.CATALOG
-            testUtil.getHBaseAdmin().split(systemCatalog);
-            // make sure the split finishes (there's no synchronous splitting
-            // before HBase 2.x)
-            testUtil.getHBaseAdmin().disableTable(systemCatalog);
-            testUtil.getHBaseAdmin().enableTable(systemCatalog);
-        } catch (DoNotRetryIOException e) {
-            // table is not splittable
-            assertTrue(e.getMessage().contains("NOT splittable"));
-        }
+        assertNumRegions(testUtil, systemCatalog, 1);
+
+        // now attempt to split SYSTEM.CATALOG
+        // The expectation is for the split to be a no-op. It should not fail/
+        // throw any exception in HBase 1.x. Also, this split is synchronous
+        // since there's no asynchronous splitting before HBase 2.x
+        testUtil.getHBaseAdmin().split(systemCatalog);
 
         // test again... Must still be exactly one region.
-        rl = testUtil.getConnection().getRegionLocator(systemCatalog);
-        assertEquals(1, rl.getAllRegionLocations().size());
+        assertNumRegions(testUtil, systemCatalog, 1);
     }
 
     /**

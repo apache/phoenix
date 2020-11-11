@@ -1874,7 +1874,8 @@ public abstract class BaseTest {
                 availableRegionServers.remove(serverName);
             }
         }
-        assertTrue("No region servers available to move regions on to ", !availableRegionServers.isEmpty());
+        assertFalse("No region servers available to move regions on to ",
+                availableRegionServers.isEmpty());
         for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
             List<HRegionInfo> regions = entry.getValue();
             if (regions.size()>1) {
