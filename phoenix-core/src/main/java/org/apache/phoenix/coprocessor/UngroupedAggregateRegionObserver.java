@@ -202,7 +202,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
     }
 
-    public Configuration getUpsertSelectConfig() {
+    Configuration getUpsertSelectConfig() {
         return upsertSelectConfig;
     }
     void incrementScansReferenceCount() throws IOException{
@@ -266,7 +266,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
-    public static void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, byte[] clientVersionBytes, boolean useIndexProto) {
+    static void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState, byte[] clientVersionBytes, boolean useIndexProto) {
         for (Mutation m : mutations) {
            if (indexMaintainersPtr != null) {
                m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
@@ -303,7 +303,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
      * a high chance that flush might not proceed and memstore won't be freed up.
      * @throws IOException
      */
-    public void checkForRegionClosing() throws IOException {
+    void checkForRegionClosing() throws IOException {
         synchronized (lock) {
             if(isRegionClosingOrSplitting) {
                 lock.notifyAll();
@@ -361,7 +361,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public static long getBlockingMemstoreSize(Region region, Configuration conf) {
+    static long getBlockingMemstoreSize(Region region, Configuration conf) {
        long flushSize = region.getTableDesc().getMemStoreFlushSize();
 
        if (flushSize <= 0) {
@@ -478,7 +478,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public void commit(final Region region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
+    void commit(final Region region, List<Mutation> mutations, byte[] indexUUID, final long blockingMemStoreSize,
             byte[] indexMaintainersPtr, byte[] txState, final HTable targetHTable, boolean useIndexProto,
                         boolean isPKChanging, byte[] clientVersionBytes)
             throws IOException {

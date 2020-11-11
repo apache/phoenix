@@ -627,9 +627,9 @@ public abstract class BaseTest {
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
         if (conf.getLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
-            conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 1);
-            // This results in processing at least one row and whatever number of rows that can be processed within
-            // the rest of the ms at which the aggregate processing started
+            conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
+            // This results in processing one row at a time in each next operation of the aggregate region
+            // scanner, i.e.,  one row pages
         }
         return conf;
     }
