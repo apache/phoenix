@@ -74,9 +74,13 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
-    // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
+    // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    public static final String SERVER_PAGING = "_ServerPaging";
+    // The number of rows to be scanned in one RPC call
+    public static final String AGGREGATE_PAGE_SIZE_IN_MS = "_AggregatePageSizeInMs";
+
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
     public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
