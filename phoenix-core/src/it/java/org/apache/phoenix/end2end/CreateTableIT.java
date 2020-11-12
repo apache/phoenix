@@ -625,6 +625,96 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCreateIndexWithDifferentStorageAndEncoding() throws Exception {
+        verifyIndexSchemeChange(false, false);
+        verifyIndexSchemeChange(false, true);
+        verifyIndexSchemeChange(true, false);
+        verifyIndexSchemeChange(true, true);
+
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String createTableDDL = "create IMMUTABLE TABLE " + tableName + "(id char(1) NOT NULL, col1 char(1), col2 char(1) "
+                + "CONSTRAINT NAME_PK PRIMARY KEY (id)) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+        String createIndexDDL = "create INDEX " + indexName + " ON " + tableName + " (col1) INCLUDE (col2) IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN";
+
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, tableName, conn);
+
+            boolean failed = false;
+            try {
+                conn.createStatement().execute(createIndexDDL);
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE.getErrorCode());
+                failed = true;
+            }
+            assertEquals(true, failed);
+        }
+    }
+
+    private void verifyIndexSchemeChange(boolean immutable, boolean multiTenant) throws Exception{
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String nonEncodedOneCellPerColumnTable = generateUniqueName();
+        String createTableDDL;
+        String createIndexDDL;
+
+        String createTableBaseDDL = "create " + (immutable? " IMMUTABLE ":"") + " TABLE %s ("
+                + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=" + (multiTenant? "true,":"false,");
+
+        String createIndexBaseDDL = "create index %s ON %s (col1) INCLUDE (col2) ";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = String.format(createTableBaseDDL, nonEncodedOneCellPerColumnTable);
+            createTableDDL += "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    nonEncodedOneCellPerColumnTable, conn);
+
+            String idxName = "IDX_" + generateUniqueName();
+            // Don't specify anything to see if it inherits from parent
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            conn.createStatement().execute(createIndexDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    idxName, conn);
+
+            idxName = "IDX_" + generateUniqueName();
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+            conn.createStatement().execute(createIndexDDL);
+            // Check if it sets the encoding to 2
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    idxName, conn);
+
+            idxName = "IDX_" + generateUniqueName();
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=3";
+            conn.createStatement().execute(createIndexDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.THREE_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    idxName, conn);
+
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=0";
+            // should fail
+            boolean failed = false;
+            try {
+                conn.createStatement().execute(createIndexDDL);
+            } catch (SQLException e) {
+                failed = true;
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES.getErrorCode(),e.getErrorCode());
+            }
+            assertEquals(true, failed);
+        }
+    }
+
     private void verifyUCFValueInSysCat(String tableName, String createTableString,
             Properties props, long expectedUCFInSysCat) throws SQLException {
         String readSysCatQuery = "SELECT TABLE_NAME, UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG "
