@@ -36,6 +36,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -57,8 +59,10 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1815,6 +1819,57 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     fetchedData =
                     fetchData(dataReader);
             assertEquals("Deleted rows should not be fetched", 0,fetchedData.rowKeySet().size());
+        }
+    }
+
+
+    @Test
+    public void testScanAttributes() throws Exception {
+
+        // PHOENIX TTL is set in seconds (for e.g 10 secs)
+        long phoenixTTL = 10;
+        TableOptions tableOptions = TableOptions.withDefaults();
+        tableOptions.getTableColumns().clear();
+        tableOptions.getTableColumnTypes().clear();
+
+        TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
+        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+
+        // Define the test schema.
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+        schemaBuilder
+                .withTableOptions(tableOptions)
+                .withTenantViewOptions(tenantViewOptions)
+                .build();
+
+        String viewName = schemaBuilder.getEntityTenantViewName();
+
+        Properties props = new Properties();
+        String tenantConnectUrl =
+                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+
+        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
+                final Statement statement = conn.createStatement()) {
+            conn.setAutoCommit(true);
+
+            final String stmtString = String.format("select * from  %s", viewName);
+            Preconditions.checkNotNull(stmtString);
+            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
+            final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
+
+            PTable table = PhoenixRuntime
+                    .getTable(conn, schemaBuilder.getDataOptions().getTenantId(), viewName);
+
+            PhoenixResultSet
+                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
+            Assert.assertFalse("Should not have any rows", rs.next());
+            Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
+            Assert.assertEquals("PhoenixTTL does not match",
+                    phoenixTTL*1000, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+            Assert.assertTrue("Masking attribute should be set",
+                    ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
+            Assert.assertFalse("Delete Expired attribute should not set",
+                    ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
         }
     }
 
