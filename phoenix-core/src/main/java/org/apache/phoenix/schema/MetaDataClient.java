@@ -2534,28 +2534,46 @@ public class MetaDataClient {
                  * 
                  */
                 if (parent != null) {
-                    encodingScheme = parent.getEncodingScheme();
-                    immutableStorageScheme = parent.getImmutableStorageScheme();
-                } else {
-                	Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
-                    if (encodingSchemeSerializedByte == null) {
-                        // Ignore default if transactional and column encoding is not supported (as with OMID)
-                        if (transactionProvider == null || !transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
-                            encodingSchemeSerializedByte = (byte)connection.getQueryServices().getProps().getInt(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB,
-                                    QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES);
-                            encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
-                        }
+                    Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+                    // Table has encoding scheme defined
+                    if (encodingSchemeSerializedByte != null) {
+                        encodingScheme = getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
                     } else {
-                        encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
-                        if (encodingScheme != NON_ENCODED_QUALIFIERS && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
-                            throw new SQLExceptionInfo.Builder(
-                                    SQLExceptionCode.UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER)
-                            .setSchemaName(schemaName).setTableName(tableName)
-                            .setMessage(transactionProvider.name())
-                            .build()
-                            .buildException();
+                        encodingScheme = parent.getEncodingScheme();
+                    }
+
+                    ImmutableStorageScheme immutableStorageSchemeProp = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
+                    if (immutableStorageSchemeProp == null) {
+                        immutableStorageScheme = parent.getImmutableStorageScheme();
+                    } else {
+                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                    }
+
+                    if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                        if (encodingScheme == NON_ENCODED_QUALIFIERS) {
+                            if (encodingSchemeSerializedByte != null) {
+                                // encoding scheme is set as non-encoded on purpose, so we should fail
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
+                                        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                            } else {
+                                // encoding scheme is inherited from parent but it is not compatible with Single Cell.
+                                encodingScheme =
+                                        QualifierEncodingScheme.fromSerializedValue(
+                                                (byte) QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES);
+                            }
                         }
                     }
+
+                    if (parent.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS && immutableStorageScheme == ONE_CELL_PER_COLUMN) {
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
+                                .setSchemaName(schemaName).setTableName(tableName).build()
+                                .buildException();
+                    }
+                    LOGGER.info(String.format("STORAGE--ENCODING: %s--%s", immutableStorageScheme, encodingScheme));
+                } else {
+                    encodingScheme = getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
+
                     if (isImmutableRows) {
                         ImmutableStorageScheme immutableStorageSchemeProp =
                                 (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
@@ -2586,15 +2604,7 @@ public class MetaDataClient {
                                 }
                             }
                         } else {
-                            immutableStorageScheme = immutableStorageSchemeProp;
-                            if (immutableStorageScheme != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
-                                throw new SQLExceptionInfo.Builder(
-                                        SQLExceptionCode.UNSUPPORTED_STORAGE_FORMAT_FOR_TXN_PROVIDER)
-                                .setSchemaName(schemaName).setTableName(tableName)
-                                .setMessage(transactionProvider.name())
-                                .build()
-                                .buildException();
-                            }
+                            immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
                         }
                         if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                                 && encodingScheme == NON_ENCODED_QUALIFIERS) {
@@ -3131,6 +3141,44 @@ public class MetaDataClient {
             deleteMutexCells(parentPhysicalSchemaName, parentPhysicalTableName,
                     acquiredColumnMutexSet);
         }
+    }
+
+    private QualifierEncodingScheme getEncodingScheme(Map<String, Object> tableProps, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
+            throws SQLException {
+        QualifierEncodingScheme encodingScheme = null;
+        Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (encodingSchemeSerializedByte == null) {
+            // Ignore default if transactional and column encoding is not supported (as with OMID)
+            if (transactionProvider == null || !transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+                encodingSchemeSerializedByte = (byte)connection.getQueryServices().getProps().getInt(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB,
+                        QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES);
+                encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
+            } else {
+                encodingScheme = NON_ENCODED_QUALIFIERS;
+            }
+        } else {
+            encodingScheme = QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
+            if (encodingScheme != NON_ENCODED_QUALIFIERS && transactionProvider != null && transactionProvider.getTransactionProvider()
+                    .isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER)
+                        .setSchemaName(schemaName).setTableName(tableName).setMessage(transactionProvider.name()).build().buildException();
+            }
+        }
+
+        return encodingScheme;
+    }
+
+    private ImmutableStorageScheme getImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
+            throws SQLException {
+        if (immutableStorageSchemeProp != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.UNSUPPORTED_STORAGE_FORMAT_FOR_TXN_PROVIDER)
+                    .setSchemaName(schemaName).setTableName(tableName)
+                    .setMessage(transactionProvider.name())
+                    .build()
+                    .buildException();
+        }
+        return immutableStorageSchemeProp;
     }
 
     /* This method handles mutation codes sent by phoenix server, except for TABLE_NOT_FOUND which
