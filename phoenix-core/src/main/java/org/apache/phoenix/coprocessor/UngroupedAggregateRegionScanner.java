@@ -104,7 +104,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -116,44 +115,44 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionScanner.class);
 
-    protected long pageSizeInMs = Long.MAX_VALUE;
-    protected int maxBatchSize = 0;
-    protected Scan scan;
-    protected RegionScanner innerScanner;
-    protected Region region;
+    private long pageSizeInMs = Long.MAX_VALUE;
+    private int maxBatchSize = 0;
+    private Scan scan;
+    private RegionScanner innerScanner;
+    private Region region;
     private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
     final private RegionCoprocessorEnvironment env;
     private final boolean useQualifierAsIndex;
-    boolean needToWrite = false;
-    final Pair<Integer, Integer> minMaxQualifiers;
-    byte[][] values = null;
-    PTable.QualifierEncodingScheme encodingScheme;
-    PTable writeToTable = null;
-    PTable projectedTable = null;
-    boolean isDescRowKeyOrderUpgrade;
-    final int offset;
-    boolean buildLocalIndex;
-    List<IndexMaintainer> indexMaintainers;
-    boolean isPKChanging = false;
-    long ts;
-    PhoenixTransactionProvider txnProvider = null;
-    UngroupedAggregateRegionObserver.MutationList indexMutations;
-    boolean isDelete = false;
-    byte[] replayMutations;
-    boolean isUpsert = false;
-    List<Expression> selectExpressions = null;
-    byte[] deleteCQ = null;
-    byte[] deleteCF = null;
-    byte[] emptyCF = null;
-    byte[] indexUUID;
-    byte[] txState;
-    byte[] clientVersionBytes;
-    long blockingMemStoreSize;
-    long maxBatchSizeBytes = 0L;
-    HTable targetHTable = null;
-    boolean incrScanRefCount = false;
-    byte[] indexMaintainersPtr;
-    boolean useIndexProto;
+    private boolean needToWrite = false;
+    final private Pair<Integer, Integer> minMaxQualifiers;
+    private byte[][] values = null;
+    private PTable.QualifierEncodingScheme encodingScheme;
+    private PTable writeToTable = null;
+    private PTable projectedTable = null;
+    private boolean isDescRowKeyOrderUpgrade;
+    private final int offset;
+    private boolean buildLocalIndex;
+    private List<IndexMaintainer> indexMaintainers;
+    private boolean isPKChanging = false;
+    private long ts;
+    private PhoenixTransactionProvider txnProvider = null;
+    private UngroupedAggregateRegionObserver.MutationList indexMutations;
+    private boolean isDelete = false;
+    private byte[] replayMutations;
+    private boolean isUpsert = false;
+    private List<Expression> selectExpressions = null;
+    private byte[] deleteCQ = null;
+    private byte[] deleteCF = null;
+    private byte[] emptyCF = null;
+    private byte[] indexUUID;
+    private byte[] txState;
+    private byte[] clientVersionBytes;
+    private long blockingMemStoreSize;
+    private long maxBatchSizeBytes = 0L;
+    private HTable targetHTable = null;
+    private boolean incrScanRefCount = false;
+    private byte[] indexMaintainersPtr;
+    private boolean useIndexProto;
 
     public UngroupedAggregateRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                            final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -375,20 +374,15 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         byte[] oldRow = Bytes.copy(firstKV.getRowArray(), firstKV.getRowOffset(), firstKV.getRowLength());
         for (Cell cell : results) {
             // Copy existing cell but with new row key
-            Cell newCell = new KeyValue(newRow, 0, newRow.length,
-                    cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
-                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            Cell newCell = CellUtil.createCell(newRow, CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell),
+                    cell.getTimestamp(), cell.getTypeByte(), CellUtil.cloneValue(cell));
             switch (KeyValue.Type.codeToType(cell.getTypeByte())) {
                 case Put:
                     // If Put, point delete old Put
                     Delete del = new Delete(oldRow);
-                    del.addDeleteMarker(new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
-                            cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                            cell.getQualifierArray(), cell.getQualifierOffset(),
-                            cell.getQualifierLength(), cell.getTimestamp(), KeyValue.Type.Delete,
-                            ByteUtil.EMPTY_BYTE_ARRAY, 0, 0));
+                    del.addDeleteMarker(CellUtil.createCell(CellUtil.cloneRow(cell), CellUtil.cloneFamily(cell),
+                            CellUtil.cloneQualifier(cell), cell.getTimestamp(), KeyValue.Type.Delete.getCode(),
+                            ByteUtil.EMPTY_BYTE_ARRAY));
                     mutations.add(del);
 
                     Put put = new Put(newRow);
@@ -408,8 +402,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         return true;
     }
 
-    void buildLocalIndex(Tuple result, List<Cell> results, ImmutableBytesWritable ptr,
-                         UngroupedAggregateRegionObserver.MutationList mutations) throws IOException {
+    void buildLocalIndex(Tuple result, List<Cell> results, ImmutableBytesWritable ptr) throws IOException {
         for (IndexMaintainer maintainer : indexMaintainers) {
             if (!results.isEmpty()) {
                 result.getKey(ptr);
@@ -431,9 +424,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         result.setKeyValues(results);
     }
     void deleteRow(List<Cell> results, UngroupedAggregateRegionObserver.MutationList mutations) {
-        // FIXME: the version of the Delete constructor without the lock
-        // args was introduced in 0.94.4, thus if we try to use it here
-        // we can no longer use the 0.94.2 version of the client.
         Cell firstKV = results.get(0);
         Delete delete = new Delete(firstKV.getRowArray(),
                 firstKV.getRowOffset(), firstKV.getRowLength(),ts);
@@ -571,7 +561,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                                     continue;
                                 }
                             } else if (buildLocalIndex) {
-                                buildLocalIndex(result, results, ptr, mutations);
+                                buildLocalIndex(result, results, ptr);
                             } else if (isDelete) {
                                 deleteRow(results, mutations);
                             } else if (isUpsert) {
@@ -626,12 +616,12 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         + region.getRegionInfo().getRegionNameAsString(), e);
                 throw e;
             }
-            KeyValue keyValue;
+            Cell cell;
             if (hasAny) {
                 byte[] value = aggregators.toBytes(rowAggregators);
-                keyValue = KeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
-                        AGG_TIMESTAMP, value, 0, value.length);
-                resultsToReturn.add(keyValue);
+                cell = CellUtil.createCell(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
+                        AGG_TIMESTAMP, KeyValue.Type.Put.getCode(), value);
+                resultsToReturn.add(cell);
             }
             return hasMore;
         } finally {

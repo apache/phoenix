@@ -447,7 +447,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return new UngroupedAggregateRegionScanner(c, theScanner,region, scan, env, this);
     }
 
-    public static void checkForLocalIndexColumnFamilies(Region region,
+    static void checkForLocalIndexColumnFamilies(Region region,
             List<IndexMaintainer> indexMaintainers) throws IOException {
         HTableDescriptor tableDesc = region.getTableDesc();
         String schemaName =
@@ -603,7 +603,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return scanner;
     }
 
-    public static PTable deserializeTable(byte[] b) {
+    static PTable deserializeTable(byte[] b) {
         try {
             PTableProtos.PTable ptableProto = PTableProtos.PTable.parseFrom(b);
             return PTableImpl.createFromProto(ptableProto);
@@ -808,7 +808,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public static List<Expression> deserializeExpressions(byte[] b) {
+    static List<Expression> deserializeExpressions(byte[] b) {
         ByteArrayInputStream stream = new ByteArrayInputStream(b);
         try {
             DataInputStream input = new DataInputStream(stream);
