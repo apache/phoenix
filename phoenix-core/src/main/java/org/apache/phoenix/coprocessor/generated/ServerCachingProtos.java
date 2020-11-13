@@ -2192,6 +2192,26 @@ public final class ServerCachingProtos {
      */
     com.google.protobuf.ByteString
         getParentTableTypeBytes();
+
+    // optional int32 dataEncodingScheme = 25;
+    /**
+     * <code>optional int32 dataEncodingScheme = 25;</code>
+     */
+    boolean hasDataEncodingScheme();
+    /**
+     * <code>optional int32 dataEncodingScheme = 25;</code>
+     */
+    int getDataEncodingScheme();
+
+    // optional int32 dataImmutableStorageScheme = 26;
+    /**
+     * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+     */
+    boolean hasDataImmutableStorageScheme();
+    /**
+     * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+     */
+    int getDataImmutableStorageScheme();
   }
   /**
    * Protobuf type {@code IndexMaintainer}
@@ -2398,6 +2418,16 @@ public final class ServerCachingProtos {
             case 194: {
               bitField0_ |= 0x00040000;
               parentTableType_ = input.readBytes();
+              break;
+            }
+            case 200: {
+              bitField0_ |= 0x00080000;
+              dataEncodingScheme_ = input.readInt32();
+              break;
+            }
+            case 208: {
+              bitField0_ |= 0x00100000;
+              dataImmutableStorageScheme_ = input.readInt32();
               break;
             }
           }
@@ -2959,6 +2989,38 @@ public final class ServerCachingProtos {
       }
     }
 
+    // optional int32 dataEncodingScheme = 25;
+    public static final int DATAENCODINGSCHEME_FIELD_NUMBER = 25;
+    private int dataEncodingScheme_;
+    /**
+     * <code>optional int32 dataEncodingScheme = 25;</code>
+     */
+    public boolean hasDataEncodingScheme() {
+      return ((bitField0_ & 0x00080000) == 0x00080000);
+    }
+    /**
+     * <code>optional int32 dataEncodingScheme = 25;</code>
+     */
+    public int getDataEncodingScheme() {
+      return dataEncodingScheme_;
+    }
+
+    // optional int32 dataImmutableStorageScheme = 26;
+    public static final int DATAIMMUTABLESTORAGESCHEME_FIELD_NUMBER = 26;
+    private int dataImmutableStorageScheme_;
+    /**
+     * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+     */
+    public boolean hasDataImmutableStorageScheme() {
+      return ((bitField0_ & 0x00100000) == 0x00100000);
+    }
+    /**
+     * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+     */
+    public int getDataImmutableStorageScheme() {
+      return dataImmutableStorageScheme_;
+    }
+
     private void initFields() {
       saltBuckets_ = 0;
       isMultiTenant_ = false;
@@ -2984,6 +3046,8 @@ public final class ServerCachingProtos {
       viewIndexIdType_ = 0;
       indexDataColumnCount_ = -1;
       parentTableType_ = "";
+      dataEncodingScheme_ = 0;
+      dataImmutableStorageScheme_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -3153,6 +3217,12 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         output.writeBytes(24, getParentTableTypeBytes());
       }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        output.writeInt32(25, dataEncodingScheme_);
+      }
+      if (((bitField0_ & 0x00100000) == 0x00100000)) {
+        output.writeInt32(26, dataImmutableStorageScheme_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -3262,6 +3332,14 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00040000) == 0x00040000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(24, getParentTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00080000) == 0x00080000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(25, dataEncodingScheme_);
+      }
+      if (((bitField0_ & 0x00100000) == 0x00100000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(26, dataImmutableStorageScheme_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -3391,6 +3469,16 @@ public final class ServerCachingProtos {
         result = result && getParentTableType()
             .equals(other.getParentTableType());
       }
+      result = result && (hasDataEncodingScheme() == other.hasDataEncodingScheme());
+      if (hasDataEncodingScheme()) {
+        result = result && (getDataEncodingScheme()
+            == other.getDataEncodingScheme());
+      }
+      result = result && (hasDataImmutableStorageScheme() == other.hasDataImmutableStorageScheme());
+      if (hasDataImmutableStorageScheme()) {
+        result = result && (getDataImmutableStorageScheme()
+            == other.getDataImmutableStorageScheme());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -3499,6 +3587,14 @@ public final class ServerCachingProtos {
       if (hasParentTableType()) {
         hash = (37 * hash) + PARENTTABLETYPE_FIELD_NUMBER;
         hash = (53 * hash) + getParentTableType().hashCode();
+      }
+      if (hasDataEncodingScheme()) {
+        hash = (37 * hash) + DATAENCODINGSCHEME_FIELD_NUMBER;
+        hash = (53 * hash) + getDataEncodingScheme();
+      }
+      if (hasDataImmutableStorageScheme()) {
+        hash = (37 * hash) + DATAIMMUTABLESTORAGESCHEME_FIELD_NUMBER;
+        hash = (53 * hash) + getDataImmutableStorageScheme();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3682,6 +3778,10 @@ public final class ServerCachingProtos {
         bitField0_ = (bitField0_ & ~0x00400000);
         parentTableType_ = "";
         bitField0_ = (bitField0_ & ~0x00800000);
+        dataEncodingScheme_ = 0;
+        bitField0_ = (bitField0_ & ~0x01000000);
+        dataImmutableStorageScheme_ = 0;
+        bitField0_ = (bitField0_ & ~0x02000000);
         return this;
       }
 
@@ -3831,6 +3931,14 @@ public final class ServerCachingProtos {
           to_bitField0_ |= 0x00040000;
         }
         result.parentTableType_ = parentTableType_;
+        if (((from_bitField0_ & 0x01000000) == 0x01000000)) {
+          to_bitField0_ |= 0x00080000;
+        }
+        result.dataEncodingScheme_ = dataEncodingScheme_;
+        if (((from_bitField0_ & 0x02000000) == 0x02000000)) {
+          to_bitField0_ |= 0x00100000;
+        }
+        result.dataImmutableStorageScheme_ = dataImmutableStorageScheme_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -4019,6 +4127,12 @@ public final class ServerCachingProtos {
           bitField0_ |= 0x00800000;
           parentTableType_ = other.parentTableType_;
           onChanged();
+        }
+        if (other.hasDataEncodingScheme()) {
+          setDataEncodingScheme(other.getDataEncodingScheme());
+        }
+        if (other.hasDataImmutableStorageScheme()) {
+          setDataImmutableStorageScheme(other.getDataImmutableStorageScheme());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -5920,6 +6034,72 @@ public final class ServerCachingProtos {
   }
   bitField0_ |= 0x00800000;
         parentTableType_ = value;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 dataEncodingScheme = 25;
+      private int dataEncodingScheme_ ;
+      /**
+       * <code>optional int32 dataEncodingScheme = 25;</code>
+       */
+      public boolean hasDataEncodingScheme() {
+        return ((bitField0_ & 0x01000000) == 0x01000000);
+      }
+      /**
+       * <code>optional int32 dataEncodingScheme = 25;</code>
+       */
+      public int getDataEncodingScheme() {
+        return dataEncodingScheme_;
+      }
+      /**
+       * <code>optional int32 dataEncodingScheme = 25;</code>
+       */
+      public Builder setDataEncodingScheme(int value) {
+        bitField0_ |= 0x01000000;
+        dataEncodingScheme_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 dataEncodingScheme = 25;</code>
+       */
+      public Builder clearDataEncodingScheme() {
+        bitField0_ = (bitField0_ & ~0x01000000);
+        dataEncodingScheme_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 dataImmutableStorageScheme = 26;
+      private int dataImmutableStorageScheme_ ;
+      /**
+       * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+       */
+      public boolean hasDataImmutableStorageScheme() {
+        return ((bitField0_ & 0x02000000) == 0x02000000);
+      }
+      /**
+       * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+       */
+      public int getDataImmutableStorageScheme() {
+        return dataImmutableStorageScheme_;
+      }
+      /**
+       * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+       */
+      public Builder setDataImmutableStorageScheme(int value) {
+        bitField0_ |= 0x02000000;
+        dataImmutableStorageScheme_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 dataImmutableStorageScheme = 26;</code>
+       */
+      public Builder clearDataImmutableStorageScheme() {
+        bitField0_ = (bitField0_ & ~0x02000000);
+        dataImmutableStorageScheme_ = 0;
         onChanged();
         return this;
       }
@@ -9050,7 +9230,7 @@ public final class ServerCachingProtos {
       "ength\030\003 \002(\005\"4\n\017ColumnReference\022\016\n\006family" +
       "\030\001 \002(\014\022\021\n\tqualifier\030\002 \002(\014\"4\n\nColumnInfo\022" +
       "\022\n\nfamilyName\030\001 \001(\t\022\022\n\ncolumnName\030\002 \002(\t\"" +
-      "\232\006\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
+      "\332\006\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
       "\022\025\n\risMultiTenant\030\002 \002(\010\022\023\n\013viewIndexId\030\003" +
       " \001(\014\022(\n\016indexedColumns\030\004 \003(\0132\020.ColumnRef" +
       "erence\022 \n\030indexedColumnTypeOrdinal\030\005 \003(\005",
@@ -9069,23 +9249,25 @@ public final class ServerCachingProtos {
       "\003(\0132\013.ColumnInfo\022\026\n\016encodingScheme\030\024 \002(\005" +
       "\022\036\n\026immutableStorageScheme\030\025 \002(\005\022\027\n\017view" +
       "IndexIdType\030\026 \001(\005\022 \n\024indexDataColumnCoun" +
-      "t\030\027 \001(\005:\002-1\022\027\n\017parentTableType\030\030 \001(\t\"\370\001\n" +
-      "\025AddServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014" +
-      "\022\017\n\007cacheId\030\002 \002(\014\022)\n\010cachePtr\030\003 \002(\0132\027.Im" +
-      "mutableBytesWritable\022)\n\014cacheFactory\030\004 \002" +
-      "(\0132\023.ServerCacheFactory\022\017\n\007txState\030\005 \001(\014",
-      "\022\"\n\032hasProtoBufIndexMaintainer\030\006 \001(\010\022\025\n\r" +
-      "clientVersion\030\007 \001(\005\022\032\n\022usePersistentCach" +
-      "e\030\010 \001(\010\"(\n\026AddServerCacheResponse\022\016\n\006ret" +
-      "urn\030\001 \002(\010\"=\n\030RemoveServerCacheRequest\022\020\n" +
-      "\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\"+\n\031Remo" +
-      "veServerCacheResponse\022\016\n\006return\030\001 \002(\0102\245\001" +
-      "\n\024ServerCachingService\022A\n\016addServerCache" +
-      "\022\026.AddServerCacheRequest\032\027.AddServerCach" +
-      "eResponse\022J\n\021removeServerCache\022\031.RemoveS" +
-      "erverCacheRequest\032\032.RemoveServerCacheRes",
-      "ponseBG\n(org.apache.phoenix.coprocessor." +
-      "generatedB\023ServerCachingProtosH\001\210\001\001\240\001\001"
+      "t\030\027 \001(\005:\002-1\022\027\n\017parentTableType\030\030 \001(\t\022\032\n\022" +
+      "dataEncodingScheme\030\031 \001(\005\022\"\n\032dataImmutabl" +
+      "eStorageScheme\030\032 \001(\005\"\370\001\n\025AddServerCacheR" +
+      "equest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(" +
+      "\014\022)\n\010cachePtr\030\003 \002(\0132\027.ImmutableBytesWrit",
+      "able\022)\n\014cacheFactory\030\004 \002(\0132\023.ServerCache" +
+      "Factory\022\017\n\007txState\030\005 \001(\014\022\"\n\032hasProtoBufI" +
+      "ndexMaintainer\030\006 \001(\010\022\025\n\rclientVersion\030\007 " +
+      "\001(\005\022\032\n\022usePersistentCache\030\010 \001(\010\"(\n\026AddSe" +
+      "rverCacheResponse\022\016\n\006return\030\001 \002(\010\"=\n\030Rem" +
+      "oveServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014\022" +
+      "\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServerCacheRes" +
+      "ponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerCachingS" +
+      "ervice\022A\n\016addServerCache\022\026.AddServerCach" +
+      "eRequest\032\027.AddServerCacheResponse\022J\n\021rem",
+      "oveServerCache\022\031.RemoveServerCacheReques" +
+      "t\032\032.RemoveServerCacheResponseBG\n(org.apa" +
+      "che.phoenix.coprocessor.generatedB\023Serve" +
+      "rCachingProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -9115,7 +9297,7 @@ public final class ServerCachingProtos {
           internal_static_IndexMaintainer_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_IndexMaintainer_descriptor,
-              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", "IndexDataColumnCount", "ParentTableType", });
+              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", "ViewIndexIdType", "IndexDataColumnCount", "ParentTableType", "DataEncodingScheme", "DataImmutableStorageScheme", });
           internal_static_AddServerCacheRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddServerCacheRequest_fieldAccessorTable = new
