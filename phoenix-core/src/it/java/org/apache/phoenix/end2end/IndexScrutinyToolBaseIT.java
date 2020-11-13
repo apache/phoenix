@@ -42,16 +42,22 @@ import static org.junit.Assert.assertTrue;
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
 
+    protected static String indexRegionObserverEnabled = Boolean.FALSE.toString();
+    private static String previousIndexRegionObserverEnabled = indexRegionObserverEnabled;
+
     @BeforeClass public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMap();
         //disable major compactions
         serverProps.put(HConstants.MAJOR_COMPACTION_PERIOD, "0");
         Map<String, String> clientProps = Maps.newHashMap();
 
-        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, Boolean.FALSE.toString());
+        clientProps.put(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, indexRegionObserverEnabled);
 
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        if (!previousIndexRegionObserverEnabled.equals(indexRegionObserverEnabled)) {
+           driver = null;
+        }
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        previousIndexRegionObserverEnabled = indexRegionObserverEnabled;
     }
 
     protected List<Job> runScrutiny(Class<? extends IndexScrutinyMapper> mapperClass,

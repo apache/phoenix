@@ -102,6 +102,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
+    private final String indexDDLOptions;
     private final boolean useSnapshot;
     private final boolean useTenantId;
 
@@ -125,6 +126,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
+        StringBuilder indexOptionBuilder = new StringBuilder();
+        if (!localIndex && transactionProvider == null) {
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
+        }
+        this.indexDDLOptions = indexOptionBuilder.toString();
     }
 
     @BeforeClass
@@ -243,7 +249,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
             String stmtString2 =
                     String.format(
-                        "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
+                        "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC " + this.indexDDLOptions,
                         (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
             conn.createStatement().execute(stmtString2);
 
@@ -439,7 +445,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         String createViewStr = "CREATE VIEW %s AS SELECT * FROM %s";
 
         String upsertQueryStr = "UPSERT INTO %s (TENANT_ID, ID, NAME) VALUES('%s' , %d, '%s')";
-        String createIndexStr = "CREATE INDEX %s ON %s (NAME) ";
+        String createIndexStr = "CREATE INDEX %s ON %s (NAME) " + this.indexDDLOptions;
 
         try {
             String tableStmtGlobal = String.format(createTblStr, dataTableName);
@@ -539,7 +545,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
             String indexDDL =
                     String.format(
-                        "CREATE %s INDEX %s on %s (\"info\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                        "CREATE %s INDEX %s on %s (\"info\".CAR_NUM,\"info\".CAP_DATE) ASYNC " + this.indexDDLOptions,
                         (localIndex ? "LOCAL" : ""), indexTableName, dataTableFullName);
             conn.createStatement().execute(indexDDL);
 
@@ -616,7 +622,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
             String indexDDL =
                     String.format(
-                        "CREATE INDEX %s on %s (\"info\".CAR_NUM,\"test\".CAR_NUM,\"info\".CAP_DATE) ASYNC",
+                        "CREATE INDEX %s on %s (\"info\".CAR_NUM,\"test\".CAR_NUM,\"info\".CAP_DATE) ASYNC " + this.indexDDLOptions,
                         indexTableName, dataTableFullName);
             conn.createStatement().execute(indexDDL);
 

@@ -727,12 +727,6 @@ public class ViewUtil {
                 .setTransactionProvider(parentTable.getTransactionProvider())
                 .setAutoPartitionSeqName(parentTable.getAutoPartitionSeqName())
                 .setAppendOnlySchema(parentTable.isAppendOnlySchema())
-                .setImmutableStorageScheme(parentTable.getImmutableStorageScheme() == null ?
-                        PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN :
-                        parentTable.getImmutableStorageScheme())
-                .setQualifierEncodingScheme(parentTable.getEncodingScheme() == null ?
-                        PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS :
-                        parentTable.getEncodingScheme())
                 .setBaseColumnCount(baseTableColumnCount)
                 .setTimeStamp(maxTableTimestamp)
                 .setExcludedColumns(ImmutableList.copyOf(excludedColumns))
