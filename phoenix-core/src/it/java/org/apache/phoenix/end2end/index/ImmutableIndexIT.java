@@ -29,6 +29,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -84,6 +85,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -179,7 +181,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
             conn.setAutoCommit(true);
             String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
-            conn.createStatement().execute(dml);
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
 
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
             assertTrue(rs.next());
@@ -221,7 +223,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(3, rs.getInt(1));
 
             String dml = "DELETE from " + fullTableName + " WHERE varchar_pk='varchar1'";
-            conn.createStatement().execute(dml);
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
             assertIndexMutations(conn);
             conn.commit();
             
@@ -263,7 +265,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(3, rs.getInt(1));
 
             String dml = "DELETE from " + fullTableName + " WHERE varchar_col1='varchar_a' AND varchar_pk='varchar1'";
-            conn.createStatement().execute(dml);
+            assertEquals(1, conn.createStatement().executeUpdate(dml));
             assertIndexMutations(conn);
             conn.commit();
             
@@ -623,4 +625,103 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    private void setupForDeleteCount(Connection conn, String schemaName, String dataTableName,
+            String indexTableName1, String indexTableName2) throws SQLException {
+
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+            + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) "
+            + this.tableDDLOptions);
+
+        if (indexTableName1 != null) {
+            conn.createStatement().execute(String.format(
+                "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName1, dataTableFullName));
+        }
+
+        if (indexTableName2 != null) {
+            conn.createStatement().execute(String.format(
+                "CREATE INDEX %s ON %s (VAL2) INCLUDE (VAL1)", indexTableName2, dataTableFullName));
+        }
+
+        PreparedStatement dataPreparedStatement =
+            conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
+        for (int i = 1; i <= 10; i++) {
+            dataPreparedStatement.setInt(1, i);
+            dataPreparedStatement.setInt(2, i + 1);
+            dataPreparedStatement.setInt(3, i * 2);
+            dataPreparedStatement.execute();
+        }
+        conn.commit();
+    }
+
+    @Test
+    public void testDeleteCount_PK() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = "TBL_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = "IND_" + generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            setupForDeleteCount(conn, schemaName, dataTableName, indexTableName, null);
+
+            PreparedStatement deleteStmt =
+                conn.prepareStatement("DELETE FROM " + dataTableFullName + " WHERE ID > 5");
+            assertEquals(5, deleteStmt.executeUpdate());
+            conn.commit();
+        }
+    }
+
+    @Test
+    public void testDeleteCount_nonPK() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = "TBL_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName1 = "IND_" + generateUniqueName();
+        String indexTableName2 = "IND_" + generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            setupForDeleteCount(conn, schemaName, dataTableName, indexTableName1, indexTableName2);
+
+            PreparedStatement deleteStmt =
+                conn.prepareStatement("DELETE FROM " + dataTableFullName + " WHERE VAL1 > 6");
+            assertEquals(5, deleteStmt.executeUpdate());
+            conn.commit();
+        }
+    }
+
+    @Test
+    public void testDeleteCount_limit() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = "TBL_" + generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName1 = "IND_" + generateUniqueName();
+        String indexTableName2 = "IND_" + generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            setupForDeleteCount(conn, schemaName, dataTableName, indexTableName1, indexTableName2);
+
+            PreparedStatement deleteStmt =
+                conn.prepareStatement("DELETE FROM " + dataTableFullName + " WHERE VAL1 > 6 LIMIT 3");
+            assertEquals(3, deleteStmt.executeUpdate());
+            conn.commit();
+        }
+    }
+
+    @Test
+    public void testDeleteCount_index() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = "TBL_" + generateUniqueName();
+        String indexTableName = "IND_" + generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            setupForDeleteCount(conn, schemaName, dataTableName, indexTableName, null);
+
+            PreparedStatement deleteStmt =
+                conn.prepareStatement("DELETE FROM " + indexTableFullName + " WHERE \"0:VAL1\" > 6");
+            assertEquals(5, deleteStmt.executeUpdate());
+            conn.commit();
+        }
+    }
 }
