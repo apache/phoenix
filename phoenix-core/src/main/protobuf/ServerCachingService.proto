@@ -66,6 +66,8 @@ message IndexMaintainer {
   optional int32 indexDataColumnCount = 23 [default = -1];
   optional string parentTableType = 24;
   optional string logicalIndexName = 25;
+  optional int32 dataEncodingScheme = 26;
+  optional int32 dataImmutableStorageScheme = 27;
 }
 
 message AddServerCacheRequest {

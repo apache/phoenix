@@ -366,6 +366,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     /**** START: New member variables added in 4.10 *****/ 
     private QualifierEncodingScheme encodingScheme;
     private ImmutableStorageScheme immutableStorageScheme;
+    private QualifierEncodingScheme dataEncodingScheme;
+    private ImmutableStorageScheme dataImmutableStorageScheme;
     /*
      * Information for columns of data tables that are being indexed. The first part of the pair is column family name
      * and second part is the column name. The reason we need to track this state is because for certain storage schemes
@@ -401,7 +403,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // null check for b/w compatibility
         this.encodingScheme = index.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : index.getEncodingScheme();
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
-        
+        this.dataEncodingScheme = dataTable.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : dataTable.getEncodingScheme();
+        this.dataImmutableStorageScheme = dataTable.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : dataTable.getImmutableStorageScheme();
+
         byte[] indexTableName = index.getPhysicalName().getBytes();
         // Use this for the nDataSaltBuckets as we need this for local indexes
         // TODO: persist nDataSaltBuckets separately, but maintain b/w compat.
@@ -602,7 +606,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.logicalIndexName = index.getName().getString();
         initCachedState();
     }
-    
+
+    public void setDataImmutableStorageScheme(ImmutableStorageScheme sc) {
+        this.dataImmutableStorageScheme = sc;
+    }
+
+    public void setDataEncodingScheme(QualifierEncodingScheme sc) {
+        this.dataEncodingScheme = sc;
+    }
+
     public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey, long ts)  {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean prependRegionStartKey = isLocalIndex && regionStartKey != null;
@@ -1047,35 +1059,40 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
                     ColumnReference indexColRef = colRefPair.getFirst();
                     ColumnReference dataColRef = colRefPair.getSecond();
-                    Expression expression = new SingleCellColumnExpression(new PDatum() {
-                        @Override
-                        public boolean isNullable() {
-                            return false;
+                    byte[] value = null;
+                    if (this.dataImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                        Expression expression = new SingleCellColumnExpression(new PDatum() {
+                            @Override public boolean isNullable() {
+                                return false;
+                            }
+
+                            @Override public SortOrder getSortOrder() {
+                                return null;
+                            }
+
+                            @Override public Integer getScale() {
+                                return null;
+                            }
+
+                            @Override public Integer getMaxLength() {
+                                return null;
+                            }
+
+                            @Override public PDataType getDataType() {
+                                return null;
+                            }
+                        }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme,
+                                immutableStorageScheme);
+                        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                        expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                        value = ptr.copyBytesIfNecessary();
+                    } else {
+                        // Data table is ONE_CELL_PER_COLUMN. Get the col value.
+                        ImmutableBytesWritable dataValue = valueGetter.getLatestValue(dataColRef, ts);
+                        if (dataValue != null && dataValue != ValueGetter.HIDDEN_BY_DELETE) {
+                            value = dataValue.copyBytes();
                         }
-                        
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public Integer getScale() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public Integer getMaxLength() {
-                            return null;
-                        }
-                        
-                        @Override
-                        public PDataType getDataType() {
-                            return null;
-                        }
-                    }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme, immutableStorageScheme);
-                    ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-                    expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
-                    byte[] value = ptr.copyBytesIfNecessary();
+                    }
                     if (value != null) {
                         int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
                         colValues[indexArrayPos] = new LiteralExpression(value);
@@ -1404,6 +1421,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // Needed for backward compatibility. Clients older than 4.10 will have non-encoded tables.
         this.immutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
         this.encodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+        this.dataImmutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+        this.dataEncodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
         initCachedState();
     }
     
@@ -1463,6 +1482,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // proto doesn't support single byte so need an explicit cast here
         maintainer.encodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue((byte)proto.getEncodingScheme());
         maintainer.immutableStorageScheme = PTable.ImmutableStorageScheme.fromSerializedValue((byte)proto.getImmutableStorageScheme());
+        maintainer.dataEncodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue((byte)proto.getDataEncodingScheme());
+        maintainer.dataImmutableStorageScheme = PTable.ImmutableStorageScheme.fromSerializedValue((byte)proto.getDataImmutableStorageScheme());
         maintainer.isLocalIndex = proto.getIsLocalIndex();
         if (proto.hasParentTableType()) {
             maintainer.parentTableType = PTableType.fromValue(proto.getParentTableType());
@@ -1611,6 +1632,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setEncodingScheme(maintainer.encodingScheme.getSerializedMetadataValue());
         builder.setImmutableStorageScheme(maintainer.immutableStorageScheme.getSerializedMetadataValue());
         builder.setLogicalIndexName(maintainer.logicalIndexName);
+        builder.setDataEncodingScheme(maintainer.dataEncodingScheme.getSerializedMetadataValue());
+        builder.setDataImmutableStorageScheme(maintainer.dataImmutableStorageScheme.getSerializedMetadataValue());
         return builder.build();
     }
 
@@ -1969,5 +1992,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public ImmutableStorageScheme getIndexStorageScheme() {
         return immutableStorageScheme;
     }
-    
+    public ImmutableStorageScheme getDataImmutableStorageScheme() {
+        return dataImmutableStorageScheme;
+    }
+
+    public QualifierEncodingScheme getDataEncodingScheme() {
+        return dataEncodingScheme;
+    }
 }
