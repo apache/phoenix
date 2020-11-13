@@ -2612,6 +2612,9 @@ public class MetaDataClient {
 
             Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
             boolean wasPKDefined = false;
+            // Keep track of all columns that are newly added to a view
+            Set<Integer> viewNewColumnPositions =
+                    Sets.newHashSetWithExpectedSize(colDefs.size());
             for (ColumnDef colDef : colDefs) {
                 rowTimeStampColumnAlreadyFound = checkAndValidateRowTimestampCol(colDef, pkConstraint, rowTimeStampColumnAlreadyFound, tableType);
                 if (colDef.isPK()) { // i.e. the column is declared as CREATE TABLE COLNAME DATATYPE PRIMARY KEY...
@@ -2677,6 +2680,8 @@ public class MetaDataClient {
                 }
                 if (columns.put(column, column) != null) {
                     throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
+                } else if (tableType == VIEW) {
+                    viewNewColumnPositions.add(column.getPosition());
                 }
                 if ((colDef.getDataType() == PVarbinary.INSTANCE || colDef.getDataType().isArrayType())
                         && SchemaUtil.isPKColumn(column)
@@ -2868,13 +2873,24 @@ public class MetaDataClient {
                         }
 
                         // if the base table column is referenced in the view
-                        if (isViewColumnReferenced.get(columnPosition)) {
-                            // acquire the mutex using the global physical table name to
-                            // prevent this column from being dropped while the view is being created
-                            boolean acquiredMutex = writeCell(null, parentPhysicalSchemaName, parentPhysicalTableName,
+                        // or if we are adding a new column during view creation
+                        if (isViewColumnReferenced.get(columnPosition) ||
+                                viewNewColumnPositions.contains(
+                                        columnPosition)) {
+                            // acquire the mutex using the global physical table
+                            // name to prevent this column from being dropped
+                            // while the view is being created or to prevent
+                            // a conflicting column from being added to a parent
+                            // in case the view creation adds new columns
+                            boolean acquiredMutex = writeCell(
+                                    null,
+                                    parentPhysicalSchemaName,
+                                    parentPhysicalTableName,
                                     column.toString());
                             if (!acquiredMutex) {
-                                throw new ConcurrentTableMutationException(parentPhysicalSchemaName, parentPhysicalTableName);
+                                throw new ConcurrentTableMutationException(
+                                        parentPhysicalSchemaName,
+                                        parentPhysicalTableName);
                             }
                             acquiredColumnMutexSet.add(column.toString());
                         }
