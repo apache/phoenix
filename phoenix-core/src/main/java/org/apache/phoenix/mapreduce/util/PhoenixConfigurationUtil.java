@@ -41,7 +41,6 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
-import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -125,8 +124,6 @@ public final class PhoenixConfigurationUtil {
     public static final String INDEX_TOOL_DATA_TABLE_NAME = "phoenix.mr.index_tool.data.table.name";
 
     public static final String INDEX_TOOL_INDEX_TABLE_NAME = "phoenix.mr.index_tool.index.table.name";
-
-    public static final String INDEX_TOOL_SOURCE_TABLE = "phoenix.mr.index_tool.source.table";
 
     public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
 
@@ -661,19 +658,6 @@ public final class PhoenixConfigurationUtil {
     public static String getIndexToolIndexTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
-    }
-
-    public static void setIndexToolSourceTable(Configuration configuration,
-            IndexScrutinyTool.SourceTable sourceTable) {
-        Preconditions.checkNotNull(configuration);
-        Preconditions.checkNotNull(sourceTable);
-        configuration.set(INDEX_TOOL_SOURCE_TABLE, sourceTable.name());
-    }
-
-    public static IndexScrutinyTool.SourceTable getIndexToolSourceTable(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        return IndexScrutinyTool.SourceTable.valueOf(configuration.get(INDEX_TOOL_SOURCE_TABLE,
-            IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE.name()));
     }
 
     public static void setScrutinySourceTable(Configuration configuration,
