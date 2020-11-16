@@ -20,7 +20,11 @@ package org.apache.phoenix.coprocessor.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
+import org.apache.phoenix.hbase.index.Indexer;
 
+/**
+ * Interface for metrics about {@link org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver}.
+ */
 public interface MetricsPhoenixTTLSource extends BaseSource {
 
     // Metrics2 and JMX constants
@@ -33,7 +37,7 @@ public interface MetricsPhoenixTTLSource extends BaseSource {
     String PHOENIX_TTL_MASK_EXPIRED_REQUESTS = "phoenixMaskTTLExpiredRequests";
     String PHOENIX_TTL_MASK_EXPIRED_REQUESTS_DESC = "The number of scan requests to mask PHOENIX TTL expired rows";
 
-    String PHOENIX_TTL_DELETE_EXPIRED_REQUESTS = "phoenixMaskTTLExpiredRequests";
+    String PHOENIX_TTL_DELETE_EXPIRED_REQUESTS = "phoenixDeleteTTLExpiredRequests";
     String PHOENIX_TTL_DELETE_EXPIRED_REQUESTS_DESC = "The number of delete requests to delete PHOENIX TTL expired rows";
 
     /**

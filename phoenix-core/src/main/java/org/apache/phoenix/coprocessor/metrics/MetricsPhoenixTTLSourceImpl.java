@@ -21,6 +21,9 @@ package org.apache.phoenix.coprocessor.metrics;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 
+/**
+ * Implementation for tracking {@link org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver} metrics.
+ */
 public class MetricsPhoenixTTLSourceImpl extends BaseSourceImpl implements MetricsPhoenixTTLSource {
     private final MutableFastCounter maskExpiredRequests;
     private final MutableFastCounter deleteExpiredRequests;
@@ -28,7 +31,6 @@ public class MetricsPhoenixTTLSourceImpl extends BaseSourceImpl implements Metri
     public MetricsPhoenixTTLSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
     }
-
 
     public MetricsPhoenixTTLSourceImpl(String metricsName, String metricsDescription,
             String metricsContext, String metricsJmxContext) {

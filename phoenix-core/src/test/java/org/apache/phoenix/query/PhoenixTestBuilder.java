@@ -289,6 +289,7 @@ public class PhoenixTestBuilder {
         // Read batch of rows
         public void readRows() throws SQLException {
             dataTable.clear();
+            dataTable = TreeBasedTable.create();
             String sql = getDML();
             Connection connection = getConnection();
             try (Statement stmt = connection.createStatement()) {
@@ -434,6 +435,7 @@ public class PhoenixTestBuilder {
         // Upsert batch of rows.
         public void upsertRows(int startRowIndex, int numRows) throws Exception {
             dataTable.clear();
+            dataTable = TreeBasedTable.create();
             List<String> upsertColumns = Lists.newArrayList();
             List<Integer> rowKeyPositions = Lists.newArrayList();
 

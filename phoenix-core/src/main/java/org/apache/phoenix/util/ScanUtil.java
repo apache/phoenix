@@ -1173,18 +1173,22 @@ public class ScanUtil {
                     PhoenixRuntime.getTable(phoenixConnection,
                             SchemaUtil.getTableName(parentSchemaName, parentTableName));
         }
+
         if (dataTable.getPhoenixTTL() != 0) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-            byte[]
-                    emptyColumnName =
+            byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                             QueryConstants.EMPTY_COLUMN_BYTES :
                             table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-
+            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL_SCAN_TABLE_NAME,
+                    Bytes.toBytes(tableName));
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL, Bytes.toBytes(Long.valueOf(dataTable.getPhoenixTTL())));
+            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL,
+                    Bytes.toBytes(Long.valueOf(dataTable.getPhoenixTTL())));
+            if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
+                scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
+            }
             addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
     }

@@ -80,14 +80,15 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             metricSource.incrementDeleteExpiredRequestCount();
             scan.setAttribute(PhoenixTTLRegionScanner.MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR,
                     Bytes.toBytes(String.format("DELETE-EXPIRED-%d",
-                            metricSource.getMaskExpiredRequestCount())));
+                            metricSource.getDeleteExpiredRequestCount())));
         }
         LOG.trace(String.format(
                 "********** PHOENIX-TTL: PhoenixTTLRegionObserver::postScannerOpen TTL for table = "
                         + "[%s], scan = [%s], PHOENIX_TTL = %d ***************, "
                         + "numMaskExpiredRequestCount=%d, "
                         + "numDeleteExpiredRequestCount=%d",
-                s.getRegionInfo().getTable().getNameAsString(), scan.toJSON(Integer.MAX_VALUE),
+                s.getRegionInfo().getTable().getNameAsString(),
+                scan.toJSON(Integer.MAX_VALUE),
                 ScanUtil.getPhoenixTTL(scan),
                 metricSource.getMaskExpiredRequestCount(),
                 metricSource.getDeleteExpiredRequestCount()
@@ -113,6 +114,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         private final boolean deleteIfExpired;
         private final boolean maskIfExpired;
         private final String requestId;
+        private final byte[] scanTableName;
         private long numRowsExpired;
         private long numRowsScanned;
         private long numRowsDeleted;
@@ -131,6 +133,8 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             region = env.getRegion();
             emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
             emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
+            scanTableName = scan.getAttribute(BaseScannerRegionObserver.PHOENIX_TTL_SCAN_TABLE_NAME);
+
             byte[] txnScn = scan.getAttribute(BaseScannerRegionObserver.TX_SCN);
             if (txnScn != null) {
                 TimeRange timeRange = scan.getTimeRange();
@@ -170,9 +174,9 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         @Override public void close() throws IOException {
             if (!reported) {
                 LOG.debug(String.format(
-                        "PHOENIX-TTL-SCAN-STATS-ON-CLOSE: " + "request-id:[%s] = [%d, %d, %d]",
-                        this.requestId, this.numRowsScanned, this.numRowsExpired,
-                        this.numRowsDeleted));
+                        "PHOENIX-TTL-SCAN-STATS-ON-CLOSE: " + "request-id:[%s,%s] = [%d, %d, %d]",
+                        this.requestId, Bytes.toString(scanTableName),
+                        this.numRowsScanned, this.numRowsExpired, this.numRowsDeleted));
                 reported = true;
             }
             scanner.close();
@@ -255,10 +259,11 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
                 long ts = ScanUtil.getMaxTimestamp(cellList);
                 LOG.trace(String.format(
                         "PHOENIX-TTL: Deleting row = [%s] belonging to table = %s, "
-                                + "delete-ts = %d, max-ts = %d",
+                                + "scn = %s, now = %d, delete-ts = %d, max-ts = %d",
                         Bytes.toString(rowKey),
-                        region.getRegionInfo().getTable().getNameAsString(),
-                        now - ttl, ts));
+                        Bytes.toString(scanTableName),
+                        maxTimestamp != HConstants.LATEST_TIMESTAMP,
+                        now, now - ttl, ts));
                 Delete del = new Delete(rowKey, now - ttl);
                 Mutation[] mutations = new Mutation[] { del };
                 region.batchMutate(mutations, HConstants.NO_NONCE, HConstants.NO_NONCE);
