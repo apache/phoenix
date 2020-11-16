@@ -201,7 +201,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                             }
 
                             // Change task status to STARTED
-                            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
+                            Task.addTaskQueue(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
                                     taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
                                     taskRecord.getData(), taskRecord.getPriority(), taskRecord.getTimeStamp(), null,
                                     true);
@@ -257,9 +257,12 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
             data = jsonNode.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
-                    taskRecord.getTableName(), taskStatus, data, taskRecord.getPriority(),
-                    taskRecord.getTimeStamp(), endTs, true);
+            Task.addTaskHistory(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(),
+                    taskRecord.getSchemaName(), taskRecord.getTableName(), taskStatus, data,
+                    taskRecord.getPriority(), taskRecord.getTimeStamp(), endTs, true);
+            Task.deleteTaskFromQueue(connForTask, taskRecord.getTaskType(),
+                    taskRecord.getTimeStamp(), taskRecord.getTenantId(),
+                    taskRecord.getSchemaName(),taskRecord.getTableName(), true);
         }
     }
 }

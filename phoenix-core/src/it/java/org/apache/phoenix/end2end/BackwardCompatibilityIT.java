@@ -314,11 +314,17 @@ public class BackwardCompatibilityIT {
         try (org.apache.hadoop.hbase.client.Connection conn =
                 hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
             TableDescriptor tableDescriptor = admin.getDescriptor(
-                TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
+                TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME));
             assertEquals("split policy not updated with compatible client version: "
                 + compatibleClientVersion,
                 tableDescriptor.getRegionSplitPolicyClassName(),
                 SystemTaskSplitPolicy.class.getName());
+            tableDescriptor = admin.getDescriptor(
+                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME));
+            assertEquals("split policy not updated with compatible client version: "
+                            + compatibleClientVersion,
+                    tableDescriptor.getRegionSplitPolicyClassName(),
+                    SystemTaskSplitPolicy.class.getName());
         }
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }

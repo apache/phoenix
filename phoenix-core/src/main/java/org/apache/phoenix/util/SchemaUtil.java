@@ -545,9 +545,15 @@ public class SchemaUtil {
     }
 
     public static boolean isTaskTable(byte[] tableName) {
-        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES) == 0
+        return Bytes.compareTo(tableName, PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME_BYTES) == 0
                 || Bytes.compareTo(tableName, SchemaUtil
-                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME_BYTES, true).getName()) == 0;
+                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME_BYTES,
+                        true).getName()) == 0
+                || Bytes.compareTo(tableName,
+                PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME_BYTES) == 0
+                || Bytes.compareTo(tableName, SchemaUtil
+                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME_BYTES,
+                        true).getName()) == 0;
     }
     
     public static boolean isChildLinkTable(byte[] tableName) {
@@ -560,7 +566,9 @@ public class SchemaUtil {
     }
 
     public static boolean isTaskTable(PTable table) {
-        return PhoenixDatabaseMetaData.SYSTEM_TASK_NAME.equals(table.getName().getString());
+        return PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME.equals(table.getName().getString())
+                || PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME
+                .equals(table.getName().getString());
     }
 
     public static boolean isMetaTable(PTable table) {

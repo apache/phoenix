@@ -106,7 +106,7 @@ public class IndexRebuildTask extends BaseTask  {
             Job job = indexToolRes.getValue();
 
             ((ObjectNode) jsonNode).put(JOB_ID, job.getJobID().toString());
-            Task.addTask(conn.unwrap(PhoenixConnection.class ), taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
+            Task.addTaskQueue(conn.unwrap(PhoenixConnection.class ), taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
                     taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
                     jsonNode.toString(), taskRecord.getPriority(),
                     taskRecord.getTimeStamp(), null, true);

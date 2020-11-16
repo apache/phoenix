@@ -87,11 +87,17 @@ public class ConnectionQueryServicesImplTest {
     @Mock
     private Table mockTable;
 
-    public static final TableDescriptorBuilder SYS_TASK_TDB = TableDescriptorBuilder
-        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
-    public static final TableDescriptorBuilder SYS_TASK_TDB_SP = TableDescriptorBuilder
-        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
+    public static final TableDescriptorBuilder SYS_TASK_QUEUE_TDB = TableDescriptorBuilder
+        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME));
+    public static final TableDescriptorBuilder SYS_TASK_QUEUE_TDB_SP = TableDescriptorBuilder
+        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME))
         .setRegionSplitPolicyClassName("abc");
+
+    public static final TableDescriptorBuilder SYS_TASK_HISTORY_TDB = TableDescriptorBuilder
+            .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME));
+    public static final TableDescriptorBuilder SYS_TASK_HISTORY_TDB_SP = TableDescriptorBuilder
+            .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME))
+            .setRegionSplitPolicyClassName("abc");
 
 
     @Before
@@ -107,10 +113,14 @@ public class ConnectionQueryServicesImplTest {
         props.set(mockCqs, mockConn);
         when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
             .thenCallRealMethod();
-        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))
+        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_QUEUE_TDB))
             .thenCallRealMethod();
-        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB_SP))
+        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_QUEUE_TDB_SP))
             .thenCallRealMethod();
+        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_HISTORY_TDB))
+                .thenCallRealMethod();
+        when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_HISTORY_TDB_SP))
+                .thenCallRealMethod();
         when(mockCqs.getSysMutexTable()).thenCallRealMethod();
         when(mockCqs.getAdmin()).thenCallRealMethod();
         when(mockCqs.getTable(Mockito.any())).thenCallRealMethod();
@@ -192,20 +202,22 @@ public class ConnectionQueryServicesImplTest {
 
     @Test
     public void testSysTaskSplitPolicy() throws Exception {
-        assertTrue(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB));
-        assertFalse(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB));
+        assertTrue(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_QUEUE_TDB));
+        assertFalse(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_QUEUE_TDB));
+        assertTrue(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_HISTORY_TDB));
+        assertFalse(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_HISTORY_TDB));
     }
 
     @Test
     public void testSysTaskSplitPolicyWithError() {
         try {
-            mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB_SP);
-            fail("Split policy for SYSTEM.TASK cannot be updated");
+            mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_QUEUE_TDB_SP);
+            fail("Split policy for SYSTEM.TASK_QUEUE cannot be updated");
         } catch (SQLException e) {
             assertEquals("ERROR 908 (43M19): REGION SPLIT POLICY is incorrect."
-                + " Region split policy for table TASK is expected to be "
+                + " Region split policy for table TASK_QUEUE is expected to be "
                 + "among: [null, org.apache.phoenix.schema.SystemTaskSplitPolicy]"
-                + " , actual split policy: abc tableName=SYSTEM.TASK",
+                + " , actual split policy: abc tableName=SYSTEM.TASK_QUEUE",
                 e.getMessage());
         }
     }

@@ -73,8 +73,8 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
-                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
@@ -120,7 +120,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             conn.setAutoCommit(true);
             viewConn.setAutoCommit(true);
             // Empty the task table first.
-            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME);
 
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
@@ -176,7 +176,7 @@ public class DropTableWithViewsIT extends SplitSystemCatalogIT {
             String expectedIndexName)
             throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * " +
-                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME +
                 " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
                 taskType.getSerializedValue());
         assertTrue(rs.next());

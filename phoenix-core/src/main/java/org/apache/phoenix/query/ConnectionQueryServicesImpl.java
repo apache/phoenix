@@ -53,7 +53,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_SYSTEM_TASK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
@@ -258,6 +260,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -1490,11 +1493,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean updateAndConfirmSplitPolicyForTask(
             final TableDescriptorBuilder tdBuilder) throws SQLException {
         boolean isTaskTable = false;
+        String tableName = null;
         TableName sysTaskTable = SchemaUtil
-            .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME,
+            .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME,
                 props);
         if (tdBuilder.build().getTableName().equals(sysTaskTable)) {
             isTaskTable = true;
+            tableName = SYSTEM_TASK_QUEUE_TABLE;
+        }
+        sysTaskTable = SchemaUtil
+                .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME,
+                        props);
+        if (tdBuilder.build().getTableName().equals(sysTaskTable)) {
+            isTaskTable = true;
+            tableName = SYSTEM_TASK_HISTORY_TABLE;
         }
         if (isTaskTable) {
             final String actualSplitPolicy = tdBuilder.build()
@@ -1506,7 +1518,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // Rare possibility. pre-4.16 create DDL query
                     // doesn't have any split policy setup for SYSTEM.TASK
                     throw new InvalidRegionSplitPolicyException(
-                        QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_TASK_TABLE,
+                        QueryConstants.SYSTEM_SCHEMA_NAME, tableName,
                         ImmutableList.of("null", targetSplitPolicy),
                         actualSplitPolicy);
                 }
@@ -3169,8 +3181,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
-    protected String getTaskDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
+    protected String getTaskQueueDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TASK_QUEUE_METADATA);
+    }
+
+    protected String getTaskHistoryDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TASK_HISTORY_METADATA);
+    }
+
+    protected String getTaskQueryUpgradeDDL() {
+        return QueryConstants.UPGRADE_SYSTEM_TASK_TO_TASK_QUEUE;
+    }
+
+    protected String getTaskHistoryUpgradeDDL() {
+        return QueryConstants.UPGRADE_SYSTEM_TASK_TO_TASK_HISTORY;
     }
 
     private String setSystemDDLProperties(String ddl) {
@@ -3443,7 +3467,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection.createStatement().executeUpdate(getMutexDDL());
         } catch (TableAlreadyExistsException ignore) {}
         try {
-            metaConnection.createStatement().executeUpdate(getTaskDDL());
+            metaConnection.createStatement().executeUpdate(getTaskQueueDDL());
+            metaConnection.createStatement().executeUpdate(getTaskHistoryDDL());
         } catch (TableAlreadyExistsException ignore) {}
 
         // Catch the IOException to log the error message and then bubble it up for the client to retry.
@@ -4118,7 +4143,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Map<String, String> systemTableToSnapshotMap)
             throws SQLException, IOException {
         try (Statement statement = metaConnection.createStatement()) {
-            statement.executeUpdate(getTaskDDL());
+            statement.executeUpdate(getTaskHistoryDDL());
+            statement.executeUpdate(getTaskQueueDDL());
+            ConnectionQueryServices cqs=metaConnection.unwrap(PhoenixConnection.class)
+                    .getQueryServices();
+            try {
+                cqs.getTableIfExists(OLD_SYSTEM_TASK_NAME_BYTES);
+                statement.executeUpdate(getTaskQueryUpgradeDDL());
+                statement.executeUpdate(getTaskHistoryUpgradeDDL());
+            } catch (TableNotFoundException e) {
+                LOGGER.warn("SYSTEM.TASK table did not exist");
+            }
         } catch (NewerTableAlreadyExistsException ignored) {
 
         } catch (TableAlreadyExistsException e) {
@@ -4137,7 +4172,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + PhoenixDatabaseMetaData.TASK_DATA + " " +
                                 PVarchar.INSTANCE.getSqlTypeName();
                 String taskTableFullName = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
-                        SYSTEM_TASK_TABLE);
+                        SYSTEM_TASK_QUEUE_TABLE);
                 metaConnection =
                         addColumnsIfNotExists(metaConnection, taskTableFullName,
                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
@@ -4151,21 +4186,42 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // If SYSTEM.TASK does not have disabled regions split policy,
             // set it up here while upgrading it
             try (Admin admin = metaConnection.getQueryServices().getAdmin()) {
-                TableDescriptor td;
-                TableName tableName = SchemaUtil.getPhysicalTableName(
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME, props);
-                td = admin.getDescriptor(tableName);
-                TableDescriptorBuilder tableDescriptorBuilder =
-                    TableDescriptorBuilder.newBuilder(td);
-                if (updateAndConfirmSplitPolicyForTask(
-                        tableDescriptorBuilder)) {
-                    admin.modifyTable(tableDescriptorBuilder.build());
-                    pollForUpdatedTableDescriptor(admin,
-                        tableDescriptorBuilder.build(), tableName.getName());
+                try{
+                    TableDescriptor td;
+                    TableName tableName = SchemaUtil.getPhysicalTableName(
+                            PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME, props);
+                    td = admin.getDescriptor(tableName);
+                    TableDescriptorBuilder tableDescriptorBuilder =
+                            TableDescriptorBuilder.newBuilder(td);
+                    if (updateAndConfirmSplitPolicyForTask(
+                            tableDescriptorBuilder)) {
+                        admin.modifyTable(tableDescriptorBuilder.build());
+                        pollForUpdatedTableDescriptor(admin,
+                                tableDescriptorBuilder.build(), tableName.getName());
                 }
-            } catch (InterruptedException | TimeoutException ite) {
-                throw new SQLException(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
-                    + " Upgrade is not confirmed");
+                } catch (InterruptedException | TimeoutException ite) {
+                    throw new SQLException(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME
+                            + " Upgrade is not confirmed");
+                }
+                try{
+                    TableDescriptor td;
+                    TableName tableName = SchemaUtil.getPhysicalTableName(
+                            PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME, props);
+                    td = admin.getDescriptor(tableName);
+                    TableDescriptorBuilder tableDescriptorBuilder =
+                            TableDescriptorBuilder.newBuilder(td);
+                    if (updateAndConfirmSplitPolicyForTask(
+                            tableDescriptorBuilder)) {
+                        admin.modifyTable(tableDescriptorBuilder.build());
+                        pollForUpdatedTableDescriptor(admin,
+                                tableDescriptorBuilder.build(), tableName.getName());
+                    }
+                } catch (InterruptedException | TimeoutException ite) {
+                    throw new SQLException(PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME
+                            + " Upgrade is not confirmed");
+                }
+            } catch (Exception ex) {
+                throw ex;
             }
         }
         return metaConnection;

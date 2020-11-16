@@ -62,8 +62,8 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
-                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
@@ -146,7 +146,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                             TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
 
             Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            Task.addTask(conn.unwrap(PhoenixConnection.class), PTable.TaskType.INDEX_REBUILD,
+            Task.addTaskQueue(conn.unwrap(PhoenixConnection.class), PTable.TaskType.INDEX_REBUILD,
                     TENANT1, null, viewName,
                     PTable.TaskStatus.CREATED.toString(), data, null, startTs, null, true);
             task.run();
@@ -159,7 +159,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(numOfValues, count);
         } finally {
             if (conn != null) {
-                conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
+                conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME
                         + " WHERE TABLE_NAME ='" + viewName  + "'");
                 conn.commit();
                 conn.close();
@@ -179,7 +179,7 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
         do {
             Thread.sleep(2000);
             String stmt = "SELECT * " +
-                    " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                    " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME +
                     " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = " +
                     taskType.getSerializedValue();
             if (expectedTableName != null) {

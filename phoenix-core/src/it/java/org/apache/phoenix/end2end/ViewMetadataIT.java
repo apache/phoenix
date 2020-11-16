@@ -24,7 +24,8 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
@@ -38,6 +39,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -134,8 +136,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
-                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }
@@ -726,7 +728,13 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     private void validateSystemTaskContainsCompletedDropChildViewsTasks(Connection conn,
             String schemaName, String tableName, int numTasks) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + SYSTEM_TASK_NAME +
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + SYSTEM_TASK_QUEUE_NAME +
+                " WHERE " + TASK_TYPE + "=" + DROP_CHILD_VIEWS.getSerializedValue() +
+                " AND " + TENANT_ID + " IS NULL" +
+                " AND " + TABLE_SCHEM + "='" + schemaName +
+                "' AND " + TABLE_NAME + "='" + tableName + "'");
+        assertFalse("Task should have been removed from the task queue", rs.next());
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + SYSTEM_TASK_HISTORY_NAME +
                 " WHERE " + TASK_TYPE + "=" + DROP_CHILD_VIEWS.getSerializedValue() +
                 " AND " + TENANT_ID + " IS NULL" +
                 " AND " + TABLE_SCHEM + "='" + schemaName +
