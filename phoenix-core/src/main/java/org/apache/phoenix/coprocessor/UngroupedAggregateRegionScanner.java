@@ -41,8 +41,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Ints;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
