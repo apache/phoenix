@@ -800,7 +800,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
     private void upsertDataAndRunValidations(int numRowsToUpsert,
             ExpectedTestResults expectedTestResults, DataWriter dataWriter,
             SchemaBuilder schemaBuilder, List<Integer> overriddenColumnsPositions)
-            throws IOException, SQLException {
+            throws Exception {
 
         //Insert for the first time and validate them.
         validateEmptyColumnsAreUpdated(upsertData(dataWriter, numRowsToUpsert), expectedTestResults,
@@ -820,7 +820,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
     private void upsertDataAndRunValidations(int numRowsToUpsert,
             ExpectedTestResults expectedTestResults, DataWriter dataWriter,
             SchemaBuilder schemaBuilder, List<Integer> overriddenColumnsPositions,
-            List<Integer> indexedCFPositions) throws IOException, SQLException {
+            List<Integer> indexedCFPositions) throws Exception {
 
         //Insert for the first time and validate them.
         validateEmptyColumnsAreUpdated(upsertData(dataWriter, numRowsToUpsert), expectedTestResults,
@@ -837,7 +837,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
                 schemaBuilder, indexedCFPositions);
     }
 
-    private long upsertData(DataWriter dataWriter, int numRowsToUpsert) throws SQLException {
+    private long upsertData(DataWriter dataWriter, int numRowsToUpsert) throws Exception {
         // Upsert rows
         long earliestTimestamp = System.currentTimeMillis();
         for (int i = 0; i < numRowsToUpsert; i++) {

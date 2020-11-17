@@ -16,18 +16,26 @@
  * limitations under the License.
  */
 package org.apache.phoenix.util;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertArrayEquals;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
@@ -36,6 +44,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
@@ -45,6 +54,12 @@ import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
 
 /**
  * Test the SetKey method in ScanUtil.
@@ -464,6 +479,80 @@ public class ScanUtilTest {
 
             assertArrayEquals(expectedStartKey, startKey);
             assertArrayEquals(expectedEndKey, endKey);
+        }
+    }
+
+    public static class PhoenixTTLScanUtilTest extends BaseConnectionlessQueryTest {
+
+        @Test
+        public void testPhoenixTTLUtilMethods() throws SQLException {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            try (Connection conn = driver.connect(getUrl(), props)) {
+                PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+                PTable table = phxConn.getTable(new PTableKey(null, ATABLE_NAME));
+
+                byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
+                byte[] emptyColumnName = table.getEncodingScheme()
+                        == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                        QueryConstants.EMPTY_COLUMN_BYTES :
+                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+
+                String row = "test.row";
+                long timestamp42 = 42L;
+                KeyValue.Type type42 = KeyValue.Type.Put;
+                String value42 = "test.value.42";
+                long seqId42 = 1042L;
+
+                List<Cell> cellList = Lists.newArrayList();
+                Cell cell42 = CellUtil.createCell(Bytes.toBytes(row),
+                        emptyColumnFamilyName, emptyColumnName,
+                        timestamp42, type42.getCode(), Bytes.toBytes(value42), seqId42);
+                // Add cell to the cell list
+                cellList.add(cell42);
+
+                long timestamp43 = 43L;
+                String columnName = "test_column";
+                KeyValue.Type type43 = KeyValue.Type.Put;
+                String value43 = "test.value.43";
+                long seqId43 = 1043L;
+                Cell cell43 = CellUtil.createCell(Bytes.toBytes(row),
+                        emptyColumnFamilyName, Bytes.toBytes(columnName),
+                        timestamp43, type43.getCode(), Bytes.toBytes(value43), seqId43);
+                // Add cell to the cell list
+                cellList.add(cell43);
+
+                long timestamp44 = 44L;
+                Scan testScan = new Scan();
+                testScan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL, Bytes.toBytes(1L));
+                // Test isTTLExpired
+                Assert.assertTrue(ScanUtil.isTTLExpired(cell42, testScan, timestamp44));
+                Assert.assertFalse(ScanUtil.isTTLExpired(cell43, testScan, timestamp44));
+                // Test isEmptyColumn
+                Assert.assertTrue(ScanUtil.isEmptyColumn(cell42, emptyColumnFamilyName, emptyColumnName));
+                Assert.assertFalse(ScanUtil.isEmptyColumn(cell43, emptyColumnFamilyName, emptyColumnName));
+                // Test getMaxTimestamp
+                Assert.assertEquals(timestamp43, ScanUtil.getMaxTimestamp(cellList));
+            }
+        }
+
+        @Test
+        public void testIsServerSideMaskingPropertySet() throws Exception {
+            // Test property is not set
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, "false");
+            PhoenixTestDriver driver1 = new PhoenixTestDriver(ReadOnlyProps.EMPTY_PROPS.addAll(props));
+            try (Connection conn = driver1.connect(getUrl(), props)) {
+                PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+                Assert.assertFalse(ScanUtil.isServerSideMaskingEnabled(phxConn));
+            }
+
+            // Test property is set
+            props.setProperty(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, "true");
+            PhoenixTestDriver driver2 = new PhoenixTestDriver(ReadOnlyProps.EMPTY_PROPS.addAll(props));
+            try (Connection conn = driver2.connect(getUrl(), props)) {
+                PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+                Assert.assertTrue(ScanUtil.isServerSideMaskingEnabled(phxConn));
+            }
         }
     }
 }
