@@ -32,7 +32,6 @@ import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ArrayAllComparisonNode;
 import org.apache.phoenix.parse.ArrayAnyComparisonNode;
-import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.CompoundParseNode;
@@ -134,25 +133,167 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         });
     }
 
+    /**
+     * <pre>
+     * Rewrite the In Subquery to semi/anti/left join for both NonCorrelated and Correlated subquery.
+     *
+     * 1.If the {@link InParseNode} is the only node in where clause or is the ANDed part of the where clause,
+     *   then we would rewrite the In Subquery to semi/anti join:
+     *   For  NonCorrelated subquery, an example is:
+     *    SELECT item_id, name FROM item i WHERE i.item_id IN
+     *    (SELECT item_id FROM order o  where o.price > 8)
+     *
+     *    The above sql would be rewritten as:
+     *    SELECT ITEM_ID,NAME FROM item I  Semi JOIN
+     *    (SELECT DISTINCT 1 $35,ITEM_ID $36 FROM order O  WHERE O.PRICE > 8) $34
+     *     ON (I.ITEM_ID = $34.$36)
+     *
+     *   For Correlated subquery, an example is:
+     *    SELECT item_id, name FROM item i WHERE i.item_id IN
+     *    (SELECT item_id FROM order o  where o.price = i.price)
+     *
+     *    The above sql would be rewritten as:
+     *    SELECT ITEM_ID,NAME FROM item I  Semi JOIN
+     *    (SELECT DISTINCT 1 $3,ITEM_ID $4,O.PRICE $2 FROM order O ) $1
+     *    ON ((I.ITEM_ID = $1.$4 AND $1.$2 = I.PRICE))
+     *
+     * 2.If the {@link InParseNode} is the ORed part of the where clause,then we would rewrite the In Subquery to
+     *   Left Join.
+     *
+     *   For  NonCorrelated subquery, an example is:
+     *    SELECT item_id, name FROM item i WHERE i.item_id IN
+     *    (SELECT max(item_id) FROM order o  where o.price > 8 group by o.customer_id,o.item_id) or i.discount1 > 10
+     *
+     *    The above sql would be rewritten as:
+     *    SELECT ITEM_ID,NAME FROM item I  Left JOIN
+     *    (SELECT DISTINCT 1 $56, MAX(ITEM_ID) $57 FROM order O  WHERE O.PRICE > 8 GROUP BY O.CUSTOMER_ID,O.ITEM_ID) $55
+     *    ON (I.ITEM_ID = $55.$57) WHERE ($55.$56 IS NOT NULL  OR I.DISCOUNT1 > 10)
+     *
+     *   For  Correlated subquery, an example is:
+     *     SELECT item_id, name FROM item i WHERE i.item_id IN
+     *     (SELECT max(item_id) FROM order o  where o.price = i.price group by o.customer_id) or i.discount1 > 10;
+     *
+     *     The above sql would be rewritten as:
+     *     SELECT ITEM_ID,NAME FROM item I  Left JOIN
+     *     (SELECT DISTINCT 1 $28, MAX(ITEM_ID) $29,O.PRICE $27 FROM order O  GROUP BY O.PRICE,O.CUSTOMER_ID) $26
+     *     ON ((I.ITEM_ID = $26.$29 AND $26.$27 = I.PRICE)) WHERE ($26.$28 IS NOT NULL  OR I.DISCOUNT1 > 10)
+     * </pre>
+     */
     @Override
-    public ParseNode visitLeave(InParseNode node, List<ParseNode> l) throws SQLException {
-        boolean isTopNode = topNode == node;
+    public ParseNode visitLeave(InParseNode inParseNode, List<ParseNode> childParseNodes) throws SQLException {
+        boolean isTopNode = topNode == inParseNode;
         if (isTopNode) {
             topNode = null;
         }
-        
-        SubqueryParseNode subqueryNode = (SubqueryParseNode) l.get(1);
-        SelectStatement subquery = fixSubqueryStatement(subqueryNode.getSelectNode());
-        String rhsTableAlias = ParseNodeFactory.createTempAlias();
-        List<AliasedNode> selectNodes = fixAliasedNodes(subquery.getSelect(), true);
-        subquery = NODE_FACTORY.select(subquery, !node.isSubqueryDistinct(), selectNodes);
-        ParseNode onNode = getJoinConditionNode(l.get(0), selectNodes, rhsTableAlias);
-        TableNode rhsTable = NODE_FACTORY.derivedTable(rhsTableAlias, subquery);
-        JoinType joinType = isTopNode ? (node.isNegate() ? JoinType.Anti : JoinType.Semi) : JoinType.Left;
-        ParseNode ret = isTopNode ? null : NODE_FACTORY.isNull(NODE_FACTORY.column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null), !node.isNegate());
-        tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, false);
-        
-        return ret;
+
+        SubqueryParseNode subqueryParseNode = (SubqueryParseNode) childParseNodes.get(1);
+        SelectStatement subquerySelectStatementToUse = fixSubqueryStatement(subqueryParseNode.getSelectNode());
+        String subqueryTableTempAlias = ParseNodeFactory.createTempAlias();
+
+        JoinConditionExtractor joinConditionExtractor = new JoinConditionExtractor(
+                subquerySelectStatementToUse,
+                resolver,
+                connection,
+                subqueryTableTempAlias);
+
+        List<AliasedNode> newSubquerySelectAliasedNodes = null;
+        ParseNode extractedJoinConditionParseNode = null;
+        int extractedSelectAliasNodeCount = 0;
+        List<AliasedNode> oldSubqueryAliasedNodes = subquerySelectStatementToUse.getSelect();
+        ParseNode whereParseNodeAfterExtract =
+                subquerySelectStatementToUse.getWhere() == null ?
+                null :
+                subquerySelectStatementToUse.getWhere().accept(joinConditionExtractor);
+        if (whereParseNodeAfterExtract == subquerySelectStatementToUse.getWhere()) {
+            /**
+             * It is an NonCorrelated subquery.
+             */
+            newSubquerySelectAliasedNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(
+                    oldSubqueryAliasedNodes.size() + 1);
+
+            newSubquerySelectAliasedNodes.add(
+                    NODE_FACTORY.aliasedNode(
+                        ParseNodeFactory.createTempAlias(),
+                        LiteralParseNode.ONE));
+            this.addNewAliasedNodes(newSubquerySelectAliasedNodes, oldSubqueryAliasedNodes);
+            subquerySelectStatementToUse = NODE_FACTORY.select(
+                    subquerySelectStatementToUse,
+                    !inParseNode.isSubqueryDistinct(),
+                    newSubquerySelectAliasedNodes,
+                    whereParseNodeAfterExtract);
+        } else {
+            /**
+             * It is an Correlated subquery.
+             */
+            List<AliasedNode> extractedAdditionalSelectAliasNodes =
+                    joinConditionExtractor.getAdditionalSelectNodes();
+            extractedSelectAliasNodeCount = extractedAdditionalSelectAliasNodes.size();
+            newSubquerySelectAliasedNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(
+                    oldSubqueryAliasedNodes.size() + 1 +
+                    extractedAdditionalSelectAliasNodes.size());
+
+            newSubquerySelectAliasedNodes.add(NODE_FACTORY.aliasedNode(
+                    ParseNodeFactory.createTempAlias(),
+                    LiteralParseNode.ONE));
+            this.addNewAliasedNodes(newSubquerySelectAliasedNodes, oldSubqueryAliasedNodes);
+            newSubquerySelectAliasedNodes.addAll(extractedAdditionalSelectAliasNodes);
+            extractedJoinConditionParseNode = joinConditionExtractor.getJoinCondition();
+
+            boolean isAggregate = subquerySelectStatementToUse.isAggregate();
+            if(!isAggregate) {
+                subquerySelectStatementToUse =
+                        NODE_FACTORY.select(
+                                subquerySelectStatementToUse,
+                                !inParseNode.isSubqueryDistinct(),
+                                newSubquerySelectAliasedNodes,
+                                whereParseNodeAfterExtract);
+            } else {
+                /**
+                 * If exists AggregateFunction,we must add the correlated join condition to both the
+                 * groupBy clause and select lists of the subquery.
+                 */
+                List<ParseNode> newGroupByParseNodes = this.createNewGroupByParseNodes(
+                        extractedAdditionalSelectAliasNodes,
+                        subquerySelectStatementToUse);
+
+                subquerySelectStatementToUse = NODE_FACTORY.select(
+                        subquerySelectStatementToUse,
+                        !inParseNode.isSubqueryDistinct(),
+                        newSubquerySelectAliasedNodes,
+                        whereParseNodeAfterExtract,
+                        newGroupByParseNodes,
+                        true);
+            }
+        }
+
+        ParseNode joinOnConditionParseNode = getJoinConditionNodeForInSubquery(
+                childParseNodes.get(0),
+                newSubquerySelectAliasedNodes,
+                subqueryTableTempAlias,
+                extractedJoinConditionParseNode,
+                extractedSelectAliasNodeCount);
+        TableNode rhsTableNode = NODE_FACTORY.derivedTable(
+                subqueryTableTempAlias,
+                subquerySelectStatementToUse);
+        JoinType joinType = isTopNode ?
+                (inParseNode.isNegate() ? JoinType.Anti : JoinType.Semi) :
+                JoinType.Left;
+        ParseNode resultWhereParseNode = isTopNode ?
+                null :
+                NODE_FACTORY.isNull(
+                        NODE_FACTORY.column(
+                                NODE_FACTORY.table(null, subqueryTableTempAlias),
+                                newSubquerySelectAliasedNodes.get(0).getAlias(),
+                                null),
+                        !inParseNode.isNegate());
+        tableNode = NODE_FACTORY.join(
+                joinType,
+                tableNode,
+                rhsTableNode,
+                joinOnConditionParseNode,
+                false);
+
+        return resultWhereParseNode;
     }
 
     @Override
@@ -236,11 +377,9 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         if (!isAggregate) {
             subquery = NODE_FACTORY.select(subquery, subquery.isDistinct(), selectNodes, where);            
         } else {
-            List<ParseNode> groupbyNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + subquery.getGroupBy().size());
-            for (AliasedNode aliasedNode : additionalSelectNodes) {
-                groupbyNodes.add(aliasedNode.getNode());
-            }
-            groupbyNodes.addAll(subquery.getGroupBy());
+            List<ParseNode> groupbyNodes =  this.createNewGroupByParseNodes(
+                    additionalSelectNodes,
+                    subquery);
             subquery = NODE_FACTORY.select(subquery, subquery.isDistinct(), selectNodes, where, groupbyNodes, true);
         }
         
@@ -299,7 +438,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         String derivedTableAlias = null;
         if (!subquery.getGroupBy().isEmpty()) {
             derivedTableAlias = ParseNodeFactory.createTempAlias();
-            aliasedNodes = fixAliasedNodes(aliasedNodes, false);
+            aliasedNodes = createNewAliasedNodes(aliasedNodes);
         }
         
         if (aliasedNodes.size() == 1) {
@@ -373,42 +512,112 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 select.getBindCount(), false, false, Collections.<SelectStatement> emptyList(),
                 select.getUdfParseNodes());
     }
-    
-    private List<AliasedNode> fixAliasedNodes(List<AliasedNode> nodes, boolean addSelectOne) {
-        List<AliasedNode> normNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(nodes.size() + (addSelectOne ? 1 : 0));
-        if (addSelectOne) {
-            normNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), LiteralParseNode.ONE));
-        }
-        for (int i = 0; i < nodes.size(); i++) {
-            AliasedNode aliasedNode = nodes.get(i);
-            normNodes.add(NODE_FACTORY.aliasedNode(
-                    ParseNodeFactory.createTempAlias(), aliasedNode.getNode()));
+
+    /**
+     * Create new {@link AliasedNode}s by every {@link ParseNode} in subquerySelectAliasedNodes and generate new aliases
+     * by {@link ParseNodeFactory#createTempAlias}.
+     * and generate new Aliases for subquerySelectAliasedNodes,
+     * @param subquerySelectAliasedNodes
+     * @param addSelectOne
+     * @return
+     */
+    private List<AliasedNode> createNewAliasedNodes(List<AliasedNode> subquerySelectAliasedNodes) {
+        List<AliasedNode> newAliasedNodes = Lists.<AliasedNode> newArrayListWithExpectedSize(
+                subquerySelectAliasedNodes.size());
+
+        this.addNewAliasedNodes(newAliasedNodes, subquerySelectAliasedNodes);
+        return newAliasedNodes;
+    }
+
+    /**
+     * Add every {@link ParseNode} in oldSelectAliasedNodes to newSelectAliasedNodes and generate new aliases by
+     * {@link ParseNodeFactory#createTempAlias}.
+     * @param oldSelectAliasedNodes
+     * @param addSelectOne
+     * @return
+     */
+    private void addNewAliasedNodes(List<AliasedNode> newSelectAliasedNodes, List<AliasedNode> oldSelectAliasedNodes) {
+        for (int index = 0; index < oldSelectAliasedNodes.size(); index++) {
+            AliasedNode oldSelectAliasedNode = oldSelectAliasedNodes.get(index);
+            newSelectAliasedNodes.add(NODE_FACTORY.aliasedNode(
+                    ParseNodeFactory.createTempAlias(),
+                    oldSelectAliasedNode.getNode()));
         }
         
-        return normNodes;
     }
-    
-    private ParseNode getJoinConditionNode(ParseNode lhs, List<AliasedNode> rhs, String rhsTableAlias) throws SQLException {
-        List<ParseNode> lhsNodes;        
-        if (lhs instanceof RowValueConstructorParseNode) {
-            lhsNodes = ((RowValueConstructorParseNode) lhs).getChildren();
+
+    /**
+     * Get the join conditions in order to rewrite InSubquery to Join.
+     * @param lhsParseNode
+     * @param rhsSubquerySelectAliasedNodes the first element is {@link LiteralParseNode#ONE}.
+     * @param rhsSubqueryTableAlias
+     * @param extractedJoinConditionParseNode For NonCorrelated subquery, it is null.
+     * @param extractedSelectAliasNodeCount For NonCorrelated subquery, it is 0.
+     * @throws SQLException
+     */
+    private ParseNode getJoinConditionNodeForInSubquery(
+            ParseNode lhsParseNode,
+            List<AliasedNode> rhsSubquerySelectAliasedNodes,
+            String rhsSubqueryTableAlias,
+            ParseNode extractedJoinConditionParseNode,
+            int extractedSelectAliasNodeCount) throws SQLException {
+        List<ParseNode> lhsParseNodes;
+        if (lhsParseNode instanceof RowValueConstructorParseNode) {
+            lhsParseNodes = ((RowValueConstructorParseNode) lhsParseNode).getChildren();
         } else {
-            lhsNodes = Collections.singletonList(lhs);
+            lhsParseNodes = Collections.singletonList(lhsParseNode);
         }
-        if (lhsNodes.size() != (rhs.size() - 1))
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS).build().buildException();
-        
-        int count = lhsNodes.size();
-        TableName rhsTableName = NODE_FACTORY.table(null, rhsTableAlias);
-        List<ParseNode> equalNodes = Lists.newArrayListWithExpectedSize(count);
-        for (int i = 0; i < count; i++) {
-            ParseNode rhsNode = NODE_FACTORY.column(rhsTableName, rhs.get(i + 1).getAlias(), null);
-            equalNodes.add(NODE_FACTORY.equal(lhsNodes.get(i), rhsNode));
+
+        if (lhsParseNodes.size() !=
+                (rhsSubquerySelectAliasedNodes.size() - 1 - extractedSelectAliasNodeCount)) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS)
+                    .build().buildException();
         }
-        
-        return count == 1 ? equalNodes.get(0) : NODE_FACTORY.and(equalNodes);
+
+        int count = lhsParseNodes.size();
+        TableName rhsSubqueryTableName = NODE_FACTORY.table(null, rhsSubqueryTableAlias);
+        List<ParseNode> joinEqualParseNodes = Lists.newArrayListWithExpectedSize(
+                count + (extractedJoinConditionParseNode == null ? 0: 1));
+        for (int index = 0; index < count; index++) {
+            /**
+             * The +1 is to skip the first {@link LiteralParseNode#ONE}
+             */
+            ParseNode rhsNode = NODE_FACTORY.column(
+                    rhsSubqueryTableName,
+                    rhsSubquerySelectAliasedNodes.get(index + 1).getAlias(),
+                    null);
+            joinEqualParseNodes.add(NODE_FACTORY.equal(lhsParseNodes.get(index), rhsNode));
+        }
+
+        if(extractedJoinConditionParseNode != null) {
+            joinEqualParseNodes.add(extractedJoinConditionParseNode);
+        }
+
+        return joinEqualParseNodes.size() == 1 ? joinEqualParseNodes.get(0) : NODE_FACTORY.and(joinEqualParseNodes);
     }
     
+    /**
+     * Combine every {@link ParseNode} in  extractedAdditionalSelectAliasNodes and GroupBy clause of the
+     * subquerySelectStatementToUse to get new GroupBy ParseNodes.
+     * @param extractedAdditionalSelectAliasNodes
+     * @param subquerySelectStatementToUse
+     * @return
+     */
+    private List<ParseNode> createNewGroupByParseNodes(
+            List<AliasedNode> extractedAdditionalSelectAliasNodes,
+            SelectStatement subquerySelectStatementToUse) {
+        List<ParseNode> newGroupByParseNodes = Lists.newArrayListWithExpectedSize(
+                extractedAdditionalSelectAliasNodes.size() +
+                subquerySelectStatementToUse.getGroupBy().size());
+
+        for (AliasedNode aliasedNode : extractedAdditionalSelectAliasNodes) {
+            newGroupByParseNodes.add(aliasedNode.getNode());
+        }
+        newGroupByParseNodes.addAll(subquerySelectStatementToUse.getGroupBy());
+        return newGroupByParseNodes;
+    }
+
     private static class JoinConditionExtractor extends AndRewriterBooleanParseNodeVisitor {
         private final TableName tableName;
         private ColumnResolveVisitor columnResolveVisitor;
