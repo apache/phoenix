@@ -431,6 +431,8 @@ public enum SQLExceptionCode {
             PTable.LinkType.CHILD_TABLE + ") for view"),
     TABLE_NOT_IN_REGION(1145, "XCL45", "No modifications allowed on this table. "
     + "Table not in this region."),
+    UNABLE_TO_UPSERT_TASK(1146, "XCL46",
+        "Error upserting records in SYSTEM.TASK table"),
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */

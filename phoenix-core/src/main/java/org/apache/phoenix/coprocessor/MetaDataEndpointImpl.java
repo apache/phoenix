@@ -215,6 +215,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -2293,13 +2294,20 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         try (PhoenixConnection conn =
                                 QueryUtil.getConnectionOnServer(env.getConfiguration())
                                     .unwrap(PhoenixConnection.class)) {
-                            Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
-                                Bytes.toString(tenantIdBytes),
-                                Bytes.toString(schemaName),
-                                Bytes.toString(tableOrViewName),
-                                PTable.TaskStatus.CREATED.toString(),
-                                null, null, null, null,
-                                this.accessCheckEnabled);
+                            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                                .setConn(conn)
+                                .setTaskType(PTable.TaskType.DROP_CHILD_VIEWS)
+                                .setTenantId(Bytes.toString(tenantIdBytes))
+                                .setSchemaName(Bytes.toString(schemaName))
+                                .setTableName(Bytes.toString(tableOrViewName))
+                                .setTaskStatus(
+                                    PTable.TaskStatus.CREATED.toString())
+                                .setData(null)
+                                .setPriority(null)
+                                .setStartTs(null)
+                                .setEndTs(null)
+                                .setAccessCheckEnabled(this.accessCheckEnabled)
+                                .build());
                         } catch (Throwable t) {
                             LOGGER.error("Adding a task to drop child views failed!", t);
                         }
