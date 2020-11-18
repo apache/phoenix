@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
@@ -121,7 +123,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
@@ -138,6 +139,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
@@ -149,7 +151,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission;
@@ -172,6 +173,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -229,7 +231,6 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme.QualifierOutOfRangeException;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.Task;
@@ -4684,11 +4685,32 @@ public class MetaDataClient {
                                 }};
                                 try {
                                     String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
-                                    Task.addTask(connection, PTable.TaskType.INDEX_REBUILD,
-                                            tenantId, schemaName,
-                                            dataTableName, PTable.TaskStatus.CREATED.toString(),
-                                            json, null, ts, null, true);
-                                    connection.commit();
+                                    List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                                        .setConn(connection)
+                                        .setTaskType(
+                                            PTable.TaskType.INDEX_REBUILD)
+                                        .setTenantId(tenantId)
+                                        .setSchemaName(schemaName)
+                                        .setTableName(dataTableName)
+                                        .setTaskStatus(
+                                            PTable.TaskStatus.CREATED.toString())
+                                        .setData(json)
+                                        .setPriority(null)
+                                        .setStartTs(ts)
+                                        .setEndTs(null)
+                                        .setAccessCheckEnabled(true)
+                                        .build());
+                                    byte[] rowKey = sysTaskUpsertMutations
+                                        .get(0).getRow();
+                                    MetaDataMutationResult metaDataMutationResult =
+                                        Task.taskMetaDataCoprocessorExec(connection, rowKey,
+                                            new TaskMetaDataServiceCallBack(sysTaskUpsertMutations));
+                                    if (MutationCode.UNABLE_TO_UPSERT_TASK.equals(
+                                            metaDataMutationResult.getMutationCode())) {
+                                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_UPSERT_TASK)
+                                          .setSchemaName(SYSTEM_SCHEMA_NAME)
+                                          .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+                                    }
                                 } catch (IOException e) {
                                     throw new SQLException("Exception happened while adding a System.Task" + e.toString());
                                 }

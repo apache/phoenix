@@ -27,7 +27,9 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -127,12 +129,12 @@ public class SystemTablesUpgradeIT extends BaseTest {
         // SystemTaskSplitPolicy (which is extending DisabledRegionSplitPolicy
         // as of this writing)
         try (Admin admin = services.getAdmin()) {
-            String taskSplitPolicy = admin
-                .getDescriptor(TableName.valueOf(
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
-                .getRegionSplitPolicyClassName();
+            TableDescriptor td = admin.getDescriptor(TableName.valueOf(
+                PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
+            String taskSplitPolicy = td.getRegionSplitPolicyClassName();
             assertEquals(SystemTaskSplitPolicy.class.getName(),
                 taskSplitPolicy);
+            assertTrue(td.hasCoprocessor(TaskMetaDataEndpoint.class.getName()));
         }
     }
 

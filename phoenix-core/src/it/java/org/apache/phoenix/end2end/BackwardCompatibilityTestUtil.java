@@ -83,6 +83,9 @@ public final class BackwardCompatibilityTestUtil {
     public static final String QUERY_DELETE = QUERY_PREFIX + DELETE;
     public static final String QUERY_SELECT_AND_DROP_TABLE = QUERY_PREFIX + SELECT_AND_DROP_TABLE;
     public static final String QUERY_CREATE_DIVERGED_VIEW = QUERY_PREFIX + CREATE_DIVERGED_VIEW;
+    public static final String INDEX_REBUILD_ASYNC = "index_rebuild_async";
+    public static final String QUERY_INDEX_REBUILD_ASYNC = QUERY_PREFIX
+        + INDEX_REBUILD_ASYNC;
     public static final String MVN_HOME = "maven.home";
     public static final String JAVA_TMP_DIR = "java.io.tmpdir";
 

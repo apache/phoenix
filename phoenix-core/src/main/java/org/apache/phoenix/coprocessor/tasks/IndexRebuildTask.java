@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor.tasks;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -106,10 +107,19 @@ public class IndexRebuildTask extends BaseTask  {
             Job job = indexToolRes.getValue();
 
             ((ObjectNode) jsonNode).put(JOB_ID, job.getJobID().toString());
-            Task.addTask(conn.unwrap(PhoenixConnection.class ), taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
-                    taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
-                    jsonNode.toString(), taskRecord.getPriority(),
-                    taskRecord.getTimeStamp(), null, true);
+            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                .setConn(conn.unwrap(PhoenixConnection.class))
+                .setTaskType(taskRecord.getTaskType())
+                .setTenantId(taskRecord.getTenantId())
+                .setSchemaName(taskRecord.getSchemaName())
+                .setTableName(taskRecord.getTableName())
+                .setTaskStatus(PTable.TaskStatus.STARTED.toString())
+                .setData(jsonNode.toString())
+                .setPriority(taskRecord.getPriority())
+                .setStartTs(taskRecord.getTimeStamp())
+                .setEndTs(null)
+                .setAccessCheckEnabled(true)
+                .build());
             // It will take some time to finish, so we will check the status in a separate task.
             return null;
         }

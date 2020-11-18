@@ -21,10 +21,12 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_DIVERGED_VIEW;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.computeClientVersions;
@@ -34,6 +36,9 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradePr
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradeProps.SET_MAX_LOOK_BACK_AGE;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -44,6 +49,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
@@ -308,18 +314,67 @@ public class BackwardCompatibilityIT {
     }
 
     @Test
-    public void testUpdatedSplitPolicyForSysTask() throws Exception {
-        executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW, zkQuorum);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW, url, NONE);
-        try (org.apache.hadoop.hbase.client.Connection conn =
-                hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
+    public void testSplitPolicyAndCoprocessorForSysTask() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion,
+            CREATE_DIVERGED_VIEW, zkQuorum);
+
+        String[] versionArr = compatibleClientVersion.split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+        org.apache.hadoop.hbase.client.Connection conn = null;
+        Admin admin = null;
+        // if connected with client < 4.15, SYSTEM.TASK does not exist
+        // if connected with client 4.15, SYSTEM.TASK exists without any
+        // split policy and also TaskMetaDataEndpoint coprocessor would not
+        // exist
+        if (majorVersion == 4 && minorVersion == 15) {
+            conn = hbaseTestUtil.getConnection();
+            admin = conn.getAdmin();
             TableDescriptor tableDescriptor = admin.getDescriptor(
                 TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
-            assertEquals("split policy not updated with compatible client version: "
+            assertNull("split policy should be null with compatible client version: "
+                + compatibleClientVersion, tableDescriptor.getRegionSplitPolicyClassName());
+            assertFalse("Coprocessor " + TaskMetaDataEndpoint.class.getName()
+                + " should not have been added with compatible client version: "
                 + compatibleClientVersion,
-                tableDescriptor.getRegionSplitPolicyClassName(),
-                SystemTaskSplitPolicy.class.getName());
+                tableDescriptor.hasCoprocessor(TaskMetaDataEndpoint.class.getName()));
         }
+
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW, url, NONE);
+
+        if (conn == null) {
+            conn = hbaseTestUtil.getConnection();
+            admin = conn.getAdmin();
+        }
+        // connect with client > 4.15, and we have new split policy and new
+        // coprocessor loaded
+        TableDescriptor tableDescriptor = admin.getDescriptor(
+            TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
+        assertEquals("split policy not updated with compatible client version: "
+            + compatibleClientVersion,
+            tableDescriptor.getRegionSplitPolicyClassName(),
+            SystemTaskSplitPolicy.class.getName());
+        assertTrue("Coprocessor " + TaskMetaDataEndpoint.class.getName()
+            + " has not been added with compatible client version: "
+            + compatibleClientVersion, tableDescriptor.hasCoprocessor(
+            TaskMetaDataEndpoint.class.getName()));
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
+        admin.close();
+        conn.close();
     }
+
+    @Test
+    public void testSystemTaskCreationWithIndexAsyncRebuild() throws Exception {
+        String[] versionArr = compatibleClientVersion.split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+        // index async rebuild support min version check
+        if (majorVersion > 4 || (majorVersion == 4 && minorVersion >= 15)) {
+            executeQueryWithClientVersion(compatibleClientVersion,
+                INDEX_REBUILD_ASYNC, zkQuorum);
+            executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
+            assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
+        }
+    }
+
 }

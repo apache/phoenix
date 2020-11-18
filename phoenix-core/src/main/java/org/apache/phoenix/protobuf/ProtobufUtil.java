@@ -34,6 +34,8 @@ import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateVi
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
+import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos
+    .TaskMutateRequest;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.protobuf.ByteString;
@@ -105,6 +107,11 @@ public class ProtobufUtil {
     }
 
     public static List<Mutation> getMutations(MetaDataProtos.CreateSchemaRequest request) throws IOException {
+        return getMutations(request.getTableMetadataMutationsList());
+    }
+
+    public static List<Mutation> getMutations(TaskMutateRequest request)
+            throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
     }
 
