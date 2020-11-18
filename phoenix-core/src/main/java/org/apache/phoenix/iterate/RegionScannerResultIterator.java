@@ -23,15 +23,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ServerUtil;
+
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 
 public class RegionScannerResultIterator extends BaseResultIterator {
@@ -62,6 +66,9 @@ public class RegionScannerResultIterator extends BaseResultIterator {
 
                 if (!hasMore && results.isEmpty()) {
                     return null;
+                }
+                if (isDummy(results)) {
+                    return new ResultTuple(Result.create(results));
                 }
                 // We instantiate a new tuple because in all cases currently we hang on to it
                 // (i.e. to compute and hold onto the TopN).

@@ -23,6 +23,10 @@ import java.util.List;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 
 /**
  * Iterates through tuples up to a limit
@@ -32,17 +36,27 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class OffsetResultIterator extends DelegateResultIterator {
     private int rowCount;
     private int offset;
+    private long pageSizeMs = Long.MAX_VALUE;
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
         this.offset = offset == null ? -1 : offset;
     }
 
+    public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs) {
+        this(delegate, offset);
+        this.pageSizeMs = pageSizeMs;
+    }
     @Override
     public Tuple next() throws SQLException {
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (rowCount < offset) {
-            if (super.next() == null) { return null; }
+            Tuple tuple = super.next();
+            if (tuple == null) { return null; }
             rowCount++;
+            if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+                return getDummyTuple(tuple);
+            }
         }
         return super.next();
     }

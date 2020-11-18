@@ -92,4 +92,14 @@ public class DelegateFilter extends FilterBase {
     public String toString() {
         return delegate.toString();
     }
+
+    @Override
+    public void setReversed(boolean reversed) {
+        delegate.setReversed(reversed);
+    }
+
+    @Override
+    public boolean isReversed() {
+        return delegate.isReversed();
+    }
 }

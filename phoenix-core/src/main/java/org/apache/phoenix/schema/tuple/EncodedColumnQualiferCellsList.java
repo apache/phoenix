@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.tuple;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
@@ -136,6 +137,12 @@ public class EncodedColumnQualiferCellsList implements List<Cell> {
     public boolean add(Cell e) {
         if (e == null) {
             throw new NullPointerException();
+        }
+        if (isDummy(e)) {
+            array[0] = e;
+            firstNonNullElementIdx = 0;
+            numNonNullElements = 1;
+            return true;
         }
         int columnQualifier =
                 encodingScheme.decode(e.getQualifierArray(), e.getQualifierOffset(),

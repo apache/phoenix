@@ -26,9 +26,11 @@ import java.util.Queue;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -52,8 +54,13 @@ import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
+
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 public class HashJoinRegionScanner implements RegionScanner {
 
@@ -72,20 +79,21 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final boolean useQualifierAsListIndex;
     private final boolean useNewValueColumnQualifier;
     private final boolean addArrayCell;
+    private final long pageSizeMs;
 
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector,
+    public HashJoinRegionScanner(RegionScanner scanner, Scan scan, TupleProjector projector,
                                  HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
                                  RegionCoprocessorEnvironment env, boolean useQualifierAsIndex,
                                  boolean useNewValueColumnQualifier)
         throws IOException {
 
-        this(env, scanner, null, null, projector, joinInfo,
+        this(env, scanner, scan, null, null, projector, joinInfo,
              tenantId, useQualifierAsIndex, useNewValueColumnQualifier);
     }
 
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionCoprocessorEnvironment env, RegionScanner scanner,
+    public HashJoinRegionScanner(RegionCoprocessorEnvironment env, RegionScanner scanner, Scan scan,
                                  final Set<KeyValueColumnExpression> arrayKVRefs,
                                  final Expression[] arrayFuncRefs, TupleProjector projector,
                                  HashJoinInfo joinInfo, ImmutableBytesPtr tenantId,
@@ -137,6 +145,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         this.useNewValueColumnQualifier = useNewValueColumnQualifier;
         this.addArrayCell = (arrayFuncRefs != null && arrayFuncRefs.length > 0 &&
                              arrayKVRefs != null && arrayKVRefs.size() > 0);
+        this.pageSizeMs = getPageSizeMsForRegionScanner(scan);
     }
 
     private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
@@ -288,9 +297,23 @@ public class HashJoinRegionScanner implements RegionScanner {
     @Override
     public boolean nextRaw(List<Cell> result) throws IOException {
         try {
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (shouldAdvance()) {
                 hasMore = scanner.nextRaw(result);
+                if (isDummy(result)) {
+                    return true;
+                }
+                if (result.isEmpty()) {
+                    return hasMore;
+                }
+                Cell cell = result.get(0);
                 processResults(result, false);
+                if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+                    byte[] rowKey = CellUtil.cloneRow(cell);
+                    result.clear();
+                    getDummyResult(rowKey, result);
+                    return true;
+                }
                 result.clear();
             }
 

@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -354,6 +355,9 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                     hasMore = localScanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         lastCell = row.get(0); // lastCell is any cell from the last visited row
+                        if (isDummy(row)) {
+                            break;
+                        }
                         indexMutationCount += populateIndexMutationFromIndexRow(row, indexMutationMap);
                         rowCount++;
                     }

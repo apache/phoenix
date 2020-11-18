@@ -35,7 +35,6 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
 public class ResultTuple extends BaseTuple {
     private final Result result;
     public static final ResultTuple EMPTY_TUPLE = new ResultTuple(Result.create(Collections.<Cell>emptyList()));
-    
     public ResultTuple(Result result) {
         this.result = result;
     }
