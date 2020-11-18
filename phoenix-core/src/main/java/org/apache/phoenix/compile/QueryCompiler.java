@@ -17,8 +17,14 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.SYSCATA_COPROC_IGNORE_TAG;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.SYSCATA_COPROC_IGNORE_BYTE;
 
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -30,6 +36,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
@@ -54,6 +61,7 @@ import org.apache.phoenix.execute.UnionPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.filter.SyscatViewIndexIdFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -761,6 +769,18 @@ public class QueryCompiler {
 
         if(plan instanceof BaseQueryPlan){
             ((BaseQueryPlan) plan).setApplicable(isApplicable);
+        }
+        if (context.getScan().getFilter() != null &&
+                table.toString().equalsIgnoreCase(SYSTEM_CATALOG_NAME)) {
+            context.getScan().setAttribute(SYSCATA_COPROC_IGNORE_TAG,
+                    TRUE_BYTES);
+            try {
+                projector.getColumnIndex(VIEW_INDEX_ID);
+                ScanUtil.andFilterAtBeginning(context.getScan(),
+                        new SyscatViewIndexIdFilter());
+            } catch (Exception e) {
+                // VIEW_INDEX_ID is not presenting.
+            }
         }
         return plan;
     }

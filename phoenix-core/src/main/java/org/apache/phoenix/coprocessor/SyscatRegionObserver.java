@@ -46,6 +46,8 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VALUE;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.SYSCATA_COPROC_IGNORE_TAG;
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN;
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN;
 
@@ -53,8 +55,6 @@ import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_SMAL
  * Coprocessor that checks whether the VIEW_INDEX_ID needs to retrieve.
  */
 public class SyscatRegionObserver extends BaseRegionObserver {
-    public static final int NULL_DATA_TYPE_VALUE = 0;
-
     @Override public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
     }
@@ -77,12 +77,14 @@ public class SyscatRegionObserver extends BaseRegionObserver {
         private final RegionScanner scanner;
         private final Scan scan;
         private final Region region;
+        private final boolean ignore;
 
         public SyscatRegionScanner(RegionCoprocessorEnvironment env, Scan scan,
                                    RegionScanner scanner) throws IOException {
             this.scan = scan;
             this.scanner = scanner;
-            region = env.getRegion();
+            this.region = env.getRegion();
+            this.ignore = this.scan.getAttribute(SYSCATA_COPROC_IGNORE_TAG) != null;
 
             byte[] txnScn = scan.getAttribute(BaseScannerRegionObserver.TX_SCN);
             if (txnScn != null) {
@@ -161,38 +163,39 @@ public class SyscatRegionObserver extends BaseRegionObserver {
                     return false;
                 }
                 // logic to change the cell
-                int type = NULL_DATA_TYPE_VALUE;
-                Cell viewIndexIdCell = KeyValueUtil.getColumnLatest(
-                        GenericKeyValueBuilder.INSTANCE, result,
-                        DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
-                Cell viewIndexIdDataTypeCell = KeyValueUtil.getColumnLatest(
-                        GenericKeyValueBuilder.INSTANCE, result,
-                        DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_DATA_TYPE_BYTES);
-
-                if (viewIndexIdCell != null) {
-                    if (viewIndexIdDataTypeCell != null) {
-                        type = (Integer) PInteger.INSTANCE.toObject(
-                                viewIndexIdDataTypeCell.getValueArray(),
-                                viewIndexIdDataTypeCell.getValueOffset(),
-                                viewIndexIdDataTypeCell.getValueLength(),
-                                PInteger.INSTANCE,
-                                SortOrder.ASC);
-                    }
-                    if (ScanUtil.getClientVersion(this.scan) < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-                        // pre-splittable client should always using SMALLINT
-                        if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
-                                VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN) {
-                            Cell keyValue = ViewIndexIdRetrieveUtil.
-                                    getViewIndexIdKeyValueInShortDataFormat(viewIndexIdCell);
-                            Collections.replaceAll(result, viewIndexIdCell, keyValue);
+                if (!ignore) {
+                    Cell viewIndexIdCell = KeyValueUtil.getColumnLatest(
+                            GenericKeyValueBuilder.INSTANCE, result,
+                            DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
+                    if (viewIndexIdCell != null) {
+                        int type = NULL_DATA_TYPE_VALUE;
+                        Cell viewIndexIdDataTypeCell = KeyValueUtil.getColumnLatest(
+                                GenericKeyValueBuilder.INSTANCE, result,
+                                DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_DATA_TYPE_BYTES);
+                        if (viewIndexIdDataTypeCell != null) {
+                            type = (Integer) PInteger.INSTANCE.toObject(
+                                    viewIndexIdDataTypeCell.getValueArray(),
+                                    viewIndexIdDataTypeCell.getValueOffset(),
+                                    viewIndexIdDataTypeCell.getValueLength(),
+                                    PInteger.INSTANCE,
+                                    SortOrder.ASC);
                         }
-                    } else {
-                        // post-splittable client should always using BIGINT
-                        if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
-                                VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
-                            Cell keyValue = ViewIndexIdRetrieveUtil.
-                                    getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
-                            Collections.replaceAll(result, viewIndexIdCell, keyValue);
+                        if (ScanUtil.getClientVersion(this.scan) < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                            // pre-splittable client should always using SMALLINT
+                            if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
+                                    VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN) {
+                                Cell keyValue = ViewIndexIdRetrieveUtil.
+                                        getViewIndexIdKeyValueInShortDataFormat(viewIndexIdCell);
+                                Collections.replaceAll(result, viewIndexIdCell, keyValue);
+                            }
+                        } else {
+                            // post-splittable client should always using BIGINT
+                            if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
+                                    VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
+                                Cell keyValue = ViewIndexIdRetrieveUtil.
+                                        getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
+                                Collections.replaceAll(result, viewIndexIdCell, keyValue);
+                            }
                         }
                     }
                 }

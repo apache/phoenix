@@ -26,6 +26,9 @@ import org.apache.phoenix.schema.types.PSmallint;
 public final class ViewIndexIdRetrieveUtil {
     public static final int VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN = 9;
     public static final int VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN = 3;
+    public static final int NULL_DATA_TYPE_VALUE = 0;
+    public static final byte SYSCATA_COPROC_IGNORE_BYTE = 1;
+    public static final String SYSCATA_COPROC_IGNORE_TAG = "SYSCATA_COPROC_IGNORE_TAG";
 
     private ViewIndexIdRetrieveUtil() {
 
