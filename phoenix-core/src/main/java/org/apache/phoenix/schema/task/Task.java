@@ -123,14 +123,32 @@ public class Task {
         return stmt;
     }
 
-    public static void addTask(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
+    public static void addTaskQueue(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
             String tableName, String taskStatus, String data, Integer priority, Timestamp startTs, Timestamp endTs,
             boolean accessCheckEnabled)
+            throws IOException {
+        addTask(conn, taskType, tenantId, schemaName, tableName, taskStatus, data, priority,
+                startTs, endTs, accessCheckEnabled,
+                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME);
+    }
+
+    public static void addTaskHistory(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
+                               String tableName, String taskStatus, String data, Integer priority, Timestamp startTs, Timestamp endTs,
+                               boolean accessCheckEnabled)
+            throws IOException {
+        addTask(conn, taskType, tenantId, schemaName, tableName, taskStatus, data, priority,
+                startTs, endTs, accessCheckEnabled,
+                PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME);
+    }
+
+    public static void addTask(PhoenixConnection conn, PTable.TaskType taskType, String tenantId, String schemaName,
+                                        String tableName, String taskStatus, String data, Integer priority, Timestamp startTs, Timestamp endTs,
+                                        boolean accessCheckEnabled, String systemTableName)
             throws IOException {
         PreparedStatement stmt;
         try {
             stmt = conn.prepareStatement("UPSERT INTO " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + " ( " +
+                    systemTableName + " ( " +
                     PhoenixDatabaseMetaData.TASK_TYPE + ", " +
                     PhoenixDatabaseMetaData.TENANT_ID + ", " +
                     PhoenixDatabaseMetaData.TABLE_SCHEM + ", " +
@@ -149,12 +167,29 @@ public class Task {
         mutateSystemTaskTable(conn, stmt, accessCheckEnabled);
     }
 
+    public static void deleteTaskFromQueue(PhoenixConnection conn, PTable.TaskType taskType,
+                                           Timestamp ts, String tenantId, String schemaName,
+                                           String tableName, boolean accessCheckEnabled)
+            throws IOException {
+        deleteTask(conn, taskType, ts, tenantId, schemaName, tableName, accessCheckEnabled,
+                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME);
+    }
+
+    public static void deleteTaskFromHistory(PhoenixConnection conn, PTable.TaskType taskType,
+                                           Timestamp ts, String tenantId, String schemaName,
+                                           String tableName, boolean accessCheckEnabled)
+            throws IOException {
+        deleteTask(conn, taskType, ts, tenantId, schemaName, tableName, accessCheckEnabled,
+                PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME);
+    }
+
+
     public static void deleteTask(PhoenixConnection conn, PTable.TaskType taskType, Timestamp ts, String tenantId,
-            String schemaName, String tableName, boolean accessCheckEnabled) throws IOException {
+            String schemaName, String tableName, boolean accessCheckEnabled, String systemTableName) throws IOException {
         PreparedStatement stmt = null;
         try {
             stmt = conn.prepareStatement("DELETE FROM " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+                    systemTableName +
                     " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = ? AND " +
                     PhoenixDatabaseMetaData.TASK_TS + " = ? AND " +
                     PhoenixDatabaseMetaData.TENANT_ID + (tenantId == null ? " IS NULL " : " = '" + tenantId + "'") + " AND " +
@@ -196,7 +231,7 @@ public class Task {
                 PhoenixDatabaseMetaData.TASK_TYPE + ", " +
                 PhoenixDatabaseMetaData.TASK_PRIORITY + ", " +
                 PhoenixDatabaseMetaData.TASK_DATA +
-                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME;
             taskQuery += " WHERE " +
                     PhoenixDatabaseMetaData.TABLE_NAME + " ='" + tableName + "' AND " +
                     PhoenixDatabaseMetaData.TASK_TYPE + "=" + taskType.getSerializedValue();
@@ -239,7 +274,7 @@ public class Task {
                 PhoenixDatabaseMetaData.TASK_TYPE + ", " +
                 PhoenixDatabaseMetaData.TASK_PRIORITY + ", " +
                 PhoenixDatabaseMetaData.TASK_DATA +
-                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+                " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME;
         if (excludedTaskStatus != null && excludedTaskStatus.length > 0) {
             taskQuery += " WHERE " + PhoenixDatabaseMetaData.TASK_STATUS + " IS NULL OR " +
             PhoenixDatabaseMetaData.TASK_STATUS + " NOT IN (";

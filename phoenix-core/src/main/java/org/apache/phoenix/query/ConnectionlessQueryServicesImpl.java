@@ -192,8 +192,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
-    protected String getTaskDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
+    protected String getTaskQueueDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TASK_QUEUE_METADATA);
+    }
+
+    protected String getTaskHistoryDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TASK_HISTORY_METADATA);
     }
 
     private String setSystemDDLProperties(String ddl) {
@@ -415,8 +419,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
                 try {
-                    metaConnection.createStatement()
-                            .executeUpdate(getTaskDDL());
+                    metaConnection.createStatement().executeUpdate(getTaskQueueDDL());
+                    metaConnection.createStatement().executeUpdate(getTaskHistoryDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {

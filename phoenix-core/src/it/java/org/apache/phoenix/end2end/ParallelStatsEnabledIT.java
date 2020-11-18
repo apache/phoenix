@@ -54,8 +54,8 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
         TaskRegionEnvironment =
                 getUtility()
                         .getRSForFirstRegionInTable(
-                                PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
-                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
+                                PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
+                        .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
     }

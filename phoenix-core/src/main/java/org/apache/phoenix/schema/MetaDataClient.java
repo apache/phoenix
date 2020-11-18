@@ -4668,7 +4668,7 @@ public class MetaDataClient {
                                 }};
                                 try {
                                     String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
-                                    Task.addTask(connection, PTable.TaskType.INDEX_REBUILD,
+                                    Task.addTaskQueue(connection, PTable.TaskType.INDEX_REBUILD,
                                             tenantId, schemaName,
                                             dataTableName, PTable.TaskStatus.CREATED.toString(),
                                             json, null, ts, null, true);

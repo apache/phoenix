@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
@@ -37,6 +38,7 @@ import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
 import org.apache.phoenix.schema.SystemStatsSplitPolicy;
 import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.schema.TableProperty;
+import org.apache.phoenix.schema.PTable;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
@@ -130,7 +132,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_SYSTEM_TASK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -499,8 +505,8 @@ public interface QueryConstants {
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TTL_FOR_MUTEX;
 
-    String CREATE_TASK_METADATA =
-            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_TABLE + "\"(\n" +
+    String CREATE_TASK_QUEUE_METADATA =
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_QUEUE_TABLE + "\"(\n" +
             // PK columns
             TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
             TASK_TS + " TIMESTAMP NOT NULL," +
@@ -522,4 +528,42 @@ public interface QueryConstants {
                 + SystemTaskSplitPolicy.class.getName() + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
+
+    String CREATE_TASK_HISTORY_METADATA =
+            "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_TASK_HISTORY_TABLE + "\"(\n" +
+                    // PK columns
+                    TASK_TYPE + " UNSIGNED_TINYINT NOT NULL," +
+                    TASK_TS + " TIMESTAMP NOT NULL," +
+                    TENANT_ID + " VARCHAR NULL," +
+                    TABLE_SCHEM + " VARCHAR NULL," +
+                    TABLE_NAME + " VARCHAR NOT NULL,\n" +
+                    // Non-PK columns
+                    TASK_STATUS + " VARCHAR NULL," +
+                    TASK_END_TS + " TIMESTAMP NULL," +
+                    TASK_PRIORITY + " UNSIGNED_TINYINT NULL," +
+                    TASK_DATA + " VARCHAR NULL,\n" +
+                    "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+                    TASK_TYPE + "," + TASK_TS + " ROW_TIMESTAMP," + TENANT_ID + "," + TABLE_SCHEM + "," +
+                    TABLE_NAME + "))\n" +
+                    HConstants.VERSIONS + "=%s,\n" +
+                    ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+                    ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
+                    TableDescriptorBuilder.SPLIT_POLICY + "='"
+                    + SystemTaskSplitPolicy.class.getName() + "',\n" +
+                    TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+                    STORE_NULLS + "=" + Boolean.TRUE;
+
+    String UPGRADE_SYSTEM_TASK_TO_TASK_QUEUE =
+            "UPSERT INTO " + SYSTEM_TASK_QUEUE_NAME + " SELECT * FROM " + OLD_SYSTEM_TASK_NAME +
+            " WHERE " + PhoenixDatabaseMetaData.TASK_STATUS + " IS NULL OR " +
+            PhoenixDatabaseMetaData.TASK_STATUS + " NOT IN ('" + PTable.TaskStatus.FAILED.toString()
+            + "', '" + PTable.TaskStatus.COMPLETED.toString() + "')";
+
+    String UPGRADE_SYSTEM_TASK_TO_TASK_HISTORY =
+            "UPSERT INTO " + SYSTEM_TASK_HISTORY_NAME + " SELECT * FROM " + OLD_SYSTEM_TASK_NAME +
+            " WHERE " + PhoenixDatabaseMetaData.TASK_STATUS + " IS NOT NULL AND " +
+            PhoenixDatabaseMetaData.TASK_STATUS + " IN ('" + PTable.TaskStatus.FAILED.toString()
+            + "', '" + PTable.TaskStatus.COMPLETED.toString() + "')";
+
+
 }

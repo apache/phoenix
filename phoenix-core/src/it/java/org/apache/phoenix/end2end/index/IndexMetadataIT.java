@@ -658,7 +658,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             upsertStmt.setString(2, "val3");
             upsertStmt.execute();
 
-            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
+            conn.createStatement().execute("DELETE " + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME +
                     " WHERE TABLE_NAME ='" + testTable  + "'");
             conn.commit();
 
@@ -667,7 +667,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
 
             String
                     queryTaskTable =
-                    "SELECT * FROM " +  PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
+                    "SELECT * FROM " +  PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME;
             ResultSet rs = conn.createStatement().executeQuery(queryTaskTable);
             assertTrue(rs.next());
             assertEquals(testTable, rs.getString(TABLE_NAME));

@@ -2293,7 +2293,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
                         try (PhoenixConnection conn =
                                 QueryUtil.getConnectionOnServer(env.getConfiguration())
                                     .unwrap(PhoenixConnection.class)) {
-                            Task.addTask(conn, PTable.TaskType.DROP_CHILD_VIEWS,
+                            Task.addTaskQueue(conn, PTable.TaskType.DROP_CHILD_VIEWS,
                                 Bytes.toString(tenantIdBytes),
                                 Bytes.toString(schemaName),
                                 Bytes.toString(tableOrViewName),

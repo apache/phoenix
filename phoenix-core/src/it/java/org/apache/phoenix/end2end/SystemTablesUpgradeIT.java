@@ -123,16 +123,22 @@ public class SystemTablesUpgradeIT extends BaseTest {
         DriverManager.getConnection(getUrl());
         assertEquals(wasTimestampChanged ? 1 : 0, countUpgradeAttempts);
         // Additional test for PHOENIX-6125
-        // Confirm that SYSTEM.TASK has split policy set as
+        // Confirm that SYSTEM.TASK tables has split policy set as
         // SystemTaskSplitPolicy (which is extending DisabledRegionSplitPolicy
         // as of this writing)
         try (Admin admin = services.getAdmin()) {
             String taskSplitPolicy = admin
                 .getDescriptor(TableName.valueOf(
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
+                    PhoenixDatabaseMetaData.SYSTEM_TASK_QUEUE_NAME))
                 .getRegionSplitPolicyClassName();
             assertEquals(SystemTaskSplitPolicy.class.getName(),
                 taskSplitPolicy);
+            taskSplitPolicy = admin
+                    .getDescriptor(TableName.valueOf(
+                            PhoenixDatabaseMetaData.SYSTEM_TASK_HISTORY_NAME))
+                    .getRegionSplitPolicyClassName();
+            assertEquals(SystemTaskSplitPolicy.class.getName(),
+                    taskSplitPolicy);
         }
     }
 

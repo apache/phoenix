@@ -389,10 +389,17 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
     public static final TableName SYSTEM_LINK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CHILD_LINK_NAME);
 
-    public static final String SYSTEM_TASK_TABLE = "TASK";
-    public static final String SYSTEM_TASK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
-    public static final byte[] SYSTEM_TASK_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_NAME);
-    public static final TableName SYSTEM_TASK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_NAME);
+    public static final String OLD_SYSTEM_TASK_TABLE = "TASK";
+    public static final String OLD_SYSTEM_TASK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, OLD_SYSTEM_TASK_TABLE);
+    public static final byte[] OLD_SYSTEM_TASK_NAME_BYTES = Bytes.toBytes(OLD_SYSTEM_TASK_NAME);
+    public static final String SYSTEM_TASK_QUEUE_TABLE = "TASK_QUEUE";
+    public static final String SYSTEM_TASK_QUEUE_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_QUEUE_TABLE);
+    public static final byte[] SYSTEM_TASK_QUEUE_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_QUEUE_NAME);
+    public static final TableName SYSTEM_TASK_QUEUE_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_QUEUE_NAME);
+    public static final String SYSTEM_TASK_HISTORY_TABLE = "TASK_HISTORY";
+    public static final String SYSTEM_TASK_HISTORY_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_HISTORY_TABLE);
+    public static final byte[] SYSTEM_TASK_HISTORY_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_HISTORY_NAME);
+    public static final TableName SYSTEM_TASK_HISTORY_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_HISTORY_NAME);
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String QUERY_ID = "QUERY_ID";
