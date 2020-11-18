@@ -18,15 +18,17 @@
 package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -41,35 +43,41 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
  * Coprocessor that checks whether the row is expired based on the TTL spec.
  */
-public class PhoenixTTLRegionObserver extends BaseRegionObserver {
+public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implements RegionCoprocessor {
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixTTLRegionObserver.class);
     private MetricsPhoenixTTLSource metricSource;
 
-    @Override public void start(CoprocessorEnvironment e) throws IOException {
-        super.start(e);
-        metricSource = MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixTTLSource();
-    }
-
-    @Override public void stop(CoprocessorEnvironment e) throws IOException {
-        super.stop(e);
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+        return Optional.of(this);
     }
 
     @Override
-    public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-            RegionScanner s) throws IOException {
+    public void start(CoprocessorEnvironment e) throws IOException {
+        metricSource = MetricsPhoenixCoprocessorSourceFactory.getInstance().getPhoenixTTLSource();
+    }
 
-        if (!ScanUtil.isMaskTTLExpiredRows(scan) && !ScanUtil.isDeleteTTLExpiredRows(scan)) {
-            return s;
-        } else if (ScanUtil.isMaskTTLExpiredRows(scan) && ScanUtil.isDeleteTTLExpiredRows(scan)) {
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return ScanUtil.isMaskTTLExpiredRows(scan) || ScanUtil.isDeleteTTLExpiredRows(scan);
+    }
+
+    @Override
+    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
+                                              final RegionScanner s) throws IOException, SQLException {
+        if (ScanUtil.isMaskTTLExpiredRows(scan) && ScanUtil.isDeleteTTLExpiredRows(scan)) {
             throw new IOException("Both mask and delete expired rows property cannot be set");
         } else if (ScanUtil.isMaskTTLExpiredRows(scan)) {
             metricSource.incrementMaskExpiredRequestCount();
@@ -99,10 +107,11 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
     /**
      * A region scanner that checks the TTL expiration of rows
      */
-    private static class PhoenixTTLRegionScanner implements RegionScanner {
+    private static class PhoenixTTLRegionScanner extends BaseRegionScanner {
         private static final String MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR =
                 "MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID";
 
+        private final RegionCoprocessorEnvironment env;
         private final RegionScanner scanner;
         private final Scan scan;
         private final byte[] emptyCF;
@@ -119,9 +128,12 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
         private long numRowsScanned;
         private long numRowsDeleted;
         private boolean reported = false;
+        private long pageSizeMs;
 
         public PhoenixTTLRegionScanner(RegionCoprocessorEnvironment env, Scan scan,
                 RegionScanner scanner) throws IOException {
+            super(scanner);
+            this.env = env;
             this.scan = scan;
             this.scanner = scanner;
             byte[] requestIdBytes = scan.getAttribute(MASK_PHOENIX_TTL_EXPIRED_REQUEST_ID_ATTR);
@@ -145,6 +157,7 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             now = maxTimestamp != HConstants.LATEST_TIMESTAMP ?
                             maxTimestamp :
                             EnvironmentEdgeManager.currentTimeMillis();
+            pageSizeMs = getPageSizeMsForRegionScanner(scan);
         }
 
         @Override public int getBatch() {
@@ -186,10 +199,6 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             return scanner.getRegionInfo();
         }
 
-        @Override public boolean isFilterDone() throws IOException {
-            return scanner.isFilterDone();
-        }
-
         @Override public boolean reseek(byte[] row) throws IOException {
             return scanner.reseek(row);
         }
@@ -204,17 +213,30 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
 
         private boolean doNext(List<Cell> result, boolean raw) throws IOException {
             try {
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 boolean hasMore;
                 do {
                     hasMore = raw ? scanner.nextRaw(result) : scanner.next(result);
                     if (result.isEmpty()) {
                         break;
                     }
+                    if (isDummy(result)) {
+                        return true;
+                    }
+
+                    /**
+                     Note : That both MaskIfExpiredRequest and DeleteIfExpiredRequest cannot be set at the same time.
+                     Case : MaskIfExpiredRequest, If row not expired then return.
+                     */
                     numRowsScanned++;
                     if (maskIfExpired && checkRowNotExpired(result)) {
                         break;
                     }
 
+                    /**
+                     Case : DeleteIfExpiredRequest, If deleted then return.
+                     So that it will count towards the aggregate deleted count.
+                     */
                     if (deleteIfExpired && deleteRowIfExpired(result)) {
                         numRowsDeleted++;
                         break;
@@ -225,6 +247,12 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
                     //  do not want it to count towards the deleted count)
                     if (maskIfExpired) {
                         numRowsExpired++;
+                    }
+                    if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+                        byte[] rowKey = CellUtil.cloneRow(result.get(0));
+                        result.clear();
+                        getDummyResult(rowKey, result);
+                        return true;
                     }
                     result.clear();
                 } while (hasMore);
@@ -303,5 +331,9 @@ public class PhoenixTTLRegionObserver extends BaseRegionObserver {
             return true;
         }
 
+        @Override
+        public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+            return new PhoenixTTLRegionScanner(env, scan, ((BaseRegionScanner)delegate).getNewRegionScanner(scan));
+        }
     }
 }

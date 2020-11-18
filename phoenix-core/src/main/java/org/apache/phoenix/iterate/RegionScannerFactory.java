@@ -20,7 +20,11 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.Cell;
@@ -54,6 +58,7 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -118,6 +123,7 @@ public abstract class RegionScannerFactory {
       private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
+      final long pageSizeMs = getPageSizeMsForRegionScanner(scan);
 
       // Get the actual scan start row of local index. This will be used to compare the row
       // key of the results less than scan start row when there are references.
@@ -129,7 +135,11 @@ public abstract class RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results) throws IOException {
         try {
-          return s.next(results);
+          boolean next = s.next(results);
+          if (isDummy(results)) {
+            return true;
+          }
+          return next;
         } catch (Throwable t) {
           ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
           return false; // impossible
@@ -170,6 +180,9 @@ public abstract class RegionScannerFactory {
       public boolean nextRaw(List<Cell> result) throws IOException {
         try {
           boolean next = s.nextRaw(result);
+          if (isDummy(result)) {
+            return true;
+          }
           Cell arrayElementCell = null;
           if (result.size() == 0) {
             return next;
@@ -182,7 +195,7 @@ public abstract class RegionScannerFactory {
             if(actualStartKey!=null) {
               next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
                   null, arrayElementCell);
-              if (result.isEmpty()) {
+              if (result.isEmpty() || isDummy(result)) {
                 return next;
               }
             }
@@ -290,8 +303,15 @@ public abstract class RegionScannerFactory {
           ScannerContext scannerContext, Cell arrayElementCell) throws IOException {
         boolean next = true;
         Cell firstCell = result.get(0);
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(),
             firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length) < 0) {
+          if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+            byte[] rowKey = CellUtil.cloneRow(result.get(0));
+            result.clear();
+            getDummyResult(rowKey, result);
+            return true;
+          }
           result.clear();
           if(scannerContext == null) {
             next = s.nextRaw(result);
@@ -300,6 +320,9 @@ public abstract class RegionScannerFactory {
           }
           if (result.isEmpty()) {
             return next;
+          }
+          if (isDummy(result)) {
+            return true;
           }
           if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
             int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);

@@ -68,6 +68,7 @@ import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -89,6 +90,8 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
@@ -677,7 +680,7 @@ public class ScanUtil {
 
     // Start/stop row must be swapped if scan is being done in reverse
     public static void setupReverseScan(Scan scan) {
-        if (isReversed(scan)) {
+        if (isReversed(scan) && !scan.isReversed()) {
             byte[] newStartRow = getReversedRow(scan.getStartRow());
             byte[] newStopRow = getReversedRow(scan.getStopRow());
             scan.setStartRow(newStopRow);
@@ -760,6 +763,12 @@ public class ScanUtil {
         Filter filter = scan.getFilter();
         if (filter == null) {
             return;
+        }
+        if (filter instanceof PagedFilter) {
+            filter = ((PagedFilter) filter).getDelegateFilter();
+            if (filter == null) {
+                return;
+            }
         }
         if (filter instanceof FilterList) {
             FilterList filterList = (FilterList)filter;
@@ -1206,6 +1215,15 @@ public class ScanUtil {
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
+            if (ScanUtil.isLocalIndex(scan)) {
+                byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null ?
+                        scan.getAttribute(SCAN_ACTUAL_START_ROW) :
+                        HConstants.EMPTY_BYTE_ARRAY;
+                ScanUtil.setLocalIndexAttributes(scan, 0,
+                        actualStartRow,
+                        HConstants.EMPTY_BYTE_ARRAY,
+                        scan.getStartRow(), scan.getStopRow());
+            }
             addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
     }
@@ -1222,22 +1240,85 @@ public class ScanUtil {
         getDummyResult(EMPTY_BYTE_ARRAY, result);
     }
 
+    public static Tuple getDummyTuple(byte[] rowKey) {
+        List<Cell> result = new ArrayList<Cell>(1);
+        getDummyResult(rowKey, result);
+        return new ResultTuple(Result.create(result));
+    }
+
+    public static Tuple getDummyTuple() {
+        List<Cell> result = new ArrayList<Cell>(1);
+        getDummyResult(result);
+        return new ResultTuple(Result.create(result));
+    }
+
+    public static Tuple getDummyTuple(Tuple tuple) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        tuple.getKey(ptr);
+        return getDummyTuple(ptr.copyBytes());
+    }
+
+    public static boolean isDummy(Cell cell) {
+        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+    }
+
     public static boolean isDummy(Result result) {
-        // Check if the result is a dummy result
         if (result.rawCells().length != 1) {
             return false;
         }
         Cell cell = result.rawCells()[0];
-        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+        return isDummy(cell);
     }
 
     public static boolean isDummy(List<Cell> result) {
-        // Check if the result is a dummy result
         if (result.size() != 1) {
             return false;
         }
         Cell cell = result.get(0);
-        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+        return isDummy(cell);
+    }
+
+    public static boolean isDummy(Tuple tuple) {
+        if (tuple instanceof ResultTuple) {
+            isDummy(((ResultTuple) tuple).getResult());
+        }
+        return false;
+    }
+
+    public static PagedFilter getPhoenixPagedFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null && filter instanceof PagedFilter) {
+            PagedFilter pageFilter = (PagedFilter) filter;
+            return pageFilter;
+        }
+        return null;
+    }
+
+    /**
+     *
+     * The server page size expressed in ms is the maximum time we want the Phoenix server code to spend
+     * for each iteration of ResultScanner. For each ResultScanner#next() can be translated into one or more
+     * HBase RegionScanner#next() calls by a Phoenix RegionScanner object in a loop. To ensure that the total
+     * time spent by the Phoenix server code will not exceed the configured page size value, SERVER_PAGE_SIZE_MS,
+     * the loop time in a Phoenix region scanner is limited by 0.6 * SERVER_PAGE_SIZE_MS and
+     * each HBase RegionScanner#next() time which is controlled by PagedFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
+     *
+     */
+    private static long getPageSizeMs(Scan scan) {
+        long pageSizeMs = Long.MAX_VALUE;
+        byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+        if (pageSizeMsBytes != null) {
+            pageSizeMs = Bytes.toLong(pageSizeMsBytes);
+        }
+        return pageSizeMs;
+    }
+
+    public static long getPageSizeMsForRegionScanner(Scan scan) {
+        return (long) (getPageSizeMs(scan) * 0.6);
+    }
+
+    public static long getPageSizeMsForFilter(Scan scan) {
+        return (long) (getPageSizeMs(scan) * 0.3);
     }
 
     /**

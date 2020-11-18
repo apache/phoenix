@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -40,6 +41,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.compile.ScanRanges;
@@ -97,6 +99,7 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputReposito
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
  * This is an abstract region scanner which is used to scan index or data table rows locally. From the data table rows,
@@ -156,7 +159,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Map<byte[], NavigableSet<byte[]>> familyMap;
     protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     protected boolean verify = false;
-    protected boolean useSkipScanFilter;
+    protected boolean isRawFilterSupported;
 
     public GlobalIndexRegionScanner(final RegionScanner innerScanner,
                                     final Region region,
@@ -244,7 +247,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
             nextStartKey = null;
             minTimestamp = scan.getTimeRange().getMin();
-            useSkipScanFilter = HbaseCompatCapabilities.isRawFilterSupported();
+            isRawFilterSupported = HbaseCompatCapabilities.isRawFilterSupported();
         }
     }
 
@@ -1055,7 +1058,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
-        if (useSkipScanFilter) {
+        if (isRawFilterSupported) {
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
             indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
         }
@@ -1347,6 +1350,36 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return indexMutations.size();
     }
 
+    static boolean adjustScanFilter(Scan scan) {
+        // For rebuilds we use count (*) as query for regular tables which ends up setting the FirstKeyOnlyFilter on scan
+        // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
+        // For rebuilds we need all columns and all versions
+
+        Filter filter = scan.getFilter();
+        if (filter instanceof PagedFilter) {
+            PagedFilter pageFilter = (PagedFilter) filter;
+            Filter delegateFilter = pageFilter.getDelegateFilter();
+            if (!HbaseCompatCapabilities.isRawFilterSupported() &&
+                    (delegateFilter == null || delegateFilter instanceof FirstKeyOnlyFilter)) {
+                scan.setFilter(null);
+                return true;
+            }
+            if (delegateFilter instanceof FirstKeyOnlyFilter) {
+                pageFilter.setDelegateFilter(null);
+            } else if (delegateFilter != null) {
+                // Override the filter so that we get all versions
+                pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
+            }
+        } else if (filter instanceof FirstKeyOnlyFilter) {
+            scan.setFilter(null);
+            return true;
+        } else if (filter != null) {
+            // Override the filter so that we get all versions
+            scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
+        }
+        return false;
+    }
+
     protected RegionScanner getLocalScanner() throws IOException {
         // override the filter to skip scan and open new scanner
         // when lower bound of timerange is passed or newStartKey was populated
@@ -1355,26 +1388,18 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             Scan incrScan = new Scan(scan);
             incrScan.setTimeRange(minTimestamp, scan.getTimeRange().getMax());
             incrScan.setRaw(true);
-            incrScan.setMaxVersions();
+            incrScan.readAllVersions();
             incrScan.getFamilyMap().clear();
             incrScan.setCacheBlocks(false);
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 incrScan.addFamily(family);
             }
-            // For rebuilds we use count (*) as query for regular tables which ends up setting the FKOF on scan
-            // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
-            // For rebuilds we need all columns and all versions
-            if (scan.getFilter() instanceof FirstKeyOnlyFilter) {
-                incrScan.setFilter(null);
-            } else if (scan.getFilter() != null) {
-                // Override the filter so that we get all versions
-                incrScan.setFilter(new AllVersionsIndexRebuildFilter(scan.getFilter()));
-            }
+            adjustScanFilter(incrScan);
             if(nextStartKey != null) {
                 incrScan.setStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try(RegionScanner scanner = region.getScanner(incrScan)) {
+            try (RegionScanner scanner = new PagedRegionScanner(region, region.getScanner(incrScan), incrScan)) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range
@@ -1383,6 +1408,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                     hasMoreIncr = scanner.nextRaw(row);
                     if (!row.isEmpty()) {
+                        if (isDummy(row)) {
+                            continue;
+                        }
                         keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
                         rowCount++;
                     }

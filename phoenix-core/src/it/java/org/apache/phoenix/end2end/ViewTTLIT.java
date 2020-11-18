@@ -50,6 +50,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDataType;
@@ -58,6 +59,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -759,7 +761,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         GlobalViewIndexOptions
                 globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
-        globalViewIndexOptions.setLocal(false);
 
         TenantViewOptions tenantViewOptions = new TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
@@ -775,65 +776,69 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         testCaseWhenAllCFMatchAndAllDefault
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
 
-        // Define the test schema.
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withGlobalViewIndexOptions(globalViewIndexOptions)
-                .withTenantViewOptions(tenantViewOptions)
-                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
+        for (boolean isGlobalIndexLocal : Lists.newArrayList(true, false)) {
+            globalViewIndexOptions.setLocal(isGlobalIndexLocal);
 
-        // Define the test data.
-        final List<String> outerCol4s = Lists.newArrayList();
-        DataSupplier dataSupplier = new DataSupplier() {
-            String col4ForWhereClause;
+            // Define the test schema.
+            final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+            schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
+                    .withGlobalViewIndexOptions(globalViewIndexOptions)
+                    .withTenantViewOptions(tenantViewOptions)
+                    .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
 
-            @Override public List<Object> getValues(int rowIndex) {
-                Random rnd = new Random();
-                String id = String.format(ID_FMT, rowIndex);
-                String zid = String.format(ZID_FMT, rowIndex);
-                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+            // Define the test data.
+            final List<String> outerCol4s = Lists.newArrayList();
+            DataSupplier dataSupplier = new DataSupplier() {
+                String col4ForWhereClause;
 
-                // Store the col4 data to be used later in a where clause
-                outerCol4s.add(col4);
-                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
-                return Lists
-                        .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
+                    // Store the col4 data to be used later in a where clause
+                    outerCol4s.add(col4);
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists
+                            .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
+                }
+            };
+
+            // Create a test data reader/writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            DataReader dataReader = new BasicDataReader();
+
+            List<String> columns =
+                    Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
+            List<String> rowKeyColumns = Lists.newArrayList("COL6");
+            String tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Upsert data for validation
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+                dataReader.setValidationColumns(rowKeyColumns);
+                dataReader.setRowKeyColumns(rowKeyColumns);
+                dataReader.setDML(String.format("SELECT col6 from %s where col4 = '%s'",
+                        schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Validate data before and after ttl expiration.
+                validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
             }
-        };
-
-        // Create a test data reader/writer for the above schema.
-        DataWriter dataWriter = new BasicDataWriter();
-        DataReader dataReader = new BasicDataReader();
-
-        List<String> columns =
-                Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
-        List<String> rowKeyColumns = Lists.newArrayList("COL6");
-        String tenantConnectUrl =
-                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
-            writeConnection.setAutoCommit(true);
-            dataWriter.setConnection(writeConnection);
-            dataWriter.setDataSupplier(dataSupplier);
-            dataWriter.setUpsertColumns(columns);
-            dataWriter.setRowKeyColumns(rowKeyColumns);
-            dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-            // Upsert data for validation
-            upsertData(dataWriter, DEFAULT_NUM_ROWS);
-
-            dataReader.setValidationColumns(rowKeyColumns);
-            dataReader.setRowKeyColumns(rowKeyColumns);
-            dataReader.setDML(String.format("SELECT col6 from %s where col4 = '%s'",
-                    schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
-            dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-            // Validate data before and after ttl expiration.
-            validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
         }
     }
 
@@ -857,7 +862,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
-        globalViewIndexOptions.setLocal(false);
 
         TenantViewOptions tenantViewOptions = new TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
@@ -873,101 +877,105 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         testCaseWhenAllCFMatchAndAllDefault
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
 
-        // Define the test schema.
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withGlobalViewIndexOptions(globalViewIndexOptions)
-                .withTenantViewOptions(tenantViewOptions)
-                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
+        for (boolean isGlobalIndexLocal : Lists.newArrayList(true, false)) {
+            globalViewIndexOptions.setLocal(isGlobalIndexLocal);
 
-        // Define the test data.
-        final List<String> outerCol4s = Lists.newArrayList();
-        DataSupplier dataSupplier = new DataSupplier() {
+            // Define the test schema.
+            final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+            schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
+                    .withGlobalViewIndexOptions(globalViewIndexOptions)
+                    .withTenantViewOptions(tenantViewOptions)
+                    .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault).build();
 
-            @Override public List<Object> getValues(int rowIndex) {
-                Random rnd = new Random();
-                String id = String.format(ID_FMT, rowIndex);
-                String zid = String.format(ZID_FMT, rowIndex);
-                String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-
-                // Store the col4 data to be used later in a where clause
-                outerCol4s.add(col4);
-                String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-
-                return Lists
-                        .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
-            }
-        };
-
-        // Create a test data reader/writer for the above schema.
-        DataWriter dataWriter = new BasicDataWriter();
-        DataReader dataReader = new BasicDataReader();
-
-        List<String> columns =
-                Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
-        List<String> nonCoveredColumns =
-                Lists.newArrayList("ID", "ZID", "COL5", "COL7", "COL8", "COL9");
-        List<String> rowKeyColumns = Lists.newArrayList("COL6");
-        String tenantConnectUrl =
-                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-        try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
-            writeConnection.setAutoCommit(true);
-            dataWriter.setConnection(writeConnection);
-            dataWriter.setDataSupplier(dataSupplier);
-            dataWriter.setUpsertColumns(columns);
-            dataWriter.setRowKeyColumns(rowKeyColumns);
-            dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-            // Upsert data for validation
-            upsertData(dataWriter, DEFAULT_NUM_ROWS);
-
-            dataReader.setValidationColumns(rowKeyColumns);
-            dataReader.setRowKeyColumns(rowKeyColumns);
-            dataReader.setDML(String.format("SELECT col6 from %s where col4 = '%s'",
-                    schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
-            dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-            // Validate data before and after ttl expiration.
-            validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
-
-            // Now update the above data but not modifying the covered columns.
-            // Ensure/validate that empty columns for the index are still updated.
-
-            // Data supplier where covered and included (col4 and col6) columns are not updated.
-            DataSupplier dataSupplierForNonCoveredColumns = new DataSupplier() {
+            // Define the test data.
+            final List<String> outerCol4s = Lists.newArrayList();
+            DataSupplier dataSupplier = new DataSupplier() {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
                     String id = String.format(ID_FMT, rowIndex);
                     String zid = String.format(ZID_FMT, rowIndex);
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    // Store the col4 data to be used later in a where clause
+                    outerCol4s.add(col4);
                     String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
                     String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
                     String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
                     String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
 
-                    return Lists.newArrayList(new Object[] { id, zid, col5, col7, col8, col9 });
+                    return Lists
+                            .newArrayList(new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
                 }
             };
 
-            // Upsert data for validation with non covered columns
-            dataWriter.setDataSupplier(dataSupplierForNonCoveredColumns);
-            dataWriter.setUpsertColumns(nonCoveredColumns);
-            upsertData(dataWriter, DEFAULT_NUM_ROWS);
+            // Create a test data reader/writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            DataReader dataReader = new BasicDataReader();
 
-            List<String> rowKeyColumns1 = Lists.newArrayList("ID", "COL6");
-            dataReader.setValidationColumns(rowKeyColumns1);
-            dataReader.setRowKeyColumns(rowKeyColumns1);
-            dataReader.setDML(String.format("SELECT id, col6 from %s where col4 = '%s'",
-                    schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
+            List<String> columns =
+                    Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
+            List<String> nonCoveredColumns =
+                    Lists.newArrayList("ID", "ZID", "COL5", "COL7", "COL8", "COL9");
+            List<String> rowKeyColumns = Lists.newArrayList("COL6");
+            String tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
 
-            // Validate data before and after ttl expiration.
-            validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
+                // Upsert data for validation
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
 
+                dataReader.setValidationColumns(rowKeyColumns);
+                dataReader.setRowKeyColumns(rowKeyColumns);
+                dataReader.setDML(String.format("SELECT col6 from %s where col4 = '%s'",
+                        schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Validate data before and after ttl expiration.
+                validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
+
+                // Now update the above data but not modifying the covered columns.
+                // Ensure/validate that empty columns for the index are still updated.
+
+                // Data supplier where covered and included (col4 and col6) columns are not updated.
+                DataSupplier dataSupplierForNonCoveredColumns = new DataSupplier() {
+
+                    @Override public List<Object> getValues(int rowIndex) {
+                        Random rnd = new Random();
+                        String id = String.format(ID_FMT, rowIndex);
+                        String zid = String.format(ZID_FMT, rowIndex);
+                        String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                        String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                        String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                        String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                        return Lists.newArrayList(new Object[] { id, zid, col5, col7, col8, col9 });
+                    }
+                };
+
+                // Upsert data for validation with non covered columns
+                dataWriter.setDataSupplier(dataSupplierForNonCoveredColumns);
+                dataWriter.setUpsertColumns(nonCoveredColumns);
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+                List<String> rowKeyColumns1 = Lists.newArrayList("ID", "COL6");
+                dataReader.setValidationColumns(rowKeyColumns1);
+                dataReader.setRowKeyColumns(rowKeyColumns1);
+                dataReader.setDML(String.format("SELECT id, col6 from %s where col4 = '%s'",
+                        schemaBuilder.getEntityTenantViewName(), outerCol4s.get(1)));
+
+                // Validate data before and after ttl expiration.
+                validateExpiredRowsAreNotReturnedUsingCounts(phoenixTTL, dataReader, schemaBuilder);
+            }
         }
+
     }
 
 
@@ -2369,6 +2377,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
+        props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
@@ -2486,7 +2495,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 final Statement statement = deleteConnection.createStatement()) {
             deleteConnection.setAutoCommit(true);
 
-            final String deleteIfExpiredStatement = String.format("select * from  %s", viewName);
+            final String deleteIfExpiredStatement = String.format("select /*+NO_INDEX*/ count(*) from  %s", viewName);
             Preconditions.checkNotNull(deleteIfExpiredStatement);
 
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
@@ -2505,6 +2514,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
             scan.setAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL, Bytes.toBytes(Long.valueOf(table.getPhoenixTTL())));
+
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
             while (rs.next());
@@ -2526,7 +2536,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 final Statement statement = deleteConnection.createStatement()) {
             deleteConnection.setAutoCommit(true);
 
-            final String deleteIfExpiredStatement = String.format("select * from %s", indexName);
+            final String deleteIfExpiredStatement = String.format("select count(*) from %s", indexName);
             Preconditions.checkNotNull(deleteIfExpiredStatement);
 
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
@@ -2595,5 +2605,20 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         testCases.add(testCaseWhenGlobalAndTenantCFsAreDiff);
 
         return testCases;
+    }
+
+    private void runValidations(long phoenixTTL,
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> table,
+            DataReader dataReader, SchemaBuilder schemaBuilder)
+            throws Exception {
+
+        //Insert for the first time and validate them.
+        validateExpiredRowsAreNotReturnedUsingData(phoenixTTL, table,
+                dataReader, schemaBuilder);
+
+        // Update the above rows and validate the same.
+        validateExpiredRowsAreNotReturnedUsingData(phoenixTTL, table,
+                dataReader, schemaBuilder);
+
     }
 }

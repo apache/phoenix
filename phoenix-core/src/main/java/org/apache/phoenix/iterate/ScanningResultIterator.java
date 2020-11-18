@@ -156,7 +156,7 @@ public class ScanningResultIterator implements ResultIterator {
     public Tuple next() throws SQLException {
         try {
             Result result = scanner.next();
-            while (result != null && isDummy(result)) {
+            while (result != null && (result.isEmpty() || isDummy(result))) {
                 result = scanner.next();
             }
             if (result == null) {

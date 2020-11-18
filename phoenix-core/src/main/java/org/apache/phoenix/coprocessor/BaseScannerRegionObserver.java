@@ -26,24 +26,18 @@ import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanOptions;
-import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
-import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
-import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
@@ -53,6 +47,7 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionObserver {
 
@@ -77,10 +72,7 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
-    public static final String SERVER_PAGING = "_ServerPaging";
-    // The number of rows to be scanned in one RPC call
-    public static final String AGGREGATE_PAGE_SIZE_IN_MS = "_AggregatePageSizeInMs";
-
+    public static final String SERVER_PAGE_SIZE_MS = "_ServerPageSizeMs";
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
     public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
@@ -241,6 +233,12 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
+            if (!(scan.getFilter() instanceof PagedFilter)) {
+                byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+                if (pageSizeMsBytes != null) {
+                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
+                }
+            }
         }
     }
 
@@ -341,11 +339,14 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public final RegionScanner postScannerOpen(
             final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
             final RegionScanner s) throws IOException {
-       try {
+        try {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            return new RegionScannerHolder(c, scan, s);
+            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region scanner. We assume
+            // here every Phoenix region scanner extends BaseRegionScanner
+            return new RegionScannerHolder(c, scan, s instanceof BaseRegionScanner ? s :
+                    new PagedRegionScanner(c.getEnvironment().getRegion(), s, scan));
         } catch (Throwable t) {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
