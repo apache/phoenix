@@ -1279,17 +1279,18 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             + " %s ID char(1) NOT NULL,"
             + " COL1 integer NOT NULL,"
             + " COL2 bigint,"
+            + " COL3 bigint,"
             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1)"
             + " ) %s");
 
         String viewDDL = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName;
 
         String divergeDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL2";
-        String viewColumnAddDDL = "ALTER VIEW " + viewFullName + " ADD COL3 varchar(50) NULL ";
-        String viewColumnDropDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL3 ";
-        String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL4 varchar" +
+        String viewColumnAddDDL = "ALTER VIEW " + viewFullName + " ADD COL4 varchar(50) NULL ";
+        String viewColumnDropDDL = "ALTER VIEW " + viewFullName + " DROP COLUMN COL4 ";
+        String tableColumnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL5 varchar" +
             "(50) NULL";
-        String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL4 ";
+        String tableColumnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(tableDDL);
             long tableDDLTimestamp = CreateTableIT.getLastDDLTimestamp(conn, dataTableFullName);
@@ -1314,10 +1315,13 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                 viewFullName, viewDDLTimestamp + 1, conn);
             Thread.sleep(1);
             conn.createStatement().execute(tableColumnAddDDL);
-            //verify DDL timestamp DID NOT change because we added a column from the base table
-            assertEquals(viewDDLTimestamp, CreateTableIT.getLastDDLTimestamp(conn, viewFullName));
+            //verify DDL timestamp DID change because we added a column from the base table
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
+            //and that it did change because we dropped a column from the base table
             conn.createStatement().execute(tableColumnDropDDL);
-            assertEquals(viewDDLTimestamp, CreateTableIT.getLastDDLTimestamp(conn, viewFullName));
+            viewDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                viewFullName, viewDDLTimestamp + 1, conn);
         }
     }
 

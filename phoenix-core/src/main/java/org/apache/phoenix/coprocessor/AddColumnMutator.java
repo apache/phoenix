@@ -409,7 +409,8 @@ public class AddColumnMutator implements ColumnMutator {
                     clientTimeStamp, serverTimestamp));
             }
             //we don't need to update the DDL timestamp for child views, because when we look up
-            // a PTable, we'll take the max timestamp of a view and all its ancestors
+            // a PTable, we'll take the max timestamp of a view and all its ancestors. This is true
+            // whether the view is diverged or not.
         }
         tableMetaData.addAll(additionalTableMetadataMutations);
         if (type == PTableType.VIEW) {

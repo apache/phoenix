@@ -2880,11 +2880,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 separateLocalAndRemoteMutations(region, tableMetadata, localMutations,
                         remoteMutations);
                 if (!remoteMutations.isEmpty()) {
-                    // there should only be remote mutations if we are updating the last ddl
-                    // timestamp for child views, or we are adding a column to a view
+                    // there should only be remote mutations if we are adding a column to a view
                     // that uses encoded column qualifiers (the remote mutations are to update the
                     // encoded column qualifier counter on the parent table)
-                    if (childViews.size() > 0 || ( mutator.getMutateColumnType() == ColumnMutator.MutateColumnType.ADD_COLUMN
+                    if (( mutator.getMutateColumnType() == ColumnMutator.MutateColumnType.ADD_COLUMN
                             && type == PTableType.VIEW
                             && table.getEncodingScheme() !=
                             QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)) {

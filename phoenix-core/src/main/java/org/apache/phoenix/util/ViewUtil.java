@@ -659,12 +659,10 @@ public class ViewUtil {
         // set the final table timestamp and DDL timestamp as the respective max timestamps of the
         // view/view index or its ancestors
         maxTableTimestamp = Math.max(maxTableTimestamp, parentTable.getTimeStamp());
-        //Diverged views no longer inherit ddl timestamps from their ancestors because they don't
-        // inherit column changes
-        if (!ViewUtil.isDivergedView(view)) {
-            maxDDLTimestamp = Math.max(maxDDLTimestamp,
+
+        maxDDLTimestamp = Math.max(maxDDLTimestamp,
                 parentTable.getLastDDLTimestamp() != null ? parentTable.getLastDDLTimestamp() : 0L);
-        }
+
         if (hasIndexId) {
             // add all pk columns of parent tables to indexes
             // skip salted column as it will be added from the base table columns

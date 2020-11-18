@@ -281,7 +281,7 @@ public class DropColumnMutator implements ColumnMutator {
         }
         //we don't need to update the DDL timestamp for any child views we may have, because
         // when we look up a PTable for any of those child views, we'll take the max timestamp
-        // of the view and all its ancestors
+        // of the view and all its ancestors. This is true whether the view is diverged or not.
         tableMetaData.addAll(additionalTableMetaData);
         if (deletePKColumn) {
             if (table.getPKColumns().size() == 1) {
