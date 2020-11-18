@@ -37,6 +37,7 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
@@ -981,10 +982,7 @@ public class ScanUtil {
             return false;
         }
         Cell cell = result.rawCells()[0];
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length) == 0;
+        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
     }
 
     public static boolean isDummy(List<Cell> result) {
@@ -993,9 +991,6 @@ public class ScanUtil {
             return false;
         }
         Cell cell = result.get(0);
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length) == 0;
+        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
     }
 }
