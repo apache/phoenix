@@ -378,24 +378,7 @@ public class BackwardCompatibilityIT {
     }
 
     @Test
-    public void testViewIndexIdCreatedByOldClientAndSyscatCoproCheckAfter() throws Exception {
-        executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
-        executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
-        assertExpectedOutput(QUERY_VIEW_INDEX);
-
-        try (org.apache.hadoop.hbase.client.Connection conn =
-                     hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
-            HTableDescriptor tableDescriptor = admin.getTableDescriptor(
-                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            assertTrue("Coprocessor " + SyscatRegionObserver.class.getName()
-                    + " has been added with compatible client version: "
-                    + compatibleClientVersion, tableDescriptor.hasCoprocessor(
-                    SyscatRegionObserver.class.getName()));
-        }
-    }
-
-    @Test
-    public void testViewIndexIdCreatedByOldClient() throws Exception {
+    public void testViewIndexIdCreatedWithOldClient() throws Exception {
         executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
         try (org.apache.hadoop.hbase.client.Connection conn =
                      hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
@@ -419,7 +402,7 @@ public class BackwardCompatibilityIT {
     }
 
     @Test
-    public void testViewIndexIdCreatedByNewClient() throws Exception {
+    public void testViewIndexIdCreatedWithNewClient() throws Exception {
         executeQueriesWithCurrentVersion(ADD_VIEW_INDEX, url, NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_VIEW_INDEX, zkQuorum);
         assertExpectedOutput(QUERY_VIEW_INDEX);

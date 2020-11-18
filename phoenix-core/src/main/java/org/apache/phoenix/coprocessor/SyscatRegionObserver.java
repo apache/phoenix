@@ -29,6 +29,8 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ViewIndexIdRetrieveUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
@@ -37,23 +39,20 @@ import org.apache.phoenix.util.ServerUtil;
 
 import java.io.IOException;
 import java.sql.Types;
+import java.util.Collections;
 import java.util.List;
 
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN;
 
 /**
  * Coprocessor that checks whether the VIEW_INDEX_ID needs to retrieve.
  */
 public class SyscatRegionObserver extends BaseRegionObserver {
-    public static final String VIEW_INDEX_ID_CQ = DEFAULT_COLUMN_FAMILY + ":" + VIEW_INDEX_ID;
-    public static final String VIEW_INDEX_ID_DATA_TYPE_CQ =
-            DEFAULT_COLUMN_FAMILY + ":" + VIEW_INDEX_ID_DATA_TYPE;
-    public static final int VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN = 9;
-    public static final int VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN = 3;
-    public static final int OFF_RANGE_POS = -1;
     public static final int NULL_DATA_TYPE_VALUE = 0;
 
     @Override public void start(CoprocessorEnvironment e) throws IOException {
@@ -106,14 +105,28 @@ public class SyscatRegionObserver extends BaseRegionObserver {
 
         @Override public boolean next(List<Cell> result, ScannerContext scannerContext)
                 throws IOException {
-            throw new IOException(
-                    "next with scannerContext should not be called in Phoenix environment");
+            return doHBaseScanNext(result, false);
         }
 
         @Override public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
                 throws IOException {
-            throw new IOException(
-                    "NextRaw with scannerContext should not be called in Phoenix environment");
+            return doHBaseScanNext(result, true);
+        }
+
+        // we don't want to modify the cell when we have the HBase scan
+        private boolean doHBaseScanNext(List<Cell> result, boolean raw) throws IOException {
+            boolean hasMore;
+            try {
+                hasMore = raw ? scanner.nextRaw(result) : scanner.next(result);
+                if (result.isEmpty()) {
+                    return false;
+                }
+            }catch (Throwable t) {
+                ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+                return false; // impossible
+            }
+
+            return hasMore;
         }
 
         @Override public void close() throws IOException {
@@ -148,42 +161,38 @@ public class SyscatRegionObserver extends BaseRegionObserver {
                     return false;
                 }
                 // logic to change the cell
-                int pos = OFF_RANGE_POS;
                 int type = NULL_DATA_TYPE_VALUE;
-                for (int i = 0; i < result.size(); i++) {
-                    Cell cell = result.get(i);
-                    if (cell.toString().contains(VIEW_INDEX_ID_DATA_TYPE_CQ)) {
-                        if (cell.getValueArray().length > 0) {
-                            type = (Integer) PInteger.INSTANCE.toObject(
-                                    cell.getValueArray(), cell.getValueOffset(),
-                                    cell.getValueLength(), PInteger.INSTANCE, SortOrder.ASC);
-                        }
-                    } else if (cell.toString().contains(VIEW_INDEX_ID_CQ)) {
-                        pos = i;
-                    }
-                }
-                if (pos != OFF_RANGE_POS) {
-                    // only 3 cases VIEW_INDEX_ID, VIEW_INDEX_ID_DATA_TYPE, CLIENT
-                    //                SMALLINT,        NULL,                PRE-4.15
-                    //                SMALLINT,         5,                  POST-4.15
-                    //                 BIGINT,         -5,                  POST-4.15
+                Cell viewIndexIdCell = KeyValueUtil.getColumnLatest(
+                        GenericKeyValueBuilder.INSTANCE, result,
+                        DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
+                Cell viewIndexIdDataTypeCell = KeyValueUtil.getColumnLatest(
+                        GenericKeyValueBuilder.INSTANCE, result,
+                        DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_DATA_TYPE_BYTES);
 
-                    // if VIEW_INDEX_ID IS presenting
+                if (viewIndexIdCell != null) {
+                    if (viewIndexIdDataTypeCell != null) {
+                        type = (Integer) PInteger.INSTANCE.toObject(
+                                viewIndexIdDataTypeCell.getValueArray(),
+                                viewIndexIdDataTypeCell.getValueOffset(),
+                                viewIndexIdDataTypeCell.getValueLength(),
+                                PInteger.INSTANCE,
+                                SortOrder.ASC);
+                    }
                     if (ScanUtil.getClientVersion(this.scan) < MIN_SPLITTABLE_SYSTEM_CATALOG) {
                         // pre-splittable client should always using SMALLINT
-                        if (type == NULL_DATA_TYPE_VALUE && result.get(pos).getValueLength() >
+                        if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
                                 VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN) {
                             Cell keyValue = ViewIndexIdRetrieveUtil.
-                                    getViewIndexIdKeyValueInShortDataFormat(result.get(pos));
-                            result.set(pos, keyValue);
+                                    getViewIndexIdKeyValueInShortDataFormat(viewIndexIdCell);
+                            Collections.replaceAll(result, viewIndexIdCell, keyValue);
                         }
                     } else {
                         // post-splittable client should always using BIGINT
-                        if (type != Types.BIGINT && result.get(pos).getValueLength() <
+                        if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
                                 VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
                             Cell keyValue = ViewIndexIdRetrieveUtil.
-                                    getViewIndexIdKeyValueInLongDataFormat(result.get(pos));
-                            result.set(pos, keyValue);
+                                    getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
+                            Collections.replaceAll(result, viewIndexIdCell, keyValue);
                         }
                     }
                 }

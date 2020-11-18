@@ -24,6 +24,9 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 
 public final class ViewIndexIdRetrieveUtil {
+    public static final int VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN = 9;
+    public static final int VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN = 3;
+
     private ViewIndexIdRetrieveUtil() {
 
     }
@@ -32,10 +35,14 @@ public final class ViewIndexIdRetrieveUtil {
         Short valueInShort = (Short) PSmallint.INSTANCE.toObject(
                 viewIndexIdCell.getValueArray(), viewIndexIdCell.getValueOffset(),
                 viewIndexIdCell.getValueLength(), PSmallint.INSTANCE, SortOrder.ASC);
-        byte[] valueBytesInLong = new byte[9];
+        byte[] valueBytesInLong = new byte[VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN];
         byte[] valueBytes = PLong.INSTANCE.toBytes(valueInShort);
-        System.arraycopy(valueBytes, 0, valueBytesInLong, 0, 8);
+        System.arraycopy(valueBytes, 0, valueBytesInLong,
+                0, VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN - 1);
+        return buildNewCell(viewIndexIdCell, valueBytesInLong);
+    }
 
+    public static Cell buildNewCell(Cell viewIndexIdCell, byte[] newVal) {
         KeyValue keyValue = new KeyValue(
                 viewIndexIdCell.getRowArray(), viewIndexIdCell.getRowOffset(),
                 viewIndexIdCell.getRowLength(),
@@ -44,9 +51,8 @@ public final class ViewIndexIdRetrieveUtil {
                 viewIndexIdCell.getQualifierArray(), viewIndexIdCell.getQualifierOffset(),
                 viewIndexIdCell.getQualifierLength(),
                 viewIndexIdCell.getTimestamp(),KeyValue.Type.Put,
-                valueBytesInLong, 0,9);
+                newVal, 0,newVal.length);
         keyValue.setSequenceId(viewIndexIdCell.getSequenceId());
-
         return keyValue;
     }
 
@@ -54,21 +60,11 @@ public final class ViewIndexIdRetrieveUtil {
         Long valueInShort = (Long) PLong.INSTANCE.toObject(
                 viewIndexIdCell.getValueArray(), viewIndexIdCell.getValueOffset(),
                 viewIndexIdCell.getValueLength(), PLong.INSTANCE, SortOrder.ASC);
-        byte[] valueBytesInShort = new byte[3];
+        byte[] valueBytesInShort = new byte[VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN];
         byte[] valueBytes = PSmallint.INSTANCE.toBytes(valueInShort);
-        System.arraycopy(valueBytes, 0, valueBytesInShort, 0, 2);
+        System.arraycopy(valueBytes, 0, valueBytesInShort,
+                0, VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN - 1);
 
-        KeyValue keyValue = new KeyValue(
-                viewIndexIdCell.getRowArray(), viewIndexIdCell.getRowOffset(),
-                viewIndexIdCell.getRowLength(),
-                viewIndexIdCell.getFamilyArray(), viewIndexIdCell.getFamilyOffset(),
-                viewIndexIdCell.getFamilyLength(),
-                viewIndexIdCell.getQualifierArray(), viewIndexIdCell.getQualifierOffset(),
-                viewIndexIdCell.getQualifierLength(),
-                viewIndexIdCell.getTimestamp(),KeyValue.Type.Put,
-                valueBytesInShort, 0,3);
-        keyValue.setSequenceId(viewIndexIdCell.getSequenceId());
-
-        return keyValue;
+        return buildNewCell(viewIndexIdCell, valueBytesInShort);
     }
 }

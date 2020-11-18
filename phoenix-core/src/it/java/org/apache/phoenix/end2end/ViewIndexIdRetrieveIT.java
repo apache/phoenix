@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static junit.framework.TestCase.assertEquals;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
@@ -26,6 +25,7 @@ import static org.apache.phoenix.query.QueryServices.LONG_VIEW_INDEX_ENABLED_ATT
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
