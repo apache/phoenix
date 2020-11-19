@@ -659,7 +659,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
             //Now we null out any existing last ddl timestamps
             nullDDLTimestamps(conn);
-            conn.commit();
 
             //now get the row timestamps for each header row
             long tableTS = getRowTimestampForMetadata(conn, schemaName, tableName,
