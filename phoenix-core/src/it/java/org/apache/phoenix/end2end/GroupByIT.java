@@ -333,6 +333,4 @@ public class GroupByIT extends BaseQueryIT {
             conn.close();
         }
     }
-    
-
 }

@@ -626,11 +626,14 @@ public abstract class BaseTest {
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
+        // This results in processing one row at a time in each next operation of the aggregate region
+        // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
+        // within one page; 0ms page is equivalent to one-row page
         if (conf.getLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
             conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
-            // This results in processing one row at a time in each next operation of the aggregate region
-            // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
-            // within one page; 0ms page is equivalent to one-row page
+        }
+        if (conf.getLong(QueryServices.GROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
+            conf.setLong(QueryServices.GROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
         }
         return conf;
     }
