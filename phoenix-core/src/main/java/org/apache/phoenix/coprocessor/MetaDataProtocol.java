@@ -178,8 +178,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
         UNABLE_TO_CREATE_CHILD_LINK,
         UNABLE_TO_UPDATE_PARENT_TABLE,
         UNABLE_TO_DELETE_CHILD_LINK,
+        UNABLE_TO_UPSERT_TASK,
         NO_OP
-    };
+    }
 
   public static class SharedTableState {
         private PName tenantId;

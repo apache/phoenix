@@ -264,4 +264,18 @@ public class PhoenixMetaDataCoprocessorHost
       }
       return user;
   }
+
+    void preUpsertTaskDetails(final String tableName) throws IOException {
+        execOperation(
+                new CoprocessorOperation<PhoenixMetaDataControllerEnvironment>(
+                    getActiveUser()) {
+                    @Override
+                    public void call(MetaDataEndpointObserver observer,
+                            ObserverContext<PhoenixMetaDataControllerEnvironment> ctx)
+                            throws IOException {
+                        observer.preUpsertTaskDetails(ctx, tableName);
+                    }
+        });
+    }
+
 }

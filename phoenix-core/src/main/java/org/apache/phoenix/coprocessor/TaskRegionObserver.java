@@ -32,6 +32,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.util.JacksonUtil;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
@@ -195,10 +196,19 @@ public class TaskRegionObserver extends BaseRegionObserver {
                             }
 
                             // Change task status to STARTED
-                            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
-                                    taskRecord.getTableName(), PTable.TaskStatus.STARTED.toString(),
-                                    taskRecord.getData(), taskRecord.getPriority(), taskRecord.getTimeStamp(), null,
-                                    true);
+                            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                                .setConn(connForTask)
+                                .setTaskType(taskRecord.getTaskType())
+                                .setTenantId(taskRecord.getTenantId())
+                                .setSchemaName(taskRecord.getSchemaName())
+                                .setTableName(taskRecord.getTableName())
+                                .setTaskStatus(PTable.TaskStatus.STARTED.toString())
+                                .setData(taskRecord.getData())
+                                .setPriority(taskRecord.getPriority())
+                                .setStartTs(taskRecord.getTimeStamp())
+                                .setEndTs(null)
+                                .setAccessCheckEnabled(true)
+                                .build());
 
                             // invokes the method at runtime
                             result = (TaskResult) runMethod.invoke(obj, taskRecord);
@@ -251,9 +261,19 @@ public class TaskRegionObserver extends BaseRegionObserver {
             data = jsonNode.toString();
 
             Timestamp endTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            Task.addTask(connForTask, taskRecord.getTaskType(), taskRecord.getTenantId(), taskRecord.getSchemaName(),
-                    taskRecord.getTableName(), taskStatus, data, taskRecord.getPriority(),
-                    taskRecord.getTimeStamp(), endTs, true);
+            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                .setConn(connForTask)
+                .setTaskType(taskRecord.getTaskType())
+                .setTenantId(taskRecord.getTenantId())
+                .setSchemaName(taskRecord.getSchemaName())
+                .setTableName(taskRecord.getTableName())
+                .setTaskStatus(taskStatus)
+                .setData(data)
+                .setPriority(taskRecord.getPriority())
+                .setStartTs(taskRecord.getTimeStamp())
+                .setEndTs(endTs)
+                .setAccessCheckEnabled(true)
+                .build());
         }
     }
 }
