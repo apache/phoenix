@@ -335,8 +335,6 @@ public class ViewIT extends SplitSystemCatalogIT {
         Properties props = new Properties();
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        } else {
-            tenantId = "";
         }
         final String schemaName = "S_" + generateUniqueName();
         final String tableName = "T_" + generateUniqueName();
