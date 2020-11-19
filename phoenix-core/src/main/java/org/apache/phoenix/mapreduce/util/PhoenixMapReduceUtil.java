@@ -23,7 +23,9 @@ import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
+import org.apache.phoenix.mapreduce.PhoenixMultiViewInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 
 import java.io.IOException;
@@ -123,6 +125,21 @@ public final class PhoenixMapReduceUtil {
             PhoenixConfigurationUtil.setInputTableConditions(configuration, conditions);
         }
         PhoenixConfigurationUtil.setSelectColumnNames(configuration, fieldNames);
+    }
+
+    /**
+     *
+     * @param job MR job instance
+     * @param tool PhoenixTtlTool for Phoenix TTL deletion MR job
+     */
+    public static void setInput(final Job job, PhoenixTTLTool tool) {
+        Configuration configuration = job.getConfiguration();
+        job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
+        tool.setPhoenixTTLJobInputConfig(configuration);
+        PhoenixConfigurationUtil.setSchemaType(configuration,
+                PhoenixConfigurationUtil.SchemaType.QUERY);
+        PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());
+        PhoenixConfigurationUtil.setMultiViewQueryMoreSplitSize(configuration, tool.getBatchSize());
     }
 
     /**
