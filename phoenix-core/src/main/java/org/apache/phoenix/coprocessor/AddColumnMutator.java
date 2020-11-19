@@ -404,7 +404,7 @@ public class AddColumnMutator implements ColumnMutator {
             //We're changing the application-facing schema by adding a column, so update the DDL
             // timestamp
             long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-            if (MetaDataUtil.isTableQueryable(table.getType())) {
+            if (MetaDataUtil.isTableTypeDirectlyQueried(table.getType())) {
                 additionalTableMetadataMutations.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
                     clientTimeStamp, serverTimestamp));
             }

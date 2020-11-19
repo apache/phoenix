@@ -126,7 +126,7 @@ public class MetaDataUtil {
      * @return True if a table or view, false otherwise (such as for an index, system table, or
      * subquery)
      */
-    public static boolean isTableQueryable(PTableType tableType) {
+    public static boolean isTableTypeDirectlyQueried(PTableType tableType) {
         return tableType.equals(PTableType.TABLE) || tableType.equals(PTableType.VIEW);
     }
 

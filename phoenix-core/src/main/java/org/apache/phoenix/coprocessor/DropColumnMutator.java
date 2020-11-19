@@ -274,7 +274,7 @@ public class DropColumnMutator implements ColumnMutator {
         }
         //We're changing the application-facing schema by dropping a column, so update the DDL
         // timestamp to current _server_ timestamp
-        if (MetaDataUtil.isTableQueryable(table.getType())) {
+        if (MetaDataUtil.isTableTypeDirectlyQueried(table.getType())) {
             long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
             additionalTableMetaData.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
                 clientTimeStamp, serverTimestamp));

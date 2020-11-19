@@ -2053,7 +2053,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // table. We only need to do this for tables and views because indexes and system
                 // tables aren't relevant to external systems that may be tracking our schema
                 // changes.
-                if (MetaDataUtil.isTableQueryable(tableType)) {
+                if (MetaDataUtil.isTableTypeDirectlyQueried(tableType)) {
                     tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
                         clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
                 }
