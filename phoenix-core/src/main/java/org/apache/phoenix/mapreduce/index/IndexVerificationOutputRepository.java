@@ -171,20 +171,22 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
 
     public void createOutputTable(Connection connection) throws IOException, SQLException {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = queryServices.getAdmin();
-        TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
-        if (!admin.tableExists(outputTableName)) {
-            HTableDescriptor tableDescriptor = new
-                HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(OUTPUT_TABLE_COLUMN_FAMILY);
-            columnDescriptor.setValue(HColumnDescriptor.TTL,
+        try (Admin admin = queryServices.getAdmin()) {
+            TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
+            if (!admin.tableExists(outputTableName)) {
+                HTableDescriptor tableDescriptor = new
+                    HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
+                HColumnDescriptor columnDescriptor =
+                    new HColumnDescriptor(OUTPUT_TABLE_COLUMN_FAMILY);
+                columnDescriptor.setValue(HColumnDescriptor.TTL,
                     String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-            tableDescriptor.addFamily(columnDescriptor);
-            admin.createTable(tableDescriptor);
-            outputTable = admin.getConnection().getTable(outputTableName);
+                tableDescriptor.addFamily(columnDescriptor);
+                admin.createTable(tableDescriptor);
+                outputTable = admin.getConnection().getTable(outputTableName);
+            }
         }
     }
-        
+
     @VisibleForTesting
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs,
                                           long indexRowTs,
