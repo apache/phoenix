@@ -964,7 +964,6 @@ public class ScanUtil {
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
-        result.clear();
         KeyValue keyValue =
                 KeyValueUtil.newKeyValue(rowKey, 0,
                         rowKey.length, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY,

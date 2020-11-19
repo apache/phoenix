@@ -609,7 +609,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             if (hasMore && !aggBoundary && !atLimit && (now - startTime) >= pageSizeInMs) {
                 // Return a dummy result as we have processed a page worth of rows
                 // but we are not ready to aggregate
-                //getDummyResult(results);
                 return true;
             }
             if (currentKey != null) {
