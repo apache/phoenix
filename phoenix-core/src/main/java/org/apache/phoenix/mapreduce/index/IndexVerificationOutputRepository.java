@@ -172,20 +172,23 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
 
     public void createOutputTable(Connection connection) throws IOException, SQLException {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = queryServices.getAdmin();
-        TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
-        if (!admin.tableExists(outputTableName)) {
-            ColumnFamilyDescriptor columnDescriptor =
-                ColumnFamilyDescriptorBuilder.newBuilder(OUTPUT_TABLE_COLUMN_FAMILY).
-                    setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL).build();
-            TableDescriptor tableDescriptor =
-                TableDescriptorBuilder.newBuilder(TableName.valueOf(OUTPUT_TABLE_NAME)).
-                    setColumnFamily(columnDescriptor).build();
-            admin.createTable(tableDescriptor);
-            outputTable = admin.getConnection().getTable(outputTableName);
+        try (Admin admin = queryServices.getAdmin()) {
+            TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
+            if (!admin.tableExists(outputTableName)) {
+                ColumnFamilyDescriptor columnDescriptor =
+                    ColumnFamilyDescriptorBuilder
+                        .newBuilder(OUTPUT_TABLE_COLUMN_FAMILY)
+                        .setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL)
+                        .build();
+                TableDescriptor tableDescriptor = TableDescriptorBuilder
+                    .newBuilder(TableName.valueOf(OUTPUT_TABLE_NAME))
+                    .setColumnFamily(columnDescriptor).build();
+                admin.createTable(tableDescriptor);
+                outputTable = admin.getConnection().getTable(outputTableName);
+            }
         }
     }
-        
+
     @VisibleForTesting
     public void logToIndexToolOutputTable(byte[] dataRowKey, byte[] indexRowKey, long dataRowTs,
                                           long indexRowTs,

@@ -331,10 +331,13 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         }
         ConnectionQueryServices
                 cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = cqsi.getAdmin();
         String physicalTable = getSourceTableName(pSourceTable,
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
-        TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(physicalTable));
+        TableDescriptor tableDesc;
+        try (Admin admin = cqsi.getAdmin()) {
+            tableDesc = admin.getDescriptor(TableName
+                .valueOf(physicalTable));
+        }
         return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
     }
 

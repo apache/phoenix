@@ -143,19 +143,23 @@ public class IndexVerificationResultRepository implements AutoCloseable {
 
     public void createResultTable(Connection connection) throws IOException, SQLException {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = queryServices.getAdmin();
-        TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
-        if (!admin.tableExists(resultTableName)) {
-            ColumnFamilyDescriptor columnDescriptor =
-                ColumnFamilyDescriptorBuilder.newBuilder(RESULT_TABLE_COLUMN_FAMILY).
-                    setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL).build();
-            TableDescriptor tableDescriptor =
-                TableDescriptorBuilder.newBuilder(resultTableName).
-                    setColumnFamily(columnDescriptor).build();
-            admin.createTable(tableDescriptor);
-            resultTable = admin.getConnection().getTable(resultTableName);
+        try (Admin admin = queryServices.getAdmin()) {
+            TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
+            if (!admin.tableExists(resultTableName)) {
+                ColumnFamilyDescriptor columnDescriptor =
+                    ColumnFamilyDescriptorBuilder
+                        .newBuilder(RESULT_TABLE_COLUMN_FAMILY)
+                        .setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL)
+                        .build();
+                TableDescriptor tableDescriptor =
+                    TableDescriptorBuilder.newBuilder(resultTableName)
+                        .setColumnFamily(columnDescriptor).build();
+                admin.createTable(tableDescriptor);
+                resultTable = admin.getConnection().getTable(resultTableName);
+            }
         }
     }
+
     private static byte[] generatePartialResultTableRowKey(long ts, byte[] indexTableName) {
         byte[] keyPrefix = Bytes.toBytes(Long.toString(ts));
         int targetOffset = 0;

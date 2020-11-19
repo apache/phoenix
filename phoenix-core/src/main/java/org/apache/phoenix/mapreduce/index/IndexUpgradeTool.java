@@ -502,8 +502,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
             LOGGER.severe("Revert of the "+operation +" failed in error handling, "
                     + "re-enabling tables and then throwing runtime exception");
             LOGGER.severe("Confirm the state for "+getSubListString(tableList, dataTableFullName));
-            try {
-                enableTable(queryServices.getAdmin(), dataTableFullName, indexes);
+            try (Admin admin = queryServices.getAdmin()) {
+                enableTable(admin, dataTableFullName, indexes);
             } catch (Exception ex) {
                 throw new RuntimeException("Error re-enabling tables after rollback failure. " +
                     "Original exception that caused the rollback: [" + e.toString() + " " + "]", ex);

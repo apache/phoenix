@@ -1059,7 +1059,9 @@ public class IndexTool extends Configured implements Tool {
 
     private org.apache.hadoop.hbase.client.Connection getTemporaryHConnection(PhoenixConnection pConnection)
             throws SQLException, IOException {
-        return ConnectionFactory.createConnection(pConnection.getQueryServices().getAdmin().getConfiguration());
+        try (Admin admin = pConnection.getQueryServices().getAdmin()) {
+            return ConnectionFactory.createConnection(admin.getConfiguration());
+        }
     }
 
     // setup a ValueGetter to get index values from the ResultSet
