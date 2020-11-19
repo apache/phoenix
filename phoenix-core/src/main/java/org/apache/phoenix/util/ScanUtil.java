@@ -25,6 +25,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STAR
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -38,9 +39,11 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
@@ -809,7 +812,7 @@ public class ScanUtil {
 
     public static byte[] getPrefix(byte[] startKey, int prefixLength) {
         // If startKey is at beginning, then our prefix will be a null padded byte array
-        return startKey.length >= prefixLength ? startKey : ByteUtil.EMPTY_BYTE_ARRAY;
+        return startKey.length >= prefixLength ? startKey : EMPTY_BYTE_ARRAY;
     }
 
     private static boolean hasNonZeroLeadingBytes(byte[] key, int nBytesToCheck) {
@@ -1206,5 +1209,35 @@ public class ScanUtil {
             }
             addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
+    }
+
+    public static void getDummyResult(byte[] rowKey, List<Cell> result) {
+        Cell keyValue =
+                PhoenixKeyValueUtil.newKeyValue(rowKey, 0,
+                        rowKey.length, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY,
+                        0, EMPTY_BYTE_ARRAY, 0, EMPTY_BYTE_ARRAY.length);
+        result.add(keyValue);
+    }
+
+    public static void getDummyResult(List<Cell> result) {
+        getDummyResult(EMPTY_BYTE_ARRAY, result);
+    }
+
+    public static boolean isDummy(Result result) {
+        // Check if the result is a dummy result
+        if (result.rawCells().length != 1) {
+            return false;
+        }
+        Cell cell = result.rawCells()[0];
+        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+    }
+
+    public static boolean isDummy(List<Cell> result) {
+        // Check if the result is a dummy result
+        if (result.size() != 1) {
+            return false;
+        }
+        Cell cell = result.get(0);
+        return CellUtil.matchingColumn(cell, EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
     }
 }
