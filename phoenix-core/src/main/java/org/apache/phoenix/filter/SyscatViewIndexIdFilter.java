@@ -36,15 +36,22 @@ import java.util.Collections;
 import java.util.List;
 
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VALUE;
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN;
 
 public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
-    public SyscatViewIndexIdFilter() {
+    private int clientVersion;
 
+    public SyscatViewIndexIdFilter() {
+    }
+
+    public SyscatViewIndexIdFilter(int clientVersion) {
+        this.clientVersion = clientVersion;
     }
 
     @Override
@@ -53,10 +60,16 @@ public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
     }
 
     @Override
+    public boolean hasFilterRow() {
+        return true;
+    }
+
+    @Override
     public void filterRowCells(List<Cell> kvs) throws IOException {
         Cell viewIndexIdCell = KeyValueUtil.getColumnLatest(
                 GenericKeyValueBuilder.INSTANCE, kvs,
                 DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
+
         if (viewIndexIdCell != null) {
             int type = NULL_DATA_TYPE_VALUE;
             Cell viewIndexIdDataTypeCell = KeyValueUtil.getColumnLatest(
@@ -70,13 +83,22 @@ public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
                         PInteger.INSTANCE,
                         SortOrder.ASC);
             }
-
-            // post-splittable client should always using BIGINT
-            if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
-                    VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
-                Cell keyValue = ViewIndexIdRetrieveUtil.
-                        getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
-                Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+            if (this.clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+                // pre-splittable client should always using SMALLINT
+                if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
+                        VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN) {
+                    Cell keyValue = ViewIndexIdRetrieveUtil.
+                            getViewIndexIdKeyValueInShortDataFormat(viewIndexIdCell);
+                    Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+                }
+            } else {
+                // post-splittable client should always using BIGINT
+                if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
+                        VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
+                    Cell keyValue = ViewIndexIdRetrieveUtil.
+                            getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
+                    Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+                }
             }
         }
     }
@@ -98,12 +120,12 @@ public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
 
     @Override
     public void readFields(DataInput input) throws IOException {
-        input.readByte();
+        this.clientVersion = input.readInt();
     }
 
     @Override
     public void write(DataOutput output) throws IOException {
-        output.writeByte(1);
+        output.writeInt(this.clientVersion);
     }
 
 }

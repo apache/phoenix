@@ -770,18 +770,6 @@ public class QueryCompiler {
         if(plan instanceof BaseQueryPlan){
             ((BaseQueryPlan) plan).setApplicable(isApplicable);
         }
-        if (context.getScan().getFilter() != null &&
-                table.toString().equalsIgnoreCase(SYSTEM_CATALOG_NAME)) {
-            context.getScan().setAttribute(SYSCATA_COPROC_IGNORE_TAG,
-                    TRUE_BYTES);
-            try {
-                projector.getColumnIndex(VIEW_INDEX_ID);
-                ScanUtil.andFilterAtBeginning(context.getScan(),
-                        new SyscatViewIndexIdFilter());
-            } catch (Exception e) {
-                // VIEW_INDEX_ID is not presenting.
-            }
-        }
         return plan;
     }
 }

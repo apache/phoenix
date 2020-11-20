@@ -148,7 +148,7 @@ public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
 
                 String schemaName = rs.getString(TABLE_SCHEM);
                 long viewIndexId = rs.getLong(VIEW_INDEX_ID);
-                if (schemaName.equals(schema) && viewIndexId != 0) {
+                if (schemaName != null && schemaName.equals(schema) && viewIndexId != 0) {
                     int viewIndexIdDataType = rs.getInt(VIEW_INDEX_ID_DATA_TYPE);
                     String tableName = rs.getString(TABLE_NAME);
                     if (tableName.equals(viewIndexName1)) {
