@@ -52,7 +52,8 @@ public interface ColumnMutator {
                                                                    List<ImmutableBytesPtr> invalidateList,
                                                                    List<Region.RowLock> locks,
                                                                    long clientTimeStamp,
-                                                                   long clientVersion)
+                                                                   long clientVersion,
+                                                                   boolean isAddingOrDroppingColumns)
             throws IOException, SQLException;
 
     /**

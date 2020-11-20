@@ -109,6 +109,7 @@ message PTable {
   optional int64 phoenixTTL = 42;
   optional int64 phoenixTTLHighWaterMark = 43;
   optional bool viewModifiedPhoenixTTL = 44;
+  optional int64 lastDDLTimestamp=45;
 }
 
 message EncodedCQCounter {

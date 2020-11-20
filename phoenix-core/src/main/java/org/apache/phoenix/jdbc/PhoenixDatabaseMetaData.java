@@ -378,6 +378,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String PHOENIX_TTL_HWM = "PHOENIX_TTL_HWM";
     public static final byte[] PHOENIX_TTL_HWM_BYTES = Bytes.toBytes(PHOENIX_TTL_HWM);
 
+    public static final String LAST_DDL_TIMESTAMP = "LAST_DDL_TIMESTAMP";
+    public static final byte[] LAST_DDL_TIMESTAMP_BYTES = Bytes.toBytes(LAST_DDL_TIMESTAMP);
+
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);
@@ -1043,7 +1046,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 "\nfrom " + SYSTEM_CATALOG +
                 "\nwhere ");
         buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = ?" ));
-        if(schema != null && schema.length() > 0) {
+        if (schema != null && schema.length() > 0) {
             parameterValues.add(schema);
         }
         buf.append("\nand " + DATA_TABLE_NAME + " = ?" );
@@ -1360,7 +1363,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         addTenantIdFilter(buf, catalog, parameterValues);
         if (schemaPattern != null) {
             buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-            if(schemaPattern.length() > 0) {
+            if (schemaPattern.length() > 0) {
                 parameterValues.add(schemaPattern);
             }
         }
@@ -1493,7 +1496,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     TRANSACTION_PROVIDER + " IS NOT NULL AS " + TRANSACTIONAL + "," +
                     IS_NAMESPACE_MAPPED + "," +
                     GUIDE_POSTS_WIDTH + "," +
-                    TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS TRANSACTION_PROVIDER" +
+                    TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS " +
+                        "TRANSACTION_PROVIDER" +
                     " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                     " where " + COLUMN_NAME + " is null" +
                     " and " + COLUMN_FAMILY + " is null" +
@@ -1501,7 +1505,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             addTenantIdFilter(buf, catalog, parameterValues);
             if (schemaPattern != null) {
                 buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -1538,7 +1542,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
                     "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
                     "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "," +
-                    "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n");
+                    "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n"
+            );
             buf.append(
                     " from " + SYSTEM_SEQUENCE + "\n");
             StringBuilder whereClause = new StringBuilder();
@@ -1546,7 +1551,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             if (schemaPattern != null) {
                 appendConjunction(whereClause);
                 whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -2086,7 +2091,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     private void setParameters(PreparedStatement stmt, List<String> parameterValues)
             throws SQLException {
-        for(int i = 0; i < parameterValues.size(); i++) {
+        for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
     }
