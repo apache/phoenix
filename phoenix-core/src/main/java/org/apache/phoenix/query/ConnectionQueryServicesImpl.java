@@ -1346,6 +1346,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                       .build().buildException();
                 }
+                // If DoNotUpgrade config is set only check namespace mapping and
+                // Client-server compatibility for system tables.
+                if(isDoNotUpgradePropSet) {
+                    try {
+                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(
+                                SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                    } catch (SQLException possibleCompatException) {
+                        if(possibleCompatException.getCause()
+                                instanceof org.apache.hadoop.hbase.TableNotFoundException) {
+                            throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
+                        }
+                        throw possibleCompatException;
+                    }
+                    return null;
+                }
             }
 
             try {
@@ -1581,19 +1596,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         long systemCatalogTimestamp = Long.MAX_VALUE;
         Table ht = null;
         try {
-            List<HRegionLocation> locations = this
-                    .getAllTableRegions(metaTable);
-            Set<HRegionLocation> serverMap = Sets.newHashSetWithExpectedSize(locations.size());
-            TreeMap<byte[], HRegionLocation> regionMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-            List<byte[]> regionKeys = Lists.newArrayListWithExpectedSize(locations.size());
-            for (HRegionLocation entry : locations) {
-                if (!serverMap.contains(entry)) {
-                    regionKeys.add(entry.getRegion().getStartKey());
-                    regionMap.put(entry.getRegion().getRegionName(), entry);
-                    serverMap.add(entry);
-                }
-            }
-
             ht = this.getTable(metaTable);
             final byte[] tablekey = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
             Map<byte[], GetVersionResponse> results;
@@ -1631,7 +1633,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 MetaDataUtil.ClientServerCompatibility compatibility = MetaDataUtil.areClientAndServerCompatible(serverJarVersion);
                 if (!compatibility.getIsCompatible()) {
                     if (compatibility.getErrorCode() == SQLExceptionCode.OUTDATED_JARS.getErrorCode()) {
-                        HRegionLocation name = regionMap.get(result.getKey());
                         errorMessage.append("Newer Phoenix clients can't communicate with older "
                                 + "Phoenix servers. Client version: "
                                 + MetaDataProtocol.CURRENT_CLIENT_VERSION
@@ -1639,9 +1640,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + getServerVersion(serverJarVersion)
                                 + " The following servers require an updated "
                                 + QueryConstants.DEFAULT_COPROCESS_JAR_NAME
-                                + " to be put in the classpath of HBase: ");
-                        errorMessage.append(name);
-                        errorMessage.append(';');
+                                + " to be put in the classpath of HBase.");
                     } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
                         errorMessage.append("Major version of client is less than that of the server. Client version: "
                                 + MetaDataProtocol.CURRENT_CLIENT_VERSION
@@ -3271,21 +3270,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     }
                                     return null;
                                 } catch (UpgradeRequiredException e) {
-                                    // This will occur in 3 cases:
-                                    // 1. SYSTEM.CATALOG does not exist and we don't want to allow the user to create it i.e.
-                                    //    !isAutoUpgradeEnabled or isDoNotUpgradePropSet is set
-                                    // 2. SYSTEM.CATALOG exists and its timestamp < MIN_SYSTEM_TABLE_TIMESTAMP
-                                    // 3. SYSTEM.CATALOG exists, but client and server-side namespace mapping is enabled so
-                                    //    we need to migrate SYSTEM tables to the SYSTEM namespace
+                                    // This will occur in 2 cases:
+                                    // 1. when SYSTEM.CATALOG doesn't exists
+                                    // 2. when SYSTEM.CATALOG exists, but client and
+                                    // server-side namespace mapping is enabled so
+                                    // we need to migrate SYSTEM tables to the SYSTEM namespace
                                     setUpgradeRequired();
                                 }
 
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
-                                    createOtherSystemTables(metaConnection);
-                                    // In case namespace mapping is enabled and system table to system namespace mapping is also enabled,
-                                    // create an entry for the SYSTEM namespace in the SYSCAT table, so that GRANT/REVOKE commands can work
-                                    // with SYSTEM Namespace
-                                    createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+                                    if(!isDoNotUpgradePropSet) {
+                                        createOtherSystemTables(metaConnection);
+                                        // In case namespace mapping is enabled and system table to
+                                        // system namespace mapping is also enabled, create an entry
+                                        // for the SYSTEM namespace in the SYSCAT table, so that
+                                        // GRANT/REVOKE commands can work with SYSTEM Namespace
+                                        createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+                                    }
                                 } else if (isAutoUpgradeEnabled && !isDoNotUpgradePropSet) {
                                     // Upgrade is required and we are allowed to automatically upgrade
                                     upgradeSystemTables(url, props);

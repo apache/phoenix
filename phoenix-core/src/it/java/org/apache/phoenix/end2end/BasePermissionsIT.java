@@ -967,7 +967,7 @@ public abstract class BasePermissionsIT extends BaseTest {
             // NS is disabled, CQSI tries creating SYSCAT, Two cases here
             // 1. First client ever --> Gets ADE, runs client server compatibility check again and gets TableNotFoundException since SYSCAT doesn't exist
             // 2. Any other client --> Gets ADE, runs client server compatibility check again and gets AccessDeniedException since it doesn't have EXEC perms
-            verifyDenied(getConnectionAction(), TableNotFoundException.class, regularUser1);
+            verifyDenied(getConnectionAction(), org.apache.hadoop.hbase.TableNotFoundException.class, regularUser1);
         }
 
         // Phoenix Client caches connection per user
