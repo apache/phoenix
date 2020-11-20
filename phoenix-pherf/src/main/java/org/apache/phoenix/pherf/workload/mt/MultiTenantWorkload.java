@@ -16,16 +16,31 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
 
-/**
- * An interface that defines the type of operation included in the load profile.
- * @see {@link org.apache.phoenix.pherf.configuration.LoadProfile}
- */
-public interface Operation {
-    enum OperationType {
-        PRE_RUN, UPSERT, SELECT, NO_OP, USER_DEFINED
-    }
-    String getId();
-    OperationType getType();
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.util.PhoenixUtil;
+
+import java.util.Properties;
+
+public interface MultiTenantWorkload {
+    /**
+     * Initializes and readies the processor for continuous queue based workloads
+     */
+    void start();
+
+    /**
+     * Stop the processor and cleans up the workload queues.
+     */
+    void stop();
+
+
+    PhoenixUtil getPhoenixUtil();
+
+    Scenario getScenario();
+
+    DataModel getModel();
+
+    Properties getProperties();
 }

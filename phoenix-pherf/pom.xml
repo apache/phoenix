@@ -266,6 +266,7 @@
         </configuration>
       </plugin>
 
+<<<<<<< HEAD
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -347,4 +348,92 @@
       </plugin>
     </plugins>
   </build>
+=======
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>1.7</source>
+					<target>1.7</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+					<configuration>
+						<workingDirectory>${java.io.tmpdir}</workingDirectory>
+						<forkCount>1</forkCount>
+					</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+			</plugin>
+		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-shade-plugin</artifactId>
+			<executions>
+				<execution>
+					<phase>package</phase>
+					<goals>
+						<goal>shade</goal>
+					</goals>
+					<configuration>
+						<promoteTransitiveDependencies>false</promoteTransitiveDependencies>
+						<shadeTestJar>false</shadeTestJar>
+						<dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
+						<transformers>
+							<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+							<transformer
+									implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+								<resource>README.md</resource>
+								<file>${project.basedir}/../README.md</file>
+							</transformer>
+							<transformer
+									implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+								<resource>LICENSE.txt</resource>
+								<file>${project.basedir}/../LICENSE</file>
+							</transformer>
+							<transformer
+									implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+								<resource>NOTICE</resource>
+								<file>${project.basedir}/../NOTICE</file>
+							</transformer>
+						</transformers>
+						<artifactSet>
+							<includes>
+								<include>org.apache.phoenix:phoenix-pherf</include>
+                                <include>com.google.guava:guava</include>
+								<include>com.googlecode.java-diff-utils:diffutils</include>
+								<include>org.apache.commons:commons-lang3</include>
+								<include>org.apache.commons:commons-math3</include>
+								<include>org.apache.phoenix.thirdparty:phoenix-shaded-commons-cli</include>
+								<include>joda-time:joda-time</include>
+								<include>org.apache.commons:commons-csv</include>
+								<include>commons-lang:commons-lang</include>
+								<include>commons-io:commons-io</include>
+								<include>com.google.code.gson:gson</include>
+								<include>com.lmax:disruptor</include>
+							</includes>
+						</artifactSet>
+						<filters>
+							<filter>
+								<artifact>*:*</artifact>
+								<excludes>
+									<exclude>META-INF/*.SF</exclude>
+									<exclude>META-INF/*.DSA</exclude>
+									<exclude>META-INF/*.RSA</exclude>
+									<exclude>META-INF/license/*</exclude>
+									<exclude>LICENSE.*</exclude>
+									<exclude>NOTICE.*</exclude>
+								</excludes>
+							</filter>
+						</filters>
+					</configuration>
+				</execution>
+			</executions>
+		</plugin>
+		</plugins>
+	</build>
+>>>>>>> 34ffb53029... Added implementation classes and tests
 </project>

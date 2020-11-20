@@ -16,14 +16,15 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
-
-import org.apache.phoenix.pherf.configuration.Query;
+package org.apache.phoenix.pherf.workload.mt;
 
 /**
- * Defines a query operation.
- * @see {@link OperationType#SELECT}
+ * An interface that implementers can use to generate events that can be consumed by
+ * @see {@link com.lmax.disruptor.WorkHandler} which provide event handling functionality for
+ * a given event.
+ *
+ * @param <T>
  */
-public interface QueryOperation extends Operation {
-    Query getQuery();
+public interface EventGenerator<T> {
+    T next();
 }

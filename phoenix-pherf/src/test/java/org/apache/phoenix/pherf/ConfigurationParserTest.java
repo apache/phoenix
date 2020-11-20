@@ -127,7 +127,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
 
     @Test
     public void testWorkloadWithLoadProfile() throws Exception {
-        String testResourceName = "/scenario/test_scenario_with_load_profile.xml";
+        String testResourceName = "/scenario/test_workload_with_load_profile.xml";
         Set<String> scenarioNames = Sets.newHashSet("scenario_11", "scenario_12");
         List<Scenario> scenarioList = getScenarios(testResourceName);
         Scenario target = null;

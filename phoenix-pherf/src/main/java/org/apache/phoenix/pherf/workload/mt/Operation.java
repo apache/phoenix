@@ -16,17 +16,16 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
-
-import org.apache.phoenix.pherf.configuration.Ddl;
-import org.apache.phoenix.pherf.configuration.Upsert;
-
-import java.util.List;
+package org.apache.phoenix.pherf.workload.mt;
 
 /**
- * Defines a pre scenario operation.
- * @see {@link OperationType#PRE_RUN}
+ * An interface that defines the type of operation included in the load profile.
+ * @see {@link org.apache.phoenix.pherf.configuration.LoadProfile}
  */
-public interface PreScenarioOperation extends Operation {
-    List<Ddl> getPreScenarioDdls();
+public interface Operation {
+    enum OperationType {
+        PRE_RUN, UPSERT, SELECT, NO_OP, USER_DEFINED
+    }
+    String getId();
+    OperationType getType();
 }

@@ -262,7 +262,7 @@
                 -->
                 <threadSleepDuration>10</threadSleepDuration>
 
-                <batchSize>1000</batchSize>
+                <batchSize>1</batchSize>
             </writeParams>
             <querySet concurrency="1" executionType="PARALLEL" executionDurationInMs="10000">
                 <query id="q3" statement="select count(*) from PHERF.TEST_TABLE"/>
