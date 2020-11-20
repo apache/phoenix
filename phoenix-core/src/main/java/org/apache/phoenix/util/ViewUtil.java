@@ -654,10 +654,15 @@ public class ViewUtil {
         }
 
         long maxTableTimestamp = view.getTimeStamp();
+        long maxDDLTimestamp = view.getLastDDLTimestamp() != null ? view.getLastDDLTimestamp() : 0L;
         int numPKCols = view.getPKColumns().size();
-        // set the final table timestamp as the max timestamp of the view/view index or its
-        // ancestors
+        // set the final table timestamp and DDL timestamp as the respective max timestamps of the
+        // view/view index or its ancestors
         maxTableTimestamp = Math.max(maxTableTimestamp, parentTable.getTimeStamp());
+
+        maxDDLTimestamp = Math.max(maxDDLTimestamp,
+                parentTable.getLastDDLTimestamp() != null ? parentTable.getLastDDLTimestamp() : 0L);
+
         if (hasIndexId) {
             // add all pk columns of parent tables to indexes
             // skip salted column as it will be added from the base table columns
@@ -762,6 +767,7 @@ public class ViewUtil {
                 .setExcludedColumns(ImmutableList.copyOf(excludedColumns))
                 .setUpdateCacheFrequency(updateCacheFreq)
                 .setUseStatsForParallelization(useStatsForParallelization)
+                .setLastDDLTimestamp(maxDDLTimestamp)
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
         

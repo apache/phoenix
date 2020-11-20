@@ -45,6 +45,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE_BYTES;
@@ -327,6 +328,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
     private static final KeyValue PHOENIX_TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_BYTES);
     private static final KeyValue PHOENIX_TTL_HWM_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_HWM_BYTES);
+    private static final KeyValue LAST_DDL_TIMESTAMP_KV =
+        createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LAST_DDL_TIMESTAMP_BYTES);
 
     private static final List<KeyValue> TABLE_KV_COLUMNS = Arrays.<KeyValue>asList(
             EMPTY_KEYVALUE_KV,
@@ -360,7 +363,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ENCODING_SCHEME_KV,
             USE_STATS_FOR_PARALLELIZATION_KV,
             PHOENIX_TTL_KV,
-            PHOENIX_TTL_HWM_KV
+            PHOENIX_TTL_HWM_KV,
+            LAST_DDL_TIMESTAMP_KV
     );
 
     static {
@@ -398,7 +402,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int USE_STATS_FOR_PARALLELIZATION_INDEX = TABLE_KV_COLUMNS.indexOf(USE_STATS_FOR_PARALLELIZATION_KV);
     private static final int PHOENIX_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_KV);
     private static final int PHOENIX_TTL_HWM_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_HWM_KV);
-
+    private static final int LAST_DDL_TIMESTAMP_INDEX =
+        TABLE_KV_COLUMNS.indexOf(LAST_DDL_TIMESTAMP_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1150,6 +1155,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         boolean viewModifiedPhoenixTTL = (PTableType.VIEW.equals(tableType)) &&
                 Bytes.contains(tagPhoenixTTL, VIEW_MODIFIED_PROPERTY_BYTES);
 
+        Cell lastDDLTimestampKv = tableKeyValues[LAST_DDL_TIMESTAMP_INDEX];
+        Long lastDDLTimestamp = lastDDLTimestampKv == null ?
+           null : PLong.INSTANCE.getCodec().decodeLong(lastDDLTimestampKv.getValueArray(),
+                lastDDLTimestampKv.getValueOffset(), SortOrder.getDefault());
+
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(useStatsForParallelizationKv);
@@ -1243,6 +1253,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
                 .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
                 .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
+                .setLastDDLTimestamp(lastDDLTimestamp)
                 .setColumns(columns)
                 .build();
     }
@@ -2038,7 +2049,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // view's property in case they are different from the parent
                     ViewUtil.addTagsToPutsForViewAlteredProperties(tableMetadata, parentTable);
                 }
-
+                //set the last DDL timestamp to the current server time since we're creating the
+                // table. We only need to do this for tables and views because indexes and system
+                // tables aren't relevant to external systems that may be tracking our schema
+                // changes.
+                if (MetaDataUtil.isTableTypeDirectlyQueried(tableType)) {
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
+                        clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+                }
                 // When we drop a view we first drop the view metadata and then drop the parent->child linking row
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
@@ -2100,6 +2118,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     builder.setViewIndexIdType(PLong.INSTANCE.getSqlType());
                 }
                 builder.setMutationTime(currentTimeStamp);
+                //send the newly built table back because we generated the DDL timestamp server
+                // side and the client doesn't have it.
+                PTable newTable = buildTable(tableKey, cacheKey, region,
+                    clientTimeStamp, clientVersion);
+                if (newTable != null) {
+                    builder.setTable(PTableImpl.toProto(newTable));
+                }
                 done.run(builder.build());
             } finally {
                 releaseRowLocks(region, locks);
@@ -2673,7 +2698,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private MetaDataMutationResult mutateColumn(
             final List<Mutation> tableMetadata,
             final ColumnMutator mutator, final int clientVersion,
-            final PTable parentTable) throws IOException {
+            final PTable parentTable, boolean isAddingOrDroppingColumns) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -2810,7 +2835,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         getParentPhysicalTableName(table), table.getType());
 
                 result = mutator.validateAndAddMetadata(table, rowKeyMetaData, tableMetadata,
-                        region, invalidateList, locks, clientTimeStamp, clientVersion);
+                        region, invalidateList, locks, clientTimeStamp, clientVersion,
+                        isAddingOrDroppingColumns);
                 // if the update mutation caused tables to be deleted, the mutation code returned
                 // will be MutationCode.TABLE_ALREADY_EXISTS
                 if (result != null
@@ -2857,18 +2883,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // there should only be remote mutations if we are adding a column to a view
                     // that uses encoded column qualifiers (the remote mutations are to update the
                     // encoded column qualifier counter on the parent table)
-                    if (mutator.getMutateColumnType() == ColumnMutator.MutateColumnType.ADD_COLUMN
+                    if (( mutator.getMutateColumnType() == ColumnMutator.MutateColumnType.ADD_COLUMN
                             && type == PTableType.VIEW
                             && table.getEncodingScheme() !=
-                            QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
+                            QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)) {
                         processRemoteRegionMutations(
                                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
                                 MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
-                        clearRemoteTableFromCache(clientTimeStamp,
+                        //if we're a view or index, clear the cache for our parent
+                        if ((type == PTableType.VIEW || type == INDEX) && table.getParentTableName() != null) {
+                            clearRemoteTableFromCache(clientTimeStamp,
                                 table.getParentSchemaName() != null
-                                        ? table.getParentSchemaName().getBytes()
-                                        : ByteUtil.EMPTY_BYTE_ARRAY,
+                                    ? table.getParentSchemaName().getBytes()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY,
                                 table.getParentTableName().getBytes());
+                        }
                     } else {
                         String msg = "Found unexpected mutations while adding or dropping column "
                                 + "to " + fullTableName;
@@ -3028,8 +3057,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
+            boolean addingColumns = request.getAddingColumns();
             MetaDataMutationResult result = mutateColumn(tableMetaData, new AddColumnMutator(),
-                    request.getClientVersion(), parentTable);
+                    request.getClientVersion(), parentTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -3167,7 +3197,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
-                    request.getClientVersion(), parentTable);
+                    request.getClientVersion(), parentTable, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
