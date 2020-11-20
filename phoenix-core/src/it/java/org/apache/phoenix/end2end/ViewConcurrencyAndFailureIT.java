@@ -36,6 +36,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -50,6 +51,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.phoenix.coprocessor.BaseMetaDataEndpointObserver;
+import org.apache.phoenix.coprocessor.MetaDataEndpointObserver;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
         .PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
@@ -112,7 +114,8 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     }
 
     // name is used by failsafe as file name in reports
-    @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}")
+    @Parameters(name="ViewConcurrencyAndFailureIT_transactionProvider={0}, "
+            + "columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
         return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
                 { "TEPHRA", false }, { "TEPHRA", true },
@@ -628,7 +631,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
             Future<Exception> future = executorService.submit(
                     new CreateViewRunnable(fullTableName, fullViewName1));
             // wait till the thread makes the rpc to add the column
-            boolean result = latch1.await(20, TimeUnit.MINUTES);
+            boolean result = latch1.await(2, TimeUnit.MINUTES);
             if (!result) {
                 fail("The create view rpc look too long");
             }
@@ -664,6 +667,14 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     public static class TestMetaDataRegionObserver
             extends BaseMetaDataEndpointObserver {
+
+        // Note that we need this in master branch since it is invoked via
+        // PhoenixObserverOperation#callObserver(). Without this, the pre-hooks
+        // of this RegionObserver will not be hit.
+        @Override
+        public Optional<MetaDataEndpointObserver> getPhoenixObserver() {
+            return Optional.of(this);
+        }
 
         @Override
         public void preAlterTable(
@@ -726,7 +737,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
                     try {
                         // wait till the second task is complete before
                         // completing the first task
-                        boolean result = latch2.await(20, TimeUnit.MINUTES);
+                        boolean result = latch2.await(2, TimeUnit.MINUTES);
                         if (!result) {
                             throw new RuntimeException("Second task took too "
                                     + "long to complete");
