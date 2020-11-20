@@ -16,17 +16,18 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-public interface ContinuousWorkload {
-    /**
-     * Initializes and readies the processor for continuous queue based workloads
-     */
-    void start();
+import com.google.common.base.Function;
+import org.apache.phoenix.pherf.workload.mt.OperationStats;
 
-    /**
-     * Stop the processor and cleans up the workload queues.
-     */
-    void stop();
-
+/**
+ * An interface that implementers can use to provide a function that takes
+ * @see {@link TenantOperationInfo} as an input and gives @see {@link OperationStats} as output.
+ * This @see {@link Function} will invoked by the
+ * @see {@link TenantOperationWorkHandler#onEvent(TenantOperationWorkload.TenantOperationEvent)}
+ * when handling the events.
+ */
+public interface TenantOperationImpl {
+    Function<TenantOperationInfo, OperationStats> getMethod();
 }

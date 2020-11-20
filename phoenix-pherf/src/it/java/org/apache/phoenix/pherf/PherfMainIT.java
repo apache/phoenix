@@ -23,6 +23,7 @@ import org.apache.phoenix.pherf.result.Result;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
@@ -50,7 +51,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
-    @Test
+    @Ignore
     public void testPherfMain() throws Exception {
         String[] args = { "-q", "-l",
                 "--schemaFile", ".*create_prod_test_unsalted.sql",

@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
 
 import org.apache.phoenix.pherf.result.ResultValue;
-import org.apache.phoenix.pherf.workload.continuous.tenantoperation.TenantOperationInfo;
+import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +35,7 @@ public class OperationStats {
     private final String tenantGroup;
     private final String operationGroup;
     private final Operation.OperationType opType;
+    private String handlerId;
     private final int status;
     private final long rowCount;
     private final long durationInMs;
@@ -58,6 +59,8 @@ public class OperationStats {
         this.rowCount = rowCount;
         this.durationInMs = durationInMs;
     }
+
+    public String getModelName() { return modelName; }
 
     public String getScenarioName() { return scenarioName; }
 
@@ -85,13 +88,15 @@ public class OperationStats {
         return rowCount;
     }
 
+    public String getHandlerId() { return handlerId; }
+
     public long getStartTime() { return startTime; }
 
     public long getDurationInMs() {
         return durationInMs;
     }
 
-    public List<ResultValue> getCsvRepresentation(final String handlerId) {
+    public List<ResultValue> getCsvRepresentation() {
         List<ResultValue> rowValues = new ArrayList<>();
         rowValues.add(new ResultValue(modelName));
         rowValues.add(new ResultValue(scenarioName));
@@ -106,5 +111,9 @@ public class OperationStats {
         rowValues.add(new ResultValue(String.valueOf(rowCount)));
         rowValues.add(new ResultValue(String.valueOf(durationInMs)));
         return rowValues;
+    }
+
+    public void setHandlerId(String handlerId) {
+        this.handlerId = handlerId;
     }
 }

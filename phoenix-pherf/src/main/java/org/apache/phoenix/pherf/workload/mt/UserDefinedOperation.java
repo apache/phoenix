@@ -16,15 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
+
+import org.apache.phoenix.pherf.configuration.UserDefined;
 
 /**
- * An interface that implementers can use to generate events that can be consumed by
- * @see {@link com.lmax.disruptor.WorkHandler} which provide event handling functionality for
- * a given event.
- *
- * @param <T>
+ * Defines an user defined operation.
+ * @see {@link OperationType#USER_DEFINED}
  */
-public interface EventGenerator<T> {
-    T next();
+public interface UserDefinedOperation extends Operation {
+    UserDefined getUserFunction();
 }

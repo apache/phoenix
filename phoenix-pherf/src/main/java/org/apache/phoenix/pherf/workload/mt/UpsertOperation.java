@@ -16,14 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
 
-import org.apache.phoenix.pherf.configuration.UserDefined;
+import org.apache.phoenix.pherf.configuration.Upsert;
 
 /**
- * Defines an user defined operation.
- * @see {@link OperationType#USER_DEFINED}
+ * Defines an upsert operation.
+ * @see {@link OperationType#UPSERT}
  */
-public interface UserDefinedOperation extends Operation {
-    UserDefined getUserFunction();
+public interface UpsertOperation extends Operation {
+    Upsert getUpsert();
 }

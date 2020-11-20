@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
 
 import org.apache.phoenix.pherf.configuration.Noop;
 

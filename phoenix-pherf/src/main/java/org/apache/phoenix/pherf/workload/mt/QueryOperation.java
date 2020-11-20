@@ -16,14 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.continuous;
+package org.apache.phoenix.pherf.workload.mt;
 
-import org.apache.phoenix.pherf.configuration.Upsert;
+import org.apache.phoenix.pherf.configuration.Query;
 
 /**
- * Defines an upsert operation.
- * @see {@link OperationType#UPSERT}
+ * Defines a query operation.
+ * @see {@link OperationType#SELECT}
  */
-public interface UpsertOperation extends Operation {
-    Upsert getUpsert();
+public interface QueryOperation extends Operation {
+    Query getQuery();
 }

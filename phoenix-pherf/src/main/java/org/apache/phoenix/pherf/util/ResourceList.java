@@ -29,7 +29,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -74,9 +76,11 @@ public class ResourceList {
     private Collection<Path> getResourcesPaths(
             final Pattern pattern) throws Exception {
 
-        final String classPath = System.getProperty("java.class.path", ".");
+        //final String classPath = System.getProperty("java.class.path", ".");
+        // TODO remove
+        final String classPath = ".";
         final String[] classPathElements = classPath.split(":");
-        List<String> strResources = new ArrayList<>();
+        Set<String> strResources = new HashSet<>();
         Collection<Path> paths = new ArrayList<>();
 
         // TODO Make getResourcesPaths() return the URLs directly instead of converting them
@@ -112,6 +116,7 @@ public class ResourceList {
             paths.add(path);
         }
 
+        Collections.sort((List<Path>)paths);
         return paths;
     }
 
