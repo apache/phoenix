@@ -65,6 +65,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -206,7 +207,9 @@ public class SystemTablesCreationOnConnectionIT {
 
     /********************* Testing SYSTEM.CATALOG/SYSTEM:CATALOG creation/upgrade behavior for subsequent connections *********************/
 
-
+    // We are ignoring this test because we aren't testing SYSCAT timestamp anymore if
+    // "DoNotUpgrade" config is set to true
+    @Ignore
     // Conditions: server-side namespace mapping is enabled, the first connection to the server will
     // create all namespace mapped SYSTEM tables i.e. SYSTEM:.*, the SYSTEM:CATALOG timestamp at
     // creation is purposefully set to be < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP.
@@ -500,6 +503,41 @@ public class SystemTablesCreationOnConnectionIT {
             HColumnDescriptor hColDesc = htd.getFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
                     hColDesc.getTimeToLive());
+        }
+    }
+
+    // Conditions: doNotUpgrade config should be set and HMaster should be stopped
+    // Expected: Even if HMaster is stopped we should be able to get phoenix
+    // connection, knowing that all system tables exists already.
+    @Test
+    public void testDoNotUpgradePropSet() throws Exception {
+        String tableName = "HBASE_SYNTH_TEST";
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        Properties propsDoNotUpgradePropSet = new Properties();
+        // Create a dummy connection to make sure we have all system tables in place
+        try (Connection con1 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet);
+             Statement stmt1 = con1.createStatement()) {
+            String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR not null, " +
+                    "PK2 VARCHAR not null, COL1 varchar, COL2 varchar "
+                    + "CONSTRAINT pk PRIMARY KEY(PK1,PK2))";
+            stmt1.execute(ddl);
+            stmt1.execute(
+                    "UPSERT INTO " + tableName + " values ('pk1','pk2','c1','c2')");
+            con1.commit();
+            // Stop HMaster to check if we can create connection without active HMaster
+            testUtil.getMiniHBaseCluster().getMaster().stopMaster();
+            // Set doNotUpgradeProperty to true
+            UpgradeUtil.doNotUpgradeOnFirstConnection(propsDoNotUpgradePropSet);
+            try (Connection con2 = DriverManager.getConnection(getJdbcUrl(), propsDoNotUpgradePropSet);
+                 Statement stmt2 = con2.createStatement();
+                 ResultSet rs = stmt2.executeQuery("select * from " + tableName)) {
+                assertTrue(rs.next());
+                assertEquals("pk1", rs.getString(1));
+                assertEquals("pk2", rs.getString(2));
+                assertFalse(rs.next());
+            }
+        } finally {
+            testUtil.getMiniHBaseCluster().startMaster();
         }
     }
 
