@@ -18,7 +18,7 @@
 package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.ViewTTLTool;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -31,13 +31,11 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 
 public class PhoenixMultiInputUtil {
     public static final String SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY =
@@ -70,7 +68,7 @@ public class PhoenixMultiInputUtil {
         String query = SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY;
 
         if (fullName != null) {
-            if (fullName.equals(ViewTTLTool.ADDING_DELETION_MARKS_FOR_ALL_VIEWS)) {
+            if (fullName.equals(PhoenixTTLTool.DELETE_ALL_VIEWS)) {
                 return query;
             }
 

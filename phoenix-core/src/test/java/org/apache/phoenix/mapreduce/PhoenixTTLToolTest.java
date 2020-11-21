@@ -22,13 +22,13 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-public class ViewTTLToolTest extends BaseTest {
+public class PhoenixTTLToolTest extends BaseTest {
     String viewName = generateUniqueName();
     String tenantId = generateUniqueName();
 
     @Test
     public void testParseInput() {
-        ViewTTLTool tool = new ViewTTLTool();
+        PhoenixTTLTool tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-a"});
 
         assertEquals("NORMAL", tool.getJobPriority());
@@ -36,35 +36,35 @@ public class ViewTTLToolTest extends BaseTest {
         assertEquals(null, tool.getViewName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTTLTool();
+        tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-v", viewName, "-i",tenantId });
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
         assertEquals(viewName, tool.getViewName());
         assertEquals(tenantId, tool.getTenantId());
 
-        tool = new ViewTTLTool();
+        tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-v", viewName, "-p", "0"});
         assertEquals("VERY_HIGH", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
         assertEquals(viewName, tool.getViewName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTTLTool();
+        tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-v", viewName, "-p", "-1"});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
         assertEquals(viewName, tool.getViewName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTTLTool();
+        tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-v", viewName, "-p", "DSAFDAS"});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
         assertEquals(viewName, tool.getViewName());
         assertEquals(null, tool.getTenantId());
 
-        tool = new ViewTTLTool();
+        tool = new PhoenixTTLTool();
         tool.parseArgs(new String[] {"-i", tenantId});
         assertEquals("NORMAL", tool.getJobPriority());
         assertEquals(false, tool.isDeletingAllViews());
@@ -74,8 +74,8 @@ public class ViewTTLToolTest extends BaseTest {
 
     @Test (expected = IllegalStateException.class)
     public void testNoInputParam() {
-        ViewTTLTool tool;
-        tool = new ViewTTLTool();
+        PhoenixTTLTool tool;
+        tool = new PhoenixTTLTool();
         tool.parseOptions(new String[] {});
     }
 }

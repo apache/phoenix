@@ -43,21 +43,19 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.util.Properties;
 
-public class ViewTTLTool extends Configured implements Tool {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLTool.class);
+public class PhoenixTTLTool extends Configured implements Tool {
+    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTTLTool.class);
 
     public static enum MR_COUNTER_METRICS {
         FAILED,
         SUCCEED
     }
 
-    public static final String ADDING_DELETION_MARKS_FOR_ALL_VIEWS = "ADDING_DELETION_MARKS_FOR_ALL_VIEWS";
-
+    public static final String DELETE_ALL_VIEWS = "DELETE_ALL_VIEWS";
     public static final int DEFAULT_MAPPER_SPLIT_SIZE = 10;
-
     public static final int DEFAULT_QUERY_BATCH_SIZE = 100;
 
-    private static final Option DELETE_ALL_VIEW_OPTION = new Option("a", "all", false,
+    private static final Option DELETE_ALL_VIEWS_OPTION = new Option("a", "all", false,
             "Delete all views from all tables.");
     private static final Option VIEW_NAME_OPTION = new Option("v", "view", true,
             "Delete Phoenix View Name");
@@ -75,9 +73,8 @@ public class ViewTTLTool extends Configured implements Tool {
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
 
-    Configuration configuration;
-    Connection connection;
-
+    private Configuration configuration;
+    private Connection connection;
     private String viewName;
     private String tenantId;
     private String jobName;
@@ -101,7 +98,7 @@ public class ViewTTLTool extends Configured implements Tool {
             setConf(HBaseConfiguration.create());
         }
 
-        if (cmdLine.hasOption(DELETE_ALL_VIEW_OPTION.getOpt())) {
+        if (cmdLine.hasOption(DELETE_ALL_VIEWS_OPTION.getOpt())) {
             this.isDeletingAllViews = true;
         } else if (cmdLine.hasOption(VIEW_NAME_OPTION.getOpt())) {
             viewName = cmdLine.getOptionValue(VIEW_NAME_OPTION.getOpt());
@@ -112,7 +109,6 @@ public class ViewTTLTool extends Configured implements Tool {
             tenantId = cmdLine.getOptionValue((TENANT_ID_OPTION.getOpt()));
         }
 
-        jobPriority = getJobPriority(cmdLine);
         if (cmdLine.hasOption(SPLIT_SIZE_OPTION.getOpt())) {
             splitSize = Integer.valueOf(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
         } else {
@@ -183,7 +179,7 @@ public class ViewTTLTool extends Configured implements Tool {
             printHelpAndExit("Error parsing command line options: " + e.getMessage(), options);
         }
 
-        if (!cmdLine.hasOption(DELETE_ALL_VIEW_OPTION.getOpt()) &&
+        if (!cmdLine.hasOption(DELETE_ALL_VIEWS_OPTION.getOpt()) &&
                 !cmdLine.hasOption(VIEW_NAME_OPTION.getOpt()) &&
                 !cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
             throw new IllegalStateException("No deletion job is specified, " +
@@ -201,7 +197,7 @@ public class ViewTTLTool extends Configured implements Tool {
 
     private Options getOptions() {
         final Options options = new Options();
-        options.addOption(DELETE_ALL_VIEW_OPTION);
+        options.addOption(DELETE_ALL_VIEWS_OPTION);
         options.addOption(VIEW_NAME_OPTION);
         options.addOption(TENANT_ID_OPTION);
         options.addOption(HELP_OPTION);
@@ -215,6 +211,7 @@ public class ViewTTLTool extends Configured implements Tool {
 
     private void printHelpAndExit(String errorMessage, Options options) {
         System.err.println(errorMessage);
+        LOGGER.error(errorMessage);
         printHelpAndExit(options, 1);
     }
 
@@ -232,7 +229,7 @@ public class ViewTTLTool extends Configured implements Tool {
         if (this.jobName == null) {
             String jobName;
             if (this.isDeletingAllViews) {
-                jobName = ADDING_DELETION_MARKS_FOR_ALL_VIEWS;
+                jobName = DELETE_ALL_VIEWS;
             } else if (this.getViewName() != null) {
                 jobName = this.getViewName();
             } else  {
@@ -247,7 +244,7 @@ public class ViewTTLTool extends Configured implements Tool {
     public void setViewTTLJobInputConfig(Configuration configuration) {
         if (this.isDeletingAllViews) {
             configuration.set(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS,
-                    ADDING_DELETION_MARKS_FOR_ALL_VIEWS);
+                    DELETE_ALL_VIEWS);
         } else if (this.getViewName() != null) {
             configuration.set(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW,
                     this.viewName);
@@ -262,8 +259,8 @@ public class ViewTTLTool extends Configured implements Tool {
         this.job = Job.getInstance(getConf(),getJobName());
         PhoenixMapReduceUtil.setInput(job, this);
 
-        job.setJarByClass(ViewTTLTool.class);
-        job.setMapperClass(ViewTTLDeleteJobMapper.class);
+        job.setJarByClass(PhoenixTTLTool.class);
+        job.setMapperClass(PhoenixTTLDeleteJobMapper.class);
         job.setMapOutputKeyClass(NullWritable.class);
         job.setMapOutputValueClass(NullWritable.class);
         job.setOutputFormatClass(NullOutputFormat.class);
@@ -314,7 +311,7 @@ public class ViewTTLTool extends Configured implements Tool {
     }
 
     public static void main(final String[] args) throws Exception {
-        int result = ToolRunner.run(new ViewTTLTool(), args);
+        int result = ToolRunner.run(new PhoenixTTLTool(), args);
         System.exit(result);
     }
 }

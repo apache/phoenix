@@ -24,7 +24,7 @@ import org.apache.phoenix.mapreduce.PhoenixMultiViewInputSplit;
 
 import java.util.List;
 
-import static org.apache.phoenix.mapreduce.ViewTTLTool.DEFAULT_MAPPER_SPLIT_SIZE;
+import static org.apache.phoenix.mapreduce.PhoenixTTLTool.DEFAULT_MAPPER_SPLIT_SIZE;
 
 public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
 
@@ -40,18 +40,18 @@ public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
             numberOfMappers++;
         }
 
-        final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(numberOfMappers);
+        final List<InputSplit> pSplits = Lists.newArrayListWithExpectedSize(numberOfMappers);
         // Split the views into splits
 
         for (int i = 0; i < numberOfMappers; i++) {
-            psplits.add(new PhoenixMultiViewInputSplit(views.subList(
+            pSplits.add(new PhoenixMultiViewInputSplit(views.subList(
                     i * numViewsInSplit, getUpperBound(numViewsInSplit, i, views.size()))));
         }
 
-        return psplits;
+        return pSplits;
     }
 
-    public int getUpperBound(int numViewsInSplit, int i, int viewSize) {
+    private int getUpperBound(int numViewsInSplit, int i, int viewSize) {
         int upper = (i + 1) * numViewsInSplit;
         if (viewSize < upper) {
             upper = viewSize;

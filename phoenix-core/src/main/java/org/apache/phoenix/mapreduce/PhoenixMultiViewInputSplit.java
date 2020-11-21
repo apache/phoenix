@@ -29,6 +29,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/*
+    Generic class that provide a list of views for the MR job. You can overwrite your own logic to
+    filter/add views.
+ */
 public class PhoenixMultiViewInputSplit extends InputSplit implements Writable {
 
     List<ViewInfoWritable> viewInfoTrackerList;
@@ -44,8 +48,9 @@ public class PhoenixMultiViewInputSplit extends InputSplit implements Writable {
     @Override public void write(DataOutput output) throws IOException {
         WritableUtils.writeVInt(output, this.viewInfoTrackerList.size());
         for (ViewInfoWritable viewInfoWritable : this.viewInfoTrackerList) {
-            ViewInfoTracker viewInfoTracker = (ViewInfoTracker)viewInfoWritable;
-            viewInfoTracker.write(output);
+            if (viewInfoWritable instanceof ViewInfoTracker) {
+                viewInfoWritable.write(output);
+            }
         }
     }
 

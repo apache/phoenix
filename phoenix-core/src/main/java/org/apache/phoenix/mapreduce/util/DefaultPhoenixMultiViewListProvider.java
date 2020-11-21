@@ -60,9 +60,9 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                     String fullTableName = null;
 
                     while (viewRs.next()) {
+                        tenantId = viewRs.getString(1);
                         schema = viewRs.getString(2);
                         tableName = viewRs.getString(3);
-                        tenantId = viewRs.getString(1);
                         fullTableName = tableName;
                         Long viewTtlValue = viewRs.getLong(4);
 
@@ -74,14 +74,19 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                         PTable pTable = null;
                         try {
                             pTable = PhoenixRuntime.getTable(connection, tenantId, fullTableName);
-                            // we currently only support up to three levels
-                            // CASE 1 : BASE_TABLE -> GLOBAL_VIEW -> TENANT_VIEW
-                            // CASE 2 : BASE_TABLE -> TENANT_VIEW
-                            // CASE 2 : BASE_TABLE -> VIEW
                             PTable parentTable = PhoenixRuntime.getTable(connection, null,
                                     pTable.getParentName().toString());
                             if (parentTable.getType() == PTableType.VIEW &&
                                     parentTable.getPhoenixTTL() > 0) {
+                                /* if the current view parent already has a TTL value, we want to
+                                skip the current view cleanup job because we want to run the cleanup
+                                 job for at the GlobalView level instead of running multi-jobs at
+                                 the LeafView level for the better performance.
+
+                                         BaseTable
+                                   GlobalView(has TTL)
+                                LeafView1, LeafView2, LeafView3....
+                                */
                                 skip = true;
                             }
                         } catch (Exception e) {

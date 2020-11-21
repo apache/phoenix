@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.RegexStringComparator;
-import org.apache.phoenix.mapreduce.ViewTTLTool;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.junit.Test;
@@ -39,7 +39,7 @@ import java.sql.Statement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class ViewTTLToolIT extends ParallelStatsDisabledIT {
+public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
     private final long PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND = 1;
     private final long PHOENIX_TTL_EXPIRE_IN_A_DAY = 1000 * 60 * 60 * 24;
@@ -47,7 +47,7 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
     private final String VIEW_PREFIX1 = "V01";
     private final String VIEW_PREFIX2 = "V02";
     private final String UPSERT_TO_GLOBAL_VIEW_QUERY = "UPSERT INTO %s (PK1,A,B,C,D) VALUES(1,1,1,1,1)";
-    private final String UPSERT_TO_TENANT_VIEW_QUERY = "UPSERT INTO %s (PK1,A,B,C,D,E,F) VALUES(1,1,1,1,1,1,1)";
+    private final String UPSERT_TO_LEAF_VIEW_QUERY = "UPSERT INTO %s (PK1,A,B,C,D,E,F) VALUES(1,1,1,1,1,1,1)";
     private final String VIEW_DDL_WITH_ID_PREFIX_AND_TTL = "CREATE VIEW %s (" +
             "PK1 BIGINT PRIMARY KEY,A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
             " AS SELECT * FROM %s WHERE ID = '%s' PHOENIX_TTL = %d";
@@ -133,10 +133,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant1Connection.createStatement().execute(String.format(TENANT_VIEW_DDL,tenantView1, globalViewName));
             tenant2Connection.createStatement().execute(String.format(TENANT_VIEW_DDL,tenantView2, globalViewName));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantView1));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView1));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantView2));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 1, globalConn);
 
@@ -144,10 +144,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + tenant2 + ".*", 2);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
             verifyNumberOfRows(baseTableFullName, tenant1, 0, globalConn);
@@ -215,10 +215,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + tenant2 + ".*", 4);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
@@ -284,15 +284,15 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     String.format(ddl, tenantViewName2, globalViewName2));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName1));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName2));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 2, globalConn);
 
@@ -300,10 +300,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + tenant2 + ".*", 4);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
@@ -353,10 +353,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRows(baseTableFullName, tenant2, 2, globalConn);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
 
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
@@ -397,10 +397,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 0);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
@@ -457,10 +457,10 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + VIEW_PREFIX2 + ".*", 2);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-a"});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
             assertEquals(0, status);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 0);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
@@ -499,18 +499,18 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant1Connection.createStatement().execute(
                     String.format(ddl, tenantViewName2, globalViewName1, VIEW_PREFIX2,PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 1);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-v", tenantViewName2, "-i", tenant1});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-v", tenantViewName2, "-i", tenant1});
             assertEquals(0, status);
 
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
@@ -560,23 +560,23 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     String.format(ddl, tenantViewName4, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName3));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName4));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
             tenant2Connection.commit();
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + tenant1 + ".*", 2);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + tenant2 + ".*", 2);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-i", tenant1});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-i", tenant1});
             assertEquals(0, status);
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + tenant1 + ".*", 0);
@@ -625,28 +625,96 @@ public class ViewTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     String.format(ddl, tenantViewName4, globalViewName2, VIEW_PREFIX2));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName3));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_TENANT_VIEW_QUERY, tenantViewName4));
+            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
             tenant2Connection.commit();
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 2);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 2);
 
             // running MR job to delete expired rows.
-            ViewTTLTool viewTtlTool = new ViewTTLTool();
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            viewTtlTool.setConf(conf);
-            int status = viewTtlTool.run(new String[]{"-runfg", "-v", globalViewName1});
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-v", globalViewName1});
             assertEquals(0, status);
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 0);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 2);
+        }
+    }
+
+
+    /*
+                                             BaseTable
+                                         GlobalView1 with TTL
+               MiddleLevelView1 with TTL(1 ms)    MiddleLevelView2 with TTL(1 DAY)
+                    LeafView1                             LeafView2
+       Upserting data to both leafView, and run the MR job.
+       It should only delete MiddleLevelView1 data not remove MiddleLevelView2 data.
+    */
+    @Test
+    public void testCleanMoreThanThreeLevelViewCase() throws Exception {
+        String schema = generateUniqueName();
+        String baseTableFullName = schema + "." + generateUniqueName();
+        String globalViewName = schema + "." + generateUniqueName();
+        String middleLevelViewName1 = schema + "." + generateUniqueName();
+        String middleLevelViewName2 = schema + "." + generateUniqueName();
+        String leafViewName1 = schema + "." + generateUniqueName();
+        String leafViewName2 = schema + "." + generateUniqueName();
+
+        try (Connection globalConn = DriverManager.getConnection(getUrl())) {
+            String baseTableDdl = "CREATE TABLE " + baseTableFullName  +
+                    " (ID CHAR(10) NOT NULL PRIMARY KEY, NUM BIGINT)";
+            globalConn.createStatement().execute(baseTableDdl);
+
+            String globalViewDdl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
+                    "A BIGINT, B BIGINT)" + " AS SELECT * FROM " + baseTableFullName;
+
+            globalConn.createStatement().execute(String.format(globalViewDdl, globalViewName));
+
+            String middleLevelViewDdl = "CREATE VIEW %s (C BIGINT, D BIGINT)" +
+                    " AS SELECT * FROM %s WHERE ID ='%s' PHOENIX_TTL = %d";
+
+            globalConn.createStatement().execute(String.format(middleLevelViewDdl,
+                    middleLevelViewName1, globalViewName,
+                    VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(String.format(middleLevelViewDdl,
+                    middleLevelViewName2, globalViewName, VIEW_PREFIX2,
+                    PHOENIX_TTL_EXPIRE_IN_A_DAY));
+
+            String leafViewDdl = "CREATE VIEW %s (E BIGINT, F BIGINT)" +
+                    " AS SELECT * FROM %s";
+
+            globalConn.createStatement().execute(String.format(leafViewDdl,
+                    leafViewName1, middleLevelViewName1));
+            globalConn.createStatement().execute(String.format(leafViewDdl,
+                    leafViewName2, middleLevelViewName2));
+
+            globalConn.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, leafViewName1));
+            globalConn.commit();
+            globalConn.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, leafViewName2));
+            globalConn.commit();
+
+            verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 1);
+            verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
+
+            // running MR job to delete expired rows.
+            PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            phoenixTtlTool.setConf(conf);
+            int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
+            assertEquals(0, status);
+            verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 0);
+            verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
         }
     }
 }

@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixMultiViewInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
-import org.apache.phoenix.mapreduce.ViewTTLTool;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 
 import java.io.IOException;
@@ -132,7 +132,7 @@ public final class PhoenixMapReduceUtil {
      * @param job MR job instance
      * @param tool ViewTtlTool for Phoenix TTL deletion MR job
      */
-    public static void setInput(final Job job, ViewTTLTool tool) {
+    public static void setInput(final Job job, PhoenixTTLTool tool) {
         Configuration configuration = job.getConfiguration();
         job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
         tool.setViewTTLJobInputConfig(configuration);

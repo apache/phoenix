@@ -38,23 +38,27 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/*
+    This is a generic MultiViewInputFormat class that using by the MR job. You can
+    provide your own split strategy and provider class to customize your own business needed by
+    overwrite and load class blow:
+        MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ
+        MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ
+ */
 public class PhoenixMultiViewInputFormat<T extends Writable> extends InputFormat<NullWritable,T> {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMultiViewInputFormat.class);
-
-    public PhoenixMultiViewInputFormat() {
-    }
 
     @Override public List<InputSplit> getSplits(JobContext context) throws IOException {
         List<InputSplit> listOfInputSplit = new ArrayList<>();
         try {
             final Configuration configuration = context.getConfiguration();
-            Class<?> defaultDeletionMultiInputStrategyClazz = DefaultPhoenixMultiViewListProvider.class;
+            Class<?> defaultMultiInputStrategyClazz = DefaultPhoenixMultiViewListProvider.class;
             if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ) != null) {
-                defaultDeletionMultiInputStrategyClazz = Class.forName(
+                defaultMultiInputStrategyClazz = Class.forName(
                         configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ));
             }
             PhoenixMultiViewListProvider phoenixMultiViewListProvider =
-                    (PhoenixMultiViewListProvider) defaultDeletionMultiInputStrategyClazz.newInstance();
+                    (PhoenixMultiViewListProvider) defaultMultiInputStrategyClazz.newInstance();
             List<ViewInfoWritable> views = phoenixMultiViewListProvider.getPhoenixMultiViewList(configuration);
 
             Class<?> defaultDeletionMultiInputSplitStrategyClazz = DefaultMultiViewSplitStrategy.class;
