@@ -380,7 +380,15 @@ public class IndexRegionObserver implements RegionObserver, RegionCoprocessor {
           if (!mutations.isEmpty()) {
               Region region = e.getEnvironment().getRegion();
               // Otherwise, submit the mutations directly here
-                region.batchMutate(mutations.toArray(new Mutation[0]));
+              OperationStatus[] batchMutationStatus = region.batchMutate(mutations.toArray(new Mutation[0]));
+              IOException batchMutationException = ServerUtil.createIOException(batchMutationStatus);
+              if (batchMutationException != null) {
+                  LOG.warn(
+                          "Encountered exception during batch mutation, which will be rethrown.",
+                          batchMutationException
+                  );
+                  throw batchMutationException;
+              }
           }
           return Result.EMPTY_RESULT;
       } catch (Throwable t) {
