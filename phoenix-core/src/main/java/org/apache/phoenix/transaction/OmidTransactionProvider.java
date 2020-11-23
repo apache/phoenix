@@ -119,7 +119,7 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     public CommitTable.Client getCommitTableClient() {
         return commitTableClient;
     }
-    
+
     @Override
     public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException{
         TSOServerConfig tsoConfig = new TSOServerConfig();
@@ -132,7 +132,8 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
         Injector injector = Guice.createInjector(new TSOMockModule(tsoConfig));
         tso = injector.getInstance(TSOServer.class);
-        tso.startAndWait();
+        tso.startAsync();
+        tso.awaitRunning();
 
         OmidClientConfiguration clientConfig = new OmidClientConfiguration();
         clientConfig.setConnectionString("localhost:" + port);
@@ -183,7 +184,8 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
                 transactionManager.close();
             }
             if (tso != null) {
-                tso.stopAndWait();
+                tso.stopAsync();
+                tso.awaitTerminated();
             }
         }
     }
