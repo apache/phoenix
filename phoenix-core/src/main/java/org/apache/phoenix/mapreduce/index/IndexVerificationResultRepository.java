@@ -142,19 +142,22 @@ public class IndexVerificationResultRepository implements AutoCloseable {
 
     public void createResultTable(Connection connection) throws IOException, SQLException {
         ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = queryServices.getAdmin();
-        TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
-        if (!admin.tableExists(resultTableName)) {
-            HTableDescriptor tableDescriptor = new
-                HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
-            columnDescriptor.setValue(HColumnDescriptor.TTL,
+        try (Admin admin = queryServices.getAdmin()) {
+            TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
+            if (!admin.tableExists(resultTableName)) {
+                HTableDescriptor tableDescriptor =
+                    new HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
+                HColumnDescriptor columnDescriptor =
+                    new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
+                columnDescriptor.setValue(HColumnDescriptor.TTL,
                     String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-            tableDescriptor.addFamily(columnDescriptor);
-            admin.createTable(tableDescriptor);
-            setResultTable(admin.getConnection().getTable(resultTableName));
+                tableDescriptor.addFamily(columnDescriptor);
+                admin.createTable(tableDescriptor);
+                setResultTable(admin.getConnection().getTable(resultTableName));
+            }
         }
     }
+
     private static byte[] generatePartialResultTableRowKey(long ts, byte[] indexTableName) {
         byte[] keyPrefix = Bytes.toBytes(Long.toString(ts));
         int targetOffset = 0;

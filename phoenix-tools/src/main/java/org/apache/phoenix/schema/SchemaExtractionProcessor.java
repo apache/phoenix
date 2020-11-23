@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -308,8 +309,10 @@ public class SchemaExtractionProcessor {
 
     private HTableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
             throws SQLException, IOException {
-        return cqsi.getAdmin().getTableDescriptor(
-                TableName.valueOf(table.getPhysicalName().getString()));
+        try (Admin admin = cqsi.getAdmin()) {
+            return admin.getTableDescriptor(TableName.valueOf(
+                table.getPhysicalName().getString()));
+        }
     }
 
     private String convertPropertiesToString() {
