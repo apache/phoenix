@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -70,7 +71,7 @@ public class TaskMetaDataEndpointTest {
         MockitoAnnotations.initMocks(this);
         configuration = new Configuration();
         RegionCoprocessorEnvironment environment =
-                new RegionCoprocessorEnvironment() {
+                new CompatRegionCoprocessorEnvironment() {
 
             @Override
             public int getVersion() {
