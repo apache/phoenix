@@ -106,7 +106,7 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
     
     @Test
     public void testQueryTimeout() throws Exception {
-        int nRows = 30000;
+        int nRows = 60000;
         Connection conn;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
