@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.pherf.rules;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;

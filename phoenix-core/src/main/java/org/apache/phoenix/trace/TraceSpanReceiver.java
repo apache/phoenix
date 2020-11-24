@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
 import org.apache.htrace.impl.MilliSpan;

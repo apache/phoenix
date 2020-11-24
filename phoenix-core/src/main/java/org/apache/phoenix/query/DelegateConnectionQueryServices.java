@@ -76,6 +76,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
+    public Table getTableIfExists(byte[] tableName) throws SQLException {
+        return getDelegate().getTableIfExists(tableName);
+    }
+
+    @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         return getDelegate().getAllTableRegions(tableName);
     }
@@ -390,11 +395,13 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public boolean writeMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
-        return true;
+        return getDelegate()
+                .writeMutexCell(tenantId, schemaName, tableName, columnName, familyName);
     }
 
     @Override
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
+        getDelegate().deleteMutexCell(tenantId, schemaName, tableName, columnName, familyName);
     }
 }

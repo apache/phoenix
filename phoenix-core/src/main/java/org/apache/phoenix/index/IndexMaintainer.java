@@ -113,12 +113,12 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 /**
  * 
@@ -332,6 +332,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private byte[] viewIndexId;
     private PDataType viewIndexIdType;
     private boolean isMultiTenant;
+    private PTableType parentTableType;
     // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
     private List<Expression> indexedExpressions;
     // columns required to evaluate all expressions in indexedExpressions (this does not include columns in the data row key)
@@ -393,7 +394,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.viewIndexIdType = index.getviewIndexIdType();
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
         this.encodingScheme = index.getEncodingScheme();
-        
+      
         // null check for b/w compatibility
         this.encodingScheme = index.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : index.getEncodingScheme();
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
@@ -433,18 +434,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         // either a VIEW or PROJECTED
         List<PColumn>dataPKColumns = dataTable.getPKColumns();
         this.indexDataColumnCount = dataPKColumns.size();
+        PTable parentTable = dataTable;
         // We need to get the PK column for the table on which the index is created
         if (!dataTable.getName().equals(index.getParentName())) {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;
-                PTable indexTable = PhoenixRuntime.getTable(connection, 
+                parentTable = PhoenixRuntime.getTable(connection, 
                         tenantId, index.getParentName().getString());
-                this.indexDataColumnCount = indexTable.getPKColumns().size();
+                this.indexDataColumnCount = parentTable.getPKColumns().size();
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
         }
+        this.parentTableType = parentTable.getType();
         
         int indexPkColumnCount = this.indexDataColumnCount + 
                 indexedExpressionCount  - (this.isDataTableSalted ? 1 : 0) - (this.isMultiTenant ? 1 : 0);
@@ -644,7 +647,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 // Ignore view constants from the data table, as these
                 // don't need to appear in the index (as they're the
                 // same for all rows in this index)
-                if (!viewConstantColumnBitSet.get(i)) {
+                if (!viewConstantColumnBitSet.get(i) || isIndexOnBaseTable()) {
                     int pos = rowKeyMetaData.getIndexPkPosition(i-dataPosOffset);
                     if (Boolean.TRUE.equals(hasValue)) {
                         dataRowKeyLocator[0][pos] = ptr.getOffset();
@@ -959,6 +962,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     private int getNumViewConstants() {
+        if (isIndexOnBaseTable()) {
+            return 0;
+        }
         BitSet bitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
         int num = 0;
         for(int i = 0; i<dataRowKeySchema.getFieldCount();i++){
@@ -1432,6 +1438,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         maintainer.encodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue((byte)proto.getEncodingScheme());
         maintainer.immutableStorageScheme = PTable.ImmutableStorageScheme.fromSerializedValue((byte)proto.getImmutableStorageScheme());
         maintainer.isLocalIndex = proto.getIsLocalIndex();
+        if (proto.hasParentTableType()) {
+            maintainer.parentTableType = PTableType.fromValue(proto.getParentTableType());
+        }
         
         List<ServerCachingProtos.ColumnReference> dataTableColRefsForCoveredColumnsList = proto.getDataTableColRefForCoveredColumnsList();
         List<ServerCachingProtos.ColumnReference> indexTableColRefsForCoveredColumnsList = proto.getIndexTableColRefForCoveredColumnsList();
@@ -1535,6 +1544,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         builder.setIsLocalIndex(maintainer.isLocalIndex);
+        if (maintainer.parentTableType != null) {
+            builder.setParentTableType(maintainer.parentTableType.toString());
+        }       
         builder.setIndexDataColumnCount(maintainer.indexDataColumnCount);
         builder.setIndexTableName(ByteStringer.wrap(maintainer.indexTableName));
         builder.setRowKeyOrderOptimizable(maintainer.rowKeyOrderOptimizable);
@@ -1652,7 +1664,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int numViewConstantColumns = 0;
         BitSet viewConstantColumnBitSet = rowKeyMetaData.getViewConstantColumnBitSet();
         for (int i = dataPkOffset; i < indexDataColumnCount; i++) {
-            if (!viewConstantColumnBitSet.get(i)) {
+            if (!viewConstantColumnBitSet.get(i) || isIndexOnBaseTable()) {
                 int indexPkPosition = rowKeyMetaData.getIndexPkPosition(i-dataPkOffset);
                 this.dataPkPosition[indexPkPosition] = i;
             } else {
@@ -1885,6 +1897,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     public boolean isImmutableRows() {
         return immutableRows;
+    }
+    
+    public boolean isIndexOnBaseTable() {
+        if (parentTableType == null) {
+            return false;
+        }
+        return parentTableType == PTableType.TABLE;
     }
     
     public Set<ColumnReference> getIndexedColumns() {

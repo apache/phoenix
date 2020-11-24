@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -73,10 +73,10 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -1370,19 +1370,22 @@ public class WhereOptimizer {
                 // will never overlap. We do not need to process both the lower and upper
                 // ranges since they are the same.
                 if (result.isSingleKey() && otherRange.isSingleKey()) {
-                    // Find the span of the trailing bytes as it could be more than one.
-                    // We need this to determine if the slot at the last position would
-                    // have a separator byte (i.e. is variable length).
-                    int pos = otherPKPos;
-                    rowKeySchema.iterator(trailingBytes, ptr, otherPKPos);
-                    while (rowKeySchema.next(ptr, pos, trailingBytes.length) != null) {
-                        pos++;
+                    int minSpan = rowKeySchema.computeMinSpan(pkPos, result, ptr);
+                    int otherMinSpan =
+                        rowKeySchema.computeMinSpan(otherPKPos, otherRange, ptr);
+                    byte[] otherLowerRange;
+                    boolean isFixedWidthAtEnd;
+                    if (pkPos + minSpan <= otherPKPos + otherMinSpan) {
+                        otherLowerRange = otherRange.getLowerRange();
+                        isFixedWidthAtEnd = table.getPKColumns().get(pkPos + minSpan -1).getDataType().isFixedWidth();
+                    } else {
+                        otherLowerRange = trailingBytes;
+                        trailingBytes = otherRange.getLowerRange();
+                        isFixedWidthAtEnd = table.getPKColumns().get(otherPKPos + otherMinSpan -1).getDataType().isFixedWidth();
                     }
-                    byte[] otherLowerRange = otherRange.getLowerRange();
-                    boolean isFixedWidthAtEnd = table.getPKColumns().get(pos).getDataType().isFixedWidth();
                     // If the otherRange starts with the overlapping trailing byte *and* we're comparing
                     // the entire key (i.e. not just a leading subset), then we have an intersection.
-                    if (Bytes.startsWith(otherLowerRange, trailingBytes) && 
+                    if (Bytes.startsWith(otherLowerRange, trailingBytes) &&
                             (isFixedWidthAtEnd || 
                              otherLowerRange.length == trailingBytes.length || 
                              otherLowerRange[trailingBytes.length] == QueryConstants.SEPARATOR_BYTE)) {

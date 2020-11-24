@@ -44,8 +44,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.IndexUtil;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 

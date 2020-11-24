@@ -896,23 +896,23 @@ runTests () {
     {color:green}+1 core tests{color}.  The patch passed unit tests in $modules."
     BAD=0
   fi
-  ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | wc -l`
+  ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | grep $BASEDIR | wc -l`
   if [[ $ZOMBIE_TESTS_COUNT != 0 ]] ; then
     #It seems sometimes the tests are not dying immediately. Let's give them 30s
     echo "Suspicious java process found - waiting 30s to see if there are just slow to stop"
     sleep 30
-    ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | wc -l`
+    ZOMBIE_TESTS_COUNT=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | grep $BASEDIR | wc -l`
     if [[ $ZOMBIE_TESTS_COUNT != 0 ]] ; then
       echo "There are $ZOMBIE_TESTS_COUNT zombie tests, they should have been killed by surefire but survived"
       echo "************ BEGIN zombies jstack extract"
-      ZB_STACK=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs -n 1 jstack | grep ".test" | grep "\.java"`
+      ZB_STACK=`jps -m | grep surefirebooter | grep "phoenix-.*/target" | grep $BASEDIR | cut -d ' ' -f 1 | xargs -n 1 jstack | grep ".test" | grep "\.java"`
       jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs -n 1 jstack
       echo "************ END  zombies jstack extract"
       JIRA_COMMENT="$JIRA_COMMENT
 
      {color:red}-1 core zombie tests{color}.  There are ${ZOMBIE_TESTS_COUNT} zombie test(s): ${ZB_STACK}"
       BAD=1
-      jps -m | grep surefirebooter | grep "phoenix-.*/target" | cut -d ' ' -f 1 | xargs kill -9
+      jps -m | grep surefirebooter | grep "phoenix-.*/target" | grep $BASEDIR | cut -d ' ' -f 1 | xargs kill -9
     else
       echo "We're ok: there is no zombie test, but some tests took some time to stop"
     fi
@@ -1103,6 +1103,8 @@ checkLineLengths
 if [[ $JENKINS == "true" ]] ; then
   runTests
   (( RESULT = RESULT + $? ))
+JIRA_COMMENT_FOOTER="Code Coverage results: $BUILD_URL/artifact/phoenix-core/target/site/jacoco/index.html
+$JIRA_COMMENT_FOOTER"
 JIRA_COMMENT_FOOTER="Test results: $BUILD_URL/testReport/
 $JIRA_COMMENT_FOOTER"
 fi

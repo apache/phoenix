@@ -23,16 +23,9 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
+import java.util.*;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -70,21 +63,10 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -94,9 +76,9 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
@@ -106,7 +88,7 @@ public class MetaDataUtil {
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final String VIEW_INDEX_SEQUENCE_NAME_PREFIX = "_ID_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
-    private static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+    public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
     public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
     public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
@@ -123,6 +105,29 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.TTL,
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
+
+    public static Put getLastDDLTimestampUpdate(byte[] tableHeaderRowKey,
+                                                     long clientTimestamp,
+                                                     long lastDDLTimestamp) {
+        //use client timestamp as the timestamp of the Cell, to match the other Cells that might
+        // be created by this DDL. But the actual value will be a _server_ timestamp
+        Put p = new Put(tableHeaderRowKey, clientTimestamp);
+        byte[] lastDDLTimestampBytes = PLong.INSTANCE.toBytes(lastDDLTimestamp);
+        p.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES, lastDDLTimestampBytes);
+        return p;
+    }
+
+    /**
+     * Checks if a table is meant to be queried directly (and hence is relevant to external
+     * systems tracking Phoenix schema)
+     * @param tableType
+     * @return True if a table or view, false otherwise (such as for an index, system table, or
+     * subquery)
+     */
+    public static boolean isTableDirectlyQueried(PTableType tableType) {
+        return tableType.equals(PTableType.TABLE) || tableType.equals(PTableType.VIEW);
+    }
 
     public static class ClientServerCompatibility {
 
@@ -1000,5 +1005,44 @@ public class MetaDataUtil {
             col = table.getPKColumn(new String(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
         }
         return col;
+    }
+
+    public static void deleteFromStatsTable(PhoenixConnection connection,
+                                            PTable table, List<byte[]> physicalTableNames,
+                                            List<MetaDataProtocol.SharedTableState> sharedTableStates)
+            throws SQLException {
+        boolean isAutoCommit = connection.getAutoCommit();
+        try {
+            connection.setAutoCommit(true);
+            Set<String> physicalTablesSet = new HashSet<>();
+            Set<String> columnFamilies  = new HashSet<>();
+            physicalTablesSet.add(table.getPhysicalName().getString());
+            for(byte[] physicalTableName:physicalTableNames) {
+                physicalTablesSet.add(Bytes.toString(physicalTableName));
+            }
+            for(MetaDataProtocol.SharedTableState s: sharedTableStates) {
+                physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
+            }
+            StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
+            Iterator itr = physicalTablesSet.iterator();
+            while(itr.hasNext()) {
+                buf.append("'" + itr.next() + "',");
+            }
+            buf.setCharAt(buf.length() - 1, ')');
+            if(table.getIndexType()==IndexType.LOCAL) {
+                buf.append(" AND COLUMN_FAMILY IN(");
+                if (table.getColumnFamilies().isEmpty()) {
+                    buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
+                } else {
+                    for(PColumnFamily cf : table.getColumnFamilies()) {
+                        buf.append("'" + cf.getName().getString() + "',");
+                    }
+                }
+                buf.setCharAt(buf.length() - 1, ')');
+            }
+            connection.createStatement().execute(buf.toString());
+        } finally {
+            connection.setAutoCommit(isAutoCommit);
+        }
     }
 }

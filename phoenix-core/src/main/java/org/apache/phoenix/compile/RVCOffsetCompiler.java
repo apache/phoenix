@@ -17,13 +17,15 @@
  */
 package org.apache.phoenix.compile;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.parse.CastParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -37,12 +39,13 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowValueConstructorOffsetInternalErrorException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -183,24 +186,21 @@ public class RVCOffsetCompiler {
             throw new RowValueConstructorOffsetInternalErrorException(
                     "RVC Offset unexpected failure.");
         }
-        if (expression == null) {
+
+        //If the whereExpression is a single term comparison/isNull it will be entirely removed
+        if (expression == null && whereExpression instanceof AndExpression) {
             LOGGER.error("Unexpected error while compiling RVC Offset, got null expression.");
             throw new RowValueConstructorOffsetInternalErrorException(
                     "RVC Offset unexpected failure.");
         }
 
         // Now that columns etc have been resolved lets check to make sure they match the pk order
-        // Today the RowValueConstuctor Equality gets Rewritten into AND of EQ Ops.
-        if (!(whereExpression instanceof AndExpression)) {
-            LOGGER.warn("Unexpected error while compiling RVC Offset, expected AndExpression got "
-                    + whereExpression.getClass().getName());
-            throw new RowValueConstructorOffsetInternalErrorException(
-                    "RVC Offset must specify the tables PKs.");
-        }
+        RowKeyColumnExpressionOutput rowKeyColumnExpressionOutput =
+                buildListOfRowKeyColumnExpressions(whereExpression, isIndex);
 
         List<RowKeyColumnExpression>
-                rowKeyColumnExpressionList =
-                buildListOfRowKeyColumnExpressions(whereExpression.getChildren(), isIndex);
+                rowKeyColumnExpressionList = rowKeyColumnExpressionOutput.getRowKeyColumnExpressions();
+
         if (rowKeyColumnExpressionList.size() != numUserColumns) {
             LOGGER.warn("Unexpected error while compiling RVC Offset, expected " + numUserColumns
                     + " found " + rowKeyColumnExpressionList.size());
@@ -243,36 +243,107 @@ public class RVCOffsetCompiler {
             }
         }
 
+        byte[] key;
+
         // check to see if this was a single key expression
         ScanRanges scanRanges = context.getScanRanges();
 
+        //We do not generate a point lookup today in phoenix if the rowkey has a trailing null, we generate a range scan.
         if (!scanRanges.isPointLookup()) {
-            throw new RowValueConstructorOffsetNotCoercibleException(
-                    "RVC Offset must be a point lookup.");
+            //Since we use a range scan to guarantee we get only the null value and the upper bound is unset this suffices
+            //sanity check
+            if (!rowKeyColumnExpressionOutput.isTrailingNull()) {
+                throw new RowValueConstructorOffsetNotCoercibleException(
+                        "RVC Offset must be a point lookup.");
+            }
+            key = scanRanges.getScanRange().getUpperRange();
+        } else {
+            RowKeySchema.RowKeySchemaBuilder builder = new RowKeySchema.RowKeySchemaBuilder(columns.size());
+
+            for (PColumn column : columns) {
+                builder.addField(column, column.isNullable(), column.getSortOrder());
+            }
+
+            RowKeySchema rowKeySchema = builder.build();
+
+            //we make a ScanRange with 1 keyslots that cover the entire PK to reuse the code
+            KeyRange pointKeyRange = scanRanges.getScanRange();
+            KeyRange keyRange = KeyRange.getKeyRange(pointKeyRange.getLowerRange(), false, KeyRange.UNBOUND, true);
+            List<KeyRange> myRangeList = Lists.newArrayList(keyRange);
+            List<List<KeyRange>> slots = new ArrayList<>();
+            slots.add(myRangeList);
+            int[] slotSpan = new int[1];
+
+            //subtract 1 see ScanUtil.SINGLE_COLUMN_SLOT_SPAN is 0
+            slotSpan[0] = columns.size() - 1;
+            key = ScanUtil.getMinKey(rowKeySchema, slots, slotSpan);
         }
 
         // Note the use of ByteUtil.nextKey() to generate exclusive offset
         CompiledOffset
                 compiledOffset =
                 new CompiledOffset(Optional.<Integer>absent(),
-                        Optional.of(ByteUtil.nextKey(scanRanges.getScanRange().getLowerRange())));
+                        Optional.of(key));
 
         return compiledOffset;
     }
 
-    @VisibleForTesting List<RowKeyColumnExpression> buildListOfRowKeyColumnExpressions(
-            List<Expression> expressions, boolean isIndex)
-            throws RowValueConstructorOffsetNotCoercibleException {
+    @VisibleForTesting
+    static class RowKeyColumnExpressionOutput {
+        public RowKeyColumnExpressionOutput(List<RowKeyColumnExpression> rowKeyColumnExpressions, boolean trailingNull) {
+            this.rowKeyColumnExpressions = rowKeyColumnExpressions;
+            this.trailingNull = trailingNull;
+        }
+
+        private final List<RowKeyColumnExpression> rowKeyColumnExpressions;
+        private final boolean trailingNull;
+
+        public List<RowKeyColumnExpression> getRowKeyColumnExpressions() {
+            return rowKeyColumnExpressions;
+        }
+
+        public boolean isTrailingNull() {
+            return trailingNull;
+        }
+    }
+
+    @VisibleForTesting
+    RowKeyColumnExpressionOutput buildListOfRowKeyColumnExpressions (
+            Expression whereExpression, boolean isIndex)
+            throws RowValueConstructorOffsetNotCoercibleException, RowValueConstructorOffsetInternalErrorException {
+
+        boolean trailingNull = false;
+        List<Expression> expressions;
+        if((whereExpression instanceof AndExpression)) {
+            expressions = whereExpression.getChildren();
+        } else if (whereExpression instanceof ComparisonExpression || whereExpression instanceof IsNullExpression) {
+            expressions = Lists.newArrayList(whereExpression);
+        } else {
+            LOGGER.warn("Unexpected error while compiling RVC Offset, expected either a Comparison/IsNull Expression of a AndExpression got "
+                    + whereExpression.getClass().getName());
+            throw new RowValueConstructorOffsetInternalErrorException(
+                    "RVC Offset must specify the tables PKs.");
+        }
+
         List<RowKeyColumnExpression>
                 rowKeyColumnExpressionList =
                 new ArrayList<RowKeyColumnExpression>();
-        for (Expression child : expressions) {
-            if (!(child instanceof ComparisonExpression)) {
+        for (int i = 0; i < expressions.size(); i++) {
+            Expression child = expressions.get(i);
+            if (!(child instanceof ComparisonExpression || child instanceof IsNullExpression)) {
                 LOGGER.warn("Unexpected error while compiling RVC Offset");
                 throw new RowValueConstructorOffsetNotCoercibleException(
                         "RVC Offset must specify the tables PKs.");
             }
 
+            //if this is the last position
+            if(i == expressions.size() - 1) {
+                if(child instanceof IsNullExpression) {
+                    trailingNull = true;
+                }
+            }
+
+            //For either case comparison/isNull the first child should be the rowkey
             Expression possibleRowKeyColumnExpression = child.getChildren().get(0);
 
             // Note that since we store indexes in variable length form there may be casts from fixed types to
@@ -292,7 +363,7 @@ public class RVCOffsetCompiler {
             }
             rowKeyColumnExpressionList.add((RowKeyColumnExpression) possibleRowKeyColumnExpression);
         }
-        return rowKeyColumnExpressionList;
+        return new RowKeyColumnExpressionOutput(rowKeyColumnExpressionList,trailingNull);
     }
 
     @VisibleForTesting List<ColumnParseNode> buildListOfColumnParseNodes(

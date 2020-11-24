@@ -73,6 +73,7 @@ tokens
     SESSION='session';
     TABLE='table';
     SCHEMA='schema';
+    SCHEMAS='schemas';
     ADD='add';
     SPLIT='split';
     EXPLAIN='explain';
@@ -147,6 +148,7 @@ tokens
     IMMUTABLE = 'immutable';
     GRANT = 'grant';
     REVOKE = 'revoke';
+    SHOW = 'show';
 }
 
 
@@ -172,9 +174,9 @@ tokens
 package org.apache.phoenix.parse;
 
 ///CLOVER:OFF
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.lang.Boolean;
@@ -425,6 +427,7 @@ oneStatement returns [BindableStatement ret]
     |   s=drop_index_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=show_node
     |   s=trace_node
     |   s=create_function_node
     |   s=drop_function_node
@@ -487,6 +490,12 @@ revoke_permission_node returns [ChangePermsStatement ret]
         }
     ;
 
+// Parse a show statement. SHOW TABLES, SHOW SCHEMAS ...
+show_node returns [ShowStatement ret]
+    :   SHOW TABLES (IN schema=identifier)? (LIKE pattern=string_literal)? { $ret = factory.showTablesStatement(schema, pattern); }
+    |   SHOW SCHEMAS (LIKE pattern=string_literal)? { $ret = factory.showSchemasStatement(pattern); }
+    ;
+
 // Parse a create view statement.
 create_view_node returns [CreateTableStatement ret]
     :   CREATE VIEW (IF NOT ex=EXISTS)? t=from_table_name 
@@ -524,6 +533,11 @@ create_sequence_node returns [CreateSequenceStatement ret]
 int_literal_or_bind returns [ParseNode ret]
     : n=int_or_long_literal { $ret = n; }
     | b=bind_expression { $ret = b; }
+    ;
+
+// Returns the normalized string literal
+string_literal returns [String ret]
+    :   s=STRING_LITERAL { ret = SchemaUtil.normalizeLiteral(factory.literal(s.getText())); }
     ;
 
 // Parse a drop sequence statement.
@@ -656,8 +670,8 @@ alter_session_node returns [AlterSessionStatement ret]
 // Parse an alter table statement.
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
-        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) | (SET (p=fam_properties)) )
-        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
+        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) (cas=CASCADE INDEX (list=indexes | all=ALL))? | (SET (p=fam_properties)) )
+        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p, cas!=null, (all == null ? list : null)) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
@@ -682,6 +696,11 @@ properties returns [Map<String,Object> ret]
 column_defs returns [List<ColumnDef> ret]
 @init{ret = new ArrayList<ColumnDef>(); }
     :  v = column_def {$ret.add(v);}  (COMMA v = column_def {$ret.add(v);} )*
+;
+
+indexes returns [List<NamedNode> ret]
+@init{ret = new ArrayList<NamedNode>(); }
+    :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
 column_def returns [ColumnDef ret]

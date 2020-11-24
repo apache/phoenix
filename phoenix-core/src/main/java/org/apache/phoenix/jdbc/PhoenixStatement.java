@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -145,6 +146,8 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.ShowSchemasStatement;
+import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
@@ -193,10 +196,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.math.IntMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -1102,6 +1105,35 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableShowTablesStatement extends ShowTablesStatement
+        implements CompilableStatement {
+
+        public ExecutableShowTablesStatement(String schema, String pattern) {
+          super(schema, pattern);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+            throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getTablesStmt(stmt.getConnection(), null,
+                getTargetSchema(), getDbPattern(), null);
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
+    // Delegates to a SELECT query against SYSCAT.
+    private static class ExecutableShowSchemasStatement extends ShowSchemasStatement implements CompilableStatement {
+
+        public ExecutableShowSchemasStatement(String pattern) { super(pattern); }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            PreparedStatement delegateStmt =
+                QueryUtil.getSchemasStmt(stmt.getConnection(), null, getSchemaPattern());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -1467,8 +1499,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
-        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            super(table, tableType, columnDefs, ifNotExists, props);
+        ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
+            super(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
         }
 
         @SuppressWarnings("unchecked")
@@ -1609,8 +1641,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
         
         @Override
-        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+        public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
+            return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
         }
         
         @Override
@@ -1677,6 +1709,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecutableChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName,
                                                          String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
             return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
+        }
+
+        @Override
+        public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+            return new ExecutableShowTablesStatement(schema, pattern);
+        }
+
+        @Override
+        public ShowSchemasStatement showSchemasStatement(String pattern) {
+            return new ExecutableShowSchemasStatement(pattern);
         }
 
     }
@@ -1934,10 +1976,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     @Override
     public int getFetchSize() throws SQLException {
-	if (fetchSize>0)
-                return fetchSize;
-        else
-        	return connection.getQueryServices().getProps().getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
+        if (fetchSize > 0) {
+            return fetchSize;
+        } else {
+            return connection.getQueryServices().getProps()
+                .getInt(QueryServices.SCAN_CACHE_SIZE_ATTRIB,
+                    QueryServicesOptions.DEFAULT_SCAN_CACHE_SIZE);
+        }
     }
 
     @Override

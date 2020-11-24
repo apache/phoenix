@@ -42,38 +42,18 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>client without classifier</id>
+            <id>client without version</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
             </goals>
             <configuration>
               <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
+              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${project.version}-${hbase.profile.string}.jar
-                </argument>
                 <argument>
                   phoenix-client-${project.version}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>client without version and classifier</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded client JAR, but we don't care -->
@@ -83,7 +63,7 @@
             </configuration>
           </execution>
           <execution>
-            <id>server without classifier</id>
+            <id>server without version</id>
             <phase>compile</phase>
             <goals>
               <goal>exec</goal>
@@ -93,28 +73,8 @@
               <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
               <arguments>
                 <argument>-fnsv</argument>
-                <argument>
-                  phoenix-server-${project.version}-${hbase.profile.string}.jar
-                </argument>
                 <argument>
                   phoenix-server-${project.version}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>server without version and classifier</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-server/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-server-${project.version}-${hbase.profile.string}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded server JAR, but we don't care -->
@@ -147,29 +107,12 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}-${hbase.profile.string}</finalName>
+            <finalName>phoenix-${project.version}-bin</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
               <descriptors>
                 <descriptor>src/build/package-to-tar-all.xml</descriptor>
-              </descriptors>
-              <tarLongFileMode>posix</tarLongFileMode>
-            </configuration>
-          </execution>
-          <execution>
-            <id>package-to-source-tar</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-            <finalName>phoenix-${project.version}-source</finalName>
-              <attach>false</attach>
-              <tarLongFileMode>gnu</tarLongFileMode>
-              <appendAssemblyId>false</appendAssemblyId>
-              <descriptors>
-                <descriptor>src/build/src.xml</descriptor>
               </descriptors>
               <tarLongFileMode>posix</tarLongFileMode>
             </configuration>
@@ -198,9 +141,16 @@
       <artifactId>phoenix-tracing-webapp</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-tools-hbase2.x</artifactId>
-      <version>${omid.version}</version>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
     </dependency>
 
     <dependency>
@@ -218,37 +168,32 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
-      <version>2.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-protobuf</artifactId>
-      <version>2.1.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-netty</artifactId>
-      <version>2.1.0</version>
+      <version>${hbase.thirdparty.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
-      <version>3.0</version>
     </dependency>
 
     <dependency>
       <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
-      <version>4.0.0-incubating</version>
     </dependency>
 
   </dependencies>

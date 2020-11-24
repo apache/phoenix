@@ -28,6 +28,7 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIME;
@@ -66,7 +67,7 @@ import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.metrics.MetricRegistryInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,6 +82,7 @@ public enum GlobalClientMetrics {
     GLOBAL_MUTATION_BYTES(MUTATION_BYTES),
     GLOBAL_MUTATION_COMMIT_TIME(MUTATION_COMMIT_TIME),
     GLOBAL_MUTATION_BATCH_FAILED_COUNT(MUTATION_BATCH_FAILED_SIZE),
+    GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT(INDEX_COMMIT_FAILURE_SIZE),
     GLOBAL_QUERY_TIME(QUERY_TIME),
     GLOBAL_NUM_PARALLEL_SCANS(NUM_PARALLEL_SCANS),
     GLOBAL_SCAN_BYTES(SCAN_BYTES),

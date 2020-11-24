@@ -31,7 +31,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ByteUtil;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * Singleton that is used to track state associated with regions undergoing stats collection at the

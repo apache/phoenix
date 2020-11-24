@@ -10,13 +10,13 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.mapreduce.index.IndexScrutinyMapperForTest;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyMapper;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
@@ -54,8 +54,9 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    protected List<Job> runScrutiny(String[] cmdArgs) throws Exception {
-        IndexScrutinyTool scrutiny = new IndexScrutinyTool(IndexScrutinyMapperForTest.class);
+    protected List<Job> runScrutiny(Class<? extends IndexScrutinyMapper> mapperClass,
+                                    String[] cmdArgs) throws Exception {
+        IndexScrutinyTool scrutiny = new IndexScrutinyTool(mapperClass);
         Configuration conf = new Configuration(getUtility().getConfiguration());
         scrutiny.setConf(conf);
         int status = scrutiny.run(cmdArgs);

@@ -117,6 +117,10 @@ public final class MetaDataProtos {
      * <code>UNABLE_TO_DELETE_CHILD_LINK = 25;</code>
      */
     UNABLE_TO_DELETE_CHILD_LINK(25, 25),
+    /**
+     * <code>UNABLE_TO_UPSERT_TASK = 26;</code>
+     */
+    UNABLE_TO_UPSERT_TASK(26, 26),
     ;
 
     /**
@@ -223,6 +227,10 @@ public final class MetaDataProtos {
      * <code>UNABLE_TO_DELETE_CHILD_LINK = 25;</code>
      */
     public static final int UNABLE_TO_DELETE_CHILD_LINK_VALUE = 25;
+    /**
+     * <code>UNABLE_TO_UPSERT_TASK = 26;</code>
+     */
+    public static final int UNABLE_TO_UPSERT_TASK_VALUE = 26;
 
 
     public final int getNumber() { return value; }
@@ -255,6 +263,7 @@ public final class MetaDataProtos {
         case 23: return UNABLE_TO_CREATE_CHILD_LINK;
         case 24: return UNABLE_TO_UPDATE_PARENT_TABLE;
         case 25: return UNABLE_TO_DELETE_CHILD_LINK;
+        case 26: return UNABLE_TO_UPSERT_TASK;
         default: return null;
       }
     }
@@ -10813,6 +10822,16 @@ public final class MetaDataProtos {
      * <code>optional .PTable parentTable = 3;</code>
      */
     org.apache.phoenix.coprocessor.generated.PTableProtos.PTableOrBuilder getParentTableOrBuilder();
+
+    // optional bool addingColumns = 4;
+    /**
+     * <code>optional bool addingColumns = 4;</code>
+     */
+    boolean hasAddingColumns();
+    /**
+     * <code>optional bool addingColumns = 4;</code>
+     */
+    boolean getAddingColumns();
   }
   /**
    * Protobuf type {@code AddColumnRequest}
@@ -10889,6 +10908,11 @@ public final class MetaDataProtos {
                 parentTable_ = subBuilder.buildPartial();
               }
               bitField0_ |= 0x00000002;
+              break;
+            }
+            case 32: {
+              bitField0_ |= 0x00000004;
+              addingColumns_ = input.readBool();
               break;
             }
           }
@@ -10995,10 +11019,27 @@ public final class MetaDataProtos {
       return parentTable_;
     }
 
+    // optional bool addingColumns = 4;
+    public static final int ADDINGCOLUMNS_FIELD_NUMBER = 4;
+    private boolean addingColumns_;
+    /**
+     * <code>optional bool addingColumns = 4;</code>
+     */
+    public boolean hasAddingColumns() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional bool addingColumns = 4;</code>
+     */
+    public boolean getAddingColumns() {
+      return addingColumns_;
+    }
+
     private void initFields() {
       tableMetadataMutations_ = java.util.Collections.emptyList();
       clientVersion_ = 0;
       parentTable_ = org.apache.phoenix.coprocessor.generated.PTableProtos.PTable.getDefaultInstance();
+      addingColumns_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -11027,6 +11068,9 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         output.writeMessage(3, parentTable_);
       }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeBool(4, addingColumns_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -11052,6 +11096,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000002) == 0x00000002)) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(3, parentTable_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(4, addingColumns_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -11088,6 +11136,11 @@ public final class MetaDataProtos {
         result = result && getParentTable()
             .equals(other.getParentTable());
       }
+      result = result && (hasAddingColumns() == other.hasAddingColumns());
+      if (hasAddingColumns()) {
+        result = result && (getAddingColumns()
+            == other.getAddingColumns());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -11112,6 +11165,10 @@ public final class MetaDataProtos {
       if (hasParentTable()) {
         hash = (37 * hash) + PARENTTABLE_FIELD_NUMBER;
         hash = (53 * hash) + getParentTable().hashCode();
+      }
+      if (hasAddingColumns()) {
+        hash = (37 * hash) + ADDINGCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getAddingColumns());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -11233,6 +11290,8 @@ public final class MetaDataProtos {
           parentTableBuilder_.clear();
         }
         bitField0_ = (bitField0_ & ~0x00000004);
+        addingColumns_ = false;
+        bitField0_ = (bitField0_ & ~0x00000008);
         return this;
       }
 
@@ -11278,6 +11337,10 @@ public final class MetaDataProtos {
         } else {
           result.parentTable_ = parentTableBuilder_.build();
         }
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.addingColumns_ = addingColumns_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -11309,6 +11372,9 @@ public final class MetaDataProtos {
         }
         if (other.hasParentTable()) {
           mergeParentTable(other.getParentTable());
+        }
+        if (other.hasAddingColumns()) {
+          setAddingColumns(other.getAddingColumns());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -11563,6 +11629,39 @@ public final class MetaDataProtos {
           parentTable_ = null;
         }
         return parentTableBuilder_;
+      }
+
+      // optional bool addingColumns = 4;
+      private boolean addingColumns_ ;
+      /**
+       * <code>optional bool addingColumns = 4;</code>
+       */
+      public boolean hasAddingColumns() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>optional bool addingColumns = 4;</code>
+       */
+      public boolean getAddingColumns() {
+        return addingColumns_;
+      }
+      /**
+       * <code>optional bool addingColumns = 4;</code>
+       */
+      public Builder setAddingColumns(boolean value) {
+        bitField0_ |= 0x00000008;
+        addingColumns_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool addingColumns = 4;</code>
+       */
+      public Builder clearAddingColumns() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        addingColumns_ = false;
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:AddColumnRequest)
@@ -18029,68 +18128,69 @@ public final class MetaDataProtos {
       "Type\030\002 \002(\t\022\017\n\007cascade\030\003 \001(\010\022\025\n\rclientVer" +
       "sion\030\004 \001(\005\"_\n\021DropSchemaRequest\022\037\n\027schem" +
       "aMetadataMutations\030\001 \003(\014\022\022\n\nschemaName\030\002" +
-      " \002(\t\022\025\n\rclientVersion\030\003 \002(\005\"g\n\020AddColumn" +
+      " \002(\t\022\025\n\rclientVersion\030\003 \002(\005\"~\n\020AddColumn" +
       "Request\022\036\n\026tableMetadataMutations\030\001 \003(\014\022",
       "\025\n\rclientVersion\030\002 \001(\005\022\034\n\013parentTable\030\003 " +
-      "\001(\0132\007.PTable\"h\n\021DropColumnRequest\022\036\n\026tab" +
-      "leMetadataMutations\030\001 \003(\014\022\025\n\rclientVersi" +
-      "on\030\002 \001(\005\022\034\n\013parentTable\030\003 \001(\0132\007.PTable\"^" +
-      "\n\023DropFunctionRequest\022\036\n\026tableMetadataMu" +
-      "tations\030\001 \003(\014\022\020\n\010ifExists\030\002 \001(\010\022\025\n\rclien" +
-      "tVersion\030\003 \001(\005\"P\n\027UpdateIndexStateReques" +
-      "t\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\025\n\rcli" +
-      "entVersion\030\002 \001(\005\"*\n\021ClearCacheRequest\022\025\n" +
-      "\rclientVersion\030\001 \001(\005\"*\n\022ClearCacheRespon",
-      "se\022\024\n\014unfreedBytes\030\001 \001(\003\"*\n\021GetVersionRe" +
-      "quest\022\025\n\rclientVersion\030\001 \001(\005\"E\n\022GetVersi" +
-      "onResponse\022\017\n\007version\030\001 \002(\003\022\036\n\026systemCat" +
-      "alogTimestamp\030\002 \001(\003\"\205\001\n\032ClearTableFromCa" +
-      "cheRequest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaNa" +
-      "me\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTim" +
-      "estamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033C" +
-      "learTableFromCacheResponse*\332\005\n\014MutationC" +
-      "ode\022\030\n\024TABLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_N" +
-      "OT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLU",
-      "MN_ALREADY_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_" +
-      "MUTATION\020\004\022\027\n\023TABLE_NOT_IN_REGION\020\005\022\025\n\021N" +
-      "EWER_TABLE_FOUND\020\006\022\034\n\030UNALLOWED_TABLE_MU" +
-      "TATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022\032\n\026PARENT_TA" +
-      "BLE_NOT_FOUND\020\t\022\033\n\027FUNCTION_ALREADY_EXIS" +
-      "TS\020\n\022\026\n\022FUNCTION_NOT_FOUND\020\013\022\030\n\024NEWER_FU" +
-      "NCTION_FOUND\020\014\022\032\n\026FUNCTION_NOT_IN_REGION" +
-      "\020\r\022\031\n\025SCHEMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_S" +
-      "CHEMA_FOUND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024S" +
-      "CHEMA_NOT_IN_REGION\020\021\022\032\n\026TABLES_EXIST_ON",
-      "_SCHEMA\020\022\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020\023" +
-      "\022%\n!AUTO_PARTITION_SEQUENCE_NOT_FOUND\020\024\022" +
-      "#\n\037CANNOT_COERCE_AUTO_PARTITION_ID\020\025\022\024\n\020" +
-      "TOO_MANY_INDEXES\020\026\022\037\n\033UNABLE_TO_CREATE_C" +
-      "HILD_LINK\020\027\022!\n\035UNABLE_TO_UPDATE_PARENT_T" +
-      "ABLE\020\030\022\037\n\033UNABLE_TO_DELETE_CHILD_LINK\020\0312" +
-      "\345\006\n\017MetaDataService\022/\n\010getTable\022\020.GetTab" +
-      "leRequest\032\021.MetaDataResponse\0227\n\014getFunct" +
-      "ions\022\024.GetFunctionsRequest\032\021.MetaDataRes" +
-      "ponse\0221\n\tgetSchema\022\021.GetSchemaRequest\032\021.",
-      "MetaDataResponse\0225\n\013createTable\022\023.Create" +
-      "TableRequest\032\021.MetaDataResponse\022;\n\016creat" +
-      "eFunction\022\026.CreateFunctionRequest\032\021.Meta" +
-      "DataResponse\0227\n\014createSchema\022\024.CreateSch" +
-      "emaRequest\032\021.MetaDataResponse\0221\n\tdropTab" +
-      "le\022\021.DropTableRequest\032\021.MetaDataResponse" +
-      "\0223\n\ndropSchema\022\022.DropSchemaRequest\032\021.Met" +
-      "aDataResponse\0227\n\014dropFunction\022\024.DropFunc" +
-      "tionRequest\032\021.MetaDataResponse\0221\n\taddCol" +
-      "umn\022\021.AddColumnRequest\032\021.MetaDataRespons",
-      "e\0223\n\ndropColumn\022\022.DropColumnRequest\032\021.Me" +
-      "taDataResponse\022?\n\020updateIndexState\022\030.Upd" +
-      "ateIndexStateRequest\032\021.MetaDataResponse\022" +
-      "5\n\nclearCache\022\022.ClearCacheRequest\032\023.Clea" +
-      "rCacheResponse\0225\n\ngetVersion\022\022.GetVersio" +
-      "nRequest\032\023.GetVersionResponse\022P\n\023clearTa" +
-      "bleFromCache\022\033.ClearTableFromCacheReques" +
-      "t\032\034.ClearTableFromCacheResponseBB\n(org.a" +
-      "pache.phoenix.coprocessor.generatedB\016Met" +
-      "aDataProtosH\001\210\001\001\240\001\001"
+      "\001(\0132\007.PTable\022\025\n\raddingColumns\030\004 \001(\010\"h\n\021D" +
+      "ropColumnRequest\022\036\n\026tableMetadataMutatio" +
+      "ns\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\022\034\n\013paren" +
+      "tTable\030\003 \001(\0132\007.PTable\"^\n\023DropFunctionReq" +
+      "uest\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\020\n\010" +
+      "ifExists\030\002 \001(\010\022\025\n\rclientVersion\030\003 \001(\005\"P\n" +
+      "\027UpdateIndexStateRequest\022\036\n\026tableMetadat" +
+      "aMutations\030\001 \003(\014\022\025\n\rclientVersion\030\002 \001(\005\"" +
+      "*\n\021ClearCacheRequest\022\025\n\rclientVersion\030\001 ",
+      "\001(\005\"*\n\022ClearCacheResponse\022\024\n\014unfreedByte" +
+      "s\030\001 \001(\003\"*\n\021GetVersionRequest\022\025\n\rclientVe" +
+      "rsion\030\001 \001(\005\"E\n\022GetVersionResponse\022\017\n\007ver" +
+      "sion\030\001 \002(\003\022\036\n\026systemCatalogTimestamp\030\002 \001" +
+      "(\003\"\205\001\n\032ClearTableFromCacheRequest\022\020\n\010ten" +
+      "antId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttable" +
+      "Name\030\003 \002(\014\022\027\n\017clientTimestamp\030\004 \002(\003\022\025\n\rc" +
+      "lientVersion\030\005 \001(\005\"\035\n\033ClearTableFromCach" +
+      "eResponse*\365\005\n\014MutationCode\022\030\n\024TABLE_ALRE" +
+      "ADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COL",
+      "UMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS" +
+      "\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020\004\022\027\n\023TAB" +
+      "LE_NOT_IN_REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020" +
+      "\006\022\034\n\030UNALLOWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK" +
+      "_COLUMNS\020\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t\022\033" +
+      "\n\027FUNCTION_ALREADY_EXISTS\020\n\022\026\n\022FUNCTION_" +
+      "NOT_FOUND\020\013\022\030\n\024NEWER_FUNCTION_FOUND\020\014\022\032\n" +
+      "\026FUNCTION_NOT_IN_REGION\020\r\022\031\n\025SCHEMA_ALRE" +
+      "ADY_EXISTS\020\016\022\026\n\022NEWER_SCHEMA_FOUND\020\017\022\024\n\020" +
+      "SCHEMA_NOT_FOUND\020\020\022\030\n\024SCHEMA_NOT_IN_REGI",
+      "ON\020\021\022\032\n\026TABLES_EXIST_ON_SCHEMA\020\022\022\035\n\031UNAL" +
+      "LOWED_SCHEMA_MUTATION\020\023\022%\n!AUTO_PARTITIO" +
+      "N_SEQUENCE_NOT_FOUND\020\024\022#\n\037CANNOT_COERCE_" +
+      "AUTO_PARTITION_ID\020\025\022\024\n\020TOO_MANY_INDEXES\020" +
+      "\026\022\037\n\033UNABLE_TO_CREATE_CHILD_LINK\020\027\022!\n\035UN" +
+      "ABLE_TO_UPDATE_PARENT_TABLE\020\030\022\037\n\033UNABLE_" +
+      "TO_DELETE_CHILD_LINK\020\031\022\031\n\025UNABLE_TO_UPSE" +
+      "RT_TASK\020\0322\345\006\n\017MetaDataService\022/\n\010getTabl" +
+      "e\022\020.GetTableRequest\032\021.MetaDataResponse\0227" +
+      "\n\014getFunctions\022\024.GetFunctionsRequest\032\021.M",
+      "etaDataResponse\0221\n\tgetSchema\022\021.GetSchema" +
+      "Request\032\021.MetaDataResponse\0225\n\013createTabl" +
+      "e\022\023.CreateTableRequest\032\021.MetaDataRespons" +
+      "e\022;\n\016createFunction\022\026.CreateFunctionRequ" +
+      "est\032\021.MetaDataResponse\0227\n\014createSchema\022\024" +
+      ".CreateSchemaRequest\032\021.MetaDataResponse\022" +
+      "1\n\tdropTable\022\021.DropTableRequest\032\021.MetaDa" +
+      "taResponse\0223\n\ndropSchema\022\022.DropSchemaReq" +
+      "uest\032\021.MetaDataResponse\0227\n\014dropFunction\022" +
+      "\024.DropFunctionRequest\032\021.MetaDataResponse",
+      "\0221\n\taddColumn\022\021.AddColumnRequest\032\021.MetaD" +
+      "ataResponse\0223\n\ndropColumn\022\022.DropColumnRe" +
+      "quest\032\021.MetaDataResponse\022?\n\020updateIndexS" +
+      "tate\022\030.UpdateIndexStateRequest\032\021.MetaDat" +
+      "aResponse\0225\n\nclearCache\022\022.ClearCacheRequ" +
+      "est\032\023.ClearCacheResponse\0225\n\ngetVersion\022\022" +
+      ".GetVersionRequest\032\023.GetVersionResponse\022" +
+      "P\n\023clearTableFromCache\022\033.ClearTableFromC" +
+      "acheRequest\032\034.ClearTableFromCacheRespons" +
+      "eBB\n(org.apache.phoenix.coprocessor.gene",
+      "ratedB\016MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -18162,7 +18262,7 @@ public final class MetaDataProtos {
           internal_static_AddColumnRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_AddColumnRequest_descriptor,
-              new java.lang.String[] { "TableMetadataMutations", "ClientVersion", "ParentTable", });
+              new java.lang.String[] { "TableMetadataMutations", "ClientVersion", "ParentTable", "AddingColumns", });
           internal_static_DropColumnRequest_descriptor =
             getDescriptor().getMessageTypes().get(11);
           internal_static_DropColumnRequest_fieldAccessorTable = new

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
@@ -413,6 +413,27 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    // case: Select with non primary keys in where clause.
+    public void testSelectWithMultiplePredicates() throws Exception {
+        long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - TS_OFFSET;
+        String tableName = createTestData(rowTimestamp, NUM_ROWS);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String sql = "SELECT COUNT(*) FROM " + tableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() > PK2 AND KV1 = 'KV1_1'";
+            try (Statement stmt = conn.createStatement()) {
+                ResultSet rs = stmt.executeQuery(sql);
+                while(rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    assertFalse(rs.wasNull());
+                    assertTrue(rowCount == 1);
+                }
+                rs.close();
+            }
+        }
+    }
+
 
     @Test
     // case: Comparision with TO_TIME()

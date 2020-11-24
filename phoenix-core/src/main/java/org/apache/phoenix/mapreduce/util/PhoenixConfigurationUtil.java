@@ -39,7 +39,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
@@ -58,9 +57,9 @@ import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -153,6 +152,9 @@ public final class PhoenixConfigurationUtil {
 
     public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
 
+    public static final String DISABLE_LOGGING_TYPE = "phoenix.mr.index" +
+        ".IndexDisableLoggingType";
+
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
 
@@ -165,6 +167,7 @@ public final class PhoenixConfigurationUtil {
     public static final String MAPREDUCE_TENANT_ID = "phoenix.mapreduce.tenantid";
     private static final String INDEX_TOOL_END_TIME = "phoenix.mr.index.endtime";
     private static final String INDEX_TOOL_START_TIME = "phoenix.mr.index.starttime";
+    private static final String INDEX_TOOL_LAST_VERIFY_TIME = "phoenix.mr.index.last.verify.time";
 
     public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
 
@@ -288,6 +291,12 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INDEX_TOOL_START_TIME, Long.toString(startTime));
     }
 
+    public static void setIndexToolLastVerifyTime(Configuration configuration, Long lastVerifyTime) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(lastVerifyTime);
+        configuration.set(INDEX_TOOL_LAST_VERIFY_TIME, Long.toString(lastVerifyTime));
+    }
+
     public static void setCurrentScnValue(Configuration configuration, Long scn) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(scn);
@@ -302,6 +311,11 @@ public final class PhoenixConfigurationUtil {
     public static String getCurrentScnValue(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(CURRENT_SCN_VALUE);
+    }
+
+    public static String getIndexToolLastVerifyTime(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INDEX_TOOL_LAST_VERIFY_TIME);
     }
     
     public static List<String> getUpsertColumnNames(final Configuration configuration) {
@@ -607,6 +621,12 @@ public final class PhoenixConfigurationUtil {
         configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
     }
 
+    public static void setDisableLoggingVerifyType(Configuration configuration,
+                                                   IndexTool.IndexDisableLoggingType disableLoggingType) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(DISABLE_LOGGING_TYPE, disableLoggingType.getValue());
+    }
+
     public static String getScrutinyDataTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(SCRUTINY_DATA_TABLE_NAME);
@@ -748,6 +768,12 @@ public final class PhoenixConfigurationUtil {
         return IndexTool.IndexVerifyType.fromValue(value);
     }
 
+    public static IndexTool.IndexVerifyType getDisableLoggingVerifyType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String value = configuration.get(DISABLE_LOGGING_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
+        return IndexTool.IndexVerifyType.fromValue(value);
+    }
+
     public static boolean getSplitByStats(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         boolean split = configuration.getBoolean(MAPREDUCE_SPLIT_BY_STATS, DEFAULT_SPLIT_BY_STATS);
@@ -782,10 +808,8 @@ public final class PhoenixConfigurationUtil {
 					if (tenantId != null) {
 						tenantId = null;
 					} else {
-						BaseResultIterators.LOGGER.warn(
-								"Unable to find parent table \"" + parentTableName + "\" of table \""
-										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",
-								e);
+						LOGGER.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
+										+ table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",e);
 					}
 				}
 		    }

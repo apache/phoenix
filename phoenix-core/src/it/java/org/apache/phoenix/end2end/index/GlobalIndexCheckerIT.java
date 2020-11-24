@@ -17,6 +17,18 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -31,7 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -44,6 +56,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,24 +64,18 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
     private final boolean async;
+    private String tableDDLOptions;
+    private StringBuilder optionBuilder;
     private final boolean encoded;
-    private final String tableDDLOptions;
-
     public GlobalIndexCheckerIT(boolean async, boolean encoded) {
         this.async = async;
         this.encoded = encoded;
-        StringBuilder optionBuilder = new StringBuilder();
-        if (!encoded) {
-            optionBuilder.append(" COLUMN_ENCODED_BYTES=0 ");
-        }
-        this.tableDDLOptions = optionBuilder.toString();
     }
 
     @BeforeClass
@@ -76,6 +83,15 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @Before
+    public void beforeTest(){
+        optionBuilder = new StringBuilder();
+        if (!encoded) {
+            optionBuilder.append(" COLUMN_ENCODED_BYTES=0");
+        }
+        this.tableDDLOptions = optionBuilder.toString();
     }
 
     @Parameters(
@@ -154,6 +170,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2, val3)");
+
             String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
             conn.createStatement().executeUpdate(dml);
             conn.commit();
@@ -204,6 +221,61 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals("abc", rs.getString(3));
             assertEquals("abcd", rs.getString(4));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLimitWithUnverifiedRows() throws Exception {
+        if (async) {
+            return;
+        }
+        String dataTableName = generateUniqueName();
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)");
+            conn.commit();
+            // Read all index rows and rewrite them back directly. This will overwrite existing rows with newer
+            // timestamps and set the empty column to value "x". This will make them unverified
+            conn.createStatement().execute("UPSERT INTO " + indexTableName + " SELECT * FROM " +
+                    indexTableName);
+            conn.commit();
+            // Verified that read repair will not reduce the number of rows returned for LIMIT queries
+            String selectSql = "SELECT * from " + indexTableName + " LIMIT 1";
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+            selectSql = "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' LIMIT 1";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("bcde", rs.getString(1));
+            assertFalse(rs.next());
+            // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the verify flag is set
+            // to true and/or index rows are deleted and check that this does not impact the correctness
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // This is to cover the case where there is no data table row for an unverified index row
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'aa','cde')");
+            commitWithException(conn);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            // Verified that read repair will not reduce the number of rows returned for LIMIT queries
+            selectSql = "SELECT * from " + indexTableName + " LIMIT 1";
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("a", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+            // Add rows and check everything is still okay
+            verifyTableHealth(conn, dataTableName, indexTableName);
+
         }
     }
 
@@ -441,6 +513,19 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
             conn.commit();
+            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(2, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab' and val2 = 'abcc'";
             // Verify that we will read from the index table
@@ -598,17 +683,8 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     public void testOnePhaseOverwrite() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             String indexTableName = generateUniqueName();
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
-                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
-            if (async) {
-                // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
-            }
+            createTableAndIndexes(conn, dataTableName, indexTableName);
             // Configure IndexRegionObserver to skip the last two write phase (i.e., the data table update and post index
             // update phase) and check that this does not impact the correctness (one overwrite)
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
@@ -678,21 +754,35 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    private void createTableAndIndexes(Connection conn, String dataTableName,
+                                       String indexTableName) throws Exception {
+        createTableAndIndexes(conn, dataTableName, indexTableName, 1);
+    }
+
+    private void createTableAndIndexes(Connection conn, String dataTableName,
+                                       String indexTableName, int indexVersions) throws Exception {
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
+                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") +
+            " VERSIONS=" + indexVersions);
+        conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
+                dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : "")+
+            " VERSIONS=" + indexVersions);
+        conn.commit();
+        if (async) {
+            // run the index MR job.
+            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
+            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+        }
+    }
+
     @Test
     public void testFailDataTableAndPostIndexRowUpdate() throws Exception {
-        String dataTableName = generateUniqueName();
-        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
-            conn.createStatement().execute("CREATE INDEX " + indexName + "1 on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
-            conn.createStatement().execute("CREATE INDEX " + indexName + "2 on " +
-                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
-            if (async) {
-                // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "1");
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexName + "2");
-            }
+            createTableAndIndexes(conn, dataTableName, indexName);
             // Configure IndexRegionObserver to fail the last two write phase (i.e., the data table update and post index update phase)
             // and check that this does not impact the correctness
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);

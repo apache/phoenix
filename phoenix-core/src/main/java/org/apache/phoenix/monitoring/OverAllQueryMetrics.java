@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.phoenix.log.LogLevel;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Class that represents the overall metrics associated with a query being executed by the phoenix.
@@ -82,8 +83,11 @@ public class OverAllQueryMetrics {
     }
 
     public void endQuery() {
+        boolean wasRunning = queryWatch.isRunning();
         queryWatch.stop();
-        wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            wallClockTimeMS.change(queryWatch.getElapsedTimeInMs());
+        }
     }
 
     public void startResultSetWatch() {
@@ -91,8 +95,21 @@ public class OverAllQueryMetrics {
     }
 
     public void stopResultSetWatch() {
+        boolean wasRunning = resultSetWatch.isRunning();
         resultSetWatch.stop();
-        resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        if (wasRunning) {
+            resultSetTimeMS.change(resultSetWatch.getElapsedTimeInMs());
+        }
+    }
+
+    @VisibleForTesting
+    long getWallClockTimeMs() {
+        return wallClockTimeMS.getValue();
+    }
+
+    @VisibleForTesting
+    long getResultSetTimeMs() {
+        return resultSetTimeMS.getValue();
     }
 
     public Map<MetricType, Long> publish() {

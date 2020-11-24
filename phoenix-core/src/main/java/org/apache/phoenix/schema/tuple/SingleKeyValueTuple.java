@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class SingleKeyValueTuple extends BaseTuple {
     private static final byte[] UNITIALIZED_KEY_BUFFER = new byte[0];
     private Cell cell;
-    private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
+    private ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable(UNITIALIZED_KEY_BUFFER);
     
     public SingleKeyValueTuple() {
     }
@@ -38,12 +38,12 @@ public class SingleKeyValueTuple extends BaseTuple {
     }
     
     public boolean hasKey() {
-        return keyPtr.get() != UNITIALIZED_KEY_BUFFER;
+        return rowKeyPtr.get() != UNITIALIZED_KEY_BUFFER;
     }
     
     public void reset() {
         this.cell = null;
-        keyPtr.set(UNITIALIZED_KEY_BUFFER);
+        rowKeyPtr.set(UNITIALIZED_KEY_BUFFER);
     }
     
     public void setCell(Cell cell) {
@@ -55,19 +55,19 @@ public class SingleKeyValueTuple extends BaseTuple {
     }
     
     public void setKey(ImmutableBytesWritable ptr) {
-        keyPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+        rowKeyPtr.set(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
     
     public void setKey(Cell cell) {
         if (cell == null) {
             throw new IllegalArgumentException();
         }
-        keyPtr.set(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+        rowKeyPtr.set(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
     }
     
     @Override
     public void getKey(ImmutableBytesWritable ptr) {
-        ptr.set(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength());
+        ptr.set(rowKeyPtr.get(), rowKeyPtr.getOffset(), rowKeyPtr.getLength());
     }
     
     @Override
@@ -79,10 +79,22 @@ public class SingleKeyValueTuple extends BaseTuple {
     public boolean isImmutable() {
         return true;
     }
-    
+
     @Override
     public String toString() {
-        return "SingleKeyValueTuple[" + cell == null ? keyPtr.get() == UNITIALIZED_KEY_BUFFER ? "null" : Bytes.toStringBinary(keyPtr.get(),keyPtr.getOffset(),keyPtr.getLength()) : cell.toString() + "]";
+        StringBuilder sb = new StringBuilder();
+        sb.append("SingleKeyValueTuple[");
+        if (cell == null) {
+            if (rowKeyPtr.get() == UNITIALIZED_KEY_BUFFER) {
+                sb.append("null");
+            } else {
+                sb.append(Bytes.toStringBinary(rowKeyPtr.get(),rowKeyPtr.getOffset(),rowKeyPtr.getLength()));
+            }
+        } else {
+            sb.append(cell.toString());
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     @Override

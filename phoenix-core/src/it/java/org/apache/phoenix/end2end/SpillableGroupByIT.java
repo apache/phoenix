@@ -42,7 +42,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * Run in own cluster since it updates QueryServices.MAX_MEMORY_SIZE_ATTRIB
@@ -80,6 +80,7 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.toString(false));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, Long.toString(1000));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

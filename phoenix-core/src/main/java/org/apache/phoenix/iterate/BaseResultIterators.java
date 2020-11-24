@@ -21,6 +21,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_IND
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
@@ -82,6 +83,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -130,10 +132,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Function;
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -250,6 +252,24 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst());
                             }
                         }
+                    }
+                }
+            } else {
+                boolean containsNullableGroubBy = false;
+                if (!plan.getOrderBy().isEmpty()) {
+                    for (OrderByExpression orderByExpression : plan.getOrderBy()
+                            .getOrderByExpressions()) {
+                        if (orderByExpression.getExpression().isNullable()) {
+                            containsNullableGroubBy = true;
+                            break;
+                        }
+                    }
+                }
+                if(containsNullableGroubBy){
+                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                    if (!familyMap.containsKey(ecf) || familyMap.get(ecf) != null) {
+                        scan.addColumn(ecf, EncodedColumnsUtil.getEmptyKeyValueInfo(table)
+                                .getFirst());
                     }
                 }
             }
@@ -1297,7 +1317,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     try {
                         long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
                         if (timeOutForScan < 0) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
+                            throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
+                                    ". Query couldn't be completed in the allotted time: "
+                                            + queryTimeOut + " ms").build().buildException();
                         }
                         // make sure we apply the iterators in order
                         if (isLocalIndex && previousScan != null && previousScan.getScan() != null
@@ -1362,10 +1384,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             context.getOverallQueryMetrics().queryTimedOut();
             GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
             // thrown when a thread times out waiting for the future.get() call to return
-            toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
-                    .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
-                    .setRootCause(e).build().buildException();
+            toThrow = new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT)
+                    .setMessage(". Query couldn't be completed in the allotted time: "
+                            + queryTimeOut + " ms").setRootCause(e).build().buildException();
         } catch (SQLException e) {
+            if (e.getErrorCode() == OPERATION_TIMED_OUT.getErrorCode()) {
+                context.getOverallQueryMetrics().queryTimedOut();
+                GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
+            }
             toThrow = e;
         } catch (Exception e) {
             toThrow = ServerUtil.parseServerException(e);

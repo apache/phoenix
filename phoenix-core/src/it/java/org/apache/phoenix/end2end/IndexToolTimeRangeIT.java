@@ -24,6 +24,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -33,12 +34,13 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     private static final String
@@ -76,23 +78,26 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     private static void populateDataTable() throws SQLException {
         myClock = new MyClock();
         EnvironmentEdgeManager.injectEdge(myClock);
-        //So that we don't have to recompute the values below
-        myClock.tickTime();
-        myClock.tickTime();
-        try (Connection conn = getConnection()) {
-            //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
-            for (int i=0; i<5; i++) {
-                myClock.tickTime();
-                PreparedStatement ps = conn.prepareStatement(
-                        String.format(UPSERT_TABLE_DML, dataTableFullName));
-                ps.setInt(1, i+1);
-                ps.setInt(2,(i+1)*10);
-                ps.setInt(3, (i+1)*100);
-                ps.execute();
-                conn.commit();
+        try {
+            //So that we don't have to recompute the values below
+            myClock.tickTime();
+            myClock.tickTime();
+            try (Connection conn = getConnection()) {
+                //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
+                for (int i=0; i<5; i++) {
+                    myClock.tickTime();
+                    PreparedStatement ps = conn.prepareStatement(
+                            String.format(UPSERT_TABLE_DML, dataTableFullName));
+                    ps.setInt(1, i+1);
+                    ps.setInt(2,(i+1)*10);
+                    ps.setInt(3, (i+1)*100);
+                    ps.execute();
+                    conn.commit();
+                }
             }
+        } finally {
+            EnvironmentEdgeManager.reset();
         }
-        EnvironmentEdgeManager.injectEdge(null);
     }
 
     private static void setupMiniCluster() throws Exception {
@@ -129,20 +134,21 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(1),
-                "--endtime", myClock.getRelativeTimeAsString(9)};
+                "--start-time", myClock.getRelativeTimeAsString(1),
+                "--end-time", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // all rows should be rebuilt
         Assert.assertEquals(5, countRowsInIndex());
     }
 
-    @Ignore("Until PHOENIX-5783 is fixed")
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(6),
-                "--endtime", myClock.getRelativeTimeAsString(9)};
+                "--start-time", myClock.getRelativeTimeAsString(6),
+                "--end-time", myClock.getRelativeTimeAsString(9)};
         runIndexTool(args, 0);
         // only last 3 rows should be rebuilt
         Assert.assertEquals(3, countRowsInIndex());
@@ -150,9 +156,10 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_endTimeInBetween() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(1),
-                "--endtime", myClock.getRelativeTimeAsString(6)};
+                "--start-time", myClock.getRelativeTimeAsString(1),
+                "--end-time", myClock.getRelativeTimeAsString(6)};
         runIndexTool(args, 0);
         // only first 2 should be rebuilt
         Assert.assertEquals(2, countRowsInIndex());
@@ -166,12 +173,12 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
         Assert.assertEquals(5, countRowsInIndex());
     }
 
-    @Ignore("Until PHOENIX-5783 is fixed")
     @Test
     public void testValidTimeRange_onlyStartTimePassed() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         //starttime passed of last upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--starttime", myClock.getRelativeTimeAsString(8)};
+                "--start-time", myClock.getRelativeTimeAsString(8)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -180,7 +187,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     public void testValidTimeRange_onlyEndTimePassed() throws Exception {
         //end time passed as time of second upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--endtime", myClock.getRelativeTimeAsString(5)};
+                "--end-time", myClock.getRelativeTimeAsString(5)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }

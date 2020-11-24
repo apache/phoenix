@@ -26,7 +26,7 @@ import java.util.List;
 
 import org.apache.hadoop.io.WritableUtils;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 
 public abstract class BaseCompoundExpression extends BaseExpression {

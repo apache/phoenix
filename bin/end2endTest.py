@@ -23,6 +23,7 @@
 # !!!  Do NOT run the script against a prodcution cluster because it wipes out
 # !!!  existing data of the cluster 
 
+from __future__ import print_function
 import os
 import subprocess
 import sys
@@ -36,8 +37,8 @@ phoenix_jar_path = os.getenv(phoenix_utils.phoenix_class_path, phoenix_utils.pho
 # HBase/Phoenix client side property override
 hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', '')
 
-print "Current ClassPath=%s:%s:%s" % (phoenix_utils.hbase_conf_dir, phoenix_jar_path,
-                                      hbase_library_path)
+print("Current ClassPath=%s:%s:%s" % (phoenix_utils.hbase_conf_dir, phoenix_jar_path,
+                                      hbase_library_path))
 
 java_cmd = "java -cp " + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_jar_path + os.pathsep + \
     hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \

@@ -19,6 +19,8 @@
 #
 ############################################################################
 
+from __future__ import print_function
+from phoenix_utils import tryDecode
 import os
 import subprocess
 import sys
@@ -56,8 +58,8 @@ phoenix_utils.common_sqlline_args(parser)
 # Parse the args
 args=parser.parse_args()
 
-zookeeper = args.zookeepers
-sqlfile = args.sqlfile
+zookeeper = tryDecode(args.zookeepers)
+sqlfile = tryDecode(args.sqlfile)
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
@@ -82,17 +84,17 @@ elif os.name == 'nt':
     hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
     hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
 if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
+    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
     sys.exit(-1)
 
 hbase_env = {}
 if os.path.isfile(hbase_env_path):
     p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
     for x in p.stdout:
-        (k, _, v) = x.partition('=')
+        (k, _, v) = x.decode().partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
+if 'JAVA_HOME' in hbase_env:
     java_home = hbase_env['JAVA_HOME']
 
 if java_home:
@@ -100,7 +102,7 @@ if java_home:
 else:
     java = 'java'
 
-colorSetting = args.color
+colorSetting = tryDecode(args.color)
 # disable color setting for windows OS
 if os.name == 'nt':
     colorSetting = "false"
@@ -112,7 +114,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
-    " -n none -p none --color=" + colorSetting + " --fastConnect=" + args.fastconnect + \
-    " --verbose=" + args.verbose + " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
+    " -n none -p none --color=" + colorSetting + " --fastConnect=" + tryDecode(args.fastconnect) + \
+    " --verbose=" + tryDecode(args.verbose) + " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)

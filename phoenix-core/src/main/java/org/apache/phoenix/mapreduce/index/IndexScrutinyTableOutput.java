@@ -26,7 +26,6 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
@@ -40,9 +39,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  *
@@ -69,6 +68,7 @@ public class IndexScrutinyTableOutput {
             "    SOURCE_TS BIGINT,\n" +
             "    TARGET_TS BIGINT,\n" +
             "    HAS_TARGET_ROW BOOLEAN,\n" +
+            "    BEYOND_MAX_LOOKBACK BOOLEAN,\n" +
             "    CONSTRAINT PK PRIMARY KEY\n" +
             "    (\n" +
             "        " + SOURCE_TABLE_COL_NAME + ",\n" +
@@ -76,7 +76,10 @@ public class IndexScrutinyTableOutput {
             "        " + SCRUTINY_EXECUTE_TIME_COL_NAME + ",\n" + // time at which the scrutiny ran
             "        SOURCE_ROW_PK_HASH\n" + //  this hash makes the PK unique
             "    )\n" + // dynamic columns consisting of the source and target columns will follow
-            ")";
+            ")  COLUMN_ENCODED_BYTES = 0 "; //column encoding not supported with dyn columns (PHOENIX-5107)
+    public static final String OUTPUT_TABLE_BEYOND_LOOKBACK_DDL = "" +
+        "ALTER TABLE " + OUTPUT_TABLE_NAME + "\n" +
+        " ADD IF NOT EXISTS BEYOND_MAX_LOOKBACK BOOLEAN";
 
     /**
      * This table holds metadata about a scrutiny job - result counters and queries to fetch invalid
@@ -103,6 +106,8 @@ public class IndexScrutinyTableOutput {
             "    INVALID_ROWS_QUERY_ALL VARCHAR,\n" + // stored sql query to fetch all the invalid rows from the output table
             "    INVALID_ROWS_QUERY_MISSING_TARGET VARCHAR,\n" +  // stored sql query to fetch all the invalid rows which are missing a target row
             "    INVALID_ROWS_QUERY_BAD_COVERED_COL_VAL VARCHAR,\n" + // stored sql query to fetch all the invalid rows which have bad covered column values
+            "    INVALID_ROWS_QUERY_BEYOND_MAX_LOOKBACK VARCHAR,\n" + // stored sql query to fetch all the potentially invalid rows which are before max lookback age
+            "    BEYOND_MAX_LOOKBACK_COUNT BIGINT,\n" +
             "    CONSTRAINT PK PRIMARY KEY\n" +
             "    (\n" +
             "        " + SOURCE_TABLE_COL_NAME + ",\n" +
@@ -110,8 +115,12 @@ public class IndexScrutinyTableOutput {
             "        " + SCRUTINY_EXECUTE_TIME_COL_NAME + "\n" +
             "    )\n" +
             ")\n";
+    public static final String OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL = "" +
+        "ALTER TABLE " + OUTPUT_METADATA_TABLE_NAME + "\n" +
+        " ADD IF NOT EXISTS INVALID_ROWS_QUERY_BEYOND_MAX_LOOKBACK VARCHAR, \n" +
+        " BEYOND_MAX_LOOKBACK_COUNT BIGINT";
 
-    public static final String UPSERT_METADATA_SQL = "UPSERT INTO " + OUTPUT_METADATA_TABLE_NAME + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    public static final String UPSERT_METADATA_SQL = "UPSERT INTO " + OUTPUT_METADATA_TABLE_NAME + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     /**
      * Gets the parameterized upsert sql to the output table Used by the scrutiny MR job to write
@@ -178,6 +187,21 @@ public class IndexScrutinyTableOutput {
         return paramQuery.replaceFirst("\\?", "true");
     }
 
+    public static String getSqlQueryBeyondMaxLookback(Connection conn,
+    SourceTargetColumnNames columnNames, long scrutinyTimeMillis) throws SQLException {
+        String whereQuery =
+            constructOutputTableQuery(conn, columnNames,
+                getPksCsv() + ", " + SchemaUtil.getEscapedFullColumnName("HAS_TARGET_ROW")
+                    + ", " + SchemaUtil.getEscapedFullColumnName("BEYOND_MAX_LOOKBACK"));
+        String inClause =
+            " IN " + QueryUtil.constructParameterizedInClause(getPkCols().size() + 2, 1);
+        String paramQuery = whereQuery + inClause;
+        paramQuery = bindPkCols(columnNames, scrutinyTimeMillis, paramQuery);
+        paramQuery = paramQuery.replaceFirst("\\?", "false"); //has_target_row false
+        paramQuery = paramQuery.replaceFirst("\\?", "true"); //beyond_max_lookback true
+        return paramQuery;
+    }
+
     /**
      * Query the metadata table for the given columns
      * @param conn connection to use
@@ -196,6 +220,22 @@ public class IndexScrutinyTableOutput {
         ps.setString(2, qTargetTableName);
         ps.setLong(3, scrutinyTimeMillis);
         return ps.executeQuery();
+    }
+
+    public static ResultSet queryAllLatestMetadata(Connection conn, String qSourceTableName,
+                                                   String qTargetTableName) throws SQLException {
+        String sql = "SELECT MAX(" + SCRUTINY_EXECUTE_TIME_COL_NAME + ") " +
+            "FROM " + OUTPUT_METADATA_TABLE_NAME +
+            " WHERE " + SOURCE_TABLE_COL_NAME + " = ?" + " AND " + TARGET_TABLE_COL_NAME + "= ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, qSourceTableName);
+        stmt.setString(2, qTargetTableName);
+        ResultSet rs = stmt.executeQuery();
+        long scrutinyTimeMillis = 0L;
+        if (rs.next()){
+            scrutinyTimeMillis = rs.getLong(1);
+        } //even if we didn't find one, still need to do a query to return the right columns
+        return queryAllMetadata(conn, qSourceTableName, qTargetTableName, scrutinyTimeMillis);
     }
 
     /**
@@ -259,6 +299,9 @@ public class IndexScrutinyTableOutput {
             pStmt.setString(index++, getSqlQueryAllInvalidRows(conn, columnNames, scrutinyExecuteTime));
             pStmt.setString(index++, getSqlQueryMissingTargetRows(conn, columnNames, scrutinyExecuteTime));
             pStmt.setString(index++, getSqlQueryBadCoveredColVal(conn, columnNames, scrutinyExecuteTime));
+            pStmt.setString(index++, getSqlQueryBeyondMaxLookback(conn, columnNames, scrutinyExecuteTime));
+            pStmt.setLong(index++,
+                counters.findCounter(PhoenixScrutinyJobCounters.BEYOND_MAX_LOOKBACK_COUNT).getValue());
             pStmt.addBatch();
         }
         pStmt.executeBatch();

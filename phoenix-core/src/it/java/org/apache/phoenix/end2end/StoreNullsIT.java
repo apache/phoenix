@@ -31,6 +31,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
@@ -40,6 +41,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -52,13 +54,17 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -69,6 +75,7 @@ import org.junit.runners.Parameterized.Parameters;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class StoreNullsIT extends ParallelStatsDisabledIT {
     
@@ -78,6 +85,15 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     private final String ddlFormat;
     
     private String dataTableName;
+
+    // In this class we depend on the major compaction to remove every deleted row
+    // so wo are overwriting the PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY to 0
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     
     public StoreNullsIT(boolean mutable, boolean columnEncoded, boolean storeNulls) {
         this.mutable = mutable;

@@ -17,11 +17,17 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -33,10 +39,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -53,6 +63,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -270,6 +281,64 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     @Test
     public void testCoprocsOnGlobalNonMTImmutableViewIndex() throws Exception {
         testCoprocsOnGlobalViewIndexHelper(false, false);
+    }
+
+    @Test
+    public void testDroppingColumnWhileCreatingIndex() throws Exception {
+        String schemaName = "S1";
+        String tableName = generateUniqueName();
+        String viewSchemaName = "S1";
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String indexName = "IND_" + generateUniqueName();
+        String viewName = "VIEW_" + generateUniqueName();
+        String fullViewName = SchemaUtil.getTableName(viewSchemaName, viewName);
+
+        createBaseTable(schemaName, tableName, false, null, null, true);
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+            conn.commit();
+
+            final AtomicInteger exceptionCode = new AtomicInteger();
+            final CountDownLatch doneSignal = new CountDownLatch(2);
+            Runnable r1 = new Runnable() {
+
+                @Override public void run() {
+                    try {
+                        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullViewName + " (v1)");
+                    } catch (SQLException e) {
+                        exceptionCode.set(e.getErrorCode());
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+            Runnable r2 = new Runnable() {
+
+                @Override public void run() {
+                    try {
+                        conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
+                    } catch (SQLException e) {
+                        exceptionCode.set(e.getErrorCode());
+                        throw new RuntimeException(e);
+                    } finally {
+                        doneSignal.countDown();
+                    }
+                }
+
+            };
+            Thread t1 = new Thread(r1);
+            t1.start();
+            Thread t2 = new Thread(r2);
+            t2.start();
+
+            t1.join();
+            t2.join();
+            doneSignal.await(60, TimeUnit.SECONDS);
+            assertEquals(exceptionCode.get(), 301);
+        }
     }
 
     private void testCoprocsOnGlobalViewIndexHelper(boolean multiTenant, boolean mutable) throws SQLException, IOException {
@@ -625,5 +694,49 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         size++;
       }
       return size;
+    }
+
+    @Test
+    public void testIndexIdDataTypeDefaultValue() throws Exception {
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "V_" + generateUniqueName();
+        String globalViewIndexName = "GV_" + generateUniqueName();
+        try (Connection globalConn = getConnection()) {
+            createBaseTable(SCHEMA1, tableName, true, 0, null, true);
+            createView(globalConn, SCHEMA1, globalViewName, tableName);
+            createViewIndex(globalConn, SCHEMA1, globalViewIndexName, globalViewName, "v1");
+
+            String sql = "SELECT " + VIEW_INDEX_ID_DATA_TYPE + " FROM " + SYSTEM_CATALOG_NAME + " WHERE " +
+                    TABLE_SCHEM + " = '%s' AND " +
+                    TABLE_NAME + " = '%s' AND " +
+                    COLUMN_COUNT + " IS NOT NULL";
+            // should not have default value for table
+            ResultSet rs = globalConn.createStatement().executeQuery(String.format(sql, SCHEMA1, tableName));
+            if (rs.next()) {
+                assertNull(rs.getObject(1));
+            } else {
+                fail();
+            }
+            // should not have default value for view
+            rs = globalConn.createStatement().executeQuery(String.format(sql, SCHEMA1, globalViewName));
+            if (rs.next()) {
+                assertNull(rs.getObject(1));
+            } else {
+                fail();
+            }
+            // should have default value
+            rs = globalConn.createStatement().executeQuery(String.format(sql, SCHEMA1, globalViewIndexName));
+            if (rs.next()) {
+            /*
+                quote from hbase-site.xml so default value is BIGINT
+                We have some hardcoded viewIndex ids in the IT tests which assumes viewIndexId is of type Long.
+                However the default viewIndexId type is set to "short" by default until we upgrade all clients to
+                 support  long viewIndex ids.
+             */
+                assertEquals(Types.BIGINT, rs.getInt(1));
+            } else {
+                fail();
+            }
+        }
     }
 }

@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -138,9 +139,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public List<PTable> getIndexes() {
-        return delegate.getIndexes();
-    }
+    public List<PTable> getIndexes() { return delegate.getIndexes(); }
 
     @Override
     public PIndexState getIndexState() {
@@ -341,13 +340,22 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
-    @Override public long getViewTTL() { return delegate.getViewTTL(); }
+    @Override public long getPhoenixTTL() { return delegate.getPhoenixTTL(); }
 
-    @Override public long getViewTTLHighWaterMark() {
-        return delegate.getViewTTLHighWaterMark();
+    @Override public long getPhoenixTTLHighWaterMark() {
+        return delegate.getPhoenixTTLHighWaterMark();
     }
 
-    @Override public boolean hasViewModifiedViewTTL() {
-        return delegate.hasViewModifiedViewTTL();
+    @Override public boolean hasViewModifiedPhoenixTTL() {
+        return delegate.hasViewModifiedPhoenixTTL();
     }
+
+    @Override
+    public Long getLastDDLTimestamp() {
+        return delegate.getLastDDLTimestamp();
+    }
+
+    @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
+
+    @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }
 }

@@ -59,8 +59,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
 
 public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     

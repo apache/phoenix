@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ResultUtil;
 
-import com.google.common.collect.MinMaxPriorityQueue;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
 
 public class BufferedSortedQueue extends BufferedQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;

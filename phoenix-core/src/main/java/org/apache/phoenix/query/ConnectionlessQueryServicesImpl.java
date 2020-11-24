@@ -97,8 +97,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  *
@@ -189,7 +189,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     protected String getMutexDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
     protected String getTaskDDL() {
@@ -209,6 +209,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public Table getTable(byte[] tableName) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Table getTableIfExists(byte[] tableName) {
         throw new UnsupportedOperationException();
     }
 

@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.cache.aggcache;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.Closeables;
 import org.slf4j.Logger;

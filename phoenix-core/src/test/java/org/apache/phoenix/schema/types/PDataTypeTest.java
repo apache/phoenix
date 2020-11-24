@@ -48,7 +48,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.TreeMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.TreeMultimap;
 
 
 public class PDataTypeTest {

@@ -19,6 +19,7 @@
 #
 ############################################################################
 
+from __future__ import print_function
 import os
 import subprocess
 import sys
@@ -51,12 +52,12 @@ proc = subprocess.Popen(java_cmd, shell=True)
 try:
     proc.wait()
 except KeyboardInterrupt:
-    print "Shutting down sandbox..."
+    print("Shutting down sandbox...")
     proc.terminate()
 
 proc.wait()
 
-print "Sandbox is stopped"
+print("Sandbox is stopped")
 returncode = proc.returncode
 if returncode is not None:
     sys.exit(returncode)

@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.BaseQueryPlan;
@@ -29,20 +30,20 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 
 import java.sql.SQLException;
 import java.util.Collections;
 
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.util.IndexUtil.addEmptyColumnToScan;
+import static org.apache.phoenix.util.ScanUtil.addEmptyColumnToScan;
 
 
 /**
@@ -89,7 +90,7 @@ public class ServerBuildIndexCompiler {
 
     public MutationPlan compile(PTable index) throws SQLException {
         try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
-            String query = "SELECT count(*) FROM " + tableName;
+            String query = "SELECT /*+ NO_INDEX */ count(*) FROM " + tableName;
             this.plan = statement.compileQuery(query);
             TableRef tableRef = plan.getTableRef();
             Scan scan = plan.getContext().getScan();
@@ -125,6 +126,14 @@ public class ServerBuildIndexCompiler {
                 scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
+                // Serialize page row size only if we're overriding, else use server side value
+                String rebuildPageRowSize =
+                        connection.getQueryServices().getProps()
+                                .get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+                if (rebuildPageRowSize != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
+                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                }
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
                 addEmptyColumnToScan(scan, indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
             }

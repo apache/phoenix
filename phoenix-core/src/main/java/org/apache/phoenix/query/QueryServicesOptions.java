@@ -97,10 +97,9 @@ import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
 
-import java.util.HashSet;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -116,7 +115,6 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.tephra.TxConstants;
 
 
 /**
@@ -147,6 +145,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true;
     public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;
     public static final int DEFAULT_MAX_MUTATION_SIZE_BYTES =  104857600; // 100 Mb
+    public static final int DEFAULT_HBASE_CLIENT_KEYVALUE_MAXSIZE =  10485760; // 10 Mb
     public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
     public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
     public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
@@ -157,6 +156,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
     public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
+    public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = true;
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
@@ -280,6 +280,7 @@ public class QueryServicesOptions {
     public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
 
     public static final boolean DEFAULT_TRANSACTIONAL = false;
+    public static final boolean DEFAULT_MULTI_TENANT = false;
     public static final boolean DEFAULT_AUTO_FLUSH = false;
 
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
@@ -339,6 +340,8 @@ public class QueryServicesOptions {
     public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 7*24*60*60*1000; /* 7 days */
     public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
     public static final long DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS = 32*1024;
+    public static final long DEFAULT_UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS = 1000; // 1 second
+    public static final long DEFAULT_GROUPED_AGGREGATE_PAGE_SIZE_IN_MS = 1000;
 
     public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
 
@@ -361,6 +364,7 @@ public class QueryServicesOptions {
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
+    public static final int DEFAULT_SALT_BUCKETS = 0;
 
 	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
 
@@ -450,9 +454,10 @@ public class QueryServicesOptions {
             .setIfUnset(PHOENIX_ACLS_ENABLED,  DEFAULT_PHOENIX_ACLS_ENABLED)
             .setIfUnset(LOG_LEVEL,  DEFAULT_LOGGING_LEVEL)
             .setIfUnset(LOG_SAMPLE_RATE,  DEFAULT_LOG_SAMPLE_RATE)
-            .setIfUnset(TxConstants.TX_PRE_014_CHANGESET_KEY, Boolean.FALSE.toString())
+            .setIfUnset("data.tx.pre.014.changeset.key", Boolean.FALSE.toString())
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
+            .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

@@ -37,43 +37,31 @@
        <jetty.version>9.3.27.v20190418</jetty.version>
     </properties>
 
-    <dependencyManagement>
-      <dependencies>
-        <dependency>
-          <groupId>javax.servlet</groupId>
-          <artifactId>javax.servlet-api</artifactId>
-          <version>${servlet.api.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-server</artifactId>
-          <version>${jetty.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-webapp</artifactId>
-          <version>${jetty.version}</version>
-        </dependency>
-      </dependencies>
-    </dependencyManagement>
 
     <dependencies>
       <dependency>
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
+        <version>${servlet.api.version}</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
+        <version>${jetty.version}</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-webapp</artifactId>
+        <version>${jetty.version}</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>log4j</groupId>
@@ -81,34 +69,36 @@
         <scope>compile</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-common</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
         <scope>provided</scope>
       </dependency>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-common</artifactId>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
-        <scope>runtime</scope>
       </dependency>
     </dependencies>
 
     <build>
       <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+        </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
@@ -149,6 +139,9 @@
             </execution>
           </executions>
           <configuration>
+            <phantomjs>
+              <version>2.1.1</version>
+            </phantomjs>
             <!--browserVersion>FIREFOX_16</browserVersion-->
             <preloadSources combine.children="append">
               <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
@@ -171,17 +164,17 @@
             <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
           </configuration>
         </plugin>
-	<plugin>
-		<groupId>org.apache.rat</groupId>
-		<artifactId>apache-rat-plugin</artifactId>
-		<configuration>
-			<excludes>
-				<exclude>**/webapp/**</exclude>
-				<exclude>**/*.xml</exclude>
-				<exclude>**/README.md</exclude>
-			</excludes>
-		</configuration>
-	</plugin>
+        <plugin>
+            <groupId>org.apache.rat</groupId>
+            <artifactId>apache-rat-plugin</artifactId>
+            <configuration>
+                <excludes>
+                    <exclude>**/webapp/**</exclude>
+                    <exclude>**/*.xml</exclude>
+                    <exclude>**/README.md</exclude>
+                </excludes>
+            </configuration>
+        </plugin>
       </plugins>
     </build>
 

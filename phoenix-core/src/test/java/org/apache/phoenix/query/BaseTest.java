@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -140,7 +141,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -158,11 +158,11 @@ import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * 
@@ -626,6 +626,16 @@ public abstract class BaseTest {
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
+        conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
+        // This results in processing one row at a time in each next operation of the aggregate region
+        // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
+        // within one page; 0ms page is equivalent to one-row page
+        if (conf.getLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
+            conf.setLong(QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
+        }
+        if (conf.getLong(QueryServices.GROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0) == 0) {
+            conf.setLong(QueryServices.GROUPED_AGGREGATE_PAGE_SIZE_IN_MS, 0);
+        }
         return conf;
     }
 
@@ -1553,9 +1563,9 @@ public abstract class BaseTest {
     }
     
     /**
-     * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
+     * Disable and drop all non system tables
      */
-    private static void disableAndDropNonSystemTables() throws Exception {
+    protected static void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
         Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
@@ -1847,6 +1857,8 @@ public abstract class BaseTest {
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
         HMaster master = cluster.getMaster();
+        //We don't want BalancerChore to undo our hard work
+        assertFalse("Balancer must be off", master.isBalancerOn());
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
         for (int i=1; i<splitPoints.size(); ++i) {
@@ -1870,7 +1882,8 @@ public abstract class BaseTest {
                 availableRegionServers.remove(serverName);
             }
         }
-        assertTrue("No region servers available to move regions on to ", !availableRegionServers.isEmpty());
+        assertFalse("No region servers available to move regions on to ",
+                availableRegionServers.isEmpty());
         for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
             List<HRegionInfo> regions = entry.getValue();
             if (regions.size()>1) {

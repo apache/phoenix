@@ -46,7 +46,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class TupleProjectionPlan extends DelegateQueryPlan {
     private final TupleProjector tupleProjector;

@@ -23,6 +23,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -35,8 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -50,13 +52,13 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -64,7 +66,7 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -72,9 +74,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -90,14 +92,11 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.HConnectionFactory;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -114,7 +113,7 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * An MR job to populate the index table from the data table.
@@ -157,57 +156,41 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
-    public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
-    public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-    public final static String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
-    public final static byte[] RESULT_TABLE_NAME_BYTES = Bytes.toBytes(RESULT_TABLE_NAME);
-    public final static byte[] RESULT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-    public final static String DATA_TABLE_NAME = "DTName";
-    public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
-    public static String INDEX_TABLE_NAME = "ITName";
-    public final static byte[] INDEX_TABLE_NAME_BYTES = Bytes.toBytes(INDEX_TABLE_NAME);
-    public static String DATA_TABLE_ROW_KEY = "DTRowKey";
-    public final static byte[] DATA_TABLE_ROW_KEY_BYTES = Bytes.toBytes(DATA_TABLE_ROW_KEY);
-    public static String INDEX_TABLE_ROW_KEY = "ITRowKey";
-    public final static byte[] INDEX_TABLE_ROW_KEY_BYTES = Bytes.toBytes(INDEX_TABLE_ROW_KEY);
-    public static String DATA_TABLE_TS = "DTTS";
-    public final static byte[] DATA_TABLE_TS_BYTES = Bytes.toBytes(DATA_TABLE_TS);
-    public static String INDEX_TABLE_TS = "ITTS";
-    public final static byte[] INDEX_TABLE_TS_BYTES = Bytes.toBytes(INDEX_TABLE_TS);
-    public static String ERROR_MESSAGE = "Error";
-    public final static byte[] ERROR_MESSAGE_BYTES = Bytes.toBytes(ERROR_MESSAGE);
-    public static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
-    public final static byte[] SCANNED_DATA_ROW_COUNT_BYTES = Bytes.toBytes(SCANNED_DATA_ROW_COUNT);
-    public static String REBUILT_INDEX_ROW_COUNT = "RebuiltIndexRowCount";
-    public final static byte[] REBUILT_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(REBUILT_INDEX_ROW_COUNT);
-    public static String BEFORE_REBUILD_VALID_INDEX_ROW_COUNT = "BeforeRebuildValidIndexRowCount";
-    public final static byte[] BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT);
-    public static String BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT = "BeforeRebuildExpiredIndexRowCount";
-    public final static byte[] BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT);
-    public static String BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT = "BeforeRebuildMissingIndexRowCount";
-    public final static byte[] BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT);
-    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT = "BeforeRebuildInvalidIndexRowCount";
-    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT);
-    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS = "BeforeRebuildInvalidIndexRowCountCozExtraCells";
-    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS);
-    public static String BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "BeforeRebuildInvalidIndexRowCountCozMissingCells";
-    public final static byte[] BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
+    public enum IndexDisableLoggingType {
+        NONE("NONE"),
+        BEFORE("BEFORE"),
+        AFTER("AFTER"),
+        BOTH("BOTH");
 
-    public static String AFTER_REBUILD_VALID_INDEX_ROW_COUNT = "AfterValidExpiredIndexRowCount";
-    public final static byte[] AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_VALID_INDEX_ROW_COUNT);
-    public static String AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT = "AfterRebuildExpiredIndexRowCount";
-    public final static byte[] AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT);
-    public static String AFTER_REBUILD_MISSING_INDEX_ROW_COUNT = "AfterRebuildMissingIndexRowCount";
-    public final static byte[] AFTER_REBUILD_MISSING_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT);
-    public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT = "AfterRebuildInvalidIndexRowCount";
-    public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT);
-    public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS = "AfterRebuildInvalidIndexRowCountCozExtraCells";
-    public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS);
-    public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "AfterRebuildInvalidIndexRowCountCozMissingCells";
-    public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
-    public static String  VERIFICATION_PHASE = "Phase";
-    public final static byte[] VERIFICATION_PHASE_BYTES = Bytes.toBytes(VERIFICATION_PHASE);
+        private String value;
+        private byte[] valueBytes;
+
+        IndexDisableLoggingType(String value) {
+            this.value = value;
+            this.valueBytes = PVarchar.INSTANCE.toBytes(value);
+        }
+
+        public String getValue() {
+            return this.value;
+        }
+
+        public byte[] toBytes() {
+            return this.valueBytes;
+        }
+
+        public static IndexDisableLoggingType fromValue(String value) {
+            for (IndexDisableLoggingType disableLoggingType: IndexDisableLoggingType.values()) {
+                if (value.equals(disableLoggingType.getValue())) {
+                    return disableLoggingType;
+                }
+            }
+            throw new IllegalStateException("Invalid value: "+ value + " for " + IndexDisableLoggingType.class);
+        }
+
+        public static IndexDisableLoggingType fromValue(byte[] value) {
+            return fromValue(Bytes.toString(value));
+        }
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexTool.class);
 
@@ -216,6 +199,7 @@ public class IndexTool extends Configured implements Tool {
     private String indexTable;
     private boolean isPartialBuild, isForeground;
     private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
+    private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
     private String qDataTable;
     private String qIndexTable;
     private boolean useSnapshot;
@@ -225,10 +209,11 @@ public class IndexTool extends Configured implements Tool {
     private PTable pDataTable;
     private String tenantId = null;
     private Job job;
-    private Long startTime, endTime;
+    private Long startTime, endTime, lastVerifyTime;
     private IndexType indexType;
     private String basePath;
     byte[][] splitKeysBeforeJob = null;
+    Configuration configuration;
 
     private static final Option SCHEMA_NAME_OPTION = new Option("s", "schema", true,
             "Phoenix schema name (optional)");
@@ -287,10 +272,18 @@ public class IndexTool extends Configured implements Tool {
             + "If specified, truncates the index table and rebuilds (optional)");
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
-    private static final Option START_TIME_OPTION = new Option("st", "starttime",
+    private static final Option START_TIME_OPTION = new Option("st", "start-time",
             true, "Start time for indextool rebuild or verify");
-    private static final Option END_TIME_OPTION = new Option("et", "endtime",
+    private static final Option END_TIME_OPTION = new Option("et", "end-time",
             true, "End time for indextool rebuild or verify");
+
+    private static final Option RETRY_VERIFY_OPTION = new Option("rv", "retry-verify",
+            true, "Max scan ts of the last rebuild/verify that needs to be retried incrementally");
+
+    private static final Option DISABLE_LOGGING_OPTION = new Option("dl",
+        "disable-logging", true
+        , "Disable logging of failed verification rows for BEFORE, " +
+        "AFTER, or BOTH verify jobs");
 
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
@@ -298,8 +291,12 @@ public class IndexTool extends Configured implements Tool {
             + "or equal to endTime "
             + "or either of them are set in the future; IndexTool can't proceed.";
 
-    public static final String FEATURE_NOT_APPLICABLE = "starttime-endtime feature is only "
+    public static final String FEATURE_NOT_APPLICABLE = "start-time/end-time and retry verify feature are only "
             + "applicable for local or non-transactional global indexes";
+
+
+    public static final String RETRY_VERIFY_NOT_APPLICABLE = "retry verify feature accepts "
+            + "non-zero ts set in the past and ts must be present in PHOENIX_INDEX_TOOL_RESULT table";
 
     private Options getOptions() {
         final Options options = new Options();
@@ -319,10 +316,13 @@ public class IndexTool extends Configured implements Tool {
         SPLIT_INDEX_OPTION.setOptionalArg(true);
         START_TIME_OPTION.setOptionalArg(true);
         END_TIME_OPTION.setOptionalArg(true);
+        RETRY_VERIFY_OPTION.setOptionalArg(true);
         options.addOption(AUTO_SPLIT_INDEX_OPTION);
         options.addOption(SPLIT_INDEX_OPTION);
         options.addOption(START_TIME_OPTION);
         options.addOption(END_TIME_OPTION);
+        options.addOption(RETRY_VERIFY_OPTION);
+        options.addOption(DISABLE_LOGGING_OPTION);
         return options;
     }
 
@@ -377,7 +377,54 @@ public class IndexTool extends Configured implements Tool {
         if (splitIndex && cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt())) {
             throw new IllegalStateException("Cannot split index for a partial rebuild, as the index table is dropped");
         }
+        if (loggingDisabledMismatchesVerifyOption(cmdLine)){
+            throw new IllegalStateException("Can't disable index verification logging when no " +
+                "index verification or the wrong kind of index verification has been requested. " +
+                "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] and " +
+                "DisableLoggingType: ["
+                + cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()) + "]");
+        }
+        if ((cmdLine.hasOption(START_TIME_OPTION.getOpt()) || cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt()))
+            && !HbaseCompatCapabilities.isRawFilterSupported()) {
+            throw new IllegalStateException("Can't do incremental index verification on this " +
+                "version of HBase because raw skip scan filters are not supported.");
+        }
         return cmdLine;
+    }
+
+    private boolean loggingDisabledMismatchesVerifyOption(CommandLine cmdLine) {
+        boolean loggingDisabled = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
+        if (!loggingDisabled) {
+            return false;
+        }
+        boolean hasVerifyOption =
+            cmdLine.hasOption(VERIFY_OPTION.getOpt());
+        if (!hasVerifyOption) {
+            return true;
+        }
+        String loggingDisableValue = cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt());
+        String verifyValue = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
+        IndexDisableLoggingType loggingDisableType = IndexDisableLoggingType.fromValue(loggingDisableValue);
+        IndexVerifyType verifyType = IndexVerifyType.fromValue(verifyValue);
+        //error if we're trying to disable logging when we're not doing any verification
+        if (verifyType.equals(IndexVerifyType.NONE)){
+            return true;
+        }
+        //error if we're disabling logging after rebuild but we're not verifying after rebuild
+        if ((verifyType.equals(IndexVerifyType.BEFORE) || verifyType.equals(IndexVerifyType.ONLY))
+            && loggingDisableType.equals(IndexDisableLoggingType.AFTER)) {
+            return true;
+        }
+        //error if we're disabling logging before rebuild but we're not verifying before rebuild
+        if ((verifyType.equals(IndexVerifyType.AFTER))
+            && loggingDisableType.equals(IndexDisableLoggingType.BEFORE)) {
+            return true;
+        }
+        if (loggingDisableType.equals(IndexDisableLoggingType.BOTH) &&
+            !verifyType.equals(IndexVerifyType.BOTH)){
+            return true;
+        }
+        return false;
     }
 
     private void printHelpAndExit(String errorMessage, Options options) {
@@ -395,8 +442,12 @@ public class IndexTool extends Configured implements Tool {
         return startTime;
     }
 
-    public Long getEndTime() {
-        return endTime;
+    public Long getEndTime() { return endTime; }
+
+    public Long getLastVerifyTime() { return lastVerifyTime; }
+
+    public IndexTool.IndexDisableLoggingType getDisableLoggingType() {
+        return disableLoggingType;
     }
 
     class JobFactory {
@@ -435,6 +486,9 @@ public class IndexTool extends Configured implements Tool {
                     // When endTime is passed for local and non-tx global indexes, we'll override the CURRENT_SCN_VALUE.
                     if (endTime != null) {
                         PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
+                    }
+                    if (lastVerifyTime != null) {
+                        PhoenixConfigurationUtil.setIndexToolLastVerifyTime(configuration, lastVerifyTime);
                     }
                     return configureJobForServerBuildIndex();
                 }
@@ -541,13 +595,13 @@ public class IndexTool extends Configured implements Tool {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
                 }
-            }
-            // Do check if table is disabled again after user invoked async rebuilding during the run of the job
-            if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
-                return maxRebuilAsyncDate;
-            } else {
-                throw new RuntimeException(
-                        "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                // Do check if table is disabled again after user invoked async rebuilding during the run of the job
+                if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
+                    return maxRebuilAsyncDate;
+                } else {
+                    throw new RuntimeException(
+                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                }
             }
         }
 
@@ -604,8 +658,8 @@ public class IndexTool extends Configured implements Tool {
                 }
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
-                FSUtils.setRootDir(configuration, rootDir);
-                Path restoreDir = new Path(FSUtils.getRootDir(configuration), "restore-dir");
+                CommonFSUtils.setRootDir(configuration, rootDir);
+                Path restoreDir = new Path(CommonFSUtils.getRootDir(configuration), "restore-dir");
 
                 // set input for map reduce job using hbase snapshots
                 PhoenixMapReduceUtil
@@ -647,6 +701,7 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
             }
             PhoenixConfigurationUtil.setIndexVerifyType(configuration, indexVerifyType);
+            PhoenixConfigurationUtil.setDisableLoggingVerifyType(configuration, disableLoggingType);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
@@ -698,24 +753,11 @@ public class IndexTool extends Configured implements Tool {
         return job;
     }
 
-    private void createIndexToolTables(Connection connection) throws Exception {
-        ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        Admin admin = queryServices.getAdmin();
-        if (!admin.tableExists(TableName.valueOf(OUTPUT_TABLE_NAME))) {
-            HTableDescriptor tableDescriptor = new
-                    HTableDescriptor(TableName.valueOf(OUTPUT_TABLE_NAME));
-            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(OUTPUT_TABLE_COLUMN_FAMILY);
-            tableDescriptor.addFamily(columnDescriptor);
-            admin.createTable(tableDescriptor);
-        }
-        if (!admin.tableExists(TableName.valueOf(RESULT_TABLE_NAME))) {
-            HTableDescriptor tableDescriptor = new
-                    HTableDescriptor(TableName.valueOf(RESULT_TABLE_NAME));
-            tableDescriptor.setValue(HColumnDescriptor.TTL, String.valueOf(MetaDataProtocol.DEFAULT_LOG_TTL));
-            HColumnDescriptor columnDescriptor = new HColumnDescriptor(RESULT_TABLE_COLUMN_FAMILY);
-            tableDescriptor.addFamily(columnDescriptor);
-            admin.createTable(tableDescriptor);
+    public static void createIndexToolTables(Connection connection) throws Exception {
+        try (IndexVerificationResultRepository resultRepo = new IndexVerificationResultRepository();
+            IndexVerificationOutputRepository outputRepo = new IndexVerificationOutputRepository()){
+            resultRepo.createResultTable(connection);
+            outputRepo.createOutputTable(connection);
         }
     }
 
@@ -728,13 +770,16 @@ public class IndexTool extends Configured implements Tool {
             printHelpAndExit(e.getMessage(), getOptions());
             return -1;
         }
+        configuration = HBaseConfiguration.addHbaseResources(getConf());
         populateIndexToolAttributes(cmdLine);
-        Configuration configuration = getConfiguration(tenantId);
+        if (tenantId != null) {
+            configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        }
         try (Connection conn = getConnection(configuration)) {
             createIndexToolTables(conn);
             if (dataTable != null && indexTable != null) {
                 setupIndexAndDataTable(conn);
-                checkTimeRangeFeature(startTime, endTime, pDataTable, isLocalIndexBuild);
+                checkIfFeatureApplicable(startTime, endTime, lastVerifyTime, pDataTable, isLocalIndexBuild);
                 if (shouldDeleteBeforeRebuild) {
                     deleteBeforeRebuild(conn);
                 }
@@ -754,18 +799,14 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    public static void checkTimeRangeFeature(Long startTime, Long endTime, PTable pDataTable, boolean isLocalIndexBuild) {
-        if (isTimeRangeSet(startTime, endTime) && !isTimeRangeFeatureApplicable(pDataTable, isLocalIndexBuild)) {
-            throw new RuntimeException(FEATURE_NOT_APPLICABLE);
+    public static void checkIfFeatureApplicable(Long startTime, Long endTime, Long lastVerifyTime,
+            PTable pDataTable, boolean isLocalIndexBuild) {
+        boolean isApplicable = isFeatureApplicable(pDataTable, isLocalIndexBuild);
+        if (!isApplicable) {
+            if(isTimeRangeSet(startTime, endTime) || lastVerifyTime!=null) {
+                throw new RuntimeException(FEATURE_NOT_APPLICABLE);
+            }
         }
-    }
-
-    private Configuration getConfiguration(String tenantId) {
-        final Configuration configuration = HBaseConfiguration.addHbaseResources(getConf());
-        if (tenantId != null) {
-            configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        }
-        return configuration;
     }
 
     private boolean submitIndexToolJob(Connection conn, Configuration configuration)
@@ -794,11 +835,13 @@ public class IndexTool extends Configured implements Tool {
     }
 
     @VisibleForTesting
-    public void populateIndexToolAttributes(CommandLine cmdLine) {
+    public int populateIndexToolAttributes(CommandLine cmdLine) throws Exception {
         boolean useTenantId = cmdLine.hasOption(TENANT_ID_OPTION.getOpt());
         boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
         boolean useEndTime = cmdLine.hasOption(END_TIME_OPTION.getOpt());
+        boolean retryVerify = cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
+        boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
 
         if (useTenantId) {
             tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -809,12 +852,21 @@ public class IndexTool extends Configured implements Tool {
         if (useEndTime) {
             endTime = new Long(cmdLine.getOptionValue(END_TIME_OPTION.getOpt()));
         }
+        if(retryVerify) {
+            lastVerifyTime = new Long(cmdLine.getOptionValue(RETRY_VERIFY_OPTION.getOpt()));
+            validateLastVerifyTime();
+        }
         if(isTimeRangeSet(startTime, endTime)) {
             validateTimeRange();
         }
         if (verify) {
             String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
             indexVerifyType = IndexVerifyType.fromValue(value);
+            if (disableLogging) {
+                disableLoggingType =
+                    IndexDisableLoggingType.fromValue(
+                        cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()));
+            }
         }
         schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
         dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
@@ -825,6 +877,30 @@ public class IndexTool extends Configured implements Tool {
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
         useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
         shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+        return 0;
+    }
+
+    public int validateLastVerifyTime() throws Exception {
+        Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (lastVerifyTime.compareTo(currentTime) > 0 || lastVerifyTime == 0L || !isValidLastVerifyTime(lastVerifyTime)) {
+            throw new RuntimeException(RETRY_VERIFY_NOT_APPLICABLE);
+        }
+        return 0;
+    }
+
+    public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
+        try(Connection conn = getConnection(configuration)) {
+            Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
+            Scan s = new Scan();
+            ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());
+            s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", lastVerifyTime,
+                    ROW_KEY_SEPARATOR,
+                    SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTable, isNamespaceMapped))));
+            ResultScanner rs = hIndexToolTable.getScanner(s);
+            return rs.next() != null;
+        }
     }
 
     private void validateTimeRange() {
@@ -873,7 +949,7 @@ public class IndexTool extends Configured implements Tool {
         return startTime != null || endTime != null;
     }
 
-    private static boolean isTimeRangeFeatureApplicable(PTable dataTable, boolean isLocalIndexBuild) {
+    private static boolean isFeatureApplicable(PTable dataTable, boolean isLocalIndexBuild) {
         if (isLocalIndexBuild || !dataTable.isTransactional()) {
             return true;
         }
@@ -983,7 +1059,9 @@ public class IndexTool extends Configured implements Tool {
 
     private org.apache.hadoop.hbase.client.Connection getTemporaryHConnection(PhoenixConnection pConnection)
             throws SQLException, IOException {
-        return ConnectionFactory.createConnection(pConnection.getQueryServices().getAdmin().getConfiguration());
+        try (Admin admin = pConnection.getQueryServices().getAdmin()) {
+            return ConnectionFactory.createConnection(admin.getConfiguration());
+        }
     }
 
     // setup a ValueGetter to get index values from the ResultSet
@@ -1096,7 +1174,7 @@ public class IndexTool extends Configured implements Tool {
         indexingTool.setConf(conf);
         int status = indexingTool.run(args.toArray(new String[0]));
         Job job = indexingTool.getJob();
-        return new AbstractMap.SimpleEntry<Integer, Job>(status, job);
+        return new AbstractMap.SimpleEntry<>(status, job);
     }
 
     public static void main(final String[] args) throws Exception {

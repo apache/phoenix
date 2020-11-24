@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.phoenix.schema.SortOrder;
 

@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.replication.ChainWALEntryFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALEdit;
@@ -134,11 +135,17 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
 
     //verify that the tenant view WAL.Entry passes the filter and the non-tenant view does not
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
-    Assert.assertNull(filter.filter(nonTenantEntry));
-    WAL.Entry filteredTenantEntry = filter.filter(tenantEntry);
+    // Chain the system catalog WAL entry filter to ChainWALEntryFilter
+    ChainWALEntryFilter chainWALEntryFilter = new ChainWALEntryFilter(filter);
+    // Asserting the WALEdit for non tenant has cells before getting filtered
+    Assert.assertTrue(nonTenantEntry.getEdit().size() > 0);
+    // All the cells will get removed by the filter since they do not belong to tenant
+    Assert.assertTrue("Non tenant edits for system catalog should not get filtered",
+        chainWALEntryFilter.filter(nonTenantEntry).getEdit().isEmpty());
+    WAL.Entry filteredTenantEntry = chainWALEntryFilter.filter(tenantEntry);
     Assert.assertNotNull("Tenant view was filtered when it shouldn't be!", filteredTenantEntry);
-    Assert.assertEquals(tenantEntry.getEdit().size(),
-        filter.filter(tenantEntry).getEdit().size());
+    Assert.assertEquals("filtered entry is not correct",
+        tenantEntry.getEdit().size(), filteredTenantEntry.getEdit().size());
 
     //now check that a WAL.Entry with cells from both a tenant and a non-tenant
     //catalog row only allow the tenant cells through
@@ -150,7 +157,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     Assert.assertEquals(tenantEntry.getEdit().size() + nonTenantEntry.getEdit().size()
         , comboEntry.getEdit().size());
     Assert.assertEquals(tenantEntry.getEdit().size(),
-        filter.filter(comboEntry).getEdit().size());
+        chainWALEntryFilter.filter(comboEntry).getEdit().size());
   }
 
   public Get getGet(PTable catalogTable, byte[] tenantId, String viewName) {

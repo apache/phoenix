@@ -87,8 +87,8 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -182,6 +182,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
+  private String dataTableName;
   
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -225,7 +226,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
         setSlowThresholds(e.getConfiguration());
-
+        this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
           // here
@@ -325,9 +326,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preIncrementAfterRowLock",
                           duration, slowPreIncrementThreshold));
               }
-              metricSource.incrementSlowDuplicateKeyCheckCalls();
+              metricSource.incrementSlowDuplicateKeyCheckCalls(dataTableName);
           }
-          metricSource.updateDuplicateKeyCheckTime(duration);
+          metricSource.updateDuplicateKeyCheckTime(dataTableName, duration);
       }
   }
 
@@ -350,9 +351,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preBatchMutate",
                           duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
       }
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
@@ -503,9 +504,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage(
                           "indexPrepare", duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
           byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
@@ -577,9 +578,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                    LOGGER.debug(getCallTooSlowMessage("postBatchMutateIndispensably",
                            duration, slowIndexWriteThreshold));
                }
-               metricSource.incrementNumSlowIndexWriteCalls();
+               metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
            }
-           metricSource.updateIndexWriteTime(duration);
+           metricSource.updateIndexWriteTime(dataTableName, duration);
        }
   }
 
@@ -618,9 +619,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("indexWrite",
                           duration, slowIndexWriteThreshold));
               }
-              metricSource.incrementNumSlowIndexWriteCalls();
+              metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
           }
-          metricSource.updateIndexWriteTime(duration);
+          metricSource.updateIndexWriteTime(dataTableName, duration);
       }
   }
 
@@ -675,9 +676,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
              if (LOGGER.isDebugEnabled()) {
                  LOGGER.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
              }
-             metricSource.incrementNumSlowPostOpenCalls();
+             metricSource.incrementNumSlowPostOpenCalls(dataTableName);
          }
-         metricSource.updatePostOpenTime(duration);
+         metricSource.updatePostOpenTime(dataTableName, duration);
     }
   }
 
@@ -712,9 +713,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preWALRestore",
                           duration, slowPreWALRestoreThreshold));
               }
-              metricSource.incrementNumSlowPreWALRestoreCalls();
+              metricSource.incrementNumSlowPreWALRestoreCalls(dataTableName);
           }
-          metricSource.updatePreWALRestoreTime(duration);
+          metricSource.updatePreWALRestoreTime(dataTableName, duration);
       }
   }
 

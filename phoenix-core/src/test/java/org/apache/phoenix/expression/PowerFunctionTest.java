@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Unit tests for {@link PowerFunction}

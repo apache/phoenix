@@ -50,13 +50,14 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -65,7 +66,9 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -1328,7 +1331,68 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
         }
     }
-	
+
+    @Test
+    public void testAddThenDropColumnTableDDLTimestamp() throws Exception {
+        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " ENTITY_ID integer NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
+            + " ) " + generateDDLOptions("");
+
+        String columnAddDDL = "ALTER TABLE " + dataTableFullName + " ADD COL3 varchar(50) NULL ";
+        String columnDropDDL = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL3 ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(tableDDL);
+            //first get the original DDL timestamp when we created the table
+            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName, startTS,
+                conn);
+            Thread.sleep(1);
+            //now add a column and make sure the timestamp updates
+            conn.createStatement().execute(columnAddDDL);
+            tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName,
+                tableDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+            conn.createStatement().execute(columnDropDDL);
+            CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName,
+                tableDDLTimestamp + 1 , conn);
+        }
+    }
+
+    @Test
+    public void testSetPropertyDoesntUpdateDDLTimestamp() throws Exception {
+        Properties props = new Properties();
+        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
+            + " ENTITY_ID integer NOT NULL,"
+            + " COL1 integer NOT NULL,"
+            + " COL2 bigint NOT NULL,"
+            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
+            + " ) " + generateDDLOptions("");
+
+        String setPropertyDDL = "ALTER TABLE " + dataTableFullName +
+            " SET UPDATE_CACHE_FREQUENCY=300000 ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(tableDDL);
+            //first get the original DDL timestamp when we created the table
+            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                dataTableFullName, startTS,
+                conn);
+            Thread.sleep(1);
+            //now change a property and make sure the timestamp DOES NOT update
+            conn.createStatement().execute(setPropertyDDL);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertNotNull(table);
+            assertNotNull(table.getLastDDLTimestamp());
+            assertEquals(tableDDLTimestamp, table.getLastDDLTimestamp().longValue());
+        }
+    }
+
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";
@@ -1440,5 +1504,74 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             stmt.execute(alterDdl2);
         }
     }
+
+    @Test
+    public void testTableExists() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ConnectionQueryServices cqs =
+                conn.unwrap(PhoenixConnection.class).getQueryServices();
+            String tableName = "randomTable";
+            // table never existed, still cqs.getTable() does not throw TNFE
+            Table randomTable = cqs.getTable(Bytes.toBytes(tableName));
+            assertNotNull(randomTable);
+            assertEquals(randomTable.getName(), TableName.valueOf(tableName));
+            try {
+                // this is correct check for existence of table
+                cqs.getTableIfExists(Bytes.toBytes(tableName));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                assertEquals(tableName, e.getTableName());
+            }
+
+            String fullTableName1 = SchemaUtil.getTableName(schemaName,
+                dataTableName);
+            String ddl = "CREATE TABLE " + fullTableName1
+                + " (col1 INTEGER PRIMARY KEY, col2 INTEGER)";
+            conn.createStatement().execute(ddl);
+            String schemaName2 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+            String fullTableName2 = SchemaUtil.getTableName(schemaName2,
+                tableName2);
+            ddl = "CREATE TABLE " + fullTableName2
+                + " (col1 INTEGER PRIMARY KEY, col2 INTEGER)";
+            conn.createStatement().execute(ddl);
+
+            // table does exist and cqs.getTable() does not throw TNFE
+            Table table1 = cqs.getTable(Bytes.toBytes(fullTableName1));
+            assertNotNull(table1);
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName1));
+            } catch (TableNotFoundException e) {
+                fail("Should not throw TableNotFoundException");
+            }
+
+            disableAndDropNonSystemTables();
+            // tables have been dropped, still cqs.getTable()
+            // does not throw TNFE for tableName1 and tableName2
+            Table t1 = cqs.getTable(Bytes.toBytes(fullTableName1));
+            assertEquals(t1.getName().getNameAsString(), fullTableName1);
+            Table t2 = cqs.getTable(Bytes.toBytes(fullTableName2));
+            assertEquals(t2.getName().getNameAsString(), fullTableName2);
+
+            // this is correct check for existence of table
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName1));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                // match table and schema
+                assertEquals(dataTableName, e.getTableName());
+                assertEquals(schemaName, e.getSchemaName());
+            }
+            try {
+                cqs.getTableIfExists(Bytes.toBytes(fullTableName2));
+                fail("Should have thrown TableNotFoundException");
+            } catch (TableNotFoundException e) {
+                // match table and schema
+                assertEquals(tableName2, e.getTableName());
+                assertEquals(schemaName2, e.getSchemaName());
+            }
+
+        }
+    }
+
 }
- 

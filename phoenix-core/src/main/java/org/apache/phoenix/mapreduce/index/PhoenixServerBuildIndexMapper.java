@@ -25,6 +25,7 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
+import org.apache.phoenix.query.QueryServices;
 
 /**
  * Mapper that does not do much as regions servers actually build the index from the data table regions directly
@@ -32,15 +33,30 @@ import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 public class PhoenixServerBuildIndexMapper extends
         Mapper<NullWritable, PhoenixServerBuildIndexDBWritable, ImmutableBytesWritable, IntWritable> {
 
+    private long rebuildPageRowSize;
+
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
         super.setup(context);
+        String rebuildPageRowSizeConf =
+                context.getConfiguration().get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
+        if (rebuildPageRowSizeConf != null) {
+            this.rebuildPageRowSize = Long.valueOf(rebuildPageRowSizeConf);
+        } else {
+            this.rebuildPageRowSize = -1L;
+        }
     }
 
     @Override
     protected void map(NullWritable key, PhoenixServerBuildIndexDBWritable record, Context context)
             throws IOException, InterruptedException {
         context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(record.getRowCount());
+        if (this.rebuildPageRowSize != -1) {
+            if (record.getRowCount() > this.rebuildPageRowSize) {
+                throw new IOException("Rebuilt/Verified rows greater than page size. Rebuilt rows: "
+                        + record.getRowCount() + " Page size: " + this.rebuildPageRowSize);
+            }
+        }
         // Make sure progress is reported to Application Master.
         context.progress();
     }

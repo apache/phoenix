@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class CorrelatePlan extends DelegateQueryPlan {    
     private final QueryPlan rhs;

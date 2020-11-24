@@ -17,24 +17,15 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-
+import com.google.protobuf.ByteString;
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -47,7 +38,9 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.ObserverContextImpl;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcServer;
+import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
@@ -56,9 +49,14 @@ import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.UserProvider;
-import org.apache.hadoop.hbase.security.access.*;
+import org.apache.hadoop.hbase.security.access.AccessChecker;
+import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.AccessControlConstants;
+import org.apache.hadoop.hbase.security.access.AccessControlUtil;
+import org.apache.hadoop.hbase.security.access.AuthResult;
+import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.phoenix.compat.hbase.CompatPermissionUtil;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
@@ -71,13 +69,20 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.RpcCallback;
-import com.google.protobuf.RpcController;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.authorizeUserTable;
-import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getUserFromUP;
 import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getPermissionFromUP;
+import static org.apache.phoenix.compat.hbase.CompatPermissionUtil.getUserFromUP;
 
 public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
@@ -123,7 +128,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void preGetTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String tableName, TableName physicalTableName) throws IOException {
         if (!accessCheckEnabled) { return; }
-        requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        if(this.execPermissionsCheckEnabled) {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ, Action.EXEC);
+        } else {
+            requireAccess("GetTable" + tenantId, physicalTableName, Action.READ);
+        }
     }
 
     @Override
@@ -131,10 +140,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         Configuration conf = env.getConfiguration();
         this.accessCheckEnabled = conf.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
-        if (!this.accessCheckEnabled) {
-            LOGGER.warn(
-                    "PhoenixAccessController has been loaded with authorization checks disabled.");
-        }
+            if (!this.accessCheckEnabled) {
+                LOGGER.warn(
+                        "PhoenixAccessController has been loaded with authorization checks disabled.");
+            }
         this.execPermissionsCheckEnabled = conf.getBoolean(AccessControlConstants.EXEC_PERMISSION_CHECKS_KEY,
                 AccessControlConstants.DEFAULT_EXEC_PERMISSION_CHECKS);
         if (env instanceof PhoenixMetaDataControllerEnvironment) {
@@ -144,12 +153,13 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     "Not a valid environment, should be loaded by PhoenixMetaDataControllerEnvironment");
         }
 
+        //2.3+ doesn't need to access ZK object.
         ZKWatcher zk = null;
         RegionCoprocessorEnvironment regionEnv = this.env.getRegionCoprocessorEnvironment();
         if (regionEnv instanceof HasRegionServerServices) {
             zk = ((HasRegionServerServices) regionEnv).getRegionServerServices().getZooKeeper();
         }
-        accessChecker = new AccessChecker(env.getConfiguration(), zk);
+        accessChecker = CompatPermissionUtil.newAccessChecker(env.getConfiguration(), zk);
         // set the user-provider.
         this.userProvider = UserProvider.instantiate(env.getConfiguration());
         // init superusers and add the server principal (if using security)
@@ -245,7 +255,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // skip check for local index
             if (physicalTableName != null && !parentPhysicalTableName.equals(physicalTableName)
                     && !MetaDataUtil.isViewIndex(physicalTableName.getNameAsString())) {
-                List<Action> actions = Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN);
+                List<Action> actions = new ArrayList<>(Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.ADMIN));
                 if(execPermissionsCheckEnabled) {
                     actions.add(Action.EXEC);
                 }
@@ -463,7 +473,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             @Override
             public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
+                final RpcCall rpcContext = RpcUtil.getRpcContext();
                 try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
+                    // Setting RPC context as null so that user can be resetted
+                    RpcUtil.setRpcContext(null);
                     // Merge permissions from all accessController coprocessors loaded in memory
                     for (MasterObserver service : getAccessControllers()) {
                         // Use AccessControlClient API's if the accessController is an instance of org.apache.hadoop.hbase.security.access.AccessController
@@ -480,6 +493,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                         throw (Error) e;
                     }
                     throw new Exception(e);
+                } finally {
+                    // Setting RPC context back to original context of the RPC
+                    RpcUtil.setRpcContext(rpcContext);
                 }
                 return userPermissions;
             }
@@ -488,16 +504,16 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
          return userPermissions;
        }
 
-     //FIXME This seems to have no effect at all
      private void getUserDefinedPermissions(final TableName tableName,
              final List<UserPermission> userPermissions) throws IOException {
           User.runAsLoginUser(new PrivilegedExceptionAction<List<UserPermission>>() {
               @Override
               public List<UserPermission> run() throws Exception {
-                 //FIXME We are masking the parameter list that we are supposed to add to
-                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
-                 try (Connection connection =
+                  final RpcCall rpcContext = RpcUtil.getRpcContext();
+                  try (Connection connection =
                          ConnectionFactory.createConnection(((CoprocessorEnvironment) env).getConfiguration())) {
+                      // Setting RPC context as null so that user can be resetted
+                      RpcUtil.setRpcContext(null);
                       for (MasterObserver service : getAccessControllers()) {
                          if (service.getClass().getName().equals(
                              org.apache.hadoop.hbase.security.access.AccessController.class
@@ -515,6 +531,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                           throw (Error) e;
                       }
                       throw new Exception(e);
+                  } finally {
+                      // Setting RPC context back to original context of the RPC
+                      RpcUtil.setRpcContext(rpcContext);
                   }
                   return userPermissions;
               }

@@ -38,22 +38,6 @@
        <groupId>org.apache.maven.plugins</groupId>
        <artifactId>maven-site-plugin</artifactId>
      </plugin>
-     <plugin>
-       <artifactId>exec-maven-plugin</artifactId>
-       <groupId>org.codehaus.mojo</groupId>
-       <executions>
-        <execution><!-- Run our version calculation script -->
-          <id>Merge Language Reference</id>
-           <phase>site</phase>
-           <goals>
-             <goal>exec</goal>
-           </goals>
-           <configuration>
-             <executable>${basedir}/src/site/bin/merge.sh</executable>
-           </configuration>
-         </execution>
-       </executions>
-      </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
@@ -167,6 +151,12 @@
   </build>
 
   <dependencies>
+    <!-- shaded thirdparty dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+
     <!-- HBase compat dependency -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
@@ -330,28 +320,10 @@
       <type>test-jar</type>
     </dependency>
 
-    <!-- Tephra dependencies -->
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-2.0</artifactId>
-    </dependency>
-
     <!-- Other dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.inject</groupId>
@@ -442,22 +414,6 @@
       <artifactId>disruptor</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-common</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-discovery-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-zookeeper</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.twill</groupId>
-      <artifactId>twill-discovery-core</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
     </dependency>
@@ -493,16 +449,80 @@
 
   </dependencies>
 
-  <reporting>
-      <plugins>
-          <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-project-info-reports-plugin</artifactId>
-          </plugin>
-          <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-          </plugin>
-      </plugins>
-  </reporting>
+<profiles>
+  <profile>
+    <id>exclude-tephra</id>
+    <activation>
+      <property>
+        <name>without.tephra</name>
+      </property>
+    </activation>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-api</artifactId>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-core-shaded</artifactId>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <classifier>shaded</classifier>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+        <scope>provided</scope>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>include-tephra</id>
+    <activation>
+      <property>
+        <name>!without.tephra</name>
+      </property>
+    </activation>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-api</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-core-shaded</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <classifier>shaded</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.3.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.3</value>
+      </property>
+    </activation>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+</profiles>
 </project>

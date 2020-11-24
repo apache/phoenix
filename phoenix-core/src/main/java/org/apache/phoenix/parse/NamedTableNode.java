@@ -23,7 +23,7 @@ import java.util.List;
 
 import org.apache.phoenix.compile.ColumnResolver;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 /**
  * Node representing an explicit table reference in the FROM clause of SQL

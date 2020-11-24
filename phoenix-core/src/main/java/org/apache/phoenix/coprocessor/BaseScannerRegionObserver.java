@@ -29,13 +29,20 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanOptions;
+import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -47,7 +54,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 
-abstract public class BaseScannerRegionObserver implements RegionObserver {
+abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -67,10 +74,20 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
-    // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
+    // The number of index rows to be rebuild in one RPC call
+    public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    public static final String SERVER_PAGING = "_ServerPaging";
+    // The number of rows to be scanned in one RPC call
+    public static final String AGGREGATE_PAGE_SIZE_IN_MS = "_AggregatePageSizeInMs";
+
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
+    public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
+    public static final String INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE =
+        "_IndexRebuildDisableLoggingVerifyType";
+    public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
+        "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
@@ -93,6 +110,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
+    public static final String PHOENIX_TTL = "_PhoenixTTL";
+    public static final String MASK_PHOENIX_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
+    public static final String DELETE_PHOENIX_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
+    public static final String PHOENIX_TTL_SCAN_TABLE_NAME = "_PhoenixTTLScanTableName";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
@@ -362,5 +383,19 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
+
+
+   /* We want to override the store scanner so that we can read "past" a delete
+    marker on an SCN / lookback query to see the underlying edit. This was possible
+    in HBase 1.x, but not possible after the interface changes in HBase 2.0. HBASE-24321 in
+     HBase 2.3 gave us this ability back, but we need to use it through a compatibility shim
+     so we can compile against 2.1 and 2.2. When 2.3 is the minimum supported HBase
+     version, the shim can be retired and the logic moved into the real coproc.
+
+    We also need to override the flush compaction coproc hooks in order to implement max lookback
+     age to keep versions from being purged.
+
+    Because the required APIs aren't present in HBase 2.1 and 2.2, we override in the 2.3
+     version of CompatBaseScannerRegionObserver and no-op in the other versions. */
 
 }

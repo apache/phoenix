@@ -77,8 +77,8 @@ public class FormatToKeyValueReducer
         for (Map.Entry<String, String> entry : conf) {
             clientInfos.setProperty(entry.getKey(), entry.getValue());
         }
-        try {
-            PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnectionOnServer(clientInfos, conf);
+        try (PhoenixConnection conn = (PhoenixConnection) QueryUtil
+                .getConnectionOnServer(clientInfos, conf)) {
             builder = conn.getKeyValueBuilder();
             final String tableNamesConf = conf.get(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY);

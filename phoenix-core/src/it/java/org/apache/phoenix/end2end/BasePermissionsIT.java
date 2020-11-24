@@ -16,42 +16,30 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.IOException;
-import java.lang.reflect.UndeclaredThrowableException;
-import java.security.PrivilegedExceptionAction;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import com.google.protobuf.RpcCallback;
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.LocalHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
+import org.apache.hadoop.hbase.security.access.AccessControlUtil;
+import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.security.access.UserPermission;
+import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -64,12 +52,38 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.MethodSorters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -140,7 +154,16 @@ public abstract class BasePermissionsIT extends BaseTest {
         this.tableName = generateUniqueName();
     }
 
+    @BeforeClass
+    public static void skipHBase21() {
+        assumeFalse(VersionInfo.getVersion().startsWith("2.1"));
+    }
+
     static void initCluster(boolean isNamespaceMapped) throws Exception {
+        initCluster(isNamespaceMapped, false);
+    }
+
+    static void initCluster(boolean isNamespaceMapped, boolean useCustomAccessController) throws Exception {
         if (null != testUtil) {
             testUtil.shutdownMiniCluster();
             testUtil = null;
@@ -149,8 +172,9 @@ public abstract class BasePermissionsIT extends BaseTest {
         testUtil = new HBaseTestingUtility();
 
         Configuration config = testUtil.getConfiguration();
-        enablePhoenixHBaseAuthorization(config);
+        enablePhoenixHBaseAuthorization(config, useCustomAccessController);
         configureNamespacesOnServer(config, isNamespaceMapped);
+        configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
 
         testUtil.startMiniCluster(1);
@@ -188,17 +212,26 @@ public abstract class BasePermissionsIT extends BaseTest {
         view2TableName = tableName + "_V2";
     }
 
-    private static void enablePhoenixHBaseAuthorization(Configuration config) {
+    private static void enablePhoenixHBaseAuthorization(Configuration config,
+                                                        boolean useCustomAccessController) {
         config.set("hbase.superuser", SUPER_USER + "," + "superUser2");
         config.set("hbase.security.authorization", Boolean.TRUE.toString());
         config.set("hbase.security.exec.permission.checks", Boolean.TRUE.toString());
-        config.set("hbase.coprocessor.master.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-        config.set("hbase.coprocessor.region.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-        config.set("hbase.coprocessor.regionserver.classes",
-                "org.apache.hadoop.hbase.security.access.AccessController");
-
+        if(useCustomAccessController) {
+            config.set("hbase.coprocessor.master.classes",
+                    CustomAccessController.class.getName());
+            config.set("hbase.coprocessor.region.classes",
+                    CustomAccessController.class.getName());
+            config.set("hbase.coprocessor.regionserver.classes",
+                    CustomAccessController.class.getName());
+        } else {
+            config.set("hbase.coprocessor.master.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+            config.set("hbase.coprocessor.region.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+            config.set("hbase.coprocessor.regionserver.classes",
+                    "org.apache.hadoop.hbase.security.access.AccessController");
+        }
         config.set(QueryServices.PHOENIX_ACLS_ENABLED,"true");
 
         config.set("hbase.regionserver.wal.codec", "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
@@ -208,6 +241,12 @@ public abstract class BasePermissionsIT extends BaseTest {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
     }
 
+    private static void configureStatsConfigurations(Configuration conf) {
+        conf.set(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        conf.set(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
+        conf.set(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
+        conf.set(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+    }
     public static HBaseTestingUtility getUtility(){
         return testUtil;
     }
@@ -384,13 +423,17 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     AccessTestAction createTable(final String tableName) throws SQLException {
+        return createTable(tableName, NUM_RECORDS);
+    }
+
+    AccessTestAction createTable(final String tableName, int numRecordsToInsert) throws SQLException {
         return new AccessTestAction() {
             @Override
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute("CREATE TABLE " + tableName + "(pk INTEGER not null primary key, data VARCHAR, val integer)"));
                     try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?, ?)")) {
-                        for (int i = 0; i < NUM_RECORDS; i++) {
+                        for (int i = 0; i < numRecordsToInsert; i++) {
                             pstmt.setInt(1, i);
                             pstmt.setString(2, Integer.toString(i));
                             pstmt.setInt(3, i);
@@ -398,6 +441,19 @@ public abstract class BasePermissionsIT extends BaseTest {
                         }
                     }
                     conn.commit();
+                }
+                return null;
+            }
+        };
+    }
+
+    AccessTestAction updateStatsOnTable(final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    assertFalse(stmt.execute("UPDATE STATISTICS " + tableName + " SET \""
+                            + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\" = 5"));
                 }
                 return null;
             }
@@ -433,6 +489,37 @@ public abstract class BasePermissionsIT extends BaseTest {
             public Object run() throws Exception {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute(String.format("DROP TABLE IF EXISTS %s CASCADE", tableName)));
+                }
+                return null;
+            }
+        };
+
+    }
+
+    private AccessTestAction deleteDataFromStatsTable() throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    conn.setAutoCommit(true);
+                    assertNotEquals(0, stmt.executeUpdate("DELETE FROM SYSTEM.STATS"));
+                }
+                return null;
+            }
+        };
+
+    }
+
+    private AccessTestAction readStatsAfterTableDelete(String physicalTableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    conn.setAutoCommit(true);
+                    ResultSet rs = stmt.executeQuery("SELECT count(*) from SYSTEM.STATS" +
+                            " WHERE PHYSICAL_NAME = '"+ physicalTableName +"'");
+                    rs.next();
+                    assertEquals(0, rs.getInt(1));
                 }
                 return null;
             }
@@ -1220,6 +1307,69 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     @Test
+    public void testDeletingStatsShouldNotFailWithADEWhenTableDropped() throws Throwable {
+        final String schema = "STATS_ENABLED";
+        final String tableName = "DELETE_TABLE_IT";
+        final String phoenixTableName = schema + "." + tableName;
+        final String indexName1 = tableName + "_IDX1";
+        final String lIndexName1 = tableName + "_LIDX1";
+        final String viewName1 = schema+"."+tableName + "_V1";
+        final String viewIndexName1 = tableName + "_VIDX1";
+        grantSystemTableAccess();
+        try {
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser1);
+                        //Neded Global ADMIN for flush operation during drop table
+                        AccessControlClient.grant(getUtility().getConnection(),regularUser1.getName(), Permission.Action.ADMIN);
+                        if (isNamespaceMapped) {
+                            grantPermissions(regularUser1.getName(), schema, Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), schema, Permission.Action.CREATE);
+                        } else {
+                            grantPermissions(regularUser1.getName(),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Permission.Action.CREATE);
+                        }
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+
+            verifyAllowed(createTable(phoenixTableName, 100), regularUser1);
+            verifyAllowed(createIndex(indexName1,phoenixTableName),regularUser1);
+            verifyAllowed(createLocalIndex(lIndexName1, phoenixTableName), regularUser1);
+            verifyAllowed(createView(viewName1,phoenixTableName),regularUser1);
+            verifyAllowed(createIndex(viewIndexName1, viewName1), regularUser1);
+            verifyAllowed(updateStatsOnTable(phoenixTableName), regularUser1);
+            Thread.sleep(10000);
+            // Normal deletes should  fail when no write permissions given on stats table.
+            verifyDenied(deleteDataFromStatsTable(), AccessDeniedException.class, regularUser1);
+            verifyAllowed(dropIndex(viewIndexName1, viewName1), regularUser1);
+            verifyAllowed(dropView(viewName1),regularUser1);
+            verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser1);
+            Thread.sleep(3000);
+            verifyAllowed(readStatsAfterTableDelete(SchemaUtil.getPhysicalHBaseTableName(
+                    schema, indexName1, isNamespaceMapped).getString()), regularUser1);
+            verifyAllowed(dropIndex(lIndexName1,  phoenixTableName), regularUser1);
+            verifyAllowed(dropTable(phoenixTableName), regularUser1);
+            Thread.sleep(3000);
+            verifyAllowed(readStatsAfterTableDelete(SchemaUtil.getPhysicalHBaseTableName(
+                    schema, tableName, isNamespaceMapped).getString()), regularUser1);
+        } finally {
+            revokeAll();
+        }
+    }
+
+    @Test
     public void testUpsertIntoImmutableTable() throws Throwable {
         final String schema = generateUniqueName();
         final String tableName = generateUniqueName();
@@ -1293,4 +1443,61 @@ public abstract class BasePermissionsIT extends BaseTest {
         };
     }
 
+    public static class  CustomAccessController extends AccessController {
+
+        Configuration configuration;
+        boolean aclRegion;
+        @Override
+        public void start(CoprocessorEnvironment env) throws IOException {
+            super.start(env);
+            configuration = env.getConfiguration();
+            if(env instanceof RegionCoprocessorEnvironment) {
+                aclRegion = AccessControlClient.ACL_TABLE_NAME.
+                        equals(((RegionCoprocessorEnvironment) env).getRegion().
+                                getTableDescriptor().getTableName());
+            }
+        }
+
+        @Override
+        public void getUserPermissions(RpcController controller,
+                                       AccessControlProtos.GetUserPermissionsRequest request,
+                                       RpcCallback<AccessControlProtos.GetUserPermissionsResponse> done) {
+            if(aclRegion) {
+                super.getUserPermissions(controller,request,done);
+                return;
+            }
+            AccessControlProtos.GetUserPermissionsResponse response = null;
+            org.apache.hadoop.hbase.client.Connection connection;
+            try {
+                connection = ConnectionFactory.createConnection(configuration);
+            } catch (IOException e) {
+                // pass exception back up
+                ResponseConverter.setControllerException(controller, new IOException(e));
+                return;
+            }
+            try {
+                final List<UserPermission> perms = new ArrayList<>();
+                if(request.getType() == AccessControlProtos.Permission.Type.Table) {
+                    final TableName table =
+                            request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
+                    perms.addAll(AccessControlClient.getUserPermissions(connection, table.getNameAsString()));
+                } else if(request.getType() == AccessControlProtos.Permission.Type.Namespace) {
+                    final String namespace =
+                            request.hasNamespaceName() ? request.getNamespaceName().toStringUtf8() : null;
+                    perms.addAll(AccessControlClient.getUserPermissions(connection, AuthUtil.toGroupEntry(namespace)));
+                }
+                response = AccessControlUtil.buildGetUserPermissionsResponse(perms);
+            } catch (Throwable ioe) {
+                // pass exception back up
+                ResponseConverter.setControllerException(controller, new IOException(ioe));
+            }
+            if(connection != null) {
+                try {
+                    connection.close();
+                } catch (IOException e) {
+                }
+            }
+            done.run(response);
+        }
+    }
 }

@@ -21,11 +21,9 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERS
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 
 import java.io.ByteArrayInputStream;
@@ -39,11 +37,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -59,8 +56,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -83,7 +78,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -91,9 +85,6 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
-import org.apache.phoenix.filter.ColumnProjectionFilter;
-import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
-import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -101,7 +92,6 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -138,13 +128,14 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
     public static final byte[] INDEX_COLUMN_NAME_SEP_BYTES = Bytes.toBytes(INDEX_COLUMN_NAME_SEP);
 
-    private static Cache<String, Boolean> indexNameGlobalIndexCheckerEnabledMap = CacheBuilder.newBuilder()
+    private final static Cache<String, Boolean> indexNameGlobalIndexCheckerEnabledMap =
+        CacheBuilder.newBuilder()
             .expireAfterWrite(QueryServicesOptions.GLOBAL_INDEX_CHECKER_ENABLED_MAP_EXPIRATION_MIN,
                     TimeUnit.MINUTES)
             .build();
@@ -577,8 +568,8 @@ public class IndexUtil {
                 joinResult = dataRegion.get(get);
             } else {
                 TableName dataTable =
-                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
-                            environment.getRegion().getTableDescriptor().getTableName().getNameAsString()));
+                    TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(environment.getRegion().
+                        getTableDescriptor().getTableName().getNameAsString()));
                 Table table = null;
                 try {
                     table = environment.getConnection().getTable(dataTable);
@@ -596,7 +587,8 @@ public class IndexUtil {
                     tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
                         tupleProjector.getValueBitSet(), ptr);
             Cell keyValue =
-                    PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
+                    PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),
+                        firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
             result.add(keyValue);
         }
@@ -641,7 +633,8 @@ public class IndexUtil {
                 m.setDurability(Durability.SKIP_WAL);
             }
         }
-        region.batchMutate(mutations.toArray(new Mutation[mutations.size()]));
+        region.batchMutate(
+            mutations.toArray(new Mutation[mutations.size()]));
     }
     
     public static MetaDataMutationResult updateIndexState(String indexTableName, long minTimeStamp,
@@ -667,7 +660,7 @@ public class IndexUtil {
                     @Override
                     public MetaDataResponse call(MetaDataService instance) throws IOException {
                         ServerRpcController controller = new ServerRpcController();
-                        BlockingRpcCallback<MetaDataResponse> rpcCallback = new BlockingRpcCallback<MetaDataResponse>();
+                        BlockingRpcCallback<MetaDataResponse> rpcCallback = new BlockingRpcCallback<>();
                         UpdateIndexStateRequest.Builder builder = UpdateIndexStateRequest.newBuilder();
                         for (Mutation m : tableMetadata) {
                             MutationProto mp = ProtobufUtil.toProto(m);
@@ -801,94 +794,5 @@ public class IndexUtil {
         } catch (SQLException e) {
             throw new IOException(e);
         }
-    }
-
-    private static boolean containsOneOrMoreColumn(Scan scan) {
-        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
-        if (familyMap == null || familyMap.isEmpty()) {
-            return false;
-        }
-        for (Map.Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            NavigableSet<byte[]> family = entry.getValue();
-            if (family != null && !family.isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
-        boolean addedEmptyColumn = false;
-        Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
-        while (iterator.hasNext()) {
-            Filter filter = iterator.next();
-            if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
-                ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
-                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                    scan.addColumn(emptyCF, emptyCQ);
-                }
-            }
-            else if (filter instanceof ColumnProjectionFilter) {
-                ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
-                if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                    scan.addColumn(emptyCF, emptyCQ);
-                }
-            }
-            else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
-                ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
-            }
-            else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
-                scan.addColumn(emptyCF, emptyCQ);
-                addedEmptyColumn = true;
-            }
-        }
-        if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-            scan.addColumn(emptyCF, emptyCQ);
-        }
-    }
-
-    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
-        if (table.isTransactional() || table.getType() != PTableType.INDEX) {
-            return;
-        }
-        PTable indexTable = table;
-        if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
-            return;
-        }
-        String schemaName = indexTable.getParentSchemaName().getString();
-        String tableName = indexTable.getParentTableName().getString();
-        PTable dataTable;
-        try {
-            dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-        } catch (TableNotFoundException e) {
-            // This index table must be being deleted. No need to set the scan attributes
-            return;
-        }
-        // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
-        // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
-        if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-            int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-            indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
-        }
-        if (!dataTable.getIndexes().contains(indexTable)) {
-            return;
-        }
-        if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
-            scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-        }
-        scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
-        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
-        IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
-        byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
-        byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
-        if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
-            BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
-        }
-        addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 }

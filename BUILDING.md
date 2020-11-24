@@ -27,6 +27,27 @@ Building Apache Phoenix
 
 Phoenix uses Maven (3.X) to build all its necessary resources.
 
+HBase 2 and Hadoop 3
+--------------------
+Phoenix 5.x requires Hadoop 3. While HBase 2.x is compatible with Hadoop 3, the public Maven Hbase
+artifacts are built with Hadoop 2, and are not.
+
+For this reason, when building Phoenix with an Hbase version later than 2.2.4, you need to rebuild
+HBase with Hadoop 3, and install it to the local maven repo of the build host.
+
+`$ wget https://downloads.apache.org/hbase/2.2.5/hbase-2.2.5-src.tar.gz`
+`$ tar xfvz hbase-2.2.5-src.tar.gz`
+`$ cd hbase-2.2.5`
+`$ mvn install -Dhadoop.profile=3.0 -DskipTests`
+
+Replace 2.2.5 with the actual Hbase version you are using in the Phoenix build.
+
+You can find the exact HBase version each phoenix HBase profile uses by checking <hbase.version>
+in the corresponding profile section at the end of phoenix/pom.xml, or you can specify the HBase
+version to build Phoenix with explicitly (see below)
+
+See https://issues.apache.org/jira/browse/PHOENIX-5993 for more information.
+
 Building from source
 --------------------
 
@@ -50,23 +71,23 @@ As Phoenix uses *limited public* HBase APIs, which sometimes change even within 
 Phoenix may not build or work with older releases of HBase, or ones that were released after
 Phoenix, even within the same HBase minor release.
 
-By default, Phoenix will be built for the latest supported HBase 2.x release. You can specify the
-targeted HBase minor release by setting the `hbase.profile` system property for maven.
+By default, Phoenix will be built for the latest known patch level of the earliest HBase 2.x
+minor release that Phoenix supports.
+
+You can specify the targeted HBase minor release by setting the `hbase.profile` system property for 
+maven.
 
 You can also specify the exact HBase release to build Phoenix with by additionally
 setting the `hbase.version` system property.
 
- * `mvn clean install` will build the for the latest known supported HBase 2.x relese
- * `mvn clean install -Dhbase.profile=2.1` will use the latest known supported HBase 2.1 release
+ * `mvn clean install` will use the latest known patch release of the the earliest supported HBase 2 minor relese
+ * `mvn clean install -Dhbase.profile=2.1` will use the latest known patch release of HBase 2.1
  * `mvn clean install -Dhbase.profile=2.1 -Dhbase.version=2.1.7` will build with HBase 2.1.7
 
 Phoenix verifies the specified `hbase.profile` and `hbase.version` properties, and will reject
 combinations that are known not to work. You may disable this verification by adding
 `-Denforcer.skip=true` to the maven command line. (In case you are using an HBase package that
 modifies the canonical version number in a way that Phoenix cannot parse)
-
-*Note that the above reflects the intended behaviour for the 5.1 release. In the current
-development releases, we default to building with the old HBase 2.0.1 release.*
 
 Importing into eclipse
 ----------------------
@@ -79,17 +100,30 @@ Running the tests
 All Unit Tests  
 `$ mvn clean test`
 
-All Unit Tests and Integration tests  
+All Unit Tests and Integration tests (takes a few hours)
 `$ mvn clean verify`
 
 The verify maven target will also run dependency:analyze-only, which checks if the dependencies
- used in the code and declared in the maven projects match.
+ used in the code and declared in the maven projects match. The code coverage report would be
+generated at /target/site/jacoco/index.html
 
-Findbugs
---------
+To skip code coverage analysis
+`$ mvn verify -Dskip.code-coverage`
 
-Findbugs report is generated in /target/site  
-`$ mvn site`
+Running project reports
+-----------------------
+
+Phoenix currently supports generating the standard set of Maven Project Info Reports, as well as
+Spotbugs, Apache Creadur RAT, OWASP Dependency-Check, and Jacoco Code Coverage reports.
+
+To run all available reports (takes a few hours)
+`$ mvn clean verify site -Dspotbugs.site`
+
+To run OWASP, RAT and Spotbugs, but not Jacoco (takes ~10 minutes)
+`$ mvn clean compile test-compile site -Dspotbugs.site`
+
+The reports are accessible via `target/site/index.html`, under the main project,
+as well as each of the subprojects. (not every project has all reports)
 
 Generate Apache Web Site
 ------------------------

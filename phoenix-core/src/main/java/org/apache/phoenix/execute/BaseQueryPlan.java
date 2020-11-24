@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -83,8 +83,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -268,12 +268,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(scan);
-            // Hack for working around PHOENIX-3121 and HBASE-16296.
-            // TODO: remove once PHOENIX-3121 and/or HBASE-16296 are fixed.
-            int scannerCacheSize = context.getStatement().getFetchSize();
-            if (limit != null && limit % scannerCacheSize == 0) {
-                scan.setCaching(scannerCacheSize + 1);
-            }
+            // After HBASE-16296 is resolved, we no longer need to set
+            // scan caching
         }
         
 

@@ -18,14 +18,18 @@
 package org.apache.phoenix.util;
 
 import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.KeyValue;
@@ -42,8 +46,10 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.junit.Before;
@@ -314,6 +320,38 @@ public class MetaDataUtilTest {
         assertTrue(Bytes.compareTo(actualTag.getValueArray(), actualTag.getValueOffset(), actualTag.getValueLength(),
                 expectedTag.getValueArray(), expectedTag.getValueOffset(), expectedTag.getValueLength()) == 0);
         assertFalse(tagIterator.hasNext());
+    }
+
+    @Test
+    public void testGetLastDDLTimestampUpdate() throws Exception {
+      byte[] tableHeaderRowKey = SchemaUtil.getTableKey("TenantId", "schema", "table");
+      long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        long clientTimestamp = serverTimestamp - 1000L;
+      Put p = MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey, clientTimestamp,
+          serverTimestamp);
+      assertNotNull(p);
+      assertFalse("Mutation is empty!", p.isEmpty());
+      assertArrayEquals(tableHeaderRowKey, p.getRow());
+      assertEquals(clientTimestamp, p.getTimeStamp());
+      assertTrue(p.cellScanner().advance());
+      List<Cell> cells = p.get(TABLE_FAMILY_BYTES, LAST_DDL_TIMESTAMP_BYTES);
+      assertNotNull(cells);
+      assertTrue(cells.size() > 0);
+      Cell c = cells.get(0);
+      assertNotNull("Cell is null!", c);
+      assertEquals(serverTimestamp, PLong.INSTANCE.getCodec().decodeLong(CellUtil.cloneValue(c),
+          0, SortOrder.ASC));
+    }
+
+    private static byte[] concatTags(byte[] tags, Cell cell) {
+        int cellTagsLen = cell.getTagsLength();
+        if (cellTagsLen == 0) {
+            return tags;
+        }
+        byte[] b = new byte[tags.length + cellTagsLen];
+        int pos = Bytes.putBytes(b, 0, tags, 0, tags.length);
+        Bytes.putBytes(b, pos, cell.getTagsArray(), cell.getTagsOffset(), cellTagsLen);
+        return b;
     }
 
 }

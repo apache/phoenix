@@ -95,11 +95,18 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
 
         byte[] emptyCF = ((KeyValueColumnExpression)children.get(0)).getColumnFamily();
         byte[] emptyCQ = ((KeyValueColumnExpression)children.get(0)).getColumnQualifier();
-        long ts = tuple.getValue(0).getTimestamp();
+        long ts;
+        // Currently there is no good way to figure out if this function is being evaluated during
+        // result or filter processing.
+        // For now relying on whether empty column exists,
+        // if true indicates filter processing else result processing.
         Cell emptyColumnKV = tuple.getValue(emptyCF, emptyCQ);
         if ((emptyColumnKV != null) && CellUtil.matchingColumn(emptyColumnKV, emptyCF, emptyCQ)) {
             ts = emptyColumnKV.getTimestamp();
+        } else {
+            ts = tuple.getValue(0).getTimestamp();
         }
+
         Date rowTimestamp = new Date(ts);
         ptr.set(PDate.INSTANCE.toBytes(rowTimestamp));
         return true;

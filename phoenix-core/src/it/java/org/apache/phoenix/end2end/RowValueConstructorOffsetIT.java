@@ -18,8 +18,10 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,9 +32,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -930,6 +935,105 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testIndexMultiColumnsMultiIndexesVariableLengthNullLiteralsRVCOffset() throws SQLException {
+        String ddlTemplate = "CREATE TABLE %s (k1 VARCHAR,\n" +
+                "k2 VARCHAR,\n" +
+                "k3 VARCHAR,\n" +
+                "k4 VARCHAR,\n" +
+                "k5 VARCHAR,\n" +
+                "k6 VARCHAR,\n" +
+                "v1 VARCHAR,\n" +
+                "v2 VARCHAR,\n" +
+                "v3 VARCHAR,\n" +
+                "v4 VARCHAR,\n" +
+                "CONSTRAINT pk PRIMARY KEY (k1, k2, k3, k4, k5, k6)) ";
+
+        String longKeyTableName = "T_" + generateUniqueName();
+        String longKeyIndex1Name =  "INDEX_1_" + longKeyTableName;
+
+        String ddl = String.format(ddlTemplate,longKeyTableName);
+        try(Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+
+        String createIndex1 = "CREATE INDEX IF NOT EXISTS " + longKeyIndex1Name + " ON " + longKeyTableName + " (k2 ,v1, k4)";
+
+        try(Statement statement = conn.createStatement()) {
+            statement.execute(createIndex1);
+        }
+
+        String sql0 = "SELECT  v1,v3 FROM " + longKeyTableName + " LIMIT 3 OFFSET (k1 ,k2, k3, k4, k5, k6)=('0','1',null,null,null,'2')";
+        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql0)) {
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().size());
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).size());
+            byte[] startRow = phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).get(0).getStartRow();
+            byte[] expectedRow = new byte[] {'0',0,'1',0,0,0,0,'2',1}; //note trailing 1 not 0 due to phoenix internal inconsistency
+            assertArrayEquals(expectedRow,startRow);
+        }
+
+        String sql = "SELECT  k2,v1,k4 FROM " + longKeyTableName + " LIMIT 3 OFFSET (k2,v1,k4,k1,k3,k5,k6)=('2',null,'4','1','3','5','6')";
+        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().size());
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).size());
+            byte[] startRow = phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).get(0).getStartRow();
+            byte[] expectedRow = new byte[] {'2',0,0,'4',0,'1',0,'3',0,'5',0,'6',1}; //note trailing 1 not 0 due to phoenix internal inconsistency
+            assertArrayEquals(expectedRow,startRow);
+        }
+    }
+
+    @Test
+    public void testIndexMultiColumnsIndexedFixedLengthNullLiteralsRVCOffset() throws SQLException {
+        String ddlTemplate = "CREATE TABLE %s (k1 VARCHAR,\n" +
+                "v1 TINYINT,\n" +
+                "v2 TINYINT,\n" +
+                "v3 TINYINT,\n" +
+                "v4 TINYINT,\n" +
+                "CONSTRAINT pk PRIMARY KEY (k1)) ";
+
+        String longKeyTableName = "T_" + generateUniqueName();
+        String longKeyIndex1Name =  "INDEX_1_" + longKeyTableName;
+
+        String ddl = String.format(ddlTemplate,longKeyTableName);
+        try(Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+
+        String createIndex1 = "CREATE INDEX IF NOT EXISTS " + longKeyIndex1Name + " ON " + longKeyTableName + " (v1, k1, v2, v3)";
+
+        try(Statement statement = conn.createStatement()) {
+            statement.execute(createIndex1);
+        }
+
+        String sql0 = "SELECT  v1,v3 FROM " + longKeyTableName + " LIMIT 3 OFFSET (k1)=('-1')";
+        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql0)) {
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().size());
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).size());
+            byte[] startRow = phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).get(0).getStartRow();
+            byte[] expectedRow = new byte[] {'-','1',1}; //note trailing 1 not 0 due to phoenix internal inconsistency
+            assertArrayEquals(expectedRow,startRow);
+        }
+
+        String sql = "SELECT  v1,v3 FROM " + longKeyTableName + " LIMIT 3 OFFSET (v1, k1, v2, v3)=(null,'a',null,0)";
+        try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+            PhoenixResultSet phoenixResultSet = rs.unwrap(PhoenixResultSet.class);
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().size());
+            assertEquals(1,phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).size());
+            byte[] startRow = phoenixResultSet.getStatement().getQueryPlan().getScans().get(0).get(0).getStartRow();
+            /* decimal is used for fixed with types
+             * we represent fixed integer keys as decimal form in the index as they need to be variable length.
+             * -128 normal two's compliment form would be 0b10000000
+             * but we flip the leading edge to keep the rowkey sorted, yielding 0.
+             */
+            byte[] expectedRow = new byte[] {0,'a',0,0,-128,1}; //note trailing 1 not 0 due to phoenix internal inconsistency
+            assertArrayEquals(expectedRow,startRow);
+        }
+
+    }
+
+    @Test
     public void testOffsetExplain() throws SQLException {
         String sql = "EXPLAIN SELECT * FROM " + DATA_TABLE_NAME + "  LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 2)";
         try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
@@ -1007,6 +1111,110 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
                 QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(statement);
                 assertEquals(PTableType.INDEX, plan.getTableRef().getTable().getType());
+            }
+        }
+    }
+
+    @Test
+    public void rvcOffsetTrailingVariableLengthKeyTest() throws Exception {
+
+        String tableName = generateUniqueName();
+        String ddl = String.format("CREATE TABLE IF NOT EXISTS %s (\n"
+                + " ORGANIZATION_ID VARCHAR(15), \n" + " TEST_ID VARCHAR(15), \n"
+                + " CREATED_DATE DATE, \n" + " LAST_UPDATE DATE\n"
+                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")",tableName);
+
+        try (Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+        //setup
+        String upsert = "UPSERT INTO %s(ORGANIZATION_ID,TEST_ID) VALUES (%s,%s)";
+        List<String> upserts = new ArrayList<>();
+        upserts.add(String.format(upsert,tableName,"'1'","'1'"));
+        upserts.add(String.format(upsert,tableName,"'1'","'10'"));
+        upserts.add(String.format(upsert,tableName,"'2'","'2'"));
+
+        for(String sql : upserts) {
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(sql);
+            }
+        }
+        conn.commit();
+
+        String query = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = ('1','1')",tableName);
+
+        try (Statement statement = conn.createStatement() ; ResultSet rs2 = statement.executeQuery(query) ) {
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("10",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("2",rs2.getString(1));
+            assertEquals("2",rs2.getString(2));
+            assertFalse(rs2.next());
+        }
+    }
+
+    //Note that phoenix does not suport a rowkey with a null inserted so there is no single key version of this.
+    @Test
+    public void rvcOffsetTrailingNullKeyTest() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = String.format("CREATE TABLE IF NOT EXISTS %s (\n"
+                + " ORGANIZATION_ID VARCHAR(15), \n" + " TEST_ID VARCHAR(15), \n"
+                + " CREATED_DATE DATE, \n" + " LAST_UPDATE DATE\n"
+                + " CONSTRAINT TEST_SCHEMA_PK PRIMARY KEY (ORGANIZATION_ID, TEST_ID) \n" + ")",tableName);
+
+        try (Statement statement = conn.createStatement()) {
+            statement.execute(ddl);
+        }
+        //setup
+        String upsert = "UPSERT INTO %s(ORGANIZATION_ID,TEST_ID) VALUES (%s,%s)";
+        List<String> upserts = new ArrayList<>();
+        upserts.add(String.format(upsert,tableName,"'0'","null"));
+        upserts.add(String.format(upsert,tableName,"'1'","null"));
+        upserts.add(String.format(upsert,tableName,"'1'","'1'"));
+        upserts.add(String.format(upsert,tableName,"'1'","'10'"));
+        upserts.add(String.format(upsert,tableName,"'2'","null"));
+
+        for(String sql : upserts) {
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(sql);
+            }
+        }
+        conn.commit();
+
+        String query = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = ('1',null)",tableName);
+
+        try (Statement statement = conn.createStatement() ; ResultSet rs2 = statement.executeQuery(query) ) {
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("1",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("1",rs2.getString(1));
+            assertEquals("10",rs2.getString(2));
+            assertTrue(rs2.next());
+            assertEquals("2",rs2.getString(1));
+            assertNull(rs2.getString(2));
+            assertFalse(rs2.next());
+        }
+
+        String preparedQuery = String.format("SELECT * FROM %s OFFSET (ORGANIZATION_ID,TEST_ID) = (?,?)",tableName);
+
+        try (PreparedStatement statement = conn.prepareStatement(preparedQuery)  ) {
+
+            statement.setString(1,"1");
+            statement.setString(2,null);
+
+            try(ResultSet rs2 = statement.executeQuery()) {
+                assertTrue(rs2.next());
+                assertEquals("1", rs2.getString(1));
+                assertEquals("1", rs2.getString(2));
+                assertTrue(rs2.next());
+                assertEquals("1", rs2.getString(1));
+                assertEquals("10", rs2.getString(2));
+                assertTrue(rs2.next());
+                assertEquals("2", rs2.getString(1));
+                assertNull(rs2.getString(2));
+                assertFalse(rs2.next());
             }
         }
     }

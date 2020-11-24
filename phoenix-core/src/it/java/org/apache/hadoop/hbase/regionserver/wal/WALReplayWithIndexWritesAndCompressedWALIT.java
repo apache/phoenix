@@ -52,7 +52,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.FSUtils;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hbase.wal.WALSplitter;
@@ -176,11 +176,14 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
    */
 @Test
   public void testReplayEditsWrittenViaHRegion() throws Exception {
-    final String tableNameStr = "testReplayEditsWrittenViaHRegion";
-    final RegionInfo hri = RegionInfoBuilder.newBuilder(org.apache.hadoop.hbase.TableName.valueOf(tableNameStr)).setSplit(false).build();
-    final Path basedir = FSUtils.getTableDir(hbaseRootDir, org.apache.hadoop.hbase.TableName.valueOf(tableNameStr));
-    deleteDir(basedir);
-    final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
+      final String tableNameStr = "testReplayEditsWrittenViaHRegion";
+      final RegionInfo hri =
+              RegionInfoBuilder.newBuilder(TableName.valueOf(tableNameStr))
+                      .setSplit(false).build();
+      final Path basedir =
+              CommonFSUtils.getTableDir(hbaseRootDir, TableName.valueOf(tableNameStr));
+      deleteDir(basedir);
+      final TableDescriptor htd = createBasic3FamilyHTD(tableNameStr);
     
     //setup basic indexing for the table
     // enable indexing to a non-existant index table
@@ -234,7 +237,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
             ConnectionFactory.createConnection(UTIL.getConfiguration());
 
     // now check to ensure that we wrote to the index table
-    Table index = hbaseConn.getTable(org.apache.hadoop.hbase.TableName.valueOf(INDEX_TABLE_NAME));
+    Table index = hbaseConn.getTable(TableName.valueOf(INDEX_TABLE_NAME));
     int indexSize = getKeyValueCount(index);
     assertEquals("Index wasn't propertly updated from WAL replay!", 1, indexSize);
     Get g = new Get(rowkey);

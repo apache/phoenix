@@ -23,18 +23,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.RowIdLifetime;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -51,26 +48,16 @@ import org.apache.phoenix.expression.LikeExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
-import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
-import org.apache.phoenix.expression.function.IndexStateNameFunction;
-import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
-import org.apache.phoenix.expression.function.SQLTableTypeFunction;
-import org.apache.phoenix.expression.function.SQLViewTypeFunction;
-import org.apache.phoenix.expression.function.SqlTypeNameFunction;
-import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
@@ -86,11 +73,11 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.collect.Lists;
-
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  *
@@ -226,6 +213,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TASK_PRIORITY = "TASK_PRIORITY";
     public static final String TASK_DATA = "TASK_DATA";
     public static final String TASK_TABLE_TTL = "864000";
+    public static final int TTL_FOR_MUTEX = 15 * 60; // 15min
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
     public static final String VIEW_CONSTANT = "VIEW_CONSTANT";
@@ -366,14 +354,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final int MIN_CLIENT_RETRY_INDEX_WRITES = VersionUtil.encodeVersion("4", "14", "0");
     public static final int MIN_TX_CLIENT_SIDE_MAINTENANCE = VersionUtil.encodeVersion("4", "14", "0");
     public static final int MIN_PENDING_DISABLE_INDEX = VersionUtil.encodeVersion("4", "14", "0");
-    
+
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");
     // Version below which we should disallow usage of mutable secondary indexing.
     public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
     /** Version below which we fall back on the generic KeyValueBuilder */
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
-    
+
     public static final String IMMUTABLE_STORAGE_SCHEME = "IMMUTABLE_STORAGE_SCHEME";
     public static final byte[] STORAGE_SCHEME_BYTES = Bytes.toBytes(IMMUTABLE_STORAGE_SCHEME);
     public static final String ENCODING_SCHEME = "ENCODING_SCHEME";
@@ -385,15 +373,18 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String USE_STATS_FOR_PARALLELIZATION = "USE_STATS_FOR_PARALLELIZATION";
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
 
-    // The view ttl property will hold the duration after which rows will be marked as expired.
-    public static final long VIEW_TTL_NOT_DEFINED = 0L;
-    public static final String VIEW_TTL = "VIEW_TTL";
-    public static final byte[] VIEW_TTL_BYTES = Bytes.toBytes(VIEW_TTL);
-    // The view ttl high watermark if set indicates the timestamp used for determining the expired rows.
+    // The PHOENIX_TTL property will hold the duration after which rows will be marked as expired.
+    public static final long PHOENIX_TTL_NOT_DEFINED = 0L;
+    public static final String PHOENIX_TTL = "PHOENIX_TTL";
+    public static final byte[] PHOENIX_TTL_BYTES = Bytes.toBytes(PHOENIX_TTL);
+    // The phoenix ttl high watermark if set indicates the timestamp used for determining the expired rows.
     // otherwise the now() - ttl-duration is the timestamp used.
-    public static final long MIN_VIEW_TTL_HWM = 0L;
-    public static final String VIEW_TTL_HWM = "VIEW_TTL_HWM";
-    public static final byte[] VIEW_TTL_HWM_BYTES = Bytes.toBytes(VIEW_TTL_HWM);
+    public static final long MIN_PHOENIX_TTL_HWM = 0L;
+    public static final String PHOENIX_TTL_HWM = "PHOENIX_TTL_HWM";
+    public static final byte[] PHOENIX_TTL_HWM_BYTES = Bytes.toBytes(PHOENIX_TTL_HWM);
+
+    public static final String LAST_DDL_TIMESTAMP = "LAST_DDL_TIMESTAMP";
+    public static final byte[] LAST_DDL_TIMESTAMP_BYTES = Bytes.toBytes(LAST_DDL_TIMESTAMP);
 
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
@@ -485,17 +476,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public ResultSet getCatalogs() throws SQLException {
-        List<String> parameterValues = new ArrayList<String>(4);
-        StringBuilder buf = new StringBuilder("select \n" +
-                " DISTINCT " + TENANT_ID + " " + TABLE_CAT +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
-                " where " + COLUMN_NAME + " is null" +
-                " and " + COLUMN_FAMILY + " is null" +
-                " and " + TENANT_ID + " is not null");
-        addTenantIdFilter(buf, null, parameterValues);
-        buf.append(" order by " + TENANT_ID);
-        PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        setParameters(stmt, parameterValues);
+        PreparedStatement stmt = QueryUtil.getCatalogsStmt(connection);
         return stmt.executeQuery();
     }
 
@@ -512,29 +493,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String GLOBAL_TENANANTS_ONLY = "null";
 
-    private void addTenantIdFilter(StringBuilder buf, String tenantIdPattern,
-            List<String> parameterValues) {
-        PName tenantId = connection.getTenantId();
-        if (tenantIdPattern == null) {
-            if (tenantId != null) {
-                appendConjunction(buf);
-                buf.append(" (" + TENANT_ID + " IS NULL " +
-                        " OR " + TENANT_ID + " = ?) ");
-                parameterValues.add(tenantId.getString());
-            }
-        } else if (tenantIdPattern.length() == 0) {
-                appendConjunction(buf);
-                buf.append(TENANT_ID + " IS NULL ");
-        } else {
-            appendConjunction(buf);
-            buf.append(" TENANT_ID LIKE ? ");
-            parameterValues.add(tenantIdPattern);
-            if (tenantId != null) {
-                buf.append(" and TENANT_ID = ? ");
-                parameterValues.add(tenantId.getString());
-            }
-        }
-    }
 
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
@@ -814,110 +772,120 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 // add one cell for each column info
                 List<Cell> cells = Lists.newArrayListWithCapacity(25);
                 // DATA_TYPE
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    DATA_TYPE_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
                 // TYPE_NAME
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     column.getDataType().getSqlTypeNameBytes()));
                 // COLUMN_SIZE
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         column.getMaxLength() != null
                                 ? PInteger.INSTANCE.toBytes(column.getMaxLength())
                                 : ByteUtil.EMPTY_BYTE_ARRAY));
                 // BUFFER_LENGTH
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(BUFFER_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // DECIMAL_DIGITS
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    DECIMAL_DIGITS_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     column.getScale() != null ? PInteger.INSTANCE.toBytes(column.getScale())
                             : ByteUtil.EMPTY_BYTE_ARRAY));
                 // NUM_PREC_RADIX
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(NUM_PREC_RADIX), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // NULLABLE
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, NULLABLE_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    NULLABLE_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     PInteger.INSTANCE.toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
                 // REMARKS
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(REMARKS),
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                        Bytes.toBytes(REMARKS),
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 // COLUMN_DEF
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(COLUMN_DEF),
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                        Bytes.toBytes(COLUMN_DEF),
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 // SQL_DATA_TYPE
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // SQL_DATETIME_SUB
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SQL_DATETIME_SUB), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // CHAR_OCTET_LENGTH
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(CHAR_OCTET_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // ORDINAL_POSITION
                 int ordinal =
                         column.getPosition() + (isSalted ? 0 : 1) - (tenantColSkipped ? 1 : 0);
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES,
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                        ORDINAL_POSITION_BYTES,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(ordinal)));
                 String isNullable =
                         column.isNullable() ? Boolean.TRUE.toString() : Boolean.FALSE.toString();
                 // IS_NULLABLE
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(IS_NULLABLE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     PVarchar.INSTANCE.toBytes(isNullable)));
                 // SCOPE_CATALOG
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SCOPE_CATALOG), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // SCOPE_SCHEMA
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SCOPE_SCHEMA), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // SCOPE_TABLE
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_TABLE),
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                        Bytes.toBytes(SCOPE_TABLE),
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
                 // SOURCE_DATA_TYPE
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SOURCE_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // IS_AUTOINCREMENT
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(IS_AUTOINCREMENT), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     ByteUtil.EMPTY_BYTE_ARRAY));
                 // ARRAY_SIZE
                 cells.add(
-                    new KeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
+                    PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                         column.getArraySize() != null
                                 ? PInteger.INSTANCE.toBytes(column.getArraySize())
                                 : ByteUtil.EMPTY_BYTE_ARRAY));
                 // COLUMN_FAMILY
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    COLUMN_FAMILY_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getFamilyName() != null
                             ? column.getFamilyName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
                 // TYPE_ID
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
                 // VIEW_CONSTANT
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    VIEW_CONSTANT_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant() != null
                             ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY));
                 // MULTI_TENANT
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                    MULTI_TENANT_BYTES,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                     PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
                 // KEY_SEQ_COLUMN
@@ -927,7 +895,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     short keySeq = (short) (pkPos + 1 - startOffset - (tenantColSkipped ? 1 : 0));
                     keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
                 }
-                cells.add(new KeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
+                cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
                         MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
                 Collections.sort(cells, new CellComparatorImpl());
                 Tuple tuple = new MultiKeyValueTuple(cells);
@@ -1031,49 +999,13 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
 
     @Override
-    public ResultSet getIndexInfo(String catalog, String schema, String table, boolean unique, boolean approximate)
-            throws SQLException {
-        if (unique) { // No unique indexes
-            return emptyResultSet;
-        }
-        List<String> parameterValues = new ArrayList<String>(4);
-        StringBuilder buf = new StringBuilder("select \n" +
-                TENANT_ID + " " + TABLE_CAT + ",\n" + // use this column for column family name
-                TABLE_SCHEM + ",\n" +
-                DATA_TABLE_NAME + " " + TABLE_NAME + ",\n" +
-                "true NON_UNIQUE,\n" +
-                "null INDEX_QUALIFIER,\n" +
-                TABLE_NAME + " INDEX_NAME,\n" +
-                DatabaseMetaData.tableIndexOther + " TYPE,\n" +
-                ORDINAL_POSITION + ",\n" +
-                COLUMN_NAME + ",\n" +
-                "CASE WHEN " + COLUMN_FAMILY + " IS NOT NULL THEN null WHEN " + SORT_ORDER + " = " + (SortOrder.DESC.getSystemValue()) + " THEN 'D' ELSE 'A' END ASC_OR_DESC,\n" +
-                "null CARDINALITY,\n" +
-                "null PAGES,\n" +
-                "null FILTER_CONDITION,\n" +
-                // Include data type info, though not in spec
-                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + ",\n" +
-                SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + ",\n" +
-                DATA_TYPE + " " + TYPE_ID + ",\n" +
-                COLUMN_FAMILY + ",\n" +
-                COLUMN_SIZE + ",\n" +
-                ARRAY_SIZE +
-                "\nfrom " + SYSTEM_CATALOG +
-                "\nwhere ");
-        buf.append(TABLE_SCHEM + (schema == null || schema.length() == 0 ? " is null" : " = ?" ));
-        if(schema != null && schema.length() > 0) {
-            parameterValues.add(schema);
-        }
-        buf.append("\nand " + DATA_TABLE_NAME + " = ?" );
-        parameterValues.add(table);
-        buf.append("\nand " + COLUMN_NAME + " is not null" );
-        addTenantIdFilter(buf, catalog, parameterValues);
-        buf.append("\norder by INDEX_NAME," + ORDINAL_POSITION);
-        PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        setParameters(stmt, parameterValues);
+    public ResultSet getIndexInfo(String catalog, String schema, String table, boolean unique,
+        boolean approximate) throws SQLException {
+        PreparedStatement stmt = QueryUtil.getIndexInfoStmt(connection, catalog, schema, table,
+            unique, approximate);
+        if (stmt == null) return emptyResultSet;
         return stmt.executeQuery();
     }
-
 
     @Override
     public int getJDBCMajorVersion() throws SQLException {
@@ -1330,26 +1262,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public ResultSet getSchemas(String catalog, String schemaPattern) throws SQLException {
-        List<String> parameterValues = new ArrayList<String>(4);
-        StringBuilder buf = new StringBuilder("select distinct \n" +
-                TABLE_SCHEM + "," +
-                TENANT_ID + " " + TABLE_CATALOG +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
-                " where " + COLUMN_NAME + " is null");
-        addTenantIdFilter(buf, catalog, parameterValues);
-        if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + " like ?");
-            parameterValues.add(schemaPattern);
-        }
-        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
-            buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
-        }
-
-        // TODO: we should union this with SYSTEM.SEQUENCE too, but we only have support for
-        // UNION ALL and we really need UNION so that it dedups.
-
-        PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        setParameters(stmt, parameterValues);
+        PreparedStatement stmt = QueryUtil.getSchemasStmt(connection, catalog, schemaPattern);
         return stmt.executeQuery();
     }
 
@@ -1365,30 +1278,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     // TODO does this need to change to use the PARENT_TABLE link
-    public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException {
-        List<String> parameterValues = new ArrayList<String>(4);
-        StringBuilder buf = new StringBuilder("select \n" +
-                TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
-                TABLE_SCHEM + "," +
-                TABLE_NAME + "," +
-                COLUMN_FAMILY + " " + SUPERTABLE_NAME +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
-                " where " + COLUMN_NAME + " is null" +
-                " and " + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue());
-        addTenantIdFilter(buf, catalog, parameterValues);
-        if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-            if(schemaPattern.length() > 0) {
-                parameterValues.add(schemaPattern);
-            }
-        }
-        if (tableNamePattern != null) {
-            buf.append(" and " + TABLE_NAME + " like ?" );
-            parameterValues.add(tableNamePattern);
-        }
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," +TABLE_NAME + "," + SUPERTABLE_NAME);
-        PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        setParameters(stmt, parameterValues);
+    public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern)
+        throws SQLException {
+        PreparedStatement stmt = QueryUtil.getSuperTablesStmt(connection, catalog, schemaPattern,
+            tableNamePattern);
         return stmt.executeQuery();
     }
 
@@ -1458,129 +1351,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
 
     @Override
-    public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String[] types)
-            throws SQLException {
-        boolean isSequence = false;
-        boolean hasTableTypes = types != null && types.length > 0;
-        StringBuilder typeClauseBuf = new StringBuilder();
-        List<String> parameterValues = new ArrayList<String>(4);
-        if (hasTableTypes) {
-            List<String> tableTypes = Lists.newArrayList(types);
-            isSequence = tableTypes.remove(SEQUENCE_TABLE_TYPE);
-            StringBuilder typeBuf = new StringBuilder();
-            for (String type : tableTypes) {
-                try {
-                    PTableType tableType = PTableType.fromValue(type);
-                    typeBuf.append('\'');
-                    typeBuf.append(tableType.getSerializedValue());
-                    typeBuf.append('\'');
-                    typeBuf.append(',');
-                } catch (IllegalArgumentException e) {
-                    // Ignore and continue
-                }
-            }
-            if (typeBuf.length() > 0) {
-                typeClauseBuf.append(" and " + TABLE_TYPE + " IN (");
-                typeClauseBuf.append(typeBuf);
-                typeClauseBuf.setCharAt(typeClauseBuf.length()-1, ')');
-            }
-        }
-        StringBuilder buf = new StringBuilder("select \n");
-        // If there were table types specified and they were all filtered out
-        // and we're not querying for sequences, return an empty result set.
-        if (hasTableTypes && typeClauseBuf.length() == 0 && !isSequence) {
-            return this.emptyResultSet;
-        }
-        if (typeClauseBuf.length() > 0 || !isSequence) {
-            buf.append(
-                    TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
-                    TABLE_SCHEM + "," +
-                    TABLE_NAME + " ," +
-                    SQLTableTypeFunction.NAME + "(" + TABLE_TYPE + ") AS " + TABLE_TYPE + "," +
-                    REMARKS + " ," +
-                    TYPE_NAME + "," +
-                    SELF_REFERENCING_COL_NAME + "," +
-                    REF_GENERATION + "," +
-                    IndexStateNameFunction.NAME + "(" + INDEX_STATE + ") AS " + INDEX_STATE + "," +
-                     IMMUTABLE_ROWS + "," +
-                    SALT_BUCKETS + "," +
-                    MULTI_TENANT + "," +
-                    VIEW_STATEMENT + "," +
-                    SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
-                    SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
-                    TRANSACTION_PROVIDER + " IS NOT NULL AS " + TRANSACTIONAL + "," +
-                    IS_NAMESPACE_MAPPED + "," +
-                    GUIDE_POSTS_WIDTH + "," +
-                    TransactionProviderNameFunction.NAME + "(" + TRANSACTION_PROVIDER + ") AS TRANSACTION_PROVIDER" +
-                    " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
-                    " where " + COLUMN_NAME + " is null" +
-                    " and " + COLUMN_FAMILY + " is null" +
-                    " and " + TABLE_NAME + " != '" + MetaDataClient.EMPTY_TABLE + "'");
-            addTenantIdFilter(buf, catalog, parameterValues);
-            if (schemaPattern != null) {
-                buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-                if(schemaPattern.length() > 0) {
-                    parameterValues.add(schemaPattern);
-                }
-            }
-            if (tableNamePattern != null) {
-                buf.append(" and " + TABLE_NAME + " like ?" );
-                parameterValues.add(tableNamePattern);
-            }
-            if (typeClauseBuf.length() > 0) {
-                buf.append(typeClauseBuf);
-            }
-        }
-        if (isSequence) {
-            // Union the SYSTEM.CATALOG entries with the SYSTEM.SEQUENCE entries
-            if (typeClauseBuf.length() > 0) {
-                buf.append(" UNION ALL\n");
-                buf.append(" select\n");
-            }
-            buf.append(
-                    TENANT_ID + " " + TABLE_CAT + "," + // tenant_id is the catalog
-                    SEQUENCE_SCHEMA + " " + TABLE_SCHEM + "," +
-                    SEQUENCE_NAME + " " + TABLE_NAME + " ," +
-                    "'" + SEQUENCE_TABLE_TYPE + "' " + TABLE_TYPE + "," +
-                    "'' " + REMARKS + " ," +
-                    "'' " + TYPE_NAME + "," +
-                    "'' " + SELF_REFERENCING_COL_NAME + "," +
-                    "'' " + REF_GENERATION + "," +
-                    "CAST(null AS CHAR(1)) " + INDEX_STATE + "," +
-                    "CAST(null AS BOOLEAN) " + IMMUTABLE_ROWS + "," +
-                    "CAST(null AS INTEGER) " + SALT_BUCKETS + "," +
-                    "CAST(null AS BOOLEAN) " + MULTI_TENANT + "," +
-                    "'' " + VIEW_STATEMENT + "," +
-                    "'' " + VIEW_TYPE + "," +
-                    "'' " + INDEX_TYPE + "," +
-                    "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
-                    "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
-                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "," +
-                    "CAST(null AS VARCHAR) " + TRANSACTION_PROVIDER + "\n");
-            buf.append(
-                    " from " + SYSTEM_SEQUENCE + "\n");
-            StringBuilder whereClause = new StringBuilder();
-            addTenantIdFilter(whereClause, catalog, parameterValues);
-            if (schemaPattern != null) {
-                appendConjunction(whereClause);
-                whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
-                if(schemaPattern.length() > 0) {
-                    parameterValues.add(schemaPattern);
-                }
-            }
-            if (tableNamePattern != null) {
-                appendConjunction(whereClause);
-                whereClause.append(SEQUENCE_NAME + " like ?\n" );
-                parameterValues.add(tableNamePattern);
-            }
-            if (whereClause.length() > 0) {
-                buf.append(" where\n");
-                buf.append(whereClause);
-            }
-        }
-        buf.append(" order by 4, 1, 2, 3\n");
-        PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        setParameters(stmt, parameterValues);
+    public ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern,
+        String[] types) throws SQLException {
+        PreparedStatement stmt = QueryUtil.getTablesStmt(connection, catalog, schemaPattern,
+            tableNamePattern, types);
+        if (stmt == null) return emptyResultSet;
         return stmt.executeQuery();
     }
 
@@ -2104,7 +1879,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     private void setParameters(PreparedStatement stmt, List<String> parameterValues)
             throws SQLException {
-        for(int i = 0; i < parameterValues.size(); i++) {
+        for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
     }

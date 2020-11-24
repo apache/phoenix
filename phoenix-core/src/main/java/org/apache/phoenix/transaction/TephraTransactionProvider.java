@@ -40,14 +40,14 @@ import org.apache.tephra.metrics.TxMetricsCollector;
 import org.apache.tephra.persist.HDFSTransactionStateStorage;
 import org.apache.tephra.snapshot.SnapshotCodecProvider;
 import org.apache.tephra.zookeeper.TephraZKClientService;
-import org.apache.twill.discovery.DiscoveryService;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.RetryStrategies;
-import org.apache.twill.zookeeper.ZKClientService;
-import org.apache.twill.zookeeper.ZKClientServices;
-import org.apache.twill.zookeeper.ZKClients;
+import org.apache.tephra.shaded.org.apache.twill.discovery.DiscoveryService;
+import org.apache.tephra.shaded.org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.tephra.shaded.org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.tephra.shaded.org.apache.twill.zookeeper.ZKClientService;
+import org.apache.tephra.shaded.org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.tephra.shaded.org.apache.twill.zookeeper.ZKClients;
 
-import com.google.common.collect.ArrayListMultimap;
+import org.apache.tephra.shaded.com.google.common.collect.ArrayListMultimap;
 import com.google.inject.util.Providers;
 
 public class TephraTransactionProvider implements PhoenixTransactionProvider {

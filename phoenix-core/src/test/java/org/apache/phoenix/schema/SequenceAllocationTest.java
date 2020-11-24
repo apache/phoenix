@@ -25,7 +25,7 @@ import java.util.List;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class SequenceAllocationTest {
 

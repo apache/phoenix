@@ -28,7 +28,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 
 /**
  * Fixed length single byte characters
@@ -73,7 +73,7 @@ public class PChar extends PDataType<String> {
         return object;
       }
       if (s.length() > maxLength) {
-        throw new DataExceedsCapacityException(this,maxLength,null);
+        throw new DataExceedsCapacityException(this, maxLength, null, null);
       }
       return Strings.padEnd(s, maxLength, ' ');
     }

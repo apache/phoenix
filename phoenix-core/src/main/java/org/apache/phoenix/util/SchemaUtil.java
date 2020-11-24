@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -93,11 +93,11 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * 
@@ -272,6 +272,12 @@ public class SchemaUtil {
         l3.addAll(l1);
         l3.addAll(l2);
         return l3;
+    }
+
+    public static byte[] getTableKey(PTable dataTable) {
+        PName tenantId = dataTable.getTenantId();
+        PName schemaName = dataTable.getSchemaName();
+        return getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName.getBytes(), dataTable.getTableName().getBytes());
     }
 
     /**
@@ -1051,12 +1057,6 @@ public class SchemaUtil {
     	return table.getRowTimestampColPos()>0;
     }
 
-    public static byte[] getTableKey(PTable dataTable) {
-        PName tenantId = dataTable.getTenantId();
-        PName schemaName = dataTable.getSchemaName();
-        return getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName.getBytes(), dataTable.getTableName().getBytes());
-    }
-
     public static byte[] getSchemaKey(String schemaName) {
         return SchemaUtil.getTableKey(null, schemaName, MetaDataClient.EMPTY_TABLE);
     }
@@ -1174,7 +1174,8 @@ public class SchemaUtil {
             if (ptr.getLength() < maxLength) {
                 type.pad(ptr, maxLength, column.getSortOrder());
             } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(tableName + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
+                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                        column.getScale(), column.getName().getString());
             }
         }
     }
@@ -1210,5 +1211,14 @@ public class SchemaUtil {
      */
     public static String getNormalizedColumnName(ColumnParseNode columnParseNode) {
         return columnParseNode.getName();
+    }
+
+
+    public static String getPTableFullNameWithQuotes(String pSchemaName, String pTableName) {
+        String pTableFullName = getQualifiedTableName(pSchemaName, pTableName);
+        if(!(Character.isAlphabetic(pTableName.charAt(0)))) {
+            pTableFullName = pSchemaName+".\""+pTableName+"\"";
+        }
+        return pTableFullName;
     }
 }

@@ -1635,6 +1635,9 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
             allowServerSideMutations);
         String t1 = generateUniqueName();
+        String validValue = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉";
+        String invalidValue = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉";
+        String columnTypeInfo = "VARCHAR(20)";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement()) {
@@ -1654,7 +1657,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("upsert into " + t1 + " (id, v) select id, "
-                    + "'澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉' from " + t1 + " WHERE id = 1");
+                    + "'" + validValue + "' from " + t1 + " WHERE id = 1");
             conn.commit();
         }
 
@@ -1665,18 +1668,19 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
             assertTrue(rs.next());
             assertEquals(1, rs.getLong(1));
-            assertEquals("澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉", rs.getString(2));
+            assertEquals(validValue, rs.getString(2));
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("upsert into  " + t1 + " (id, v) select id, "
-                    + "'澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉' from " + t1 + " WHERE id = 1");
+                    + "'" + invalidValue + "' from " + t1 + " WHERE id = 1");
             conn.commit();
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().contains(columnTypeInfo));
         }
     }
 

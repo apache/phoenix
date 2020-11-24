@@ -26,13 +26,20 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.junit.Test;
 
 public class PhoenixEmbeddedDriverTest {
     @Test
     public void testGetConnectionInfo() throws SQLException {
+        Configuration config =
+                HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        String defaultQuorum = config.get(HConstants.ZOOKEEPER_QUORUM);
+
         String[] urls = new String[] {
             null,
             "",
@@ -73,9 +80,9 @@ public class PhoenixEmbeddedDriverTest {
             "jdbc:phoenix:v1,v2,v3:345:/hbase:user1:C:\\Documents and Settings\\user1\\user1.keytab;test=false",
         };
         ConnectionInfo[] infos = new ConnectionInfo[] {
-            new ConnectionInfo("localhost",2181,"/hbase"),
-            new ConnectionInfo("localhost",2181,"/hbase"),
-            new ConnectionInfo("localhost",2181,"/hbase"),
+            new ConnectionInfo(defaultQuorum, 2181, "/hbase"),
+            new ConnectionInfo(defaultQuorum, 2181, "/hbase"),
+            new ConnectionInfo(defaultQuorum, 2181, "/hbase"),
             new ConnectionInfo(null,null,null),
             new ConnectionInfo("localhost",null,null),
             new ConnectionInfo("localhost",null,null),

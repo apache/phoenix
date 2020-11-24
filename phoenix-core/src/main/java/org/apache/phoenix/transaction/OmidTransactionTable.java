@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.omid.transaction.TTable;
 import org.apache.omid.transaction.Transaction;
+import org.apache.phoenix.compat.hbase.CompatOmidTransactionTable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
@@ -55,7 +56,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 
-public class OmidTransactionTable implements Table {
+public class OmidTransactionTable extends CompatOmidTransactionTable implements Table {
     // Copied from HBase ProtobufUtil since it's not accessible
     final static Result EMPTY_RESULT_EXISTS_TRUE = Result.create(null, true);
 
@@ -375,4 +376,5 @@ public class OmidTransactionTable implements Table {
     public long getOperationTimeout(TimeUnit unit) {
         throw new UnsupportedOperationException();
     }
+
 }
