@@ -307,7 +307,7 @@ public class SelectStatement implements FilterableStatement {
     }
     
     /**
-     * Gets the group-by, containing at least 1 element, or null, if none.
+     * Gets the group-by, containing at least 1 element, or empty list, if none.
      */
     public List<ParseNode> getGroupBy() {
         return groupBy;

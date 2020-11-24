@@ -36,6 +36,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,6 +81,7 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -104,6 +106,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -125,6 +128,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
         value="RV_RETURN_VALUE_IGNORED",
         justification="Test code.")
 public class QueryCompilerTest extends BaseConnectionlessQueryTest {
+
+    @Before
+    public void setUp() {
+        ParseNodeFactory.setTempAliasCounterValue(0);
+    }
 
     @Test
     public void testParameterUnbound() throws Exception {
@@ -6471,6 +6479,127 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             rhsPlan = (ScanPlan)((TupleProjectionPlan)sortMergeJoinPlan.getRhsPlan()).getDelegate();
             TestUtil.assertSelectStatement(rhsPlan.getStatement(),
                    "SELECT ENTITY_ID ID,A_STRING A,B_STRING B,A_BYTE X FROM TESTA  WHERE A_BYTE != 5 ORDER BY B_STRING");
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testInSubqueryBug6224() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String itemTableName = "item_table";
+            String sql ="create table " + itemTableName +
+                "   (item_id varchar not null primary key, " +
+                "    name varchar, " +
+                "    price integer, " +
+                "    discount1 integer, " +
+                "    discount2 integer, " +
+                "    supplier_id varchar, " +
+                "    description varchar)";
+            conn.createStatement().execute(sql);
+
+            String orderTableName = "order_table";
+            sql = "create table " + orderTableName +
+                "   (order_id varchar not null primary key, " +
+                "    customer_id varchar, " +
+                "    item_id varchar, " +
+                "    price integer, " +
+                "    quantity integer, " +
+                "    date timestamp)";
+            conn.createStatement().execute(sql);
+            //test simple Correlated subquery
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT item_id FROM " + orderTableName + " o  where o.price = i.price) ORDER BY name";
+            QueryPlan queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN (SELECT DISTINCT 1 $3,ITEM_ID $4,O.PRICE $2 FROM ORDER_TABLE O ) $1 "+
+                    "ON ((I.ITEM_ID = $1.$4 AND $1.$2 = I.PRICE)) ORDER BY NAME");
+
+            //test Correlated subquery with AggregateFunction but no groupBy
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price = i.price) ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                   "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN "+
+                   "(SELECT DISTINCT 1 $11, MAX(ITEM_ID) $12,O.PRICE $10 FROM ORDER_TABLE O  GROUP BY O.PRICE) $9 "+
+                   "ON ((I.ITEM_ID = $9.$12 AND $9.$10 = I.PRICE)) ORDER BY NAME");
+
+            //test Correlated subquery with AggregateFunction with groupBy
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price = i.price group by o.customer_id) ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN "+
+                    "(SELECT DISTINCT 1 $19, MAX(ITEM_ID) $20,O.PRICE $18 FROM ORDER_TABLE O  GROUP BY O.PRICE,O.CUSTOMER_ID) $17 "+
+                    "ON ((I.ITEM_ID = $17.$20 AND $17.$18 = I.PRICE)) ORDER BY NAME");
+
+            //for Correlated subquery, the extracted join condition must be equal expression.
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price = i.price or o.quantity > 1 group by o.customer_id) ORDER BY name";
+            try {
+                queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+                fail();
+            } catch(SQLFeatureNotSupportedException exception) {
+
+            }
+
+          //test Correlated subquery with AggregateFunction with groupBy and is ORed part of the where clause.
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price = i.price group by o.customer_id) or i.discount1 > 10 ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Left JOIN "+
+                    "(SELECT DISTINCT 1 $28, MAX(ITEM_ID) $29,O.PRICE $27 FROM ORDER_TABLE O  GROUP BY O.PRICE,O.CUSTOMER_ID) $26 "+
+                    "ON ((I.ITEM_ID = $26.$29 AND $26.$27 = I.PRICE)) WHERE ($26.$28 IS NOT NULL  OR I.DISCOUNT1 > 10) ORDER BY NAME");
+
+            // test NonCorrelated subquery
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT item_id FROM " + orderTableName + " o  where o.price > 8) ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN "+
+                    "(SELECT DISTINCT 1 $35,ITEM_ID $36 FROM ORDER_TABLE O  WHERE O.PRICE > 8) $34 ON (I.ITEM_ID = $34.$36) ORDER BY NAME");
+
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price > 8) ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN "+
+                    "(SELECT DISTINCT 1 $42, MAX(ITEM_ID) $43 FROM ORDER_TABLE O  WHERE O.PRICE > 8) $41 ON (I.ITEM_ID = $41.$43) ORDER BY NAME");
+
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price > 8 group by o.customer_id,o.item_id) ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Semi JOIN "+
+                    "(SELECT DISTINCT 1 $49, MAX(ITEM_ID) $50 FROM ORDER_TABLE O  WHERE O.PRICE > 8 GROUP BY O.CUSTOMER_ID,O.ITEM_ID) $48 "+
+                    "ON (I.ITEM_ID = $48.$50) ORDER BY NAME");
+
+            sql= "SELECT item_id, name FROM " + itemTableName + " i WHERE i.item_id IN "+
+                    "(SELECT max(item_id) FROM " + orderTableName + " o  where o.price > 8 group by o.customer_id,o.item_id) or i.discount1 > 10 ORDER BY name";
+            queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            TestUtil.assertSelectStatement(
+                    queryPlan.getStatement(),
+                    "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Left JOIN "+
+                    "(SELECT DISTINCT 1 $56, MAX(ITEM_ID) $57 FROM ORDER_TABLE O  WHERE O.PRICE > 8 GROUP BY O.CUSTOMER_ID,O.ITEM_ID) $55 "+
+                    "ON (I.ITEM_ID = $55.$57) WHERE ($55.$56 IS NOT NULL  OR I.DISCOUNT1 > 10) ORDER BY NAME");
         } finally {
             conn.close();
         }

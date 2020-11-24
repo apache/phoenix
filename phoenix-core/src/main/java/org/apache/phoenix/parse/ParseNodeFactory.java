@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
@@ -198,6 +199,16 @@ public class ParseNodeFactory {
     }
     
     private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
+
+    @VisibleForTesting
+    public static int getTempAliasCounterValue() {
+        return tempAliasCounter.get();
+    }
+
+    @VisibleForTesting
+    public static void setTempAliasCounterValue(int newValue) {
+        tempAliasCounter.set(newValue);
+    }
     
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();

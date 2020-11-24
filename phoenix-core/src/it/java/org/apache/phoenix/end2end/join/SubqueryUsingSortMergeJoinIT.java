@@ -493,6 +493,112 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
     }
     
     @Test
+    public void testCorrelatedInSubqueryBug6224() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        try {
+            String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", name FROM " +
+                           tableName4 + " o JOIN " + tableName1 +
+                           " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity in (SELECT max(quantity) FROM " + tableName4 +
+                           " q WHERE o.\"item_id\" = q.\"item_id\") order by \"order_id\"";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertFalse(rs.next());
+
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ name from " + tableName3 +
+                    " WHERE \"customer_id\" IN "+
+                    "(SELECT \"customer_id\" FROM " + tableName1 + " i JOIN " + tableName4 +
+                      " o ON o.\"item_id\" = i.\"item_id\" WHERE i.name = 'T2' OR quantity in (SELECT max(quantity) FROM " + tableName4 +
+                      " q WHERE o.\"item_id\" = q.\"item_id\" and q.\"item_id\" = '0000000006')) order by name";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C4");
+            assertFalse(rs.next());
+
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT quantity FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004') order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT quantity FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003') order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT max(quantity) FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004' GROUP BY \"order_id\") order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+
+            assertFalse(rs.next());
+
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT max(quantity) FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\") order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testAnyAllComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
