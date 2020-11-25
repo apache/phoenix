@@ -18,8 +18,9 @@
 package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.phoenix.schema.SortOrder;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 
@@ -27,22 +28,9 @@ public final class ViewIndexIdRetrieveUtil {
     public static final int VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN = 9;
     public static final int VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN = 3;
     public static final int NULL_DATA_TYPE_VALUE = 0;
-    public static final byte SYSCATA_COPROC_IGNORE_BYTE = 1;
-    public static final String SYSCATA_COPROC_IGNORE_TAG = "SYSCATA_COPROC_IGNORE_TAG";
 
     private ViewIndexIdRetrieveUtil() {
 
-    }
-
-    public static Cell getViewIndexIdKeyValueInLongDataFormat(Cell viewIndexIdCell) {
-        Short valueInShort = (Short) PSmallint.INSTANCE.toObject(
-                viewIndexIdCell.getValueArray(), viewIndexIdCell.getValueOffset(),
-                viewIndexIdCell.getValueLength(), PSmallint.INSTANCE, SortOrder.ASC);
-        byte[] valueBytesInLong = new byte[VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN];
-        byte[] valueBytes = PLong.INSTANCE.toBytes(valueInShort);
-        System.arraycopy(valueBytes, 0, valueBytesInLong,
-                0, VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN - 1);
-        return buildNewCell(viewIndexIdCell, valueBytesInLong);
     }
 
     public static Cell buildNewCell(Cell viewIndexIdCell, byte[] newVal) {
@@ -59,15 +47,20 @@ public final class ViewIndexIdRetrieveUtil {
         return keyValue;
     }
 
-    public static Cell getViewIndexIdKeyValueInShortDataFormat(Cell viewIndexIdCell) {
-        Long valueInShort = (Long) PLong.INSTANCE.toObject(
-                viewIndexIdCell.getValueArray(), viewIndexIdCell.getValueOffset(),
-                viewIndexIdCell.getValueLength(), PLong.INSTANCE, SortOrder.ASC);
-        byte[] valueBytesInShort = new byte[VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN];
-        byte[] valueBytes = PSmallint.INSTANCE.toBytes(valueInShort);
-        System.arraycopy(valueBytes, 0, valueBytesInShort,
-                0, VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN - 1);
+    public static Cell getRetrievedViewIndexIdCell(Cell viewIndexIdCell, boolean isShortToLong) {
 
-        return buildNewCell(viewIndexIdCell, valueBytesInShort);
+        ImmutableBytesWritable columnValue =
+                new ImmutableBytesWritable(CellUtil.cloneValue(viewIndexIdCell));
+        ImmutableBytesWritable newValue = new ImmutableBytesWritable();
+
+        byte[] newBytes;
+
+        if (isShortToLong) {
+            newBytes = PLong.INSTANCE.toBytes(PSmallint.INSTANCE.toObject(columnValue.get()));
+        } else {
+            newBytes = PSmallint.INSTANCE.toBytes(PLong.INSTANCE.toObject(columnValue.get()));
+        }
+        newValue.set(newBytes);
+        return buildNewCell(viewIndexIdCell, newValue.get());
     }
 }

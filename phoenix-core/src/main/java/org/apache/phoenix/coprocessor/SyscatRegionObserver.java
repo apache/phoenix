@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.filter.SyscatViewIndexIdFilter;
+import org.apache.phoenix.filter.SystemCatalogViewIndexIdFilter;
 import org.apache.phoenix.util.ScanUtil;
 
 import java.io.IOException;
@@ -46,8 +46,13 @@ public class SyscatRegionObserver extends BaseRegionObserver {
     public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan,
                                         RegionScanner s) throws IOException {
         int clientVersion = ScanUtil.getClientVersion(scan);
+        /*
+            ScanUtil.getClientVersion returns UNKNOWN_CLIENT_VERSION if the phoenix client version
+            didn't set. We only want to retrieve the data based on the client version, and we don't
+            want to change the behavior other than Phoenix env.
+         */
         if (clientVersion != UNKNOWN_CLIENT_VERSION) {
-            ScanUtil.andFilterAtBeginning(scan, new SyscatViewIndexIdFilter(clientVersion));
+            ScanUtil.andFilterAtBeginning(scan, new SystemCatalogViewIndexIdFilter(clientVersion));
         }
         return s;
     }

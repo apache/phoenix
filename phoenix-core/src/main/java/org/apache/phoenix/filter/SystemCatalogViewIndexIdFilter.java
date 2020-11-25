@@ -44,13 +44,13 @@ import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VAL
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN;
 import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN;
 
-public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
+public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writable {
     private int clientVersion;
 
-    public SyscatViewIndexIdFilter() {
+    public SystemCatalogViewIndexIdFilter() {
     }
 
-    public SyscatViewIndexIdFilter(int clientVersion) {
+    public SystemCatalogViewIndexIdFilter(int clientVersion) {
         this.clientVersion = clientVersion;
     }
 
@@ -70,6 +70,17 @@ public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
                 GenericKeyValueBuilder.INSTANCE, kvs,
                 DEFAULT_COLUMN_FAMILY_BYTES, VIEW_INDEX_ID_BYTES);
 
+        /*
+            We retrieve the VIEW_INDEX_ID cell from SMALLINT to BIGINT or BIGINT to SMALLINT if and
+            only if VIEW_INDEX_ID is included as part of the projected column.
+
+            This is combination of diff client created view index looks like:
+
+            client                  VIEW_INDEX_ID(Cell number of bytes)     VIEW_INDEX_ID_DATA_TYPE
+        pre-4.14                        2 bytes                                     NULL
+        post-4.15[config smallint]      2 bytes                                     5(smallint)
+        post-4.15[config bigint]        8 bytes                                     -5(bigint)
+         */
         if (viewIndexIdCell != null) {
             int type = NULL_DATA_TYPE_VALUE;
             Cell viewIndexIdDataTypeCell = KeyValueUtil.getColumnLatest(
@@ -84,29 +95,47 @@ public class SyscatViewIndexIdFilter extends FilterBase implements Writable {
                         SortOrder.ASC);
             }
             if (this.clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-                // pre-splittable client should always using SMALLINT
+                /*
+                    For pre-4.15 client select query cannot include VIEW_INDEX_ID_DATA_TYPE as part
+                    of the projected columns; for this reason, the TYPE will always be NULL. Since
+                    the pre-4.15 client always assume the VIEW_INDEX_ID column is type of SMALLINT,
+                    we need to retrieve the BIGINT cell to SMALLINT cell.
+
+                    VIEW_INDEX_ID_DATA_TYPE,      VIEW_INDEX_ID(Cell representation of the data)
+                        NULL,                         SMALLINT         -> DO NOT RETRIEVE
+                        SMALLINT,                     SMALLINT         -> DO NOT RETRIEVE
+                        BIGINT,                       BIGINT           -> RETRIEVE AND SEND SMALLINT BACK
+                 */
                 if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
                         VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN) {
                     Cell keyValue = ViewIndexIdRetrieveUtil.
-                            getViewIndexIdKeyValueInShortDataFormat(viewIndexIdCell);
+                            getRetrievedViewIndexIdCell(viewIndexIdCell, false);
                     Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
                 }
             } else {
-                // post-splittable client should always using BIGINT
+                /*
+                    For post-4.15 client select query needs to include VIEW_INDEX_ID_DATA_TYPE as
+                    part of the projected columns, and VIEW_INDEX_ID depends on it.
+
+                    VIEW_INDEX_ID_DATA_TYPE,      VIEW_INDEX_ID(Cell representation of the data)
+                        NULL,                         SMALLINT         -> RETRIEVE AND SEND BIGINT BACK
+                        SMALLINT,                     SMALLINT         -> RETRIEVE AND SEND BIGINT BACK
+                        BIGINT,                       BIGINT           -> DO NOT RETRIEVE
+                 */
                 if (type != Types.BIGINT && viewIndexIdCell.getValueLength() <
                         VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN) {
                     Cell keyValue = ViewIndexIdRetrieveUtil.
-                            getViewIndexIdKeyValueInLongDataFormat(viewIndexIdCell);
+                            getRetrievedViewIndexIdCell(viewIndexIdCell, true);
                     Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
                 }
             }
         }
     }
 
-    public static SyscatViewIndexIdFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
+    public static SystemCatalogViewIndexIdFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
         try {
-            SyscatViewIndexIdFilter writable = (SyscatViewIndexIdFilter)
-                    Writables.getWritable(pbBytes, new SyscatViewIndexIdFilter());
+            SystemCatalogViewIndexIdFilter writable = (SystemCatalogViewIndexIdFilter)
+                    Writables.getWritable(pbBytes, new SystemCatalogViewIndexIdFilter());
             return writable;
         } catch (IOException e) {
             throw new DeserializationException(e);

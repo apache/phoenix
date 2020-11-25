@@ -43,16 +43,23 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
-    private String ddlForBaseTable = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, ID CHAR(3)" +
+/*
+    After 4.15 release, Phoenix introduced VIEW_INDEX_ID_COLUMN_TYPE and changed VIEW_INDEX_ID data
+    type from SMALLINT to BIGINT. However, SELECT from syscat doesn't have the right view index id
+    because the VIEW_INDEX_ID column always assume the data type is BIGINT. PHOENIX-5712 introduced
+    a coproc that checks the client request version and send it back to the client.
+    For more information, please see PHOENIX-3547, PHOENIX-5712
+ */
+public class ViewIndexIdRetrieveIT extends BaseOwnClusterIT {
+    private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, ID CHAR(3)" +
             " NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))" +
             " MULTI_TENANT = true, COLUMN_ENCODED_BYTES=0 ";
-    private String ddlForView = "CREATE VIEW %s (A BIGINT PRIMARY KEY, B BIGINT)" +
+    private final String VIEW_DDL = "CREATE VIEW %s (A BIGINT PRIMARY KEY, B BIGINT)" +
             " AS SELECT * FROM %s WHERE ID='ABC'";
-    private String ddlForViewIndex =
+    private final String VIEW_INDEX_DDL =
             "CREATE INDEX %s ON %s (B DESC) INCLUDE (NUM)";
-    private String selectAll = "SELECT * FROM SYSTEM.CATALOG";
-    private String selectRow = "SELECT VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE" +
+    private final String SELECT_ALL = "SELECT * FROM SYSTEM.CATALOG";
+    private final String SELECT_ROW = "SELECT VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE" +
             " FROM SYSTEM.CATALOG WHERE TABLE_NAME='%s' AND COLUMN_COUNT IS NOT NULL";
 
     @BeforeClass
@@ -85,12 +92,13 @@ public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
         String viewIndexName = generateUniqueName();
         try (final Connection conn = DriverManager.getConnection(url,props);
              final Statement stmt = conn.createStatement()) {
-            stmt.execute(String.format(ddlForBaseTable, fullTableName));
-            stmt.execute(String.format(ddlForView, viewFullName, fullTableName));
-            stmt.execute(String.format(ddlForViewIndex, viewIndexName, viewFullName));
+            stmt.execute(String.format(BASE_TABLE_DDL, fullTableName));
+            stmt.execute(String.format(VIEW_DDL, viewFullName, fullTableName));
+            stmt.execute(String.format(VIEW_INDEX_DDL, viewIndexName, viewFullName));
 
-            ResultSet rs = stmt.executeQuery(String.format(selectRow, viewIndexName));
+            ResultSet rs = stmt.executeQuery(String.format(SELECT_ROW, viewIndexName));
             rs.next();
+            // even we enabled longViewIndex config, but the sequence always starts at smallest short
             assertEquals(Short.MIN_VALUE,rs.getLong(1));
             assertEquals(expectedDataType, rs.getInt(2));
             assertFalse(rs.next());
@@ -112,11 +120,11 @@ public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
         // view index id data type is long
         try (final Connection conn = DriverManager.getConnection(url,propsForLongType);
              final Statement stmt = conn.createStatement()) {
-            stmt.execute(String.format(ddlForBaseTable, fullTableName));
-            stmt.execute(String.format(ddlForView, viewFullName, fullTableName));
-            stmt.execute(String.format(ddlForViewIndex, viewIndexName1, viewFullName));
+            stmt.execute(String.format(BASE_TABLE_DDL, fullTableName));
+            stmt.execute(String.format(VIEW_DDL, viewFullName, fullTableName));
+            stmt.execute(String.format(VIEW_INDEX_DDL, viewIndexName1, viewFullName));
 
-            ResultSet rs = stmt.executeQuery(String.format(selectRow, viewIndexName1));
+            ResultSet rs = stmt.executeQuery(String.format(SELECT_ROW, viewIndexName1));
             rs.next();
             assertEquals(Short.MIN_VALUE,rs.getLong(1));
             assertEquals(Types.BIGINT, rs.getInt(2));
@@ -129,9 +137,9 @@ public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
         propsForShortType.setProperty(LONG_VIEW_INDEX_ENABLED_ATTRIB, "false");
         try (final Connection conn = DriverManager.getConnection(url,propsForShortType);
              final Statement stmt = conn.createStatement()) {
-            stmt.execute(String.format(ddlForViewIndex, viewIndexName2, viewFullName));
+            stmt.execute(String.format(VIEW_INDEX_DDL, viewIndexName2, viewFullName));
 
-            ResultSet rs = stmt.executeQuery(String.format(selectRow, viewIndexName2));
+            ResultSet rs = stmt.executeQuery(String.format(SELECT_ROW, viewIndexName2));
             rs.next();
             assertEquals(Short.MIN_VALUE + 1,rs.getLong(1));
             assertEquals(Types.SMALLINT, rs.getInt(2));
@@ -141,7 +149,7 @@ public class ViewIndexIdRetrieveIT extends ParallelStatsDisabledIT {
         // check select * from syscat
         try (final Connection conn = DriverManager.getConnection(url);
              final Statement stmt = conn.createStatement()) {
-            ResultSet rs = stmt.executeQuery(String.format(selectAll));
+            ResultSet rs = stmt.executeQuery(String.format(SELECT_ALL));
             boolean checkShort = false;
             boolean checkLong = false;
             while (rs.next()) {
