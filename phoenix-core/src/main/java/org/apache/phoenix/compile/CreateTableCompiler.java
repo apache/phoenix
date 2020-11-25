@@ -56,6 +56,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDatum;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -63,11 +64,11 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 public class CreateTableCompiler {
@@ -164,22 +165,10 @@ public class CreateTableCompiler {
                     }
                 }
             }
-            if (viewTypeToBe == ViewType.MAPPED && parentToBe.getPKColumns().size() == 0) {
-                boolean isPKMissed = true;
-                if (pkConstraint.getColumnNames().size() > 0) {
-                    isPKMissed = false;
-                } else {
-                    for (ColumnDef columnDef: columnDefs) {
-                        if (columnDef.isPK()){
-                            isPKMissed = false;
-                            break;
-                        }
-                    }
-                }
-                if (isPKMissed) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
-                            .build().buildException();
-                }
+            if (viewTypeToBe == ViewType.MAPPED
+                    && parentToBe.getPKColumns().isEmpty()) {
+                validateCreateViewCompilation(connection, parentToBe,
+                    columnDefs, pkConstraint);
             }
         }
         final ViewType viewType = viewTypeToBe;
@@ -211,7 +200,48 @@ public class CreateTableCompiler {
         return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
             viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, connection);
     }
-    
+
+    /**
+     * Validate View creation compilation.
+     * 1. If view creation syntax does not specify primary key, the method
+     * throws SQLException with PRIMARY_KEY_MISSING code.
+     * 2. If parent table does not exist, the method throws TNFE.
+     *
+     * @param connection The client connection
+     * @param parentToBe To be parent for given view
+     * @param columnDefs List of column defs
+     * @param pkConstraint PrimaryKey constraint retrieved from CreateTable
+     *     statement
+     * @throws SQLException If view creation validation fails
+     */
+    private void validateCreateViewCompilation(
+            final PhoenixConnection connection, final PTable parentToBe,
+            final List<ColumnDef> columnDefs,
+            final PrimaryKeyConstraint pkConstraint) throws SQLException {
+        boolean isPKMissed = true;
+        if (pkConstraint.getColumnNames().size() > 0) {
+            isPKMissed = false;
+        } else {
+            for (ColumnDef columnDef : columnDefs) {
+                if (columnDef.isPK()) {
+                    isPKMissed = false;
+                    break;
+                }
+            }
+        }
+        PName fullTableName = SchemaUtil.getPhysicalHBaseTableName(
+            parentToBe.getSchemaName(), parentToBe.getTableName(),
+            parentToBe.isNamespaceMapped());
+        // getTableIfExists will throw TNFE if table does not exist
+        connection.getQueryServices().getTableIfExists(
+            fullTableName.getBytes());
+        if (isPKMissed) {
+            throw new SQLExceptionInfo
+                .Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
+                .build().buildException();
+        }
+    }
+
     public static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
         private final BitSet isColumnReferenced;
         
