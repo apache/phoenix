@@ -47,8 +47,10 @@ public class PhoenixTTLTool extends Configured implements Tool {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTTLTool.class);
 
     public static enum MR_COUNTER_METRICS {
-        FAILED,
-        SUCCEED
+        VIEW_FAILED,
+        VIEW_SUCCEED,
+        VIEW_INDEX_FAILED,
+        VIEW_INDEX_SUCCEED
     }
 
     public static final String DELETE_ALL_VIEWS = "DELETE_ALL_VIEWS";

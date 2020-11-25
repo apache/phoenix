@@ -27,18 +27,17 @@ public class DefaultMultiViewJobStatusTracker implements MultiViewJobStatusTrack
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultMultiViewJobStatusTracker.class);
 
     public void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state,
-                                Configuration config, long duration, String mrJobName,
-                                String sourceTableName) {
+                                Configuration config, long duration, String mrJobName) {
         if (state == ViewInfoJobState.SUCCEEDED.getValue()) {
             LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s, and Source Table Name %s : " +
                             "number of deleted row %d, duration : %d, mr job name : %s.",
-                    view.getViewName(), view.getTenantId(), sourceTableName, numberOfDeletedRows, duration, mrJobName));
+                    view.getViewName(), view.getTenantId(), view.getRelationName(), numberOfDeletedRows, duration, mrJobName));
         } else if (state == ViewInfoJobState.DELETED.getValue()) {
             LOGGER.debug(String.format("View has been deleted, view info : view %s, TenantID %s, and Source Table Name %s : %d," +
-                    " mr job name : %s.", view.getViewName(), view.getTenantId(), sourceTableName, mrJobName));
+                    " mr job name : %s.", view.getViewName(), view.getTenantId(), view.getRelationName(), mrJobName));
         } else {
             LOGGER.debug(String.format("Job is in state %d for view %s, TenantID %s, Source Table Name %s , and duration : %d, " +
-                    "mr job name : %s.", state, view.getViewName(), view.getTenantId(),sourceTableName, duration, mrJobName));
+                    "mr job name : %s.", state, view.getViewName(), view.getTenantId(),view.getRelationName(), duration, mrJobName));
         }
     }
 }

@@ -21,5 +21,5 @@ import org.apache.hadoop.conf.Configuration;
 
 public interface MultiViewJobStatusTracker {
     void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state, Configuration config,
-                         long duration, String mrJobName, String sourceTableName);
+                         long duration, String mrJobName);
 }

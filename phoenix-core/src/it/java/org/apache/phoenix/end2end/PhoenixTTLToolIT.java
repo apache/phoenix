@@ -717,4 +717,14 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
         }
     }
+
+
+    @Test
+    public void testNoViewCase() throws Exception {
+        PhoenixTTLTool phoenixTtlTool = new PhoenixTTLTool();
+        Configuration conf = new Configuration(getUtility().getConfiguration());
+        phoenixTtlTool.setConf(conf);
+        int status = phoenixTtlTool.run(new String[]{"-runfg", "-a"});
+        assertEquals(0, status);
+    }
 }

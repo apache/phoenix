@@ -66,8 +66,8 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
             }
             this.multiViewJobStatusTracker = (MultiViewJobStatusTracker) defaultViewDeletionTrackerClass.newInstance();
         } catch (Exception e) {
-            LOGGER.error("Getting exception While initializing initMultiViewJobStatusTracker with error message");
-            LOGGER.error("stack trace" + e.getStackTrace().toString());
+            LOGGER.error("Getting exception While initializing initMultiViewJobStatusTracker " +
+                    "with error message " + e.getMessage());
             throw e;
         }
     }
@@ -112,39 +112,26 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
         }
     }
 
-    private void deleteExpiredRows(PhoenixConnection connection, ViewInfoTracker viewInfoTracker,
-                                   Configuration config, Context context) throws Exception {
-        try {
-            PTable ptable = PhoenixRuntime.getTable(connection, viewInfoTracker.getViewName());
-            String deleteIfExpiredStatement = "SELECT /*+ NO_INDEX */ count(*) FROM " + viewInfoTracker.getViewName();
-
-            if (viewInfoTracker.isIndexRelation()) {
-                ptable = PhoenixRuntime.getTable(connection, viewInfoTracker.getRelationName());
-                deleteIfExpiredStatement = "SELECT count(*) FROM " + viewInfoTracker.getRelationName();
-            }
-
-            deleteExpiredRows(connection, ptable, deleteIfExpiredStatement, config, context, viewInfoTracker);
-
-        } catch (Exception e) {
-            LOGGER.error(String.format("Had an issue to process the view: %s, " +
-                    "see error %s ", viewInfoTracker.toString(),e.getMessage()));
-        }
-    }
-
     /*
      * Each Mapper that receives a MultiPhoenixViewInputSplit will execute a DeleteMutation/Scan
      *  (With DELETE_TTL_EXPIRED attribute) per view for all the views and view indexes in the split.
      * For each DeleteMutation, it bounded by the view start and stop keys for the region and
      *  TTL attributes and Delete Hint.
      */
-    private boolean deleteExpiredRows(PhoenixConnection connection, PTable pTable,
-                                      String deleteIfExpiredStatement, Configuration config,
-                                      Context context, ViewInfoTracker viewInfoTracker) throws Exception {
-
+    private void deleteExpiredRows(PhoenixConnection connection, ViewInfoTracker viewInfoTracker,
+                                   Configuration config, Context context) throws Exception {
         try (PhoenixStatement pstmt = new PhoenixStatement(connection).unwrap(PhoenixStatement.class)) {
+            PTable pTable = PhoenixRuntime.getTable(connection, viewInfoTracker.getViewName());
+            String deleteIfExpiredStatement = "SELECT /*+ NO_INDEX */ count(*) FROM " + viewInfoTracker.getViewName();
+
+            if (viewInfoTracker.isIndexRelation()) {
+                pTable = PhoenixRuntime.getTable(connection, viewInfoTracker.getRelationName());
+                deleteIfExpiredStatement = "SELECT count(*) FROM " + viewInfoTracker.getRelationName();
+            }
+
             String sourceTableName = pTable.getTableName().getString();
             this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, 0,
-                    ViewInfoJobState.PREP.getValue(), config, 0, context.getJobName(), sourceTableName);
+                    ViewInfoJobState.PREP.getValue(), config, 0, context.getJobName());
             final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
             final Scan scan = queryPlan.getContext().getScan();
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(pTable);
@@ -160,8 +147,17 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
             scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL_SCAN_TABLE_NAME, Bytes.toBytes(sourceTableName));
 
             this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, 0,
-                    ViewInfoJobState.RUNNING.getValue(), config, 0, context.getJobName(), sourceTableName);
-            return addingDeletionMarkWithRetries(pstmt, viewInfoTracker, config, context, queryPlan, sourceTableName);
+                    ViewInfoJobState.RUNNING.getValue(), config, 0, context.getJobName());
+
+            addingDeletionMarkWithRetries(pstmt, viewInfoTracker, config, context, queryPlan, sourceTableName);
+        } catch (Exception e) {
+            if (e instanceof SQLException && ((SQLException) e).getErrorCode() ==
+                    SQLExceptionCode.TABLE_UNDEFINED.getErrorCode()) {
+                this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, 0,
+                        ViewInfoJobState.DELETED.getValue(), config, 0, context.getJobName());
+            }
+            LOGGER.error(String.format("Had an issue to process the view: %s, " +
+                    "see error %s ", viewInfoTracker.toString(),e.getMessage()));
         }
     }
 
@@ -184,15 +180,21 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
                 }
                 this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, numberOfDeletedRows,
                         ViewInfoJobState.SUCCEEDED.getValue(), config,
-                        System.currentTimeMillis() - startTime, context.getJobName(), sourceTableName);
-                context.getCounter(PhoenixTTLTool.MR_COUNTER_METRICS.SUCCEED).increment(1);
+                        System.currentTimeMillis() - startTime, context.getJobName());
+                PhoenixTTLTool.MR_COUNTER_METRICS metricsStatus = viewInfoTracker.isIndexRelation() ?
+                        PhoenixTTLTool.MR_COUNTER_METRICS.VIEW_INDEX_SUCCEED :
+                        PhoenixTTLTool.MR_COUNTER_METRICS.VIEW_SUCCEED;
+                context.getCounter(metricsStatus).increment(1);
                 return true;
             } catch (Exception e) {
+                PhoenixTTLTool.MR_COUNTER_METRICS metricsStatus = viewInfoTracker.isIndexRelation() ?
+                        PhoenixTTLTool.MR_COUNTER_METRICS.VIEW_INDEX_FAILED :
+                        PhoenixTTLTool.MR_COUNTER_METRICS.VIEW_FAILED;
                 if (e instanceof SQLException && ((SQLException) e).getErrorCode() == SQLExceptionCode.TABLE_UNDEFINED.getErrorCode()) {
                     LOGGER.info(viewInfo + " has been deleted : " + e.getMessage());
                     this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, 0,
-                            ViewInfoJobState.DELETED.getValue(), config, 0, context.getJobName(), sourceTableName);
-                    context.getCounter(PhoenixTTLTool.MR_COUNTER_METRICS.SUCCEED).increment(1);
+                            ViewInfoJobState.DELETED.getValue(), config, 0, context.getJobName());
+                    context.getCounter(metricsStatus).increment(1);
                     return false;
                 }
                 retry++;
@@ -200,8 +202,8 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
                 if (retry == DEFAULT_MAX_RETRIES) {
                     LOGGER.error("Deleting " + viewInfo + " expired rows has an exception for : " + e.getMessage());
                     this.multiViewJobStatusTracker.updateJobStatus(viewInfoTracker, 0,
-                            ViewInfoJobState.FAILED.getValue(), config, 0, context.getJobName(), sourceTableName);
-                    context.getCounter(PhoenixTTLTool.MR_COUNTER_METRICS.FAILED).increment(1);
+                            ViewInfoJobState.FAILED.getValue(), config, 0, context.getJobName());
+                    context.getCounter(metricsStatus).increment(1);
                     throw e;
                 } else {
                     Thread.sleep(DEFAULT_RETRY_SLEEP_TIME_IN_MS);

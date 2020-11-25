@@ -49,7 +49,7 @@ public class PhoenixMultiViewInputFormat<T extends Writable> extends InputFormat
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMultiViewInputFormat.class);
 
     @Override public List<InputSplit> getSplits(JobContext context) throws IOException {
-        List<InputSplit> listOfInputSplit = new ArrayList<>();
+        List<InputSplit> listOfInputSplit;
         try {
             final Configuration configuration = context.getConfiguration();
             Class<?> defaultMultiInputStrategyClazz = DefaultPhoenixMultiViewListProvider.class;
@@ -83,7 +83,7 @@ public class PhoenixMultiViewInputFormat<T extends Writable> extends InputFormat
                     "PhoenixMultiViewInputFormat is getting IllegalAccessException : " + e.getMessage(), e.getCause());
         }
 
-        return listOfInputSplit;
+        return listOfInputSplit == null ? new ArrayList<InputSplit>() : listOfInputSplit;
     }
 
     @Override
