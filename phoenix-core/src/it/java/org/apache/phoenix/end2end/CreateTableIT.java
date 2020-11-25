@@ -60,6 +60,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -799,6 +800,39 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.VIEW_WITH_PROPERTIES.getErrorCode(), e.getErrorCode());
         }
         conn2.close();
+    }
+
+    @Test
+    public void testCreateViewFromNonExistentTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS S.T1 (A INTEGER PRIMARY KEY, B INTEGER)");
+            // 1. create view from non-existent table (without schema)
+            try {
+                conn.createStatement().execute(
+                    "CREATE VIEW IF NOT EXISTS V1(C INTEGER) AS SELECT * FROM T2");
+                fail("Creating view on non-existent table should have failed");
+            } catch (TableNotFoundException e) {
+                assertEquals("T2", e.getTableName());
+                assertEquals("", e.getSchemaName());
+                assertEquals("ERROR 1012 (42M03): Table undefined. tableName=T2",
+                    e.getMessage());
+            }
+            // 2. create view from existing table - successful
+            conn.createStatement().execute(
+                "CREATE VIEW IF NOT EXISTS V1(C INTEGER) AS SELECT * FROM S.T1");
+            // 3. create view from non-existent table (with schema)
+            try {
+                conn.createStatement().execute(
+                    "CREATE VIEW IF NOT EXISTS V2(C INTEGER) AS SELECT * FROM S.T2");
+                fail("Creating view on non-existent table should have failed");
+            } catch (TableNotFoundException e) {
+                assertEquals("T2", e.getTableName());
+                assertEquals("S", e.getSchemaName());
+                assertEquals("ERROR 1012 (42M03): Table undefined. tableName=S.T2",
+                    e.getMessage());
+            }
+        }
     }
 
     @Test
