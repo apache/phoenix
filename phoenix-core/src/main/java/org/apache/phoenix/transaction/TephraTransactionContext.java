@@ -356,6 +356,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             break;
         case SNAPSHOT_ALL:
             phoenixVisibilityLevel = PhoenixVisibilityLevel.SNAPSHOT_ALL;
+            break;
         default:
             phoenixVisibilityLevel = null;
         }
