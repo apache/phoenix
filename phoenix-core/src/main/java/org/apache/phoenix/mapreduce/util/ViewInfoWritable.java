@@ -25,10 +25,10 @@ import java.io.IOException;
 
 public interface ViewInfoWritable extends Writable {
     public enum ViewInfoJobState {
-        RUNNING(1),
-        SUCCEEDED(2),
-        FAILED(3),
-        PREP(4),
+        INITIALIZED(1),
+        RUNNING(2),
+        SUCCEEDED(3),
+        FAILED(4),
         KILLED(5),
         DELETED(6);
 

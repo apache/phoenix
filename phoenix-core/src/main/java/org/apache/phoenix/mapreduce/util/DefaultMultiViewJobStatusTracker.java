@@ -24,20 +24,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DefaultMultiViewJobStatusTracker implements MultiViewJobStatusTracker {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultMultiViewJobStatusTracker.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(DefaultMultiViewJobStatusTracker.class);
 
     public void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state,
                                 Configuration config, long duration, String mrJobName) {
         if (state == ViewInfoJobState.SUCCEEDED.getValue()) {
-            LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s, and Source Table Name %s : " +
+            LOGGER.debug(String.format("Number of deleted rows from view %s, TenantID %s, " +
+                            "and Source Table Name %s : " +
                             "number of deleted row %d, duration : %d, mr job name : %s.",
-                    view.getViewName(), view.getTenantId(), view.getRelationName(), numberOfDeletedRows, duration, mrJobName));
+                    view.getViewName(), view.getTenantId(), view.getRelationName(),
+                    numberOfDeletedRows, duration, mrJobName));
         } else if (state == ViewInfoJobState.DELETED.getValue()) {
-            LOGGER.debug(String.format("View has been deleted, view info : view %s, TenantID %s, and Source Table Name %s : %d," +
-                    " mr job name : %s.", view.getViewName(), view.getTenantId(), view.getRelationName(), mrJobName));
+            LOGGER.debug(String.format("View has been deleted, view info : view %s, TenantID %s, " +
+                    "and Source Table Name %s : %d," +
+                    " mr job name : %s.", view.getViewName(), view.getTenantId(),
+                    view.getRelationName(), mrJobName));
         } else {
-            LOGGER.debug(String.format("Job is in state %d for view %s, TenantID %s, Source Table Name %s , and duration : %d, " +
-                    "mr job name : %s.", state, view.getViewName(), view.getTenantId(),view.getRelationName(), duration, mrJobName));
+            LOGGER.debug(String.format("Job is in state %d for view %s, TenantID %s, " +
+                    "Source Table Name %s , and duration : %d, " +
+                    "mr job name : %s.", state, view.getViewName(), view.getTenantId(),
+                    view.getRelationName(), duration, mrJobName));
         }
     }
 }

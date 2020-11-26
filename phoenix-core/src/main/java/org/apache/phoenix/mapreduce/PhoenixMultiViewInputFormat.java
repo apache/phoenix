@@ -53,48 +53,61 @@ public class PhoenixMultiViewInputFormat<T extends Writable> extends InputFormat
         try {
             final Configuration configuration = context.getConfiguration();
             Class<?> defaultMultiInputStrategyClazz = DefaultPhoenixMultiViewListProvider.class;
-            if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ) != null) {
-                defaultMultiInputStrategyClazz = Class.forName(
-                        configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ));
+            if (configuration.get(
+                    PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ) != null) {
+                defaultMultiInputStrategyClazz = Class.forName(configuration.get(
+                        PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ));
             }
             PhoenixMultiViewListProvider phoenixMultiViewListProvider =
                     (PhoenixMultiViewListProvider) defaultMultiInputStrategyClazz.newInstance();
-            List<ViewInfoWritable> views = phoenixMultiViewListProvider.getPhoenixMultiViewList(configuration);
+            List<ViewInfoWritable> views =
+                    phoenixMultiViewListProvider.getPhoenixMultiViewList(configuration);
 
-            Class<?> defaultDeletionMultiInputSplitStrategyClazz = DefaultMultiViewSplitStrategy.class;
-            if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ) != null) {
-                defaultDeletionMultiInputSplitStrategyClazz = Class.forName(
-                        configuration.get(PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ));
+            Class<?> defaultDeletionMultiInputSplitStrategyClazz =
+                    DefaultMultiViewSplitStrategy.class;
+            if (configuration.get(
+                    PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ) != null) {
+                defaultDeletionMultiInputSplitStrategyClazz = Class.forName(configuration.get(
+                        PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ));
             }
-            MultiViewSplitStrategy multiViewSplitStrategy =
-                    (MultiViewSplitStrategy) defaultDeletionMultiInputSplitStrategyClazz.newInstance();
+            MultiViewSplitStrategy multiViewSplitStrategy = (MultiViewSplitStrategy)
+                    defaultDeletionMultiInputSplitStrategyClazz.newInstance();
             listOfInputSplit = multiViewSplitStrategy.generateSplits(views, configuration);
         } catch (ClassNotFoundException e) {
-            LOGGER.debug("PhoenixMultiViewInputFormat is getting ClassNotFoundException : " + e.getMessage());
+            LOGGER.debug("PhoenixMultiViewInputFormat is getting ClassNotFoundException : " +
+                    e.getMessage());
             throw new IOException(
-                    "PhoenixMultiViewInputFormat is getting ClassNotFoundException : " + e.getMessage(), e.getCause());
+                    "PhoenixMultiViewInputFormat is getting ClassNotFoundException : " +
+                            e.getMessage(), e.getCause());
         } catch (InstantiationException e) {
-            LOGGER.debug("PhoenixMultiViewInputFormat is getting InstantiationException : " + e.getMessage());
+            LOGGER.debug("PhoenixMultiViewInputFormat is getting InstantiationException : " +
+                    e.getMessage());
             throw new IOException(
-                    "PhoenixMultiViewInputFormat is getting InstantiationException : " + e.getMessage(), e.getCause());
+                    "PhoenixMultiViewInputFormat is getting InstantiationException : " +
+                            e.getMessage(), e.getCause());
         } catch (IllegalAccessException e) {
-            LOGGER.debug("PhoenixMultiViewInputFormat is getting IllegalAccessException : " + e.getMessage());
+            LOGGER.debug("PhoenixMultiViewInputFormat is getting IllegalAccessException : " +
+                    e.getMessage());
             throw new IOException(
-                    "PhoenixMultiViewInputFormat is getting IllegalAccessException : " + e.getMessage(), e.getCause());
+                    "PhoenixMultiViewInputFormat is getting IllegalAccessException : " +
+                            e.getMessage(), e.getCause());
         }
 
         return listOfInputSplit == null ? new ArrayList<InputSplit>() : listOfInputSplit;
     }
 
     @Override
-    public RecordReader<NullWritable,T> createRecordReader(InputSplit split, TaskAttemptContext context) {
+    public RecordReader<NullWritable,T> createRecordReader(InputSplit split,
+                                                           TaskAttemptContext context) {
         final Configuration configuration = context.getConfiguration();
 
-        final Class<T> inputClass = (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
+        final Class<T> inputClass =
+                (Class<T>) PhoenixConfigurationUtil.getInputClass(configuration);
         return getPhoenixRecordReader(inputClass, configuration);
     }
 
-    private RecordReader<NullWritable,T> getPhoenixRecordReader(Class<T> inputClass, Configuration configuration) {
+    private RecordReader<NullWritable,T> getPhoenixRecordReader(Class<T> inputClass,
+                                                                Configuration configuration) {
         return new PhoenixMultiViewReader<>(inputClass , configuration);
     }
 }

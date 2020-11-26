@@ -112,13 +112,13 @@ public class PhoenixTTLTool extends Configured implements Tool {
         }
 
         if (cmdLine.hasOption(SPLIT_SIZE_OPTION.getOpt())) {
-            splitSize = Integer.valueOf(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
+            splitSize = Integer.parseInt(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
         } else {
             splitSize = DEFAULT_MAPPER_SPLIT_SIZE;
         }
 
         if (cmdLine.hasOption(BATCH_SIZE_OPTION.getOpt())) {
-            batchSize = Integer.valueOf(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
+            batchSize = Integer.parseInt(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
         } else {
             batchSize = DEFAULT_QUERY_BATCH_SIZE;
         }
@@ -178,14 +178,15 @@ public class PhoenixTTLTool extends Configured implements Tool {
         try {
             cmdLine = parser.parse(options, args);
         } catch (ParseException e) {
-            printHelpAndExit("Error parsing command line options: " + e.getMessage(), options);
+            printHelpAndExit("Error parsing command line options: " + e.getMessage(),
+                    options);
         }
 
         if (!cmdLine.hasOption(DELETE_ALL_VIEWS_OPTION.getOpt()) &&
                 !cmdLine.hasOption(VIEW_NAME_OPTION.getOpt()) &&
                 !cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
             throw new IllegalStateException("No deletion job is specified, " +
-                    "please indicate deletion job for ALL/TABLE/VIEW/TENANT level");
+                    "please indicate deletion job for ALL/VIEW/TENANT level");
         }
 
         if (cmdLine.hasOption(HELP_OPTION.getOpt())) {

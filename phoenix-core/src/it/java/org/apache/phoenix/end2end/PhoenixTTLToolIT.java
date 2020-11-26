@@ -46,18 +46,23 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
     private final String VIEW_PREFIX1 = "V01";
     private final String VIEW_PREFIX2 = "V02";
-    private final String UPSERT_TO_GLOBAL_VIEW_QUERY = "UPSERT INTO %s (PK1,A,B,C,D) VALUES(1,1,1,1,1)";
-    private final String UPSERT_TO_LEAF_VIEW_QUERY = "UPSERT INTO %s (PK1,A,B,C,D,E,F) VALUES(1,1,1,1,1,1,1)";
+    private final String UPSERT_TO_GLOBAL_VIEW_QUERY =
+            "UPSERT INTO %s (PK1,A,B,C,D) VALUES(1,1,1,1,1)";
+    private final String UPSERT_TO_LEAF_VIEW_QUERY =
+            "UPSERT INTO %s (PK1,A,B,C,D,E,F) VALUES(1,1,1,1,1,1,1)";
     private final String VIEW_DDL_WITH_ID_PREFIX_AND_TTL = "CREATE VIEW %s (" +
             "PK1 BIGINT PRIMARY KEY,A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
             " AS SELECT * FROM %s WHERE ID = '%s' PHOENIX_TTL = %d";
     private final String VIEW_INDEX_DDL = "CREATE INDEX %s ON %s(%s)";
-    private final String TENANT_VIEW_DDL = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s";
+    private final String TENANT_VIEW_DDL =
+            "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s";
 
     private void verifyNumberOfRowsFromHBaseLevel(String tableName, String regrex, int expectedRows)
             throws Exception {
-        try (Table table  = HBaseFactoryProvider.getHConnectionFactory().createConnection(config).getTable(tableName)) {
-            Filter filter = new RowFilter(CompareFilter.CompareOp.EQUAL, new RegexStringComparator(regrex));
+        try (Table table = HBaseFactoryProvider.getHConnectionFactory().
+                createConnection(config).getTable(tableName)) {
+            Filter filter =
+                    new RowFilter(CompareFilter.CompareOp.EQUAL, new RegexStringComparator(regrex));
             Scan scan = new Scan();
             scan.setFilter(filter);
             assertEquals(expectedRows, getRowCount(table,scan));
@@ -120,23 +125,32 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String indexTable = "_IDX_" + baseTableFullName;
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL,
-                    globalViewName, baseTableFullName, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    globalViewName, baseTableFullName, VIEW_PREFIX1,
+                    PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable1, globalViewName, "A,B"));
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable2, globalViewName, "C,D"));
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable1, globalViewName, "A,B"));
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable2, globalViewName, "C,D"));
 
-            tenant1Connection.createStatement().execute(String.format(TENANT_VIEW_DDL,tenantView1, globalViewName));
-            tenant2Connection.createStatement().execute(String.format(TENANT_VIEW_DDL,tenantView2, globalViewName));
+            tenant1Connection.createStatement().execute(
+                    String.format(TENANT_VIEW_DDL,tenantView1, globalViewName));
+            tenant2Connection.createStatement().execute(
+                    String.format(TENANT_VIEW_DDL,tenantView2, globalViewName));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView1));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 1, globalConn);
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView2));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantView2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 1, globalConn);
 
@@ -180,34 +194,42 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant2 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
-            String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
-                    "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL, globalViewName1, baseTableFullName, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL, globalViewName2, baseTableFullName, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
+            globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL,
+                    globalViewName1, baseTableFullName, VIEW_PREFIX1,
+                    PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(String.format(VIEW_DDL_WITH_ID_PREFIX_AND_TTL,
+                    globalViewName2, baseTableFullName, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
 
-            ddl = "CREATE INDEX %s ON %s(%s)";
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable1, globalViewName1, "A,B"));
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable2, globalViewName1, "C,D"));
 
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable1, globalViewName1, "A,B"));
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable2, globalViewName1, "C,D"));
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable3, globalViewName2, "A,B"));
+            globalConn.createStatement().execute(
+                    String.format(VIEW_INDEX_DDL, indexTable4, globalViewName2, "C,D"));
 
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable3, globalViewName2, "A,B"));
-            globalConn.createStatement().execute(String.format(VIEW_INDEX_DDL, indexTable4, globalViewName2, "C,D"));
-
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 2, globalConn);
 
@@ -254,24 +276,33 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant2 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(ddl, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
 
             ddl = "CREATE INDEX %s ON %s(%s)";
 
-            globalConn.createStatement().execute(String.format(ddl, indexTable1, globalViewName1, "A,B"));
-            globalConn.createStatement().execute(String.format(ddl, indexTable2, globalViewName1, "C,D"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable1, globalViewName1, "A,B"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable2, globalViewName1, "C,D"));
 
-            globalConn.createStatement().execute(String.format(ddl, indexTable3, globalViewName2, "A,B"));
-            globalConn.createStatement().execute(String.format(ddl, indexTable4, globalViewName2, "C,D"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable3, globalViewName2, "A,B"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable4, globalViewName2, "C,D"));
 
             ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s";
             tenant1Connection.createStatement().execute(
@@ -284,15 +315,19 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     String.format(ddl, tenantViewName2, globalViewName2));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 2, globalConn);
 
@@ -329,26 +364,35 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant2 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(ddl, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 2, globalConn);
 
@@ -386,12 +430,17 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(ddl, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
 
-            globalConn.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
+            globalConn.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName1));
             globalConn.commit();
-            globalConn.createStatement().execute(String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
+            globalConn.createStatement().execute(
+                    String.format(UPSERT_TO_GLOBAL_VIEW_QUERY, globalViewName2));
             globalConn.commit();
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 1);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
@@ -437,19 +486,27 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE PK1=%d PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(ddl, globalViewName2, 2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName2, 2, PHOENIX_TTL_EXPIRE_IN_A_DAY));
 
             ddl = "CREATE INDEX %s ON %s(%s)";
-            globalConn.createStatement().execute(String.format(ddl, indexTable1, globalViewName1, "A,ID,B"));
-            globalConn.createStatement().execute(String.format(ddl, indexTable2, globalViewName1, "C,ID,D"));
-            globalConn.createStatement().execute(String.format(ddl, indexTable3, globalViewName2, "A,ID,B"));
-            globalConn.createStatement().execute(String.format(ddl, indexTable4, globalViewName2, "C,ID,D"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable1, globalViewName1, "A,ID,B"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable2, globalViewName1, "C,ID,D"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable3, globalViewName2, "A,ID,B"));
+            globalConn.createStatement().execute(
+                    String.format(ddl, indexTable4, globalViewName2, "C,ID,D"));
 
             String query = "UPSERT INTO %s (PK2,A,B,C,D,ID) VALUES(1,1,1,1,1,'%s')";
-            globalConn.createStatement().execute(String.format(query, globalViewName1, VIEW_PREFIX1));
+            globalConn.createStatement().execute(
+                    String.format(query, globalViewName1, VIEW_PREFIX1));
             globalConn.commit();
-            globalConn.createStatement().execute(String.format(query, globalViewName2, VIEW_PREFIX2));
+            globalConn.createStatement().execute(
+                    String.format(query, globalViewName2, VIEW_PREFIX2));
             globalConn.commit();
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 1);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX2 + ".*", 1);
@@ -484,7 +541,8 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant1 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -493,15 +551,20 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
             globalConn.createStatement().execute(String.format(ddl, globalViewName1));
 
-            ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s WHERE ID = '%s' PHOENIX_TTL = %d";
+            ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s " +
+                    "WHERE ID = '%s' PHOENIX_TTL = %d";
             tenant1Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
             tenant1Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName2, globalViewName1, VIEW_PREFIX2,PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName2, globalViewName1, VIEW_PREFIX2,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant1, 2, globalConn);
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 1);
@@ -538,8 +601,10 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant2 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
@@ -549,24 +614,33 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             globalConn.createStatement().execute(String.format(ddl, globalViewName1, 1));
             globalConn.createStatement().execute(String.format(ddl, globalViewName2, 2));
 
-            ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s WHERE ID = '%s' PHOENIX_TTL = %d";
+            ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s " +
+                    "WHERE ID = '%s' PHOENIX_TTL = %d";
             tenant1Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
             tenant1Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName2, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName2, globalViewName2, VIEW_PREFIX2,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
             tenant2Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName3, globalViewName1, VIEW_PREFIX1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName3, globalViewName1, VIEW_PREFIX1,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
             tenant2Connection.createStatement().execute(
-                    String.format(ddl, tenantViewName4, globalViewName2, VIEW_PREFIX2, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+                    String.format(ddl, tenantViewName4, globalViewName2, VIEW_PREFIX2,
+                            PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
             tenant2Connection.commit();
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + tenant1 + ".*", 2);
@@ -603,16 +677,20 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         String tenant2 = generateUniqueName();
 
         try (Connection globalConn = DriverManager.getConnection(getUrl());
-             Connection tenant1Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
-             Connection tenant2Connection = PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
+             Connection tenant1Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1);
+             Connection tenant2Connection =
+                     PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = %d PHOENIX_TTL = %d";
 
-            globalConn.createStatement().execute(String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
-            globalConn.createStatement().execute(String.format(ddl, globalViewName2, 2, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
+            globalConn.createStatement().execute(
+                    String.format(ddl, globalViewName2, 2, PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND));
 
             ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s WHERE ID = '%s'";
             tenant1Connection.createStatement().execute(
@@ -625,14 +703,18 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.createStatement().execute(
                     String.format(ddl, tenantViewName4, globalViewName2, VIEW_PREFIX2));
 
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName1));
             tenant1Connection.commit();
-            tenant1Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
+            tenant1Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName2));
             tenant1Connection.commit();
 
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName3));
             tenant2Connection.commit();
-            tenant2Connection.createStatement().execute(String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
+            tenant2Connection.createStatement().execute(
+                    String.format(UPSERT_TO_LEAF_VIEW_QUERY, tenantViewName4));
             tenant2Connection.commit();
 
             verifyNumberOfRowsFromHBaseLevel(baseTableFullName, ".*" + VIEW_PREFIX1 + ".*", 2);

@@ -18,20 +18,15 @@
 package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -91,8 +86,9 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                             }
                         } catch (Exception e) {
                             skip = true;
-                            LOGGER.error(String.format("Had an issue to process the view: %s, tenantId:" +
-                                    "see error %s ", fullTableName, tenantId, e.getMessage()));
+                            LOGGER.error(String.format("Had an issue to process the view: %s, " +
+                                    "tenantId: see error %s ", fullTableName, tenantId,
+                                    e.getMessage()));
                         }
 
                         if (!skip) {
@@ -110,7 +106,8 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                             for (PTable viewIndexTable : allIndexesOnView) {
                                 String indexName = viewIndexTable.getTableName().getString();
                                 String indexSchema = viewIndexTable.getSchemaName().getString();
-                                if (indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                                if (indexName.contains(
+                                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                                     indexName = SchemaUtil.getTableNameFromFullName(indexName,
                                             QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
                                 }
@@ -132,7 +129,8 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                         if (fullTableName == null) {
                             isQueryMore = false;
                         } else {
-                            query = PhoenixMultiInputUtil.constructQueryMoreQuery(tenantId, schema, tableName, limit);
+                            query = PhoenixMultiInputUtil.constructQueryMoreQuery(
+                                    tenantId, schema, tableName, limit);
                         }
                     }
                 } while (isQueryMore);

@@ -130,13 +130,14 @@ public final class PhoenixMapReduceUtil {
     /**
      *
      * @param job MR job instance
-     * @param tool ViewTtlTool for Phoenix TTL deletion MR job
+     * @param tool PhoenixTtlTool for Phoenix TTL deletion MR job
      */
     public static void setInput(final Job job, PhoenixTTLTool tool) {
         Configuration configuration = job.getConfiguration();
         job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
         tool.setViewTTLJobInputConfig(configuration);
-        PhoenixConfigurationUtil.setSchemaType(configuration, PhoenixConfigurationUtil.SchemaType.QUERY);
+        PhoenixConfigurationUtil.setSchemaType(configuration,
+                PhoenixConfigurationUtil.SchemaType.QUERY);
         PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());
         PhoenixConfigurationUtil.setMultiViewQueryMoreSplitSize(configuration, tool.getBatchSize());
     }

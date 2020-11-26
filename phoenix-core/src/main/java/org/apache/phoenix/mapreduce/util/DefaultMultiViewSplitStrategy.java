@@ -28,7 +28,8 @@ import static org.apache.phoenix.mapreduce.PhoenixTTLTool.DEFAULT_MAPPER_SPLIT_S
 
 public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
 
-    public List<InputSplit> generateSplits(List<ViewInfoWritable> views, Configuration configuration) {
+    public List<InputSplit> generateSplits(List<ViewInfoWritable> views,
+                                           Configuration configuration) {
         int numViewsInSplit = PhoenixConfigurationUtil.getMultiViewSplitSize(configuration);
 
         if (numViewsInSplit < 1) {

@@ -44,7 +44,8 @@ public class PhoenixMultiViewReader<T extends Writable> extends RecordReader<Nul
         this.inputClass = inputClass;
     }
 
-    @Override public void initialize(InputSplit split, TaskAttemptContext context) throws IOException {
+    @Override public void initialize(InputSplit split, TaskAttemptContext context)
+            throws IOException {
         if (split instanceof PhoenixMultiViewInputSplit) {
             final PhoenixMultiViewInputSplit pSplit = (PhoenixMultiViewInputSplit)split;
             final List<ViewInfoWritable> viewInfoTracker = pSplit.getViewInfoTrackerList();

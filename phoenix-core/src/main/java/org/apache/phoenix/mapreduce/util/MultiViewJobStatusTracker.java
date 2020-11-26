@@ -20,6 +20,6 @@ package org.apache.phoenix.mapreduce.util;
 import org.apache.hadoop.conf.Configuration;
 
 public interface MultiViewJobStatusTracker {
-    void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state, Configuration config,
-                         long duration, String mrJobName);
+    void updateJobStatus(ViewInfoTracker view, long numberOfDeletedRows, int state,
+                         Configuration config, long duration, String mrJobName);
 }

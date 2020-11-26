@@ -46,7 +46,8 @@ public class PhoenixMultiInputUtil {
                     PHOENIX_TTL + " > " + PHOENIX_TTL_NOT_DEFINED + " AND " +
                     VIEW_TYPE + " <> " + PTable.ViewType.MAPPED.getSerializedValue();
 
-    public static Connection buildTenantConnection(String url, String tenantId) throws SQLException {
+    public static Connection buildTenantConnection(String url, String tenantId)
+            throws SQLException {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(url, props);
@@ -56,7 +57,8 @@ public class PhoenixMultiInputUtil {
         return SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY + " LIMIT " + limit;
     }
 
-    public static String constructQueryMoreQuery(String tenantId, String schema, String viewName, int limit) {
+    public static String constructQueryMoreQuery(String tenantId, String schema,
+                                                 String viewName, int limit) {
         return  String.format("SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHOENIX_TTL " +
                         "FROM SYSTEM.CATALOG " +
                         "WHERE TABLE_TYPE = 'v' AND PHOENIX_TTL IS NOT NULL AND " +
@@ -100,16 +102,19 @@ public class PhoenixMultiInputUtil {
 
     public static String getFetchViewQuery(Configuration configuration) {
         String query;
-        if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS) != null) {
+        if (configuration.get(
+                PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS) != null) {
             query = PhoenixMultiInputUtil.constructAllViewInitialQuery(
                     PhoenixConfigurationUtil.getMultiViewQueryMoreSplitSize(configuration));
         } else if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID) != null &&
-                configuration.get(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW) == null) {
+                configuration.get(PhoenixConfigurationUtil.
+                        MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW) == null) {
             query = PhoenixMultiInputUtil.constructViewMetadataQueryBasedOnTenant(
                     configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
         } else {
             query = PhoenixMultiInputUtil.constructViewMetadataQueryBasedOnView(
-                    configuration.get(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW),
+                    configuration.get(
+                            PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW),
                     configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID));
         }
         return query;
