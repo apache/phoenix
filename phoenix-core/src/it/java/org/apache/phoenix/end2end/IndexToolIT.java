@@ -134,6 +134,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         this.tableDDLOptions = optionBuilder.toString();
         StringBuilder indexOptionBuilder = new StringBuilder();
         if (!localIndex && transactionProvider == null) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" COLUMN_ENCODED_BYTES=0");
             indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
         }
         this.indexDDLOptions = indexOptionBuilder.toString();

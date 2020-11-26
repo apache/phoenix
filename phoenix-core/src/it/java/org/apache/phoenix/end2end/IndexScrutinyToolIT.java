@@ -305,6 +305,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * a covered index value is incorrect. Scrutiny should report the invalid row
      */
     @Test public void testCoveredValueIncorrect() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         // insert one valid row
         upsertRow(dataTableUpsertStmt, 1, "name-1", 94010);
         conn.commit();
@@ -322,6 +325,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         List<Job> completedJobs = runScrutiny(schemaName, dataTableName, indexTableName);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
+
         Counters counters = job.getCounters();
         assertEquals(1, getCounterValue(counters, VALID_ROW_COUNT));
         assertEquals(1, getCounterValue(counters, INVALID_ROW_COUNT));
@@ -405,6 +409,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
                 runScrutiny(schemaName, dataTableName, indexTableName, 10L, SourceTable.INDEX_TABLE_SOURCE);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
+
         Counters counters = job.getCounters();
         assertEquals(1, getCounterValue(counters, VALID_ROW_COUNT));
         assertEquals(2, getCounterValue(counters, INVALID_ROW_COUNT));
@@ -415,6 +420,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * incorrectly indexed row, it should be reported in each direction
      */
     @Test public void testBothDataAndIndexAsSource() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         // insert one valid row
         upsertRow(dataTableUpsertStmt, 1, "name-1", 94010);
         conn.commit();

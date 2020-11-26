@@ -160,15 +160,27 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         });
     }
     
-    public static Iterator<PTable> maintainedGlobalIndexes(Iterator<PTable> indexes) {
+    public static Iterator<PTable> maintainedGlobalIndexesWithMatchingStorageScheme(final PTable dataTable, Iterator<PTable> indexes) {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
             public boolean apply(PTable index) {
-                return sendIndexMaintainer(index) && index.getIndexType() == IndexType.GLOBAL;
+                return sendIndexMaintainer(index) && index.getIndexType() == IndexType.GLOBAL
+                        && dataTable.getImmutableStorageScheme() == index.getImmutableStorageScheme();
             }
         });
     }
-    
+
+    public static Iterator<PTable> maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(final PTable dataTable, Iterator<PTable> indexes) {
+        return Iterators.filter(indexes, new Predicate<PTable>() {
+            @Override
+            public boolean apply(PTable index) {
+                return sendIndexMaintainer(index) && ((index.getIndexType() == IndexType.GLOBAL
+                        && dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme())
+                        || index.getIndexType() == IndexType.LOCAL);
+            }
+        });
+    }
+
     public static Iterator<PTable> maintainedLocalIndexes(Iterator<PTable> indexes) {
         return Iterators.filter(indexes, new Predicate<PTable>() {
             @Override
@@ -195,7 +207,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         if (onlyLocalIndexes) {
             if (!dataTable.isTransactional()
                     || !dataTable.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) {
-                indexesItr = maintainedLocalIndexes(indexes.iterator());
+                indexesItr = maintainedLocalOrGlobalIndexesWithoutMatchingStorageScheme(dataTable, indexes.iterator());
             }
         } else {
             indexesItr = maintainedIndexes(indexes.iterator());
@@ -360,6 +372,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private int estimatedExpressionSize;
     private int[] dataPkPosition;
     private int maxTrailingNulls;
+    private ColumnReference indexEmptyKeyValueRef;
     private ColumnReference dataEmptyKeyValueRef;
     private boolean rowKeyOrderOptimizable;
     
@@ -1019,7 +1032,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Put put = null;
         // New row being inserted: add the empty key value
         ImmutableBytesWritable latestValue = null;
-        if (valueGetter==null || (latestValue = valueGetter.getLatestValue(dataEmptyKeyValueRef, ts)) == null || latestValue == ValueGetter.HIDDEN_BY_DELETE) {
+        if (valueGetter==null || (latestValue = valueGetter.getLatestValue(indexEmptyKeyValueRef, ts)) == null || latestValue == ValueGetter.HIDDEN_BY_DELETE) {
             // We need to track whether or not our empty key value is hidden by a Delete Family marker at the same timestamp.
             // If it is, these Puts will be masked so should not be emitted.
             if (latestValue == ValueGetter.HIDDEN_BY_DELETE) {
@@ -1028,7 +1041,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put = new Put(indexRowKey);
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
-                    this.getEmptyKeyValueFamily(), dataEmptyKeyValueRef.getQualifierWritable(), ts,
+                    this.getEmptyKeyValueFamily(), indexEmptyKeyValueRef.getQualifierWritable(), ts,
                     QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
@@ -1282,7 +1295,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public Set<ColumnReference> getAllColumns() {
         return allColumns;
     }
-    
+
+    public Set<ColumnReference> getAllColumnsForDataTable() {
+        Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size() + coveredColumnsMap.size());
+        result.addAll(indexedColumns);
+        for (ColumnReference colRef : coveredColumnsMap.keySet()) {
+            if (getDataImmutableStorageScheme()==ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                result.add(colRef);
+            } else {
+                result.add(new ColumnReference(colRef.getFamily(), QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES));
+            }
+        }
+        return result;
+    }
+
     public ImmutableBytesPtr getEmptyKeyValueFamily() {
         // Since the metadata of an index table will never change,
         // we can infer this based on the family of the first covered column
@@ -1682,8 +1708,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * Init calculated state reading/creating
      */
     private void initCachedState() {
-        byte[] emptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(encodingScheme).getFirst();
-        dataEmptyKeyValueRef = new ColumnReference(dataEmptyKeyValueCF, emptyKvQualifier);
+        byte[] indexEmptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(encodingScheme).getFirst();
+        byte[] dataEmptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(dataEncodingScheme).getFirst();
+        indexEmptyKeyValueRef = new ColumnReference(dataEmptyKeyValueCF, indexEmptyKvQualifier);
+        dataEmptyKeyValueRef = new ColumnReference(dataEmptyKeyValueCF, dataEmptyKvQualifier);
         this.allColumns = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size() + coveredColumnsMap.size());
         // columns that are required to evaluate all expressions in indexedExpressions (not including columns in data row key)
         this.indexedColumns = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size());
@@ -1928,7 +1956,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return new ValueGetter() {
             @Override
             public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
-                if(ref.equals(dataEmptyKeyValueRef)) return null;
+                if(ref.equals(indexEmptyKeyValueRef)) return null;
                 return valueMap.get(ref);
             }
             @Override
@@ -1982,9 +2010,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     
     public byte[] getEmptyKeyValueQualifier() {
+        return indexEmptyKeyValueRef.getQualifier();
+    }
+
+    public byte[] getEmptyKeyValueQualifierForDataTable() {
         return dataEmptyKeyValueRef.getQualifier();
     }
-    
+
     public Set<Pair<String, String>> getIndexedColumnInfo() {
         return indexedColumnsInfo;
     }

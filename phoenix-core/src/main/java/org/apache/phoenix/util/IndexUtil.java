@@ -878,7 +878,9 @@ public class IndexUtil {
                 (table.isTransactional() && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)) ?
                          IndexMaintainer.maintainedIndexes(table.getIndexes().iterator()) :
                              (table.isImmutableRows() || table.isTransactional()) ?
-                                IndexMaintainer.maintainedGlobalIndexes(table.getIndexes().iterator()) :
+                                 // If the data table has a different storage scheme than index table, don't maintain this on the client
+                                 // For example, if the index is single cell but the data table is one_cell, if there is a partial update on the data table, index can't be built on the client.
+                                IndexMaintainer.maintainedGlobalIndexesWithMatchingStorageScheme(table, table.getIndexes().iterator()) :
                                     Collections.<PTable>emptyIterator();
         return Lists.newArrayList(indexIterator);
     }
