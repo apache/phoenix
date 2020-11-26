@@ -36,10 +36,7 @@ public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
             numViewsInSplit = DEFAULT_MAPPER_SPLIT_SIZE;
         }
 
-        int numberOfMappers = views.size() / numViewsInSplit;
-        if (Math.ceil(views.size() % numViewsInSplit) > 0) {
-            numberOfMappers++;
-        }
+        int numberOfMappers = getNumberOfMappers(views.size(),numViewsInSplit);
 
         final List<InputSplit> pSplits = Lists.newArrayListWithExpectedSize(numberOfMappers);
         // Split the views into splits
@@ -52,7 +49,26 @@ public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
         return pSplits;
     }
 
-    private int getUpperBound(int numViewsInSplit, int i, int viewSize) {
+    /*
+        Calculate number of mappers are needed based on split policy and
+        number of views on the cluster
+     */
+    public int getNumberOfMappers(int viewSize, int numViewsInSplit) {
+        int numberOfMappers = viewSize / numViewsInSplit;
+        if (Math.ceil(viewSize % numViewsInSplit) > 0) {
+            numberOfMappers++;
+        }
+        return numberOfMappers;
+    }
+
+    /*
+        Calculate the upper bound for each mapper. For example, given
+        split policy is 10 cleanup jobs per mapper, and the total view size at the cluster
+        is 12.
+        The first mapper will take from [0 - 10), this method will return 10 as upper bound
+        The second mapper will take from [10 - 12), this method will return 12 as upper bound.
+     */
+    public int getUpperBound(int numViewsInSplit, int i, int viewSize) {
         int upper = (i + 1) * numViewsInSplit;
         if (viewSize < upper) {
             upper = viewSize;

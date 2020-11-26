@@ -30,6 +30,7 @@ import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -39,6 +40,7 @@ import java.sql.Statement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
     private final long PHOENIX_TTL_EXPIRE_IN_A_MILLISECOND = 1;
@@ -154,6 +156,8 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             tenant2Connection.commit();
             verifyNumberOfRows(baseTableFullName, tenant2, 1, globalConn);
 
+            // the view has 2 view indexes, so upsert 1 row(base table) will result
+            // 2 rows(index table)
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + tenant1 + ".*", 2);
             verifyNumberOfRowsFromHBaseLevel(indexTable, ".*" + tenant2 + ".*", 2);
 

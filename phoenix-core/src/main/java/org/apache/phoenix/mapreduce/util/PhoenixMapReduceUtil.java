@@ -135,7 +135,7 @@ public final class PhoenixMapReduceUtil {
     public static void setInput(final Job job, PhoenixTTLTool tool) {
         Configuration configuration = job.getConfiguration();
         job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
-        tool.setViewTTLJobInputConfig(configuration);
+        tool.setPhoenixTTLJobInputConfig(configuration);
         PhoenixConfigurationUtil.setSchemaType(configuration,
                 PhoenixConfigurationUtil.SchemaType.QUERY);
         PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());

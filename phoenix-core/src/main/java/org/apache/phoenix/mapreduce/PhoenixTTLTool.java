@@ -70,7 +70,7 @@ public class PhoenixTTLTool extends Configured implements Tool {
     private static final Option BATCH_SIZE_OPTION = new Option("b", "batch-size-for-query-more", true,
             "Define batch size for fetching views metadata from syscat.");
     private static final Option RUN_FOREGROUND_OPTION = new Option("runfg",
-            "run-foreground", false, "If specified, runs ViewTTLTool " +
+            "run-foreground", false, "If specified, runs PhoenixTTLTool " +
             "in Foreground. Default - Runs the build in background");
 
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
@@ -238,13 +238,13 @@ public class PhoenixTTLTool extends Configured implements Tool {
             } else  {
                 jobName = this.tenantId;
             }
-            this.jobName =  "ViewTTLTool-" + jobName + "-";
+            this.jobName =  "PhoenixTTLTool-" + jobName + "-";
         }
 
         return this.jobName;
     }
 
-    public void setViewTTLJobInputConfig(Configuration configuration) {
+    public void setPhoenixTTLJobInputConfig(Configuration configuration) {
         if (this.isDeletingAllViews) {
             configuration.set(PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS,
                     DELETE_ALL_VIEWS);
@@ -271,22 +271,22 @@ public class PhoenixTTLTool extends Configured implements Tool {
         job.setPriority(this.jobPriority);
 
         TableMapReduceUtil.addDependencyJars(job);
-        LOGGER.info("ViewTTLTool is running for " + job.getJobName());
+        LOGGER.info("PhoenixTTLTool is running for " + job.getJobName());
     }
 
     public int runJob() {
         try {
             if (isForeground) {
-                LOGGER.info("Running ViewTTLTool in foreground. " +
+                LOGGER.info("Running PhoenixTTLTool in foreground. " +
                         "Runs full table scans. This may take a long time!");
                 return (job.waitForCompletion(true)) ? 0 : 1;
             } else {
-                LOGGER.info("Running ViewTTLTool in Background - Submit async and exit");
+                LOGGER.info("Running PhoenixTTLTool in Background - Submit async and exit");
                 job.submit();
                 return 0;
             }
         } catch (Exception e) {
-            LOGGER.error("Caught exception " + e + " trying to run ViewTTLTool.");
+            LOGGER.error("Caught exception " + e + " trying to run PhoenixTTLTool.");
             return 1;
         }
     }

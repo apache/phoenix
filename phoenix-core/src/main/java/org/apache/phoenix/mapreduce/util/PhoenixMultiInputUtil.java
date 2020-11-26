@@ -53,21 +53,14 @@ public class PhoenixMultiInputUtil {
         return DriverManager.getConnection(url, props);
     }
 
-    public static String constructAllViewInitialQuery(int limit) {
-        return SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY + " LIMIT " + limit;
-    }
-
-    public static String constructQueryMoreQuery(String tenantId, String schema,
-                                                 String viewName, int limit) {
-        return  String.format("SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHOENIX_TTL " +
-                        "FROM SYSTEM.CATALOG " +
-                        "WHERE TABLE_TYPE = 'v' AND PHOENIX_TTL IS NOT NULL AND " +
-                        "(TENANT_ID,TABLE_SCHEM,TABLE_NAME) > ('%s','%s','%s') LIMIT %d",
-                tenantId, schema, viewName, limit);
+    public static String getSelectAllPageQuery() {
+        return SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY + " AND " +
+                "(TENANT_ID,TABLE_SCHEM,TABLE_NAME) > (?,?,?) LIMIT ?";
     }
 
     public static String constructViewMetadataQueryBasedOnView(String fullName, String tenantId) {
         String query = SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY;
+
 
         if (fullName != null) {
             if (fullName.equals(PhoenixTTLTool.DELETE_ALL_VIEWS)) {
@@ -104,8 +97,7 @@ public class PhoenixMultiInputUtil {
         String query;
         if (configuration.get(
                 PhoenixConfigurationUtil.MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS) != null) {
-            query = PhoenixMultiInputUtil.constructAllViewInitialQuery(
-                    PhoenixConfigurationUtil.getMultiViewQueryMoreSplitSize(configuration));
+            query = PhoenixMultiInputUtil.getSelectAllPageQuery();
         } else if (configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID) != null &&
                 configuration.get(PhoenixConfigurationUtil.
                         MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW) == null) {
