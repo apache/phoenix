@@ -84,7 +84,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
             String tableName = "TBL_" + generateUniqueName();
             String idxName = "IND_" + generateUniqueName();
 
-            createTableAndIndex(conn, tableName, idxName, this.tableDDLOptions, 3);
+            createTableAndIndex(conn, tableName, idxName, this.tableDDLOptions, false,3);
             assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
             assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
 
@@ -134,7 +134,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
             String tableName = "TBL_" + generateUniqueName();
             String idxName = "IND_" + generateUniqueName();
 
-            createTableAndIndex(conn, tableName, idxName, null, 3);
+            createTableAndIndex(conn, tableName, idxName, null, false,3);
             assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
             assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
 
@@ -170,7 +170,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
             String tableName = "TBL_" + generateUniqueName();
             String idxName = "IND_" + generateUniqueName();
 
-            createTableAndIndex(conn, tableName, idxName, null, 1);
+            createTableAndIndex(conn, tableName, idxName, null, false,1);
             assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
             assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
 
@@ -303,6 +303,102 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testUpsertSelect() throws Exception {
+        String tableName = generateUniqueName();
+        String idxName = "IDX_" + generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
+            conn.setAutoCommit(true);
+            createTableAndIndex(conn, tableName, idxName, null, true, 2);
+            assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
+            assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
+
+            // this delete will be issued at a timestamp later than the above timestamp of the index table
+            conn.createStatement().execute("delete from " + tableName + " where pk1 = 'PK1'");
+            conn.commit();
+            String
+                    sql =
+                    "UPSERT INTO " + idxName + "(\":PK1\",\":INT_PK\",\"0:V1\",\"0:V2\",\"0:V4\") "
+                            + " SELECT /*+ NO_INDEX */ PK1,INT_PK, V1, V2,V4 FROM "
+                            + tableName;
+            conn.createStatement().executeUpdate(sql);
+            conn.commit();
+
+            // validate that delete markers were issued correctly and only ('a', '1', 'value1') was
+            // deleted
+            String query = "SELECT \":PK1\" from " + idxName + " ORDER BY \":PK1\"";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("PK2", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testMultipleColumnFamilies() throws Exception {
+        String tableName = generateUniqueName();
+        String idxName = "IDX_" + generateUniqueName();
+        int numOfRows = 2;
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
+            conn.setAutoCommit(true);
+            String createTableSql = "CREATE TABLE " + tableName +
+                    " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, V1 VARCHAR, A.V2 INTEGER, B.V3 INTEGER, A.V4 VARCHAR, B.V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) ";
+            conn.createStatement().execute(createTableSql);
+            String createIndexSql = "CREATE INDEX " + idxName + " ON " + tableName + " (A.V2) include (B.V3, A.V4, B.V5) "
+                    + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
+            LOGGER.debug(createIndexSql);
+            conn.createStatement().execute(createIndexSql);
+            String upsert = "UPSERT INTO " + tableName + " (PK1, INT_PK, V1, A.V2, B.V3, A.V4, B.V5) VALUES (?,?,?,?,?,?,?)";
+            PreparedStatement upsertStmt = conn.prepareStatement(upsert);
+
+            for (int i=1; i <= numOfRows; i++) {
+                upsertStmt.setString(1, "PK"+i);
+                upsertStmt.setInt(2, i);
+                upsertStmt.setString(3, "V1"+i);
+                upsertStmt.setInt(4, i+1);
+                upsertStmt.setInt(5, i+2);
+                upsertStmt.setString(6, "V4"+i);
+                upsertStmt.setString(7, "V5"+i);
+                upsertStmt.executeUpdate();
+            }
+            assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
+            assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
+
+            String query = "SELECT * from " + idxName + " ORDER BY \":PK1\"";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("2", rs.getString(1));
+            assertEquals("PK1", rs.getString(2));
+            assertEquals("1", rs.getString(3));
+            assertEquals("3", rs.getString(4));
+            assertEquals("V41", rs.getString(5));
+            assertEquals("V51", rs.getString(6));
+            assertTrue(rs.next());
+            assertEquals("3", rs.getString(1));
+            assertEquals("PK2", rs.getString(2));
+            assertEquals("2", rs.getString(3));
+            assertEquals("4", rs.getString(4));
+            assertEquals("V42", rs.getString(5));
+            assertEquals("V52", rs.getString(6));
+
+            String selectFromIndex = "SELECT PK1, INT_PK, A.V2, B.V3, A.V4, B.V5 FROM " + tableName + " where A.V4='V42' and B.V3 >= 3";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualExplainPlan.contains(idxName));
+            rs = conn.createStatement().executeQuery(selectFromIndex);
+            assertTrue(rs.next());
+            assertEquals("PK2", rs.getString(1));
+            assertEquals("2", rs.getString(2));
+            assertEquals("3", rs.getString(3));
+            assertEquals("4", rs.getString(4));
+            assertEquals("V42", rs.getString(5));
+            assertEquals("V52", rs.getString(6));
+            assertFalse(rs.next());
+        }
+    }
+
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = PropertiesUtil.deepCopy(testProps);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -318,14 +414,16 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
 
-    private void createTableAndIndex(Connection conn, String tableName, String indexName, String tableDDL, int numOfRows)
+    private void createTableAndIndex(Connection conn, String tableName, String indexName, String tableDDL, boolean async, int numOfRows)
             throws SQLException {
         String createTableSql = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, V1 VARCHAR, V2 INTEGER, V3 INTEGER, V4 VARCHAR, V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) "
                 + (tableDDL == null ? "" : tableDDL);
         LOGGER.debug(createTableSql);
         conn.createStatement().execute(createTableSql);
 
-        String createIndexSql = "CREATE INDEX " + indexName + " ON " + tableName + " (PK1, INT_PK) include (V1,V2,V4) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
+        String createIndexSql = "CREATE INDEX " + indexName + " ON " + tableName + " (PK1, INT_PK) include (V1,V2,V4) " + (async? "ASYNC":"")
+                + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
+        LOGGER.debug(createIndexSql);
         conn.createStatement().execute(createIndexSql);
 
         String upsert = "UPSERT INTO " + tableName + " (PK1, INT_PK, V1,  V2, V3, V4, V5) VALUES (?,?,?,?,?,?,?)";

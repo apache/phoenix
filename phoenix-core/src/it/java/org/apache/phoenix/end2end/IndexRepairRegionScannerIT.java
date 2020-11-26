@@ -71,25 +71,37 @@ import static org.junit.Assert.assertTrue;
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     private final String tableDDLOptions;
+    private final String indexDDLOptions;
     private boolean mutable;
     @Rule
     public ExpectedException exceptionRule = ExpectedException.none();
 
-    public IndexRepairRegionScannerIT(boolean mutable) {
+    public IndexRepairRegionScannerIT(boolean mutable, boolean singleCellIndex) {
         StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder indexOptionBuilder = new StringBuilder();
         this.mutable = mutable;
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
         }
+        if (singleCellIndex) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0 ");
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
+        }
         optionBuilder.append(" SPLIT ON(1,2)");
+        this.indexDDLOptions = indexOptionBuilder.toString();
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameterized.Parameters(name = "mutable={0}")
+    @Parameterized.Parameters(name = "mutable={0}, singleCellIndex={1}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                {true},
-                {false} });
+                {true, true},
+                {true, false},
+                {false, true},
+                {false, false}});
     }
 
     @Before

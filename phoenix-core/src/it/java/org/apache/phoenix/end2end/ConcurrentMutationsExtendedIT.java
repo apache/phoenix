@@ -217,11 +217,13 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     public void testConcurrentDeletesAndUpsertValues() throws Exception {
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
+        final String singleCellindexName = "SC_" + generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("CREATE INDEX " + singleCellindexName + " ON " + tableName + "(v1) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         Runnable r1 = new Runnable() {
 
@@ -272,6 +274,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
         doneSignal.await(60, TimeUnit.SECONDS);
         verifyIndexTable(tableName, indexName, conn);
+        verifyIndexTable(tableName, singleCellindexName, conn);
     }
 
     @Test
