@@ -326,10 +326,10 @@ public class GlobalIndexChecker extends BaseRegionObserver {
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
                 // Scan only columns included in the index table plus the empty column
-                for (ColumnReference column : indexMaintainer.getAllColumns()) {
+                for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
                     buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
                 }
-                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
+                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifierForDataTable());
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key

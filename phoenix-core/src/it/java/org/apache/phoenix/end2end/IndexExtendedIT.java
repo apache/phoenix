@@ -37,7 +37,6 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
@@ -57,6 +56,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Tests for the {@link IndexTool}
@@ -67,19 +68,30 @@ public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
     private final boolean useViewIndex;
     private final String tableDDLOptions;
+    private final String indexDDLOptions;
     private final boolean mutable;
     private final boolean useSnapshot;
-    
+
     public IndexExtendedIT( boolean mutable, boolean localIndex, boolean useViewIndex, boolean useSnapshot) {
         this.localIndex = localIndex;
         this.useViewIndex = useViewIndex;
         this.mutable = mutable;
         this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder indexOptionBuilder = new StringBuilder();
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
         }
+
+        if (!localIndex) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0 ");
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2 ");
+        }
         optionBuilder.append(" SPLIT ON(1,2)");
+        this.indexDDLOptions = indexOptionBuilder.toString();
         this.tableDDLOptions = optionBuilder.toString();
     }
     
@@ -102,7 +114,7 @@ public class IndexExtendedIT extends BaseTest {
             for (boolean localIndex : Booleans) {
                 for (boolean useViewIndex : Booleans) {
                     for (boolean useSnapshot : Booleans) {
-                        list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot });
+                        list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot});
                     }
                 }
             }
@@ -139,7 +151,7 @@ public class IndexExtendedIT extends BaseTest {
             IndexToolIT.upsertRow(stmt1, id++);
             conn.commit();
             
-            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ASYNC ", indexTableName,dataTableFullName));
+            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ASYNC %s" , indexTableName,dataTableFullName, this.indexDDLOptions));
             
             //update a row 
             stmt1.setInt(1, 1);
@@ -178,7 +190,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.close();
         }
     }
-    
+
     @Test
     public void testDeleteFromImmutable() throws Exception {
         if (mutable) {
@@ -190,7 +202,7 @@ public class IndexExtendedIT extends BaseTest {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
+        String indexTableName = "IDX_" + generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -208,7 +220,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.createStatement().execute("upsert into " + dataTableFullName + " (pk1, pk2, pk3) values ('a', '1', '1')");
             conn.createStatement().execute("upsert into " + dataTableFullName + " (pk1, pk2, pk3) values ('b', '2', '2')");
             conn.commit();
-            conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON " + dataTableFullName + " (pk3, pk2) ASYNC");
+            conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON " + dataTableFullName + " (pk3, pk2) ASYNC " + this.indexDDLOptions);
             
             // this delete will be issued at a timestamp later than the above timestamp of the index table
             conn.createStatement().execute("delete from " + dataTableFullName + " where pk1 = 'a'");
@@ -287,8 +299,8 @@ public class IndexExtendedIT extends BaseTest {
             Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
 
             stmt.execute(
-                    String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) ", indexName,
-                            baseTableFullNameOfIndex));
+                    String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) %s", indexName,
+                            baseTableFullNameOfIndex, this.indexDDLOptions));
             long dataCnt = getRowCount(conn, dataTableFullName);
             long indexCnt = getUtility().countRows(hIndexTable);
             assertEquals(dataCnt, indexCnt);
@@ -344,8 +356,8 @@ public class IndexExtendedIT extends BaseTest {
             // lead to any change on index and thus index verify during index rebuild should fail
             IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             stmt.execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC",
-                    indexTableName, dataTableFullName));
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC %s",
+                    indexTableName, dataTableFullName, this.indexDDLOptions));
 
             // Verify that the index table is not in the ACTIVE state
             assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
