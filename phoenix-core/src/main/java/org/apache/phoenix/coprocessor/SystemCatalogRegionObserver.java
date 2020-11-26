@@ -33,7 +33,7 @@ import static org.apache.phoenix.util.ScanUtil.UNKNOWN_CLIENT_VERSION;
 /**
  * Coprocessor that checks whether the VIEW_INDEX_ID needs to retrieve.
  */
-public class SyscatRegionObserver extends BaseRegionObserver {
+public class SystemCatalogRegionObserver extends BaseRegionObserver {
     @Override public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
     }
@@ -48,7 +48,7 @@ public class SyscatRegionObserver extends BaseRegionObserver {
         int clientVersion = ScanUtil.getClientVersion(scan);
         /*
             ScanUtil.getClientVersion returns UNKNOWN_CLIENT_VERSION if the phoenix client version
-            didn't set. We only want to retrieve the data based on the client version, and we don't
+            isn't set. We only want to retrieve the data based on the client version, and we don't
             want to change the behavior other than Phoenix env.
          */
         if (clientVersion != UNKNOWN_CLIENT_VERSION) {

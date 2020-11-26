@@ -52,7 +52,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
-import org.apache.phoenix.coprocessor.SyscatRegionObserver;
+import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
@@ -384,20 +384,20 @@ public class BackwardCompatibilityIT {
                      hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
             HTableDescriptor tableDescriptor = admin.getTableDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            assertFalse("Coprocessor " + SyscatRegionObserver.class.getName()
+            assertFalse("Coprocessor " + SystemCatalogRegionObserver.class.getName()
                     + " has been added with compatible client version: "
                     + compatibleClientVersion, tableDescriptor.hasCoprocessor(
-                    SyscatRegionObserver.class.getName()));
+                    SystemCatalogRegionObserver.class.getName()));
 
             executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
             assertExpectedOutput(QUERY_VIEW_INDEX);
 
             tableDescriptor = admin.getTableDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            assertTrue("Coprocessor " + SyscatRegionObserver.class.getName()
+            assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
                     + " has been added with compatible client version: "
                     + compatibleClientVersion, tableDescriptor.hasCoprocessor(
-                    SyscatRegionObserver.class.getName()));
+                    SystemCatalogRegionObserver.class.getName()));
         }
     }
 

@@ -77,7 +77,7 @@ public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writab
             This is combination of diff client created view index looks like:
 
             client                  VIEW_INDEX_ID(Cell number of bytes)     VIEW_INDEX_ID_DATA_TYPE
-        pre-4.14                        2 bytes                                     NULL
+        pre-4.15                        2 bytes                                     NULL
         post-4.15[config smallint]      2 bytes                                     5(smallint)
         post-4.15[config bigint]        8 bytes                                     -5(bigint)
          */
@@ -102,8 +102,8 @@ public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writab
                     we need to retrieve the BIGINT cell to SMALLINT cell.
 
                     VIEW_INDEX_ID_DATA_TYPE,      VIEW_INDEX_ID(Cell representation of the data)
-                        NULL,                         SMALLINT         -> DO NOT RETRIEVE
-                        SMALLINT,                     SMALLINT         -> DO NOT RETRIEVE
+                        NULL,                         SMALLINT         -> DO NOT CONVERT
+                        SMALLINT,                     SMALLINT         -> DO NOT CONVERT
                         BIGINT,                       BIGINT           -> RETRIEVE AND SEND SMALLINT BACK
                  */
                 if (type == NULL_DATA_TYPE_VALUE && viewIndexIdCell.getValueLength() >
