@@ -4014,12 +4014,19 @@ public class MetaDataClient {
                     }
                 }
 
-                if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
-                    // for tables that use column encoding acquire a mutex on the base table as we
-                    // need to update the encoded column qualifier counter on the base table
-                    acquiredBaseTableMutex = writeCell(null, physicalSchemaName, physicalTableName, null);
+                if (EncodedColumnsUtil.usesEncodedColumnNames(table)
+                        && stmtProperties.isEmpty()) {
+                    // For tables that use column encoding acquire a mutex on
+                    // the base table as we need to update the encoded column
+                    // qualifier counter on the base table. Not applicable to
+                    // ALTER TABLE/VIEW SET <property> statements because
+                    // we don't update the column qualifier counter while
+                    // setting property, hence the check: stmtProperties.isEmpty()
+                    acquiredBaseTableMutex = writeCell(null, physicalSchemaName,
+                        physicalTableName, null);
                     if (!acquiredBaseTableMutex) {
-                        throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                        throw new ConcurrentTableMutationException(
+                            physicalSchemaName, physicalTableName);
                     }
                 }
                 for (PColumn pColumn : columns) {
