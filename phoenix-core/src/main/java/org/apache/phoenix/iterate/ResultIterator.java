@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SQLCloseable;
 
@@ -38,6 +40,11 @@ public interface ResultIterator extends SQLCloseable {
         @Override
         public void explain(List<String> planSteps) {
         }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
     };
 
     /**
@@ -49,4 +56,21 @@ public interface ResultIterator extends SQLCloseable {
     public Tuple next() throws SQLException;
     
     public void explain(List<String> planSteps);
+
+    /**
+     * Generate ExplainPlan steps and add steps as list of Strings in
+     * planSteps argument as readable statement as well as add same generated
+     * steps in explainPlanAttributesBuilder so that we prepare ExplainPlan
+     * result as an attribute object useful to retrieve individual plan step
+     * attributes.
+     *
+     * @param planSteps Add generated plan in list of planSteps. This argument
+     *     is used to provide planSteps as whole statement consisting of
+     *     list of Strings.
+     * @param explainPlanAttributesBuilder Add generated plan in attributes
+     *     object. Having an API to provide planSteps as an object is easier
+     *     while comparing individual attributes of ExplainPlan.
+     */
+    void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder);
 }

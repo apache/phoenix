@@ -29,6 +29,8 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -182,15 +184,19 @@ public class UnionPlan implements QueryPlan {
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
         List<String> steps = new ArrayList<String>();
-        steps.add("UNION ALL OVER " + this.plans.size() + " QUERIES");
+        ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder();
+        String abstractExplainPlan = "UNION ALL OVER " + this.plans.size()
+            + " QUERIES";
+        builder.setAbstractExplainPlan(abstractExplainPlan);
+        steps.add(abstractExplainPlan);
         ResultIterator iterator = iterator();
-        iterator.explain(steps);
+        iterator.explain(steps, builder);
         // Indent plans steps nested under union, except last client-side merge/concat step (if there is one)
         int offset = !orderBy.getOrderByExpressions().isEmpty() && limit != null ? 2 : limit != null ? 1 : 0;
         for (int i = 1 ; i < steps.size()-offset; i++) {
             steps.set(i, "    " + steps.get(i));
         }
-        return new ExplainPlan(steps);
+        return new ExplainPlan(steps, builder.build());
     }
 
 

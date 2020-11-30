@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.Comparator;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -71,5 +73,11 @@ public class MaterializedComparableResultIterator
     @Override
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
     }
 }

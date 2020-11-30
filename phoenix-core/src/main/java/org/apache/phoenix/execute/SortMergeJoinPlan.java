@@ -39,6 +39,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
@@ -197,14 +200,33 @@ public class SortMergeJoinPlan implements QueryPlan {
     public ExplainPlan getExplainPlan() throws SQLException {
         List<String> steps = Lists.newArrayList();
         steps.add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES");
-        for (String step : lhsPlan.getExplainPlan().getPlanSteps()) {
-            steps.add("    " + step);            
+        ExplainPlan lhsExplainPlan = lhsPlan.getExplainPlan();
+        List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
+        ExplainPlanAttributes lhsPlanAttributes =
+          lhsExplainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder lhsPlanBuilder =
+          new ExplainPlanAttributesBuilder(lhsPlanAttributes);
+        lhsPlanBuilder.setAbstractExplainPlan("SORT-MERGE-JOIN ("
+          + joinType.toString().toUpperCase() + ")");
+
+        for (String step : lhsPlanSteps) {
+            steps.add("    " + step);
         }
         steps.add("AND" + (rhsSchema.getFieldCount() == 0 ? " (SKIP MERGE)" : ""));
-        for (String step : rhsPlan.getExplainPlan().getPlanSteps()) {
-            steps.add("    " + step);            
+
+        ExplainPlan rhsExplainPlan = rhsPlan.getExplainPlan();
+        List<String> rhsPlanSteps = rhsExplainPlan.getPlanSteps();
+        ExplainPlanAttributes rhsPlanAttributes =
+          rhsExplainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder rhsPlanBuilder =
+          new ExplainPlanAttributesBuilder(rhsPlanAttributes);
+
+        lhsPlanBuilder.setRhsJoinQueryExplainPlan(rhsPlanBuilder.build());
+
+        for (String step : rhsPlanSteps) {
+            steps.add("    " + step);
         }
-        return new ExplainPlan(steps);
+        return new ExplainPlan(steps, lhsPlanBuilder.build());
     }
 
     @Override
@@ -481,6 +503,11 @@ public class SortMergeJoinPlan implements QueryPlan {
         public void explain(List<String> planSteps) {
         }
 
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
+
         private void doInit(boolean lhs) throws SQLException {
             if(lhs) {
                 nextLhsTuple = lhsIterator.next();
@@ -745,7 +772,12 @@ public class SortMergeJoinPlan implements QueryPlan {
         @Override
         public void explain(List<String> planSteps) {
         }
-        
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
+
         private void advance(boolean lhs) throws SQLException {
             if (lhs) {
                 lhsTuple = lhsIterator.next();

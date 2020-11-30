@@ -35,6 +35,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+  .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -177,6 +179,11 @@ public class ListJarsQueryPlan implements QueryPlan {
             
             @Override
             public void explain(List<String> planSteps) {
+            }
+
+            @Override
+            public void explain(List<String> planSteps,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
             }
         };
     }
