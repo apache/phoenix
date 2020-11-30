@@ -35,6 +35,8 @@ import java.util.Objects;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
@@ -141,6 +143,12 @@ public class ClientHashAggregatingResultIterator
     @Override
     public void explain(List<String> planSteps) {
         resultIterator.explain(planSteps);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterator.explain(planSteps, explainPlanAttributesBuilder);
     }
 
     @Override

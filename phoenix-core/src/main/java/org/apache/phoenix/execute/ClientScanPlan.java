@@ -23,6 +23,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -121,30 +124,44 @@ public class ClientScanPlan extends ClientProcessingPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
+        ExplainPlan explainPlan = delegate.getExplainPlan();
+        List<String> currentPlanSteps = explainPlan.getPlanSteps();
+        ExplainPlanAttributes explainPlanAttributes =
+            explainPlan.getPlanStepsAsAttributes();
+        List<String> planSteps = Lists.newArrayList(currentPlanSteps);
+        ExplainPlanAttributesBuilder newBuilder =
+            new ExplainPlanAttributesBuilder(explainPlanAttributes);
         if (where != null) {
             planSteps.add("CLIENT FILTER BY " + where.toString());
+            newBuilder.setClientFilterBy(where.toString());
         }
         if (!orderBy.getOrderByExpressions().isEmpty()) {
             if (offset != null) {
                 planSteps.add("CLIENT OFFSET " + offset);
+                newBuilder.setClientOffset(offset);
             }
             planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
                     + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+            newBuilder.setClientRowLimit(limit);
+            newBuilder.setClientSortedBy(
+                orderBy.getOrderByExpressions().toString());
         } else {
             if (offset != null) {
                 planSteps.add("CLIENT OFFSET " + offset);
+                newBuilder.setClientOffset(offset);
             }
             if (limit != null) {
                 planSteps.add("CLIENT " + limit + " ROW LIMIT");
+                newBuilder.setClientRowLimit(limit);
             }
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             int nSequences = context.getSequenceManager().getSequenceCount();
             planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+            newBuilder.setClientSequenceCount(nSequences);
         }
-        
-        return new ExplainPlan(planSteps);
+
+        return new ExplainPlan(planSteps, newBuilder.build());
     }
 
     private static List<OrderBy> convertActualOutputOrderBy(

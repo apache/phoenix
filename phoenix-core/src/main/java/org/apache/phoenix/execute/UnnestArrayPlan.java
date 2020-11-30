@@ -24,6 +24,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -57,9 +60,15 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        List<String> planSteps = delegate.getExplainPlan().getPlanSteps();
+        ExplainPlan explainPlan = delegate.getExplainPlan();
+        List<String> planSteps = explainPlan.getPlanSteps();
+        ExplainPlanAttributes explainPlanAttributes =
+            explainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder newBuilder =
+            new ExplainPlanAttributesBuilder(explainPlanAttributes);
         planSteps.add("UNNEST");
-        return new ExplainPlan(planSteps);
+        newBuilder.setAbstractExplainPlan("UNNEST");
+        return new ExplainPlan(planSteps, newBuilder.build());
     }
     
     @Override

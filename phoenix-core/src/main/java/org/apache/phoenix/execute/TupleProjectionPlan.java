@@ -27,6 +27,9 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderPreservingTracker;
 import org.apache.phoenix.compile.OrderPreservingTracker.Info;
 import org.apache.phoenix.compile.QueryPlan;
@@ -151,12 +154,19 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
+        ExplainPlan explainPlan = delegate.getExplainPlan();
+        List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
+        ExplainPlanAttributes explainPlanAttributes =
+            explainPlan.getPlanStepsAsAttributes();
         if (postFilter != null) {
             planSteps.add("CLIENT FILTER BY " + postFilter.toString());
+            ExplainPlanAttributesBuilder newBuilder =
+                new ExplainPlanAttributesBuilder(explainPlanAttributes);
+            newBuilder.setClientFilterBy(postFilter.toString());
+            explainPlanAttributes = newBuilder.build();
         }
 
-        return new ExplainPlan(planSteps);
+        return new ExplainPlan(planSteps, explainPlanAttributes);
     }
 
     @Override

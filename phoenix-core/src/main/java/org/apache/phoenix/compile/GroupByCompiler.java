@@ -26,6 +26,8 @@ import java.util.List;
 import net.jcip.annotations.Immutable;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderPreservingTracker.Info;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -73,12 +75,18 @@ public class GroupByCompiler {
             @Override
             public void explain(List<String> planSteps, Integer limit) {
             }
-            
+
+            @Override
+            public void explain(List<String> planSteps, Integer limit,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            }
+
             @Override
             public String getScanAttribName() {
                 return null;
             }
         };
+
         public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true).setIsUngroupedAggregate(true)) {
             @Override
             public GroupBy compile(StatementContext context, QueryPlan innerQueryPlan, Expression whereExpression) throws SQLException {
@@ -89,7 +97,17 @@ public class GroupByCompiler {
             public void explain(List<String> planSteps, Integer limit) {
                 planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
             }
-            
+
+            @Override
+            public void explain(List<String> planSteps, Integer limit,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+                planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setServerAggregate(
+                        "SERVER AGGREGATE INTO SINGLE ROW");
+                }
+            }
+
             @Override
             public String getScanAttribName() {
                 return BaseScannerRegionObserver.UNGROUPED_AGG;
@@ -335,13 +353,34 @@ public class GroupByCompiler {
         }
 
         public void explain(List<String> planSteps, Integer limit) {
+            explainUtil(planSteps, limit, null);
+        }
+
+        private void explainUtil(List<String> planSteps, Integer limit,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            String serverAggregate;
             if (isUngroupedAggregate) {
-                planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
-            } else if (isOrderPreserving) {
-                planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
+                serverAggregate = "SERVER AGGREGATE INTO SINGLE ROW";
             } else {
-                planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
+                String groupLimit = limit == null ? "" : (" LIMIT " + limit
+                    + " GROUP" + (limit == 1 ? "" : "S"));
+                if (isOrderPreserving) {
+                    serverAggregate = "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY "
+                        + getExpressions() + groupLimit;
+                } else {
+                    serverAggregate = "SERVER AGGREGATE INTO DISTINCT ROWS BY "
+                        + getExpressions() + groupLimit;
+                }
             }
+            planSteps.add("    " + serverAggregate);
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerAggregate(serverAggregate);
+            }
+        }
+
+        public void explain(List<String> planSteps, Integer limit,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            explainUtil(planSteps, limit, explainPlanAttributesBuilder);
         }
     }
 
