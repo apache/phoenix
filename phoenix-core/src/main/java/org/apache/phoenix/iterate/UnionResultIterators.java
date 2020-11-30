@@ -22,6 +22,9 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
@@ -128,13 +131,36 @@ public class UnionResultIterators implements ResultIterators {
 
     @Override
     public void explain(List<String> planSteps) {
-        for (int index=0; index < iterators.size(); index++) {
-            iterators.get(index).explain(planSteps);
+        for (PeekingResultIterator iterator : iterators) {
+            iterator.explain(planSteps);
         }
     }
 
     @Override 
     public List<PeekingResultIterator> getIterators() throws SQLException {    
         return iterators;
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        boolean moreThanOneIters = false;
+        ExplainPlanAttributesBuilder lhsPointer = null;
+        // For more than one iterators, explainPlanAttributes will create
+        // chain of objects as lhs and rhs query plans.
+        for (PeekingResultIterator iterator : iterators) {
+            if (moreThanOneIters) {
+                ExplainPlanAttributesBuilder rhsBuilder =
+                    new ExplainPlanAttributesBuilder();
+                iterator.explain(planSteps, rhsBuilder);
+                ExplainPlanAttributes rhsPlans = rhsBuilder.build();
+                lhsPointer.setRhsJoinQueryExplainPlan(rhsPlans);
+                lhsPointer = rhsBuilder;
+            } else {
+                iterator.explain(planSteps, explainPlanAttributesBuilder);
+                lhsPointer = explainPlanAttributesBuilder;
+            }
+            moreThanOneIters = true;
+        }
     }
 }

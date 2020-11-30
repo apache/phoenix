@@ -26,6 +26,7 @@ import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -45,6 +46,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Result;
@@ -250,12 +254,16 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k CHAR(1) PRIMARY KEY )"  + tableDDLOptions);
         collectStatistics(conn, fullTableName);
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT 1-CHUNK 0 ROWS 20 BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY",
-                explainPlan);
+        ExplainPlan plan = conn.prepareStatement("SELECT * FROM " + fullTableName)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(1, (int) planAttributes.getSplitsChunk());
+        assertEquals(0, (long) planAttributes.getEstimatedRows());
+        assertEquals(20, (long) planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY", planAttributes.getServerWhereFilter());
         conn.close();
     }
 
@@ -268,30 +276,56 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute("UPSERT INTO " + fullTableName + "(k,v1) VALUES('a','123456789')");
         collectStatistics(conn, fullTableName);
                 
-        ResultSet rs;
-        String explainPlan;
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + fullTableName + " WHERE v2='foo'");
-        explainPlan = QueryUtil.getExplainPlan(rs);
-        // if we are using the ONE_CELL_PER_COLUMN_FAMILY storage scheme, we will have the single kv even though there are no values for col family v2 
-        String stats = columnEncoded && !mutable ? "4-CHUNK 1 ROWS 38 BYTES" : "3-CHUNK 0 ROWS 20 BYTES";
-        assertEquals(
-                "CLIENT " + stats + " PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
-                "    SERVER FILTER BY B.V2 = 'foo'\n" + 
-                "CLIENT MERGE SORT",
-                explainPlan);
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT 4-CHUNK 1 ROWS " + (columnEncoded ? "28" : TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? "38" : "34") + " BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
-                "CLIENT MERGE SORT",
-                explainPlan);
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName + " WHERE k = 'a'");
-        explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT 1-CHUNK 1 ROWS " + (columnEncoded ? "204" : "202") + " BYTES PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + physicalTableName + "\n" +
-                "CLIENT MERGE SORT",
-                explainPlan);
-        
+        // if we are using the ONE_CELL_PER_COLUMN_FAMILY storage scheme, we will have the single kv even though there are no values for col family v2
+
+        ExplainPlan plan = conn.prepareStatement(
+            "SELECT v2 FROM " + fullTableName + " WHERE v2='foo'")
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(columnEncoded && !mutable ? 4 : 3,
+            (int) planAttributes.getSplitsChunk());
+        assertEquals(columnEncoded && !mutable ? 1 : 0,
+            (long) planAttributes.getEstimatedRows());
+        assertEquals(columnEncoded && !mutable ? 38 : 20,
+            (long) planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 3-WAY", planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
+        assertEquals("SERVER FILTER BY B.V2 = 'foo'",
+            planAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+
+        long estimatedSizeInBytes = columnEncoded ? 28
+            : TransactionFactory.Provider.OMID.name().equals(transactionProvider)
+            ? 38 : 34;
+        plan = conn.prepareStatement(
+            "SELECT * FROM " + fullTableName)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(4, (int) planAttributes.getSplitsChunk());
+        assertEquals(1, (long) planAttributes.getEstimatedRows());
+        assertEquals(estimatedSizeInBytes,
+            (long) planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 3-WAY", planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
+        assertNull(planAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+
+        plan = conn.prepareStatement(
+            "SELECT * FROM " + fullTableName + " WHERE k = 'a'")
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(1, (int) planAttributes.getSplitsChunk());
+        assertEquals(1, (long) planAttributes.getEstimatedRows());
+        assertEquals(columnEncoded ? 204 : 202,
+            (long) planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("POINT LOOKUP ON 1 KEY ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
+        assertNull(planAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT", planAttributes.getClientSortAlgo());
+
         conn.close();
     }
     
@@ -567,9 +601,23 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         collectStatistics(conn, fullTableName);
         List<KeyRange> keyRanges = getAllSplits(conn, fullTableName);
         assertEquals(26, keyRanges.size());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 26-CHUNK 25 ROWS " + (columnEncoded ? ( mutable ? "12530" : "13902" ) : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? "25044" : "12420") + " BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
-                QueryUtil.getExplainPlan(rs));
+
+        long sizeInBytes = columnEncoded ? (mutable ? 12530 : 13902)
+            : (TransactionFactory.Provider.OMID.name().equals(transactionProvider))
+            ? 25044 : 12420;
+
+        ExplainPlan plan = conn.prepareStatement(
+            "SELECT * FROM " + fullTableName)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(26, (int) planAttributes.getSplitsChunk());
+        assertEquals(25, (long) planAttributes.getEstimatedRows());
+        assertEquals(sizeInBytes,
+            (long) planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 1-WAY",
+            planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
 
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(physicalTableName));
@@ -623,9 +671,18 @@ public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
-                QueryUtil.getExplainPlan(rs));
+
+        plan = conn.prepareStatement(
+            "SELECT * FROM " + fullTableName)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+        planAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(1, (int) planAttributes.getSplitsChunk());
+        assertNull(planAttributes.getEstimatedRows());
+        assertNull(planAttributes.getEstimatedSizeInBytes());
+        assertEquals("PARALLEL 1-WAY",
+          planAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
+        assertEquals(physicalTableName, planAttributes.getTableName());
     }
 
     @Test

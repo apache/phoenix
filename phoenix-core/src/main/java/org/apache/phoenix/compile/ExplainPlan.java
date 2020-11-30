@@ -26,15 +26,28 @@ public class ExplainPlan {
     public static final ExplainPlan EMPTY_PLAN = new ExplainPlan(Collections.<String>emptyList());
 
     private final List<String> planSteps;
-    
+    private final ExplainPlanAttributes planStepsAsAttributes;
+
     public ExplainPlan(List<String> planSteps) {
         this.planSteps = ImmutableList.copyOf(planSteps);
+        this.planStepsAsAttributes =
+            ExplainPlanAttributes.getDefaultExplainPlan();
     }
-    
+
+    public ExplainPlan(List<String> planSteps,
+            ExplainPlanAttributes planStepsAsAttributes) {
+        this.planSteps = planSteps;
+        this.planStepsAsAttributes = planStepsAsAttributes;
+    }
+
     public List<String> getPlanSteps() {
         return planSteps;
     }
-    
+
+    public ExplainPlanAttributes getPlanStepsAsAttributes() {
+        return planStepsAsAttributes;
+    }
+
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder();

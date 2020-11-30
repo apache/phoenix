@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -55,9 +57,19 @@ public class SequenceResultIterator extends DelegateResultIterator {
         planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
     }
 
-	@Override
-	public String toString() {
-		return "SequenceResultIterator [sequenceManager=" + sequenceManager
-				+ "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        super.explain(planSteps, explainPlanAttributesBuilder);
+        int nSequences = sequenceManager.getSequenceCount();
+        explainPlanAttributesBuilder.setClientSequenceCount(nSequences);
+        planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences
+            + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+    }
+
+    @Override
+    public String toString() {
+        return "SequenceResultIterator [sequenceManager=" + sequenceManager
+            + "]";
+    }
 }

@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -76,9 +78,17 @@ public class FilterAggregatingResultIterator  implements AggregatingResultIterat
         planSteps.add("CLIENT FILTER BY " + expression.toString());
     }
 
-	@Override
-	public String toString() {
-		return "FilterAggregatingResultIterator [delegate=" + delegate
-				+ ", expression=" + expression + ", ptr=" + ptr + "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientFilterBy(expression.toString());
+        planSteps.add("CLIENT FILTER BY " + expression.toString());
+    }
+
+    @Override
+    public String toString() {
+        return "FilterAggregatingResultIterator [delegate=" + delegate
+            + ", expression=" + expression + ", ptr=" + ptr + "]";
+    }
 }

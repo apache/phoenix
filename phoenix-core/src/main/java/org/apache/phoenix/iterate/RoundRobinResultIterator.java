@@ -28,6 +28,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -151,6 +153,14 @@ public class RoundRobinResultIterator implements ResultIterator {
     public void explain(List<String> planSteps) {
         if (resultIterators != null) {
             resultIterators.explain(planSteps);
+        }
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        if (resultIterators != null) {
+            resultIterators.explain(planSteps, explainPlanAttributesBuilder);
         }
     }
 
@@ -312,6 +322,12 @@ public class RoundRobinResultIterator implements ResultIterator {
         @Override
         public void explain(List<String> planSteps) {
             delegate.explain(planSteps);
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            delegate.explain(planSteps, explainPlanAttributesBuilder);
         }
 
         @Override

@@ -27,6 +27,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.PeekingResultIterator;
@@ -94,6 +96,11 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
 
                 @Override
                 public void explain(List<String> planSteps) {
+                }
+
+                @Override
+                public void explain(List<String> planSteps,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
                 }
 
                 @Override

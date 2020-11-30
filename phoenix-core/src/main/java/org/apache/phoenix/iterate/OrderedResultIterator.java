@@ -31,6 +31,8 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -304,6 +306,19 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientOffset(offset);
+        explainPlanAttributesBuilder.setClientRowLimit(limit);
+        explainPlanAttributesBuilder.setClientSortedBy(
+            orderByExpressions.toString());
+        planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
+            + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+            + " SORTED BY " + orderByExpressions.toString());
+    }
+
+    @Override
     public String toString() {
         return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
                 + ", limit=" + limit + ", offset=" + offset + ", delegate=" + delegate
@@ -354,6 +369,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
         @Override
         public void explain(List<String> planSteps) {
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         }
 
         @Override

@@ -19,6 +19,8 @@ package org.apache.phoenix.iterate;
 
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.TupleUtil;
 
@@ -57,9 +59,17 @@ public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {
         planSteps.add("CLIENT MERGE SORT");
     }
 
-	@Override
-	public String toString() {
-		return "MergeSortRowKeyResultIterator [keyOffset=" + keyOffset
-				+ ", factor=" + factor + "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterators.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
+        planSteps.add("CLIENT MERGE SORT");
+    }
+
+    @Override
+    public String toString() {
+        return "MergeSortRowKeyResultIterator [keyOffset=" + keyOffset
+            + ", factor=" + factor + "]";
+    }
 }

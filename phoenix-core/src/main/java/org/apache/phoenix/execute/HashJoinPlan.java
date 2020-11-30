@@ -295,6 +295,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
+        // TODO : Support ExplainPlanAttributes for HashJoinPlan
         List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
         for (int i = 0; i < count; i++) {

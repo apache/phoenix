@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -48,6 +50,14 @@ public class OffsetResultIterator extends DelegateResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
+        planSteps.add("CLIENT OFFSET " + offset);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        super.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientOffset(offset);
         planSteps.add("CLIENT OFFSET " + offset);
     }
 
