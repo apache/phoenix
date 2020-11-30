@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.iterate;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
+
 import java.sql.SQLException;
 import java.util.List;
 
@@ -38,4 +41,8 @@ public abstract class BaseResultIterator implements ResultIterator {
     public void explain(List<String> planSteps) {
     }
 
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    }
 }

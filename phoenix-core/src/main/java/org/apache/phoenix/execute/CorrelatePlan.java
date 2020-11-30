@@ -24,6 +24,9 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -92,14 +95,33 @@ public class CorrelatePlan extends DelegateQueryPlan {
     public ExplainPlan getExplainPlan() throws SQLException {
         List<String> steps = Lists.newArrayList();
         steps.add("NESTED-LOOP-JOIN (" + joinType.toString().toUpperCase() + ") TABLES");
-        for (String step : delegate.getExplainPlan().getPlanSteps()) {
-            steps.add("    " + step);            
+        ExplainPlan lhsExplainPlan = delegate.getExplainPlan();
+        List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
+        ExplainPlanAttributes lhsPlanAttributes =
+            lhsExplainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder lhsPlanBuilder =
+            new ExplainPlanAttributesBuilder(lhsPlanAttributes);
+        lhsPlanBuilder.setAbstractExplainPlan("NESTED-LOOP-JOIN ("
+            + joinType.toString().toUpperCase() + ")");
+
+        for (String step : lhsPlanSteps) {
+            steps.add("    " + step);
         }
         steps.add("AND" + (rhsSchema.getFieldCount() == 0 ? " (SKIP MERGE)" : ""));
-        for (String step : rhs.getExplainPlan().getPlanSteps()) {
-            steps.add("    " + step);            
+
+        ExplainPlan rhsExplainPlan = rhs.getExplainPlan();
+        List<String> rhsPlanSteps = rhsExplainPlan.getPlanSteps();
+        ExplainPlanAttributes rhsPlanAttributes =
+            rhsExplainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder rhsPlanBuilder =
+            new ExplainPlanAttributesBuilder(rhsPlanAttributes);
+
+        lhsPlanBuilder.setRhsJoinQueryExplainPlan(rhsPlanBuilder.build());
+
+        for (String step : rhsPlanSteps) {
+            steps.add("    " + step);
         }
-        return new ExplainPlan(steps);
+        return new ExplainPlan(steps, lhsPlanBuilder.build());
     }
 
     @Override
@@ -216,6 +238,11 @@ public class CorrelatePlan extends DelegateQueryPlan {
 
         @Override
         public void explain(List<String> planSteps) { }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
 
         private ProjectedValueTuple convertLhs(Tuple lhs) throws IOException {
             ProjectedValueTuple tuple;

@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 
@@ -90,6 +92,14 @@ public class ConcatResultIterator implements PeekingResultIterator {
     public void explain(List<String> planSteps) {
         if (resultIterators != null) {
             resultIterators.explain(planSteps);
+        }
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        if (resultIterators != null) {
+            resultIterators.explain(planSteps, explainPlanAttributesBuilder);
         }
     }
 

@@ -28,6 +28,10 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.base.Optional;
+import org.apache.commons.math3.util.Pair;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -516,7 +520,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
 
         ResultIterator iterator = iterator();
-        ExplainPlan explainPlan = new ExplainPlan(getPlanSteps(iterator));
+        Pair<List<String>, ExplainPlanAttributes> planSteps =
+            getPlanStepsV2(iterator);
+        ExplainPlan explainPlan = new ExplainPlan(planSteps.getFirst(),
+            planSteps.getSecond());
         iterator.close();
         return explainPlan;
     }
@@ -525,6 +532,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
         return planSteps;
+    }
+
+    private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(
+            ResultIterator iterator) {
+        List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
+        ExplainPlanAttributesBuilder builder =
+            new ExplainPlanAttributesBuilder();
+        iterator.explain(planSteps, builder);
+        return new Pair<>(planSteps, builder.build());
     }
 
     @Override
