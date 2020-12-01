@@ -77,7 +77,7 @@ def findClasspath(command_name):
     return tryDecode(subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read())
 
 def setPath():
-    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client*.jar"
+    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
     PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
     PHOENIX_LOADBALANCER_JAR_PATTERN = "phoenix-load-balancer-*[!t][!e][!s][!t][!s].jar"
