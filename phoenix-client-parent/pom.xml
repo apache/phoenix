@@ -204,6 +204,18 @@
               <shadedPattern>${shaded.package}.javax.ws.</shadedPattern>
             </relocation>
             <relocation>
+              <pattern>javax/annotation/</pattern>
+              <shadedPattern>${shaded.package}.javax.annotation.</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>javax/inject/</pattern>
+              <shadedPattern>${shaded.package}.javax.inject.</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>javax/validation/</pattern>
+              <shadedPattern>${shaded.package}.javax.validation.</shadedPattern>
+            </relocation>
+            <relocation>
               <pattern>net/</pattern>
               <shadedPattern>${shaded.package}.net.</shadedPattern>
               <excludes>
