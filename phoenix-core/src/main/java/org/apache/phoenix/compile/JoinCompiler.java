@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.HashJoinRegionScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
@@ -100,6 +101,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
+import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -120,8 +122,8 @@ public class JoinCompiler {
         GENERAL,
     }
 
-    private final PhoenixStatement statement;
-    private final SelectStatement select;
+    private final PhoenixStatement phoenixStatement;
+    private final SelectStatement originalJoinSelectStatement;
     private final ColumnResolver origResolver;
     private final boolean useStarJoin;
     private final Map<ColumnRef, ColumnRefType> columnRefs;
@@ -129,8 +131,8 @@ public class JoinCompiler {
     private final boolean useSortMergeJoin;
 
     private JoinCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) {
-        this.statement = statement;
-        this.select = select;
+        this.phoenixStatement = statement;
+        this.originalJoinSelectStatement = select;
         this.origResolver = resolver;
         this.useStarJoin = !select.getHint().hasHint(Hint.NO_STAR_JOIN);
         this.columnRefs = new HashMap<ColumnRef, ColumnRefType>();
@@ -196,7 +198,7 @@ public class JoinCompiler {
         @Override
         public Pair<Table, List<JoinSpec>> visit(BindTableNode boundTableNode) throws SQLException {
             TableRef tableRef = resolveTable(boundTableNode.getAlias(), boundTableNode.getName());
-            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            boolean isWildCard = isWildCardSelectForTable(originalJoinSelectStatement.getSelect(), tableRef, origResolver);
             Table table = new Table(boundTableNode, isWildCard, Collections.<ColumnDef>emptyList(), boundTableNode.getTableSamplingRate(), tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
@@ -219,7 +221,7 @@ public class JoinCompiler {
         public Pair<Table, List<JoinSpec>> visit(NamedTableNode namedTableNode)
                 throws SQLException {
             TableRef tableRef = resolveTable(namedTableNode.getAlias(), namedTableNode.getName());
-            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            boolean isWildCard = isWildCardSelectForTable(originalJoinSelectStatement.getSelect(), tableRef, origResolver);
             Table table = new Table(namedTableNode, isWildCard, namedTableNode.getDynamicColumns(), namedTableNode.getTableSamplingRate(), tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
@@ -228,7 +230,7 @@ public class JoinCompiler {
         public Pair<Table, List<JoinSpec>> visit(DerivedTableNode subselectNode)
                 throws SQLException {
             TableRef tableRef = resolveTable(subselectNode.getAlias(), null);
-            boolean isWildCard = isWildCardSelectForTable(select.getSelect(), tableRef, origResolver);
+            boolean isWildCard = isWildCardSelectForTable(originalJoinSelectStatement.getSelect(), tableRef, origResolver);
             Table table = new Table(subselectNode, isWildCard, tableRef);
             return new Pair<Table, List<JoinSpec>>(table, null);
         }
@@ -313,7 +315,7 @@ public class JoinCompiler {
         }
 
         public SelectStatement getStatement() {
-            return select;
+            return originalJoinSelectStatement;
         }
 
         public ColumnResolver getOriginalResolver() {
@@ -361,14 +363,14 @@ public class JoinCompiler {
             WhereNodeVisitor visitor = new WhereNodeVisitor(
                     origResolver,
                     this,
-                    statement.getConnection());
+                    phoenixStatement.getConnection());
             filter.accept(visitor);
         }
 
         public void pushDownColumnRefVisitors(
                 ColumnRefParseNodeVisitor generalRefVisitor,
                 ColumnRefParseNodeVisitor joinLocalRefVisitor) throws SQLException {
-            for (ParseNode node : leftTable.getPostFilters()) {
+            for (ParseNode node : leftTable.getPostFilterParseNodes()) {
                 node.accept(generalRefVisitor);
             }
             for (ParseNode node : postFilters) {
@@ -421,8 +423,9 @@ public class JoinCompiler {
          *    or a flat sub-query,
          *    add BUILD_LEFT to the returned list.
          * 4. add SORT_MERGE to the returned list.
+         * @throws SQLException
          */
-        public List<Strategy> getApplicableJoinStrategies() {
+        public List<Strategy> getApplicableJoinStrategies() throws SQLException {
             List<Strategy> strategies = Lists.newArrayList();
             if (useSortMergeJoin) {
                 strategies.add(Strategy.SORT_MERGE);
@@ -434,7 +437,7 @@ public class JoinCompiler {
                 JoinType type = lastJoinSpec.getType();
                 if ((type == JoinType.Right || type == JoinType.Inner)
                         && lastJoinSpec.getRhsJoinTable().getJoinSpecs().isEmpty()
-                        && lastJoinSpec.getRhsJoinTable().getLeftTable().isFlat()) {
+                        && lastJoinSpec.getRhsJoinTable().getLeftTable().isCouldPushToServerAsHashJoinProbeSide()) {
                     strategies.add(Strategy.HASH_BUILD_LEFT);
                 }
                 strategies.add(Strategy.SORT_MERGE);
@@ -448,10 +451,11 @@ public class JoinCompiler {
          * can be evaluated at an early stage if the input JoinSpec can be taken as a
          * star join. Otherwise returns null.
          * @return a boolean vector for a star join; or null for non star join.
+         * @throws SQLException
          */
-        public boolean[] getStarJoinVector() {
+        public boolean[] getStarJoinVector() throws SQLException {
             int count = joinSpecs.size();
-            if (!leftTable.isFlat() ||
+            if (!leftTable.isCouldPushToServerAsHashJoinProbeSide() ||
                     (!useStarJoin
                             && count > 1
                             && joinSpecs.get(count - 1).getType() != JoinType.Left
@@ -530,12 +534,12 @@ public class JoinCompiler {
         }
 
         public SelectStatement getAsSingleSubquery(SelectStatement query, boolean asSubquery) throws SQLException {
-            assert (isFlat(query));
+            assert (isCouldPushToServerAsHashJoinProbeSide(query));
 
             if (asSubquery)
                 return query;
 
-            return NODE_FACTORY.select(select, query.getFrom(), query.getWhere());
+            return NODE_FACTORY.select(originalJoinSelectStatement, query.getFrom(), query.getWhere());
         }
 
         public boolean hasPostReference() {
@@ -586,7 +590,7 @@ public class JoinCompiler {
             this.rhsJoinTable = joinTable;
             this.singleValueOnly = singleValueOnly;
             this.dependentTableRefs = new HashSet<TableRef>();
-            this.onNodeVisitor = new OnNodeVisitor(resolver, this, statement.getConnection());
+            this.onNodeVisitor = new OnNodeVisitor(resolver, this, phoenixStatement.getConnection());
             if (onNode != null) {
                 this.pushDownOnCondition(onNode);
             }
@@ -768,10 +772,27 @@ public class JoinCompiler {
         private final boolean isWildcard;
         private final List<ColumnDef> dynamicColumns;
         private final Double tableSamplingRate;
-        private SelectStatement subselect;
+        private SelectStatement subselectStatement;
         private TableRef tableRef;
-        private final List<ParseNode> preFilters;
-        private final List<ParseNode> postFilters;
+        /**
+         * Which could as this {@link Table}'s where conditions.
+         * Note: for {@link #isSubselect()}, added preFilterParseNode
+         * is at first rewritten by
+         * {@link SubselectRewriter#rewritePreFilterForSubselect}.
+         */
+        private final List<ParseNode> preFilterParseNodes;
+        /**
+         * Only make sense for {@link #isSubselect()}.
+         * {@link #postFilterParseNodes} could not as this
+         * {@link Table}'s where conditions, but need to filter after
+         * {@link #getSelectStatementByApplyPreFiltersIfSubselect()}
+         * is executed.
+         */
+        private final List<ParseNode> postFilterParseNodes;
+        /**
+         * Determined by {@link SubselectRewriter#isFilterCanPushDownToSelect}.
+         * Only make sense for {@link #isSubselect()},
+         */
         private final boolean filterCanPushDownToSubselect;
 
         private Table(TableNode tableNode, boolean isWildcard, List<ColumnDef> dynamicColumns,
@@ -780,10 +801,10 @@ public class JoinCompiler {
             this.isWildcard = isWildcard;
             this.dynamicColumns = dynamicColumns;
             this.tableSamplingRate=tableSamplingRate;
-            this.subselect = null;
+            this.subselectStatement = null;
             this.tableRef = tableRef;
-            this.preFilters = new ArrayList<ParseNode>();
-            this.postFilters = Collections.<ParseNode>emptyList();
+            this.preFilterParseNodes = new ArrayList<ParseNode>();
+            this.postFilterParseNodes = Collections.<ParseNode>emptyList();
             this.filterCanPushDownToSubselect = false;
         }
 
@@ -792,11 +813,11 @@ public class JoinCompiler {
             this.isWildcard = isWildcard;
             this.dynamicColumns = Collections.<ColumnDef>emptyList();
             this.tableSamplingRate=ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
-            this.subselect = SubselectRewriter.flatten(tableNode.getSelect(), statement.getConnection());
+            this.subselectStatement = SubselectRewriter.flatten(tableNode.getSelect(), phoenixStatement.getConnection());
             this.tableRef = tableRef;
-            this.preFilters = new ArrayList<ParseNode>();
-            this.postFilters = new ArrayList<ParseNode>();
-            this.filterCanPushDownToSubselect = SubselectRewriter.isFilterCanPushDownToSelect(subselect);
+            this.preFilterParseNodes = new ArrayList<ParseNode>();
+            this.postFilterParseNodes = new ArrayList<ParseNode>();
+            this.filterCanPushDownToSubselect = SubselectRewriter.isFilterCanPushDownToSelect(subselectStatement);
         }
 
         public TableNode getTableNode() {
@@ -812,11 +833,11 @@ public class JoinCompiler {
         }
 
         public boolean isSubselect() {
-            return subselect != null;
+            return subselectStatement != null;
         }
 
-        public SelectStatement getSubselect() {
-            return this.subselect;
+        public SelectStatement getSubselectStatement() {
+            return this.subselectStatement;
         }
 
         /**
@@ -831,10 +852,10 @@ public class JoinCompiler {
             Set<String> referencedColumnNames = this.getReferencedColumnNames();
             SelectStatement newSubselectStatement =
                     SubselectRewriter.pruneSelectAliasedNodes(
-                            this.subselect,
+                            this.subselectStatement,
                             referencedColumnNames,
-                            statement.getConnection());
-            if(!newSubselectStatement.getSelect().equals(this.subselect.getSelect())) {
+                            phoenixStatement.getConnection());
+            if(!newSubselectStatement.getSelect().equals(this.subselectStatement.getSelect())) {
                 /**
                  * The columns are pruned, so {@link ColumnResolver} should be refreshed.
                  */
@@ -843,7 +864,7 @@ public class JoinCompiler {
                 TableRef newTableRef =
                         FromCompiler.refreshDerivedTableNode(origResolver, newDerivedTableNode);
                 assert newTableRef != null;
-                this.subselect = newSubselectStatement;
+                this.subselectStatement = newSubselectStatement;
                 this.tableRef = newTableRef;
                 this.tableNode = newDerivedTableNode;
             }
@@ -874,7 +895,7 @@ public class JoinCompiler {
         /**
          * Returns all the basic select nodes, no aggregation.
          */
-        public List<AliasedNode> getSelectNodes() {
+        public List<AliasedNode> getSelectAliasedNodes() {
             if (isWildCardSelect()) {
                 return Collections.singletonList(NODE_FACTORY.aliasedNode(null, NODE_FACTORY.wildcard()));
             }
@@ -891,12 +912,12 @@ public class JoinCompiler {
             return ret;
         }
 
-        public List<ParseNode> getPreFilters() {
-            return preFilters;
+        public List<ParseNode> getPreFilterParseNodes() {
+            return preFilterParseNodes;
         }
 
-        public List<ParseNode> getPostFilters() {
-            return postFilters;
+        public List<ParseNode> getPostFilterParseNodes() {
+            return postFilterParseNodes;
         }
 
         public TableRef getTableRef() {
@@ -907,7 +928,7 @@ public class JoinCompiler {
             if (!isSubselect() || filterCanPushDownToSubselect) {
                 this.addPreFilter(filter);
             } else {
-                postFilters.add(filter);
+                postFilterParseNodes.add(filter);
             }
         }
 
@@ -922,29 +943,34 @@ public class JoinCompiler {
                 preFilterParseNode =
                         SubselectRewriter.rewritePreFilterForSubselect(
                                 preFilterParseNode,
-                                this.subselect,
+                                this.subselectStatement,
                                 tableNode.getAlias());
             }
-            preFilters.add(preFilterParseNode);
+            preFilterParseNodes.add(preFilterParseNode);
         }
 
-        public ParseNode getPreFiltersCombined() {
-            return combine(preFilters);
+        public ParseNode getCombinedPreFilterParseNodes() {
+            return combine(preFilterParseNodes);
         }
 
-        public SelectStatement getAsSubquery(List<OrderByNode> orderBy) throws SQLException {
+        /**
+         * Get this {@link Table}'s new {@link SelectStatement} by applying {@link #preFilterParseNodes},
+         * {@link #postFilterParseNodes} and additional newOrderByNodes.
+         * @param newOrderByNodes
+         * @return
+         * @throws SQLException
+         */
+        public SelectStatement getAsSubquery(List<OrderByNode> newOrderByNodes) throws SQLException {
             if (isSubselect()) {
                 return SubselectRewriter.applyOrderByAndPostFilters(
-                        SubselectRewriter.applyPreFiltersForSubselect(subselect, preFilters, tableNode.getAlias()),
-                        orderBy,
+                        this.getSelectStatementByApplyPreFiltersIfSubselect(),
+                        newOrderByNodes,
                         tableNode.getAlias(),
-                        postFilters);
+                        postFilterParseNodes);
             }
             //for flat table, postFilters is empty , because it can safely pushed down as preFilters.
-            assert postFilters == null || postFilters.isEmpty();
-            return NODE_FACTORY.select(tableNode, select.getHint(), false, getSelectNodes(), getPreFiltersCombined(), null,
-                    null, orderBy, null, null, 0, false, select.hasSequence(),
-                    Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());
+            assert postFilterParseNodes == null || postFilterParseNodes.isEmpty();
+            return this.getSelectStatementByApplyPreFiltersIfNotSubselect(newOrderByNodes);
         }
 
         public SelectStatement getAsSubqueryForOptimization(boolean applyGroupByOrOrderBy) throws SQLException {
@@ -956,18 +982,18 @@ public class JoinCompiler {
 
             boolean addGroupBy = false;
             boolean addOrderBy = false;
-            if (select.getGroupBy() != null && !select.getGroupBy().isEmpty()) {
-                ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(origResolver, statement.getConnection());
-                for (ParseNode node : select.getGroupBy()) {
+            if (originalJoinSelectStatement.getGroupBy() != null && !originalJoinSelectStatement.getGroupBy().isEmpty()) {
+                ColumnRefParseNodeVisitor groupByVisitor = new ColumnRefParseNodeVisitor(origResolver, phoenixStatement.getConnection());
+                for (ParseNode node : originalJoinSelectStatement.getGroupBy()) {
                     node.accept(groupByVisitor);
                 }
                 Set<TableRef> set = groupByVisitor.getTableRefSet();
                 if (set.size() == 1 && tableRef.equals(set.iterator().next())) {
                     addGroupBy = true;
                 }
-            } else if (select.getOrderBy() != null && !select.getOrderBy().isEmpty()) {
-                ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(origResolver, statement.getConnection());
-                for (OrderByNode node : select.getOrderBy()) {
+            } else if (originalJoinSelectStatement.getOrderBy() != null && !originalJoinSelectStatement.getOrderBy().isEmpty()) {
+                ColumnRefParseNodeVisitor orderByVisitor = new ColumnRefParseNodeVisitor(origResolver, phoenixStatement.getConnection());
+                for (OrderByNode node : originalJoinSelectStatement.getOrderBy()) {
                     node.getNode().accept(orderByVisitor);
                 }
                 Set<TableRef> set = orderByVisitor.getTableRefSet();
@@ -991,18 +1017,87 @@ public class JoinCompiler {
             }
 
             return NODE_FACTORY.select(query.getFrom(), query.getHint(), query.isDistinct(), selectList,
-                    query.getWhere(), addGroupBy ? select.getGroupBy() : query.getGroupBy(),
-                    addGroupBy ? null : query.getHaving(), addOrderBy ? select.getOrderBy() : query.getOrderBy(),
+                    query.getWhere(), addGroupBy ? originalJoinSelectStatement.getGroupBy() : query.getGroupBy(),
+                    addGroupBy ? null : query.getHaving(), addOrderBy ? originalJoinSelectStatement.getOrderBy() : query.getOrderBy(),
                     query.getLimit(), query.getOffset(), query.getBindCount(), addGroupBy, query.hasSequence(),
                     query.getSelects(), query.getUdfParseNodes());
         }
 
         public boolean hasFilters() {
-            return isSubselect() ? (!postFilters.isEmpty() || subselect.getWhere() != null || subselect.getHaving() != null) : !preFilters.isEmpty();
+            return isSubselect() ?
+                   (!postFilterParseNodes.isEmpty() || subselectStatement.getWhere() != null || subselectStatement.getHaving() != null) :
+                    !preFilterParseNodes.isEmpty();
         }
 
-        public boolean isFlat() {
-            return subselect == null || JoinCompiler.isFlat(subselect);
+        /**
+         * Check if this {@link Table} could be pushed to RegionServer
+         * {@link HashJoinRegionScanner} as the probe side of Hash join.
+         * @return
+         * @throws SQLException
+         */
+        public boolean isCouldPushToServerAsHashJoinProbeSide() throws SQLException {
+           //return subselectStatement == null || JoinCompiler.isFlat(subselectStatement);
+            /**
+             * If {@link #postFilterParseNodes} is not empty, obviously this {@link Table}
+             * should execute {@link #postFilterParseNodes} before join.
+             */
+            if(this.postFilterParseNodes != null && !this.postFilterParseNodes.isEmpty()) {
+                return false;
+            }
+
+            SelectStatement selectStatementToUse =
+                this.getSelectStatementByApplyPreFilters();
+            RewriteResult rewriteResult =
+                    ParseNodeUtil.rewrite(selectStatementToUse, phoenixStatement.getConnection());
+            return JoinCompiler.isCouldPushToServerAsHashJoinProbeSide(rewriteResult.getRewrittenSelectStatement());
+        }
+
+        /**
+         * Get this {@link Table}'s new {@link SelectStatement} only applying
+         * {@link #preFilterParseNodes}.
+         * @return
+         */
+        private SelectStatement getSelectStatementByApplyPreFilters() {
+            return  this.isSubselect() ?
+                    this.getSelectStatementByApplyPreFiltersIfSubselect() :
+                    this.getSelectStatementByApplyPreFiltersIfNotSubselect(null);
+        }
+
+        /**
+         * Get this {@link Table}'s new {@link SelectStatement} only applying
+         * {@link #preFilterParseNodes} for {@link #isSubselect()}.
+         * @return
+         */
+        private SelectStatement getSelectStatementByApplyPreFiltersIfSubselect() {
+            return SubselectRewriter.applyPreFiltersForSubselect(
+                    subselectStatement,
+                    preFilterParseNodes,
+                    tableNode.getAlias());
+
+        }
+
+        /**
+         * Get this {@link Table}'s new {@link SelectStatement} only applying
+         * {@link #preFilterParseNodes} if not {@link #isSubselect()}.
+         * @return
+         */
+        private SelectStatement getSelectStatementByApplyPreFiltersIfNotSubselect(List<OrderByNode> newOrderByNodes) {
+            return NODE_FACTORY.select(
+                    tableNode,
+                    originalJoinSelectStatement.getHint(),
+                    false,
+                    getSelectAliasedNodes(),
+                    getCombinedPreFilterParseNodes(),
+                    null,
+                    null,
+                    newOrderByNodes,
+                    null,
+                    null,
+                    0,
+                    false,
+                    originalJoinSelectStatement.hasSequence(),
+                    Collections.<SelectStatement> emptyList(),
+                    originalJoinSelectStatement.getUdfParseNodes());
         }
 
         protected boolean isWildCardSelect() {
@@ -1058,7 +1153,7 @@ public class JoinCompiler {
 
         public PTable createProjectedTable(RowProjector rowProjector) throws SQLException {
             assert(isSubselect());
-            TableRef tableRef = FromCompiler.getResolverForCompiledDerivedTable(statement.getConnection(), this.tableRef, rowProjector).getTables().get(0);
+            TableRef tableRef = FromCompiler.getResolverForCompiledDerivedTable(phoenixStatement.getConnection(), this.tableRef, rowProjector).getTables().get(0);
             List<ColumnRef> sourceColumns = new ArrayList<ColumnRef>();
             PTable table = tableRef.getTable();
             for (PColumn column : table.getColumns()) {
@@ -1373,13 +1468,24 @@ public class JoinCompiler {
     // for creation of new statements
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
 
-    private static boolean isFlat(SelectStatement select) {
-        return !select.isJoin()
-                && !select.isAggregate()
-                && !select.isDistinct()
-                && !(select.getFrom() instanceof DerivedTableNode)
-                && select.getLimit() == null
-                && select.getOffset() == null;
+    /**
+     * Check if this {@link Table} could be pushed to RegionServer
+     * {@link HashJoinRegionScanner} as the probe side of Hash join.
+     * Note: the {@link SelectStatement} parameter should be rewritten by
+     * {@link ParseNodeUtil#rewrite} before this method.
+     * {@link SelectStatement} parameter could has NonCorrelated subquery,
+     * but for Correlated subquery, {@link ParseNodeUtil#rewrite} rewrite
+     * it as join.
+     * @param selectStatement
+     * @return
+     */
+    private static boolean isCouldPushToServerAsHashJoinProbeSide(SelectStatement selectStatement) {
+        return !selectStatement.isJoin()
+                && !selectStatement.isAggregate()
+                && !selectStatement.isDistinct()
+                && !(selectStatement.getFrom() instanceof DerivedTableNode)
+                && selectStatement.getLimit() == null
+                && selectStatement.getOffset() == null;
     }
 
     private static ParseNode combine(List<ParseNode> nodes) {
@@ -1393,7 +1499,7 @@ public class JoinCompiler {
     }
 
     private boolean isWildCardSelectForTable(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
-        ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
+        ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver, phoenixStatement.getConnection());
         for (AliasedNode aliasedNode : select) {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof TableWildcardParseNode) {
