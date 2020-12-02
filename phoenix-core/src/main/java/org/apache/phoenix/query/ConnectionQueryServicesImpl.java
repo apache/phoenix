@@ -3944,28 +3944,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     toThrow = e;
                 }
             } finally {
-                try {
-                    for (Map.Entry<String, String> tableToSnapshotEntrySet
-                            : systemTableToSnapshotMap.entrySet()) {
-                        restoreFromSnapshot(tableToSnapshotEntrySet.getKey(),
-                            tableToSnapshotEntrySet.getValue(), success);
-                    }
-                } catch (SQLException e) {
-                    if (toThrow != null) {
-                        toThrow.setNextException(e);
-                    } else {
-                        toThrow = e;
-                    }
-                } finally {
-                    if (acquiredMutexLock) {
-                        try {
-                            releaseUpgradeMutex();
-                        } catch (IOException e) {
-                            LOGGER.warn("Release of upgrade mutex failed ", e);
-                        }
+                if (!success) {
+                    LOGGER.warn("Failed upgrading System tables. " +
+                        "Snapshots for system tables created so far: {}",
+                        systemTableToSnapshotMap);
+                }
+                if (acquiredMutexLock) {
+                    try {
+                        releaseUpgradeMutex();
+                    } catch (IOException e) {
+                        LOGGER.warn("Release of upgrade mutex failed ", e);
                     }
                 }
-                if (toThrow != null) { throw toThrow; }
+                if (toThrow != null) {
+                    throw toThrow;
+                }
             }
         }
     }
@@ -4366,70 +4359,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } finally {
                 if (sqlE != null) {
                     throw sqlE;
-                }
-            }
-        }
-    }
-
-    private void restoreFromSnapshot(String tableName, String snapshotName,
-            boolean success) throws SQLException {
-        boolean snapshotRestored = false;
-        boolean tableDisabled = false;
-        if (!success && snapshotName != null) {
-            SQLException sqlE = null;
-            Admin admin = null;
-            try {
-                LOGGER.warn("Starting restore of " + tableName + " using snapshot "
-                        + snapshotName + " because upgrade failed");
-                admin = getAdmin();
-                admin.disableTable(TableName.valueOf(tableName));
-                tableDisabled = true;
-                admin.restoreSnapshot(snapshotName);
-                snapshotRestored = true;
-                LOGGER.warn("Successfully restored " + tableName + " using snapshot "
-                        + snapshotName);
-            } catch (Exception e) {
-                sqlE = new SQLException(e);
-            } finally {
-                if (admin != null && tableDisabled) {
-                    try {
-                        admin.enableTable(TableName.valueOf(tableName));
-                        if (snapshotRestored) {
-                            LOGGER.warn("Successfully restored and enabled " + tableName + " using snapshot "
-                                    + snapshotName);
-                        } else {
-                            LOGGER.warn("Successfully enabled " + tableName + " after restoring using snapshot "
-                                    + snapshotName + " failed. ");
-                        }
-                    } catch (Exception e1) {
-                        SQLException enableTableEx = new SQLException(e1);
-                        if (sqlE == null) {
-                            sqlE = enableTableEx;
-                        } else {
-                            sqlE.setNextException(enableTableEx);
-                        }
-                        LOGGER.error("Failure in enabling "
-                                + tableName
-                                + (snapshotRestored ? " after successfully restoring using snapshot"
-                                        + snapshotName
-                                        : " after restoring using snapshot "
-                                                + snapshotName + " failed. "));
-                    } finally {
-                        try {
-                            admin.close();
-                        } catch (Exception e2) {
-                            SQLException adminCloseEx = new SQLException(e2);
-                            if (sqlE == null) {
-                                sqlE = adminCloseEx;
-                            } else {
-                                sqlE.setNextException(adminCloseEx);
-                            }
-                        } finally {
-                            if (sqlE != null) {
-                                throw sqlE;
-                            }
-                        }
-                    }
                 }
             }
         }
