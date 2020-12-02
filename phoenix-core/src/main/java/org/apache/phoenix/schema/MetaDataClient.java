@@ -4195,7 +4195,9 @@ public class MetaDataClient {
         for (PTable index : indexesPTable) {
             int iPos = indexToColumnSizeMap.get(index);
             EncodedCQCounter cqCounterToUse = index.getEncodedCQCounter();
-            Integer encodedCQ = index.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + iPos) : cqCounterToUse.getNextQualifier(familyName) + iPos;
+            int baseCount = 0;
+            baseCount = (cqCounterToUse != null && cqCounterToUse.getNextQualifier(familyName)!=null) ? cqCounterToUse.getNextQualifier(familyName) : 0 ;
+            Integer encodedCQ = index.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + iPos) : baseCount + iPos;
             byte[] columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(indexColDef.getColumnDefName().getColumnName(), encodedCQ, index, indexColDef.isPK());
             PColumn iColumn = newColumn(iPos, indexColDef, null, index.getDefaultFamilyName() == null ? null : index.getDefaultFamilyName().getString(), false, columnQualifierBytes, willBeImmutableRows);
             indexColumn.put(index, iColumn);

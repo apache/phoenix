@@ -73,10 +73,10 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
 
     public AlterAddCascadeIndexIT(boolean isViewIndex, boolean mutable) {
         this.isViewIndex = isViewIndex;
-        StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder optionBuilder = new StringBuilder("COLUMN_ENCODED_BYTES=0");
         if (!mutable) {
 
-            optionBuilder.append(" IMMUTABLE_ROWS=true");
+            optionBuilder.append(", IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'");
         }
         this.mutable = mutable;
         this.tableDDLOptions = optionBuilder.toString();
@@ -159,7 +159,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
                 assertNumberOfHBaseCells( "_IDX_"+fullTableName,6);
             }
             else {
-                assertNumberOfHBaseCells( "_IDX_"+fullTableName,4);
+                assertNumberOfHBaseCells( "_IDX_"+fullTableName,6);
             }
         } else {
             assertDBODefinition(conn, phoenixObjectName, PTableType.TABLE, 4, columnArray, false);
