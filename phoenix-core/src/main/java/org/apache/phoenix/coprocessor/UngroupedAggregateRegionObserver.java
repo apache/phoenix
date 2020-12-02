@@ -977,4 +977,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         return s;
     }
+
+    /**
+     * roll back after split failed, will isRegionClosingOrSplitting set false,
+     * and then write region will is available
+     * @param ctx
+     * @throws IOException
+     */
+    @Override
+    public void postRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx) throws IOException {
+        synchronized (lock) {
+            isRegionClosingOrSplitting = false;
+        }
+    }
 }
