@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DELETE;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.INDEX_REBUILD_ASYNC;
@@ -27,6 +28,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.computeClientVersions;
@@ -46,9 +48,11 @@ import java.util.Collection;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -377,4 +381,34 @@ public class BackwardCompatibilityIT {
         }
     }
 
+    @Test
+    public void testViewIndexIdCreatedWithOldClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
+        try (org.apache.hadoop.hbase.client.Connection conn =
+                     hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
+            HTableDescriptor tableDescriptor = admin.getTableDescriptor(
+                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+            assertFalse("Coprocessor " + SystemCatalogRegionObserver.class.getName()
+                    + " has been added with compatible client version: "
+                    + compatibleClientVersion, tableDescriptor.hasCoprocessor(
+                    SystemCatalogRegionObserver.class.getName()));
+
+            executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
+            assertExpectedOutput(QUERY_VIEW_INDEX);
+
+            tableDescriptor = admin.getTableDescriptor(
+                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+            assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
+                    + " has been added with compatible client version: "
+                    + compatibleClientVersion, tableDescriptor.hasCoprocessor(
+                    SystemCatalogRegionObserver.class.getName()));
+        }
+    }
+
+    @Test
+    public void testViewIndexIdCreatedWithNewClient() throws Exception {
+        executeQueriesWithCurrentVersion(ADD_VIEW_INDEX, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_VIEW_INDEX, zkQuorum);
+        assertExpectedOutput(QUERY_VIEW_INDEX);
+    }
 }
