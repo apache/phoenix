@@ -122,6 +122,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
@@ -134,6 +135,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -171,6 +173,7 @@ import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
+import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
@@ -1137,6 +1140,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
                     builder.addCoprocessor(
                             PhoenixTTLRegionObserver.class.getName(), null, priority-2, null);
+                }
+            }
+            if (Arrays.equals(tableName, SYSTEM_CATALOG_NAME_BYTES)) {
+                if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
+                    builder.addCoprocessor(
+                            SystemCatalogRegionObserver.class.getName(), null, priority, null);
                 }
             }
 
@@ -3795,6 +3804,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         metaConnection, rowKey, tableBytes);
             } else {
                 LOGGER.info("Updating VIEW_INDEX_ID data type is not needed.");
+            }
+            try (Admin admin = metaConnection.getQueryServices().getAdmin()) {
+                HTableDescriptor htd;
+                TableName syscatPhysicalTableName = SchemaUtil.getPhysicalTableName(
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props);
+                htd = admin.getTableDescriptor(syscatPhysicalTableName);
+                if (!htd.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
+                    int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
+                            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
+                    htd.addCoprocessor(SystemCatalogRegionObserver.class.getName(), null, priority, null);
+                    admin.modifyTable(syscatPhysicalTableName, htd);
+                    pollForUpdatedTableDescriptor(admin, htd, syscatPhysicalTableName.getName());
+                }
             }
         }
         return metaConnection;

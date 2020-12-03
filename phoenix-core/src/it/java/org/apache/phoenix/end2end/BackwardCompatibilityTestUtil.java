@@ -75,7 +75,9 @@ public final class BackwardCompatibilityTestUtil {
     public static final String CREATE_DIVERGED_VIEW = "create_diverged_view";
     public static final String ADD_DATA = "add_data";
     public static final String ADD_DELETE = "add_delete";
+    public static final String ADD_VIEW_INDEX = "add_view_index";
     public static final String DELETE = "delete";
+    public static final String VIEW_INDEX = "view_index";
     public static final String SELECT_AND_DROP_TABLE = "select_and_drop_table";
     public static final String QUERY_CREATE_ADD = QUERY_PREFIX + CREATE_ADD;
     public static final String QUERY_ADD_DATA = QUERY_PREFIX + ADD_DATA;
@@ -83,6 +85,7 @@ public final class BackwardCompatibilityTestUtil {
     public static final String QUERY_DELETE = QUERY_PREFIX + DELETE;
     public static final String QUERY_SELECT_AND_DROP_TABLE = QUERY_PREFIX + SELECT_AND_DROP_TABLE;
     public static final String QUERY_CREATE_DIVERGED_VIEW = QUERY_PREFIX + CREATE_DIVERGED_VIEW;
+    public static final String QUERY_VIEW_INDEX = QUERY_PREFIX + VIEW_INDEX;
     public static final String INDEX_REBUILD_ASYNC = "index_rebuild_async";
     public static final String QUERY_INDEX_REBUILD_ASYNC = QUERY_PREFIX
         + INDEX_REBUILD_ASYNC;
