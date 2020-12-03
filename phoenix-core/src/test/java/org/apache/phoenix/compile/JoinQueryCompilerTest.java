@@ -115,51 +115,51 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
 
         String query = String.format(queryTemplate, "INNER", "INNER");
         JoinTable joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(1, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(1, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "INNER", "LEFT");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(1, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(1, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "INNER", "RIGHT");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(0, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(0, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "LEFT", "INNER");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(1, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(1, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "LEFT", "LEFT");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(1, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(1, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "LEFT", "RIGHT");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(0, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(0, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "RIGHT", "INNER");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(0, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(0, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
 
         query = String.format(queryTemplate, "RIGHT", "RIGHT");
         joinTable = TestUtil.getJoinTable(query, pconn);
-        assertEquals(0, joinTable.getLeftTable().getPreFilters().size());
-        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilters().size());
-        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilters().size());
+        assertEquals(0, joinTable.getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(0, joinTable.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
+        assertEquals(1, joinTable.getJoinSpecs().get(1).getRhsJoinTable().getLeftTable().getPreFilterParseNodes().size());
     }
 }
 

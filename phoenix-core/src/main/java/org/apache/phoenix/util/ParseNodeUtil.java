@@ -26,11 +26,18 @@ import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNodeVisitor;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.StatementNormalizer;
+import org.apache.phoenix.compile.SubqueryRewriter;
+import org.apache.phoenix.compile.SubselectRewriter;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.compile.QueryCompiler;
 
 public class ParseNodeUtil {
 
@@ -138,5 +145,43 @@ public class ParseNodeUtil {
             this.wildcard = true;
             return null;
         }
+    }
+
+    public static class RewriteResult {
+        private SelectStatement rewrittenSelectStatement;
+        private ColumnResolver columnResolver;
+        public RewriteResult(SelectStatement rewrittenSelectStatement, ColumnResolver columnResolver) {
+            this.rewrittenSelectStatement = rewrittenSelectStatement;
+            this.columnResolver = columnResolver;
+        }
+        public SelectStatement getRewrittenSelectStatement() {
+            return rewrittenSelectStatement;
+        }
+        public ColumnResolver getColumnResolver() {
+            return columnResolver;
+        }
+    }
+
+    /**
+     * Optimize rewriting {@link SelectStatement} by {@link SubselectRewriter} and {@link SubqueryRewriter} before
+     * {@link QueryCompiler#compile}.
+     * @param selectStatement
+     * @param phoenixConnection
+     * @return
+     * @throws SQLException
+     */
+    public static RewriteResult rewrite(SelectStatement selectStatement, PhoenixConnection phoenixConnection) throws SQLException {
+        SelectStatement selectStatementToUse =
+                SubselectRewriter.flatten(selectStatement, phoenixConnection);
+        ColumnResolver columnResolver =
+                FromCompiler.getResolverForQuery(selectStatementToUse, phoenixConnection);
+        selectStatementToUse = StatementNormalizer.normalize(selectStatementToUse, columnResolver);
+        SelectStatement transformedSubquery =
+                SubqueryRewriter.transform(selectStatementToUse, columnResolver, phoenixConnection);
+        if (transformedSubquery != selectStatementToUse) {
+            columnResolver = FromCompiler.getResolverForQuery(transformedSubquery, phoenixConnection);
+            transformedSubquery = StatementNormalizer.normalize(transformedSubquery, columnResolver);
+        }
+        return new RewriteResult(transformedSubquery, columnResolver);
     }
 }

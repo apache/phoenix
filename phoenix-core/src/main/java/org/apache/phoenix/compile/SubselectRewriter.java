@@ -73,7 +73,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
     public static SelectStatement applyPreFiltersForSubselect(
             SelectStatement subselectStatement,
             List<ParseNode> preFilterParseNodes,
-            String subselectAlias) throws SQLException {
+            String subselectAlias) {
 
         if (preFilterParseNodes.isEmpty()) {
             return subselectStatement;
@@ -113,8 +113,9 @@ public class SubselectRewriter extends ParseNodeRewriter {
      * @return
      * @throws SQLException
      */
-    public static boolean isFilterCanPushDownToSelect(SelectStatement statement) throws SQLException {
-        return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
+    public static boolean isFilterCanPushDownToSelect(SelectStatement statement) {
+        return statement.getLimit() == null &&
+               (!statement.isAggregate() || !statement.getGroupBy().isEmpty());
     }
     
     /**
