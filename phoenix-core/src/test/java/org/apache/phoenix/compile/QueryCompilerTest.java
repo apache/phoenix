@@ -63,6 +63,8 @@ import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
+import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
+import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
@@ -6383,14 +6385,14 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             JoinTable joinTablesContext = TestUtil.getJoinTable(sql, conn);
             Table leftmostTableContext = joinTablesContext.getLeftTable();
             TestUtil.assertSelectStatement(
-                    leftmostTableContext.getSubselect(),
+                    leftmostTableContext.getSubselectStatement(),
                     "SELECT ENTITY_ID ID,A_STRING A FROM TESTA  WHERE A_BYTE >= 8");
-            assertTrue(leftmostTableContext.getPreFilters().isEmpty());
+            assertTrue(leftmostTableContext.getPreFilterParseNodes().isEmpty());
 
             Table rightTableContext = joinTablesContext.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable();
-            TestUtil.assertSelectStatement(rightTableContext.getSubselect(), "SELECT ENTITY_ID ID,B_STRING B FROM TESTA");
-            assertTrue(rightTableContext.getPreFilters().size() == 1);
-            assertTrue(rightTableContext.getPreFilters().get(0).toString().equals("A_BYTE != 5"));
+            TestUtil.assertSelectStatement(rightTableContext.getSubselectStatement(), "SELECT ENTITY_ID ID,B_STRING B FROM TESTA");
+            assertTrue(rightTableContext.getPreFilterParseNodes().size() == 1);
+            assertTrue(rightTableContext.getPreFilterParseNodes().get(0).toString().equals("A_BYTE != 5"));
 
             queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
             HashJoinPlan hashJoinPlan = (HashJoinPlan)queryPlan;
@@ -6417,16 +6419,16 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             joinTablesContext = TestUtil.getJoinTable(sql, conn);
             leftmostTableContext = joinTablesContext.getLeftTable();
             TestUtil.assertSelectStatement(
-                    leftmostTableContext.getSubselect(),
+                    leftmostTableContext.getSubselectStatement(),
                     "SELECT ENTITY_ID ID,A_STRING A,B_STRING B FROM TESTA  WHERE A_BYTE >= 8");
-            assertTrue(leftmostTableContext.getPreFilters().isEmpty());
+            assertTrue(leftmostTableContext.getPreFilterParseNodes().isEmpty());
 
             rightTableContext = joinTablesContext.getJoinSpecs().get(0).getRhsJoinTable().getLeftTable();
             TestUtil.assertSelectStatement(
-                    rightTableContext.getSubselect(),
+                    rightTableContext.getSubselectStatement(),
                     "SELECT ENTITY_ID ID,A_STRING A,B_STRING B,A_BYTE X FROM TESTA");
-            assertTrue(rightTableContext.getPreFilters().size() == 1);
-            assertTrue(rightTableContext.getPreFilters().get(0).toString().equals("A_BYTE != 5"));
+            assertTrue(rightTableContext.getPreFilterParseNodes().size() == 1);
+            assertTrue(rightTableContext.getPreFilterParseNodes().get(0).toString().equals("A_BYTE != 5"));
 
             queryPlan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
             hashJoinPlan = (HashJoinPlan)queryPlan;
@@ -6600,6 +6602,177 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                     "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  Left JOIN "+
                     "(SELECT DISTINCT 1 $56, MAX(ITEM_ID) $57 FROM ORDER_TABLE O  WHERE O.PRICE > 8 GROUP BY O.CUSTOMER_ID,O.ITEM_ID) $55 "+
                     "ON (I.ITEM_ID = $55.$57) WHERE ($55.$56 IS NOT NULL  OR I.DISCOUNT1 > 10) ORDER BY NAME");
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testHashJoinBug6232() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String sql ="CREATE TABLE test (" +
+                    "      id INTEGER NOT NULL," +
+                    "      test_id INTEGER," +
+                    "      lastchanged TIMESTAMP," +
+                    "      CONSTRAINT my_pk PRIMARY KEY (id))";
+            conn.createStatement().execute(sql);
+
+            sql= "SELECT AAA.* FROM " +
+                    "(SELECT id, test_id, lastchanged FROM test T " +
+                    "  WHERE lastchanged = ( SELECT max(lastchanged) FROM test WHERE test_id = T.test_id )) AAA " +
+                    "inner join " +
+                    "(SELECT id FROM test) BBB " +
+                    "on AAA.id = BBB.id";
+            QueryPlan queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(queryPlan instanceof HashJoinPlan);
+            HashJoinPlan hashJoinPlan = (HashJoinPlan)queryPlan;
+            assertTrue(hashJoinPlan.getDelegate() instanceof ScanPlan);
+            TestUtil.assertSelectStatement(
+                    hashJoinPlan.getDelegate().getStatement(), "SELECT AAA.* FROM TEST");
+            SubPlan[] subPlans = hashJoinPlan.getSubPlans();
+            assertTrue(subPlans.length == 1);
+            assertTrue(subPlans[0] instanceof HashSubPlan);
+            assertTrue(subPlans[0].getInnerPlan() instanceof TupleProjectionPlan);
+            assertTrue(
+               ((TupleProjectionPlan)(subPlans[0].getInnerPlan())).getDelegate() instanceof HashJoinPlan);
+
+            sql= "SELECT AAA.* FROM " +
+                    "(SELECT id, test_id, lastchanged FROM test T " +
+                    "  WHERE lastchanged = ( SELECT max(lastchanged) FROM test WHERE test_id = T.test_id )) AAA " +
+                    "inner join " +
+                    "(SELECT id FROM test limit 10) BBB " +
+                    "on AAA.id = BBB.id";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof ClientScanPlan);
+           assertTrue(((ClientScanPlan)queryPlan).getDelegate() instanceof SortMergeJoinPlan);
+
+           String GRAMMAR_TABLE = "CREATE TABLE IF NOT EXISTS GRAMMAR_TABLE (ID INTEGER PRIMARY KEY, " +
+                   "unsig_id UNSIGNED_INT, big_id BIGINT, unsig_long_id UNSIGNED_LONG, tiny_id TINYINT," +
+                   "unsig_tiny_id UNSIGNED_TINYINT, small_id SMALLINT, unsig_small_id UNSIGNED_SMALLINT," +
+                   "float_id FLOAT, unsig_float_id UNSIGNED_FLOAT, double_id DOUBLE, unsig_double_id UNSIGNED_DOUBLE," +
+                   "decimal_id DECIMAL, boolean_id BOOLEAN, time_id TIME, date_id DATE, timestamp_id TIMESTAMP," +
+                   "unsig_time_id TIME, unsig_date_id DATE, unsig_timestamp_id TIMESTAMP, varchar_id VARCHAR (30)," +
+                   "char_id CHAR (30), binary_id BINARY (100), varbinary_id VARBINARY (100))";
+           conn.createStatement().execute(GRAMMAR_TABLE);
+
+           String LARGE_TABLE = "CREATE TABLE IF NOT EXISTS LARGE_TABLE (ID INTEGER PRIMARY KEY, " +
+                   "unsig_id UNSIGNED_INT, big_id BIGINT, unsig_long_id UNSIGNED_LONG, tiny_id TINYINT," +
+                   "unsig_tiny_id UNSIGNED_TINYINT, small_id SMALLINT, unsig_small_id UNSIGNED_SMALLINT," +
+                   "float_id FLOAT, unsig_float_id UNSIGNED_FLOAT, double_id DOUBLE, unsig_double_id UNSIGNED_DOUBLE," +
+                   "decimal_id DECIMAL, boolean_id BOOLEAN, time_id TIME, date_id DATE, timestamp_id TIMESTAMP," +
+                   "unsig_time_id TIME, unsig_date_id DATE, unsig_timestamp_id TIMESTAMP, varchar_id VARCHAR (30)," +
+                   "char_id CHAR (30), binary_id BINARY (100), varbinary_id VARBINARY (100))";
+           conn.createStatement().execute(LARGE_TABLE);
+
+           String SECONDARY_LARGE_TABLE = "CREATE TABLE IF NOT EXISTS SECONDARY_LARGE_TABLE (SEC_ID INTEGER PRIMARY KEY," +
+                   "sec_unsig_id UNSIGNED_INT, sec_big_id BIGINT, sec_usnig_long_id UNSIGNED_LONG, sec_tiny_id TINYINT," +
+                   "sec_unsig_tiny_id UNSIGNED_TINYINT, sec_small_id SMALLINT, sec_unsig_small_id UNSIGNED_SMALLINT," +
+                   "sec_float_id FLOAT, sec_unsig_float_id UNSIGNED_FLOAT, sec_double_id DOUBLE, sec_unsig_double_id UNSIGNED_DOUBLE," +
+                   "sec_decimal_id DECIMAL, sec_boolean_id BOOLEAN, sec_time_id TIME, sec_date_id DATE," +
+                   "sec_timestamp_id TIMESTAMP, sec_unsig_time_id TIME, sec_unsig_date_id DATE, sec_unsig_timestamp_id TIMESTAMP," +
+                   "sec_varchar_id VARCHAR (30), sec_char_id CHAR (30), sec_binary_id BINARY (100), sec_varbinary_id VARBINARY (100))";
+           conn.createStatement().execute(SECONDARY_LARGE_TABLE);
+
+          sql = "SELECT * FROM (SELECT ID, BIG_ID, DATE_ID FROM LARGE_TABLE AS A WHERE (A.ID % 5) = 0) AS A " +
+                   "INNER JOIN (SELECT SEC_ID, SEC_TINY_ID, SEC_UNSIG_FLOAT_ID FROM SECONDARY_LARGE_TABLE AS B WHERE (B.SEC_ID % 5) = 0) AS B " +
+                   "ON A.ID=B.SEC_ID WHERE A.DATE_ID > ALL (SELECT SEC_DATE_ID FROM SECONDARY_LARGE_TABLE LIMIT 100) " +
+                   "AND B.SEC_UNSIG_FLOAT_ID = ANY (SELECT sec_unsig_float_id FROM SECONDARY_LARGE_TABLE " +
+                   "WHERE SEC_ID > ALL (SELECT MIN (ID) FROM GRAMMAR_TABLE WHERE UNSIG_ID IS NULL) AND " +
+                   "SEC_UNSIG_ID < ANY (SELECT DISTINCT(UNSIG_ID) FROM LARGE_TABLE WHERE UNSIG_ID<2500) LIMIT 1000) " +
+                   "AND A.ID < 10000";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof HashJoinPlan);
+           hashJoinPlan = (HashJoinPlan)queryPlan;
+           subPlans = hashJoinPlan.getSubPlans();
+           assertTrue(subPlans.length == 2);
+           assertTrue(subPlans[0] instanceof WhereClauseSubPlan);
+           assertTrue(subPlans[1] instanceof HashSubPlan);
+
+
+           String tableName1 = generateUniqueName();
+           String tableName2 = generateUniqueName();
+
+          sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                   "AID INTEGER PRIMARY KEY,"+
+                   "AGE INTEGER"+
+                   ")";
+           conn.createStatement().execute(sql);
+
+           sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                   "BID INTEGER PRIMARY KEY,"+
+                   "CODE INTEGER"+
+                   ")";
+           conn.createStatement().execute(sql);
+
+           sql="select a.aid from " + tableName1 + " a inner join  "+
+                   "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                   "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof HashJoinPlan);
+           hashJoinPlan = (HashJoinPlan)queryPlan;
+           ScanPlan scanPlan=(ScanPlan)(hashJoinPlan.getDelegate());
+           TestUtil.assertSelectStatement(
+                   scanPlan.getStatement(),
+                   "SELECT A.AID FROM " +tableName1+ " A  WHERE A.AGE > (SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2) ORDER BY A.AID");
+           subPlans = hashJoinPlan.getSubPlans();
+           assertTrue(subPlans.length == 2);
+           assertTrue(subPlans[0] instanceof WhereClauseSubPlan);
+           WhereClauseSubPlan whereClauseSubPlan = (WhereClauseSubPlan)subPlans[0];
+           TestUtil.assertSelectStatement(
+                   whereClauseSubPlan.getInnerPlan().getStatement(),
+                   "SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2");
+           assertTrue(subPlans[1] instanceof HashSubPlan);
+
+           sql="select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                   "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                   "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof HashJoinPlan);
+           hashJoinPlan = (HashJoinPlan)queryPlan;
+           scanPlan=(ScanPlan)(hashJoinPlan.getDelegate());
+           TestUtil.assertSelectStatement(
+                   scanPlan.getStatement(),
+                   "SELECT A.AID FROM " +tableName1+ "  WHERE (AGE > (SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2) AND (AGE >= 11 AND AGE <= 33)) ORDER BY A.AID");
+           subPlans = hashJoinPlan.getSubPlans();
+           assertTrue(subPlans.length == 2);
+           assertTrue(subPlans[0] instanceof WhereClauseSubPlan);
+           whereClauseSubPlan = (WhereClauseSubPlan)subPlans[0];
+           TestUtil.assertSelectStatement(
+                   whereClauseSubPlan.getInnerPlan().getStatement(),
+                   "SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2");
+           assertTrue(subPlans[1] instanceof HashSubPlan);
+
+           sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                   "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                   "where a.age > (select max(code) from " + tableName2 + " c where c.bid >= 1) order by a.aid";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof HashJoinPlan);
+           hashJoinPlan = (HashJoinPlan)queryPlan;
+           scanPlan=(ScanPlan)(hashJoinPlan.getDelegate());
+           TestUtil.assertSelectStatement(
+                   scanPlan.getStatement(),
+                   "SELECT A.AID FROM " + tableName1 + "  WHERE (AGE > (SELECT  MAX(CODE) FROM " + tableName2 + " C  WHERE C.BID >= 1 LIMIT 2) AND (AGE >= 11 AND AGE <= 33)) ORDER BY A.AID");
+           subPlans = hashJoinPlan.getSubPlans();
+           assertTrue(subPlans.length == 2);
+           assertTrue(subPlans[0] instanceof WhereClauseSubPlan);
+           whereClauseSubPlan = (WhereClauseSubPlan)subPlans[0];
+           TestUtil.assertSelectStatement(
+                   whereClauseSubPlan.getInnerPlan().getStatement(),
+                   "SELECT  MAX(CODE) FROM " + tableName2 + " C  WHERE C.BID >= 1 LIMIT 2");
+           assertTrue(subPlans[1] instanceof HashSubPlan);
+
+           sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                   "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                   "where a.age > (select max(code) from " + tableName2 + " c where c.bid = a.aid) order by a.aid";
+           queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+           assertTrue(queryPlan instanceof HashJoinPlan);
+           hashJoinPlan = (HashJoinPlan)queryPlan;
+           subPlans = hashJoinPlan.getSubPlans();
+           assertTrue(subPlans.length == 2);
+           assertTrue(subPlans[0] instanceof HashSubPlan);
+           assertTrue(subPlans[1] instanceof HashSubPlan);
         } finally {
             conn.close();
         }

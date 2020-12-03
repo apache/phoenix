@@ -73,8 +73,9 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ParseNodeUtil;
+import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -401,11 +402,18 @@ public class QueryOptimizer {
                         }
                         HintNode hint = HintNode.combine(HintNode.subtract(indexSelect.getHint(), new Hint[] {Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION}), FACTORY.hint("NO_INDEX"));
                         SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
-                        ColumnResolver queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
-                        query = SubqueryRewriter.transform(query, queryResolver, statement.getConnection());
-                        queryResolver = FromCompiler.getResolverForQuery(query, statement.getConnection());
-                        query = StatementNormalizer.normalize(query, queryResolver);
-                        QueryPlan plan = new QueryCompiler(statement, query, queryResolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
+                        RewriteResult rewriteResult =
+                                ParseNodeUtil.rewrite(query, statement.getConnection());
+                        QueryPlan plan = new QueryCompiler(
+                                statement,
+                                rewriteResult.getRewrittenSelectStatement(),
+                                rewriteResult.getColumnResolver(),
+                                targetColumns,
+                                parallelIteratorFactory,
+                                dataPlan.getContext().getSequenceManager(),
+                                isProjected,
+                                true,
+                                dataPlans).compile();
                         return plan;
                     }
                 }

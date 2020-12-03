@@ -64,7 +64,6 @@ import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExpressionProjector;
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
@@ -75,10 +74,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
-import org.apache.phoenix.compile.SubqueryRewriter;
-import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -187,12 +183,14 @@ import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -485,25 +483,25 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         
         @SuppressWarnings("unchecked")
         @Override
-        public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+        public QueryPlan compilePlan(PhoenixStatement phoenixStatement, Sequence.ValueOp seqAction) throws SQLException {
             if(!getUdfParseNodes().isEmpty()) {
-                stmt.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
-            }
-            SelectStatement select = SubselectRewriter.flatten(this, stmt.getConnection());
-            ColumnResolver resolver = FromCompiler.getResolverForQuery(select, stmt.getConnection());
-            select = StatementNormalizer.normalize(select, resolver);
-            SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, stmt.getConnection());
-            if (transformedSelect != select) {
-                resolver = FromCompiler.getResolverForQuery(transformedSelect, stmt.getConnection());
-                select = StatementNormalizer.normalize(transformedSelect, resolver);
+                phoenixStatement.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
             }
 
-            QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.emptyList(),
-                    stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt),
-                    true, false, null)
-                    .compile();
-            plan.getContext().getSequenceManager().validateSequences(seqAction);
-            return plan;
+            RewriteResult rewriteResult =
+                    ParseNodeUtil.rewrite(this, phoenixStatement.getConnection());
+            QueryPlan queryPlan = new QueryCompiler(
+                    phoenixStatement,
+                    rewriteResult.getRewrittenSelectStatement(),
+                    rewriteResult.getColumnResolver(),
+                    Collections.<PDatum>emptyList(),
+                    phoenixStatement.getConnection().getIteratorFactory(),
+                    new SequenceManager(phoenixStatement),
+                    true,
+                    false,
+                    null).compile();
+            queryPlan.getContext().getSequenceManager().validateSequences(seqAction);
+            return queryPlan;
         }
 
     }
