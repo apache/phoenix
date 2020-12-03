@@ -39,6 +39,10 @@ public class PhoenixMultiViewReader<T extends Writable> extends RecordReader<Nul
     private Class<T> inputClass;
     Iterator<ViewInfoWritable> it;
 
+    public PhoenixMultiViewReader() {
+
+    }
+
     public PhoenixMultiViewReader(final Class<T> inputClass, final Configuration configuration) {
         this.configuration = configuration;
         this.inputClass = inputClass;
