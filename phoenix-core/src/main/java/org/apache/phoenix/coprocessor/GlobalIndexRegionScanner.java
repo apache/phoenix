@@ -819,6 +819,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (verifyType == IndexTool.IndexVerifyType.ONLY) {
             repairActualMutationList(actualMutationList, expectedMutationList);
         }
+        // actualMutationList can be empty after returning from this function
         cleanUpActualMutationList(actualMutationList);
 
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -926,6 +927,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
             else {
                 if (expected == null) {
+                    // Happens when the actualMutationList becomes empty after returning from
+                    // the cleanUpActualMutationList function.
                     expected = expectedMutationList.get(0);
                 }
                 byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);

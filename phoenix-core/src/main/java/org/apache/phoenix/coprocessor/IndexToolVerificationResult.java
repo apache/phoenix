@@ -229,7 +229,6 @@ public class IndexToolVerificationResult {
                     && this.indexHasExtraCellsCount == pr.indexHasExtraCellsCount
                     && this.oldIndexRowCount == pr.oldIndexRowCount
                     && this.unknownIndexRowCount == pr.unknownIndexRowCount
-                    && this.unknownIndexRowCount == pr.unknownIndexRowCount
                     && this.extraVerifiedIndexRowCount == pr.extraVerifiedIndexRowCount
                     && this.extraUnverifiedIndexRowCount == pr.extraUnverifiedIndexRowCount;
         }

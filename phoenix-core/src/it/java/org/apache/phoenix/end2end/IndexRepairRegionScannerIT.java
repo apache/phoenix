@@ -30,15 +30,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRepairRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexTool.IndexDisableLoggingType;
@@ -48,7 +45,6 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -58,11 +54,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -74,7 +70,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -88,7 +83,6 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -96,6 +90,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
@@ -150,29 +145,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         }
         EnvironmentEdgeManager.reset();
         resetIndexRegionObserverFailPoints();
-    }
-
-    private void repairIndex(Connection conn, String schemaName, String dataTableFullName, String indexTableName, IndexTool.IndexVerifyType verifyType) throws Exception {
-        PTable pDataTable = PhoenixRuntime.getTable(conn, dataTableFullName);
-        PTable pIndexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indexTableName));
-        Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .getTable(pIndexTable.getPhysicalName().getBytes());
-        Scan scan = new Scan();
-        scan.setRaw(true);
-        scan.setMaxVersions();
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
-        IndexMaintainer.serialize(pDataTable, ptr, Collections.singletonList(pIndexTable), phoenixConnection);
-        scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, verifyType.toBytes());
-        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, pDataTable.getPhysicalName().getBytes());
-        scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
-        scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
-        scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
-        scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
-        ResultScanner scanner = hTable.getScanner(scan);
-        for (Result result = scanner.next(); result != null; result = scanner.next()) {
-        }
     }
 
     private void setIndexRowStatusesToVerified(Connection conn, String dataTableFullName, String indexTableFullName) throws Exception {
@@ -526,13 +498,9 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
                 indexTableName, null, 0, IndexVerifyType.ONLY, "-fi");
 
             Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            try {
-                String expectedErrorMsg = IndexRepairRegionScanner.ERROR_MESSAGE_EXTRA_INDEX_ROW;
-                String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                assertTrue(expectedErrorMsg.equals(actualErrorMsg));
-            } catch(Exception ex) {
-                Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
-            }
+            String expectedErrorMsg = IndexRepairRegionScanner.ERROR_MESSAGE_EXTRA_INDEX_ROW;
+            String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            assertTrue(actualErrorMsg.contains(expectedErrorMsg));
         }
     }
 
