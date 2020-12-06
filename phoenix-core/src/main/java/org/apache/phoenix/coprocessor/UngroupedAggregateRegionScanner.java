@@ -31,6 +31,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
@@ -463,6 +464,12 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         if (replayMutations != null) {
             delete.setAttribute(REPLAY_WRITES, replayMutations);
         }
+        byte[] sourceOperationBytes =
+                scan.getAttribute(SOURCE_OPERATION_ATTRIB);
+        if (sourceOperationBytes != null) {
+            delete.setAttribute(SOURCE_OPERATION_ATTRIB, sourceOperationBytes);
+        }
+
         mutations.add(delete);
         // force tephra to ignore this deletes
         delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
@@ -479,6 +486,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             delete.addColumns(deleteCF,  deleteCQ, ts);
             // force tephra to ignore this deletes
             delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
+            // TODO: We need to set SOURCE_OPERATION_ATTRIB here also. The control will come here if
+            // TODO: we drop a column. We also delete metadata from SYSCAT table for the dropped column
+            // TODO: and delete the column. In short, we need to set this attribute for the DM for SYSCAT metadata
+            // TODO: and for data table rows.
             mutations.add(delete);
         }
     }
@@ -502,7 +513,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                     SortOrder.invert(values[i], 0, values[i], 0,
                             values[i].length);
                 }
-            }else{
+            } else {
                 values[i] = ByteUtil.EMPTY_BYTE_ARRAY;
             }
         }

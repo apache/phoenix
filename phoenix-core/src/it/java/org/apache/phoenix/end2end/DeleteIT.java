@@ -18,12 +18,13 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.printResultSet;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -32,11 +33,30 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.PhoenixTagType;
+import org.apache.hadoop.hbase.PrivateCellUtil;
+import org.apache.hadoop.hbase.RawCell;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.Tag;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.DeleteCompiler;
+import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -943,6 +963,163 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    /*
+        Tests whether we have cell tags in delete marker for
+        ClientSelectDeleteMutationPlan.
+     */
+    @Test
+    public void testDeleteClientDeleteMutationPlan() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String tagValue = "customer-delete";
+        String delete = "DELETE FROM " + tableName + " WHERE v1 = 'foo'";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // Add tag "customer-delete" to delete marker.
+        props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
+
+        createAndUpsertTable(tableName, indexName, props);
+        // Make sure that the plan creates is of ClientSelectDeleteMutationPlan
+        verifyDeletePlan(delete, DeleteCompiler.ClientSelectDeleteMutationPlan.class, props);
+        executeDelete(delete, props, 1);
+        String startRowKeyForBaseTable = "1";
+        String startRowKeyForIndexTable = "foo";
+        // Make sure that Delete Marker has cell tag for base table
+        // and has no cell tag for index table.
+        checkTagPresentInDeleteMarker(tableName, startRowKeyForBaseTable, true, tagValue);
+        checkTagPresentInDeleteMarker(indexName, startRowKeyForIndexTable, false, null);
+    }
+
+    /*
+        Tests whether we have cell tags in delete marker for
+        ServerSelectDeleteMutationPlan.
+     */
+    @Test
+    public void testDeleteServerDeleteMutationPlan() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String tagValue = "customer-delete";
+        String delete = "DELETE FROM " + tableName;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
+
+        createAndUpsertTable(tableName, indexName, props);
+        // Make sure that the plan creates is of ServerSelectDeleteMutationPlan
+        verifyDeletePlan(delete, DeleteCompiler.ServerSelectDeleteMutationPlan.class, props);
+        executeDelete(delete, props, 2);
+
+        String startRowKeyForBaseTable = "1";
+        String startRowKeyForIndexTable = "foo";
+        // Make sure that Delete Marker has cell tag for base table
+        // and has no cell tag for index table.
+        checkTagPresentInDeleteMarker(tableName, startRowKeyForBaseTable, true, tagValue);
+        checkTagPresentInDeleteMarker(indexName, startRowKeyForIndexTable, false, null);
+    }
+
+    /*
+        Tests whether we have cell tags in delete marker for
+        MultiRowDeleteMutationPlan.
+    */
+    @Test
+    public void testDeleteMultiRowDeleteMutationPlan() throws Exception {
+        String tableName = generateUniqueName();
+        String tagValue = "customer-delete";
+        String delete = "DELETE FROM " + tableName + " WHERE k = 1";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
+        // Don't create index table. We will use MultiRowDeleteMutationPlan
+        // if there is no index present for a table.
+        createAndUpsertTable(tableName, null, props);
+        // Make sure that the plan creates is of MultiRowDeleteMutationPlan
+        verifyDeletePlan(delete, DeleteCompiler.MultiRowDeleteMutationPlan.class, props);
+        executeDelete(delete, props, 1);
+        String startRowKeyForBaseTable = "1";
+        // Make sure that Delete Marker has cell tag for base table.
+        // We haven't created index table for this test case.
+        checkTagPresentInDeleteMarker(tableName, startRowKeyForBaseTable, true, tagValue);
+    }
+
+    /*
+        Verify whether plan that we create for delete statement is of planClass
+     */
+    private void verifyDeletePlan(String delete, Class<? extends MutationPlan> planClass,
+            Properties props) throws SQLException {
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            SQLParser parser = new SQLParser(delete);
+            DeleteStatement deleteStmt = (DeleteStatement) parser.parseStatement();
+            DeleteCompiler compiler = new DeleteCompiler(stmt, null);
+            MutationPlan plan = compiler.compile(deleteStmt);
+            assertEquals(plan.getClass(), planClass);
+        }
+    }
+    private void createAndUpsertTable(String tableName, String indexName, Properties props)
+            throws SQLException {
+        String ddl = "CREATE TABLE " + tableName +
+                " (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)";
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try (Statement statement = conn.createStatement()) {
+                statement.execute(ddl);
+                if (indexName != null) {
+                    String indexDdl1 = "CREATE INDEX " + indexName + " ON " + tableName + "(v1,v2)";
+                    statement.execute(indexDdl1);
+                }
+                statement.execute(
+                        "upsert into " + tableName + " values (1, 'foo', 'foo1')");
+                statement.execute(
+                        "upsert into " + tableName + " values (2, 'bar', 'bar1')");
+                conn.commit();
+            }
+
+        }
+    }
+
+    private void executeDelete(String delete, Properties props, int deleteRowCount)
+            throws SQLException {
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try (Statement statement = conn.createStatement()) {
+                int rs = statement.executeUpdate(delete);
+                assertEquals( deleteRowCount, rs);
+            }
+        }
+    }
+
+    /*
+        Verify whether we have tags present for base table and not present for
+        index tables.
+     */
+    private void checkTagPresentInDeleteMarker(String tableName, String startRowKey,
+            boolean tagPresent, String tagValue) throws IOException {
+        List<Cell> values = new ArrayList<>();
+        TableName table = TableName.valueOf(tableName);
+        // Scan table with specified startRowKey
+        for (HRegion region : getUtility().getHBaseCluster().getRegions(table)) {
+            Scan scan = new Scan();
+            // Make sure to set rawScan to true so that we will get Delete Markers.
+            scan.setRaw(true);
+            scan.withStartRow(Bytes.toBytes(startRowKey));
+            RegionScanner scanner = region.getScanner(scan);
+            scanner.next(values);
+            if (!values.isEmpty()) {
+                break;
+            }
+        }
+        assertFalse("Values shouldn't be empty", values.isEmpty());
+        Cell first = values.get(0);
+        assertTrue("First cell should be delete marker ", CellUtil.isDelete(first));
+        List<Tag> tags = PrivateCellUtil.getTags(first);
+        if (tagPresent) {
+            assertEquals(1, tags.size());
+            RawCell rawCell = (RawCell)first;
+            Optional<Tag> optional = rawCell.getTag(PhoenixTagType.SOURCE_OPERATION_TAG_TYPE);
+            assertTrue(optional.isPresent());
+            Tag sourceOfOperationTag = optional.get();
+            assertEquals(tagValue, Tag.getValueAsString(sourceOfOperationTag));
+        } else {
+            assertEquals(0, tags.size());
+        }
+    }
 }
-
-
