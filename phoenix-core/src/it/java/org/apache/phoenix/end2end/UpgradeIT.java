@@ -387,7 +387,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         cqs.clearCache();
         //Now make sure that running the merge logic doesn't cause a problem when there are no
         //sequences
-        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        try (PhoenixConnection mockUpgradeScnTsConn = new PhoenixConnection(
+                conn, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0)) {
+            UpgradeUtil.mergeViewIndexIdSequences(mockUpgradeScnTsConn);
+        }
         PName tenantOne = PNameFactory.newName("TENANT_ONE");
         PName tenantTwo = PNameFactory.newName("TENANT_TWO");
         String tableName =
@@ -419,7 +422,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             assertNull(e);
         }
 
-        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        try (PhoenixConnection mockUpgradeScnTsConn = new PhoenixConnection(
+                conn, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0)) {
+            UpgradeUtil.mergeViewIndexIdSequences(mockUpgradeScnTsConn);
+        }
         //now check that there exists a sequence using the new naming convention, whose value is the
         //max of all the previous sequences for this table.
 

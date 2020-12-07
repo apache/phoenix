@@ -3921,9 +3921,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
                     moveChildLinks = true;
                     syncAllTableAndIndexProps = true;
+                }
+                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0) {
                     //Combine view index id sequences for the same physical view index table
                     //to avoid collisions. See PHOENIX-5132 and PHOENIX-5138
-                    UpgradeUtil.mergeViewIndexIdSequences(this, metaConnection);
+                    try (PhoenixConnection conn = new PhoenixConnection(
+                            ConnectionQueryServicesImpl.this, globalUrl,
+                            props, newEmptyMetaData())) {
+                        UpgradeUtil.mergeViewIndexIdSequences(metaConnection);
+                    } catch (Exception mergeViewIndeIdException) {
+                        LOGGER.warn("Merge view index id sequence failed! If possible, " +
+                                "please run MergeViewIndexIdSequencesTool to avoid view index" +
+                                "id collision. Error: " + mergeViewIndeIdException.getMessage());
+                    }
                 }
             }
 
