@@ -26,7 +26,6 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NO
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UNINITIALIZED;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -37,10 +36,10 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -55,6 +54,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
@@ -139,7 +139,15 @@ public class TableResultIterator implements ResultIterator {
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
         ScanUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
         ScanUtil.setScanAttributesForPhoenixTTL(scan, table, plan.getContext().getConnection());
-        scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGING, TRUE_BYTES);
+        long pageSizeMs = plan.getContext().getConnection().getQueryServices().getProps()
+                .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+        if (pageSizeMs == -1) {
+            // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+            // region server will be able to send a heartbeat message to the client before the client times out
+            pageSizeMs = (long) (plan.getContext().getConnection().getQueryServices().getProps()
+                    .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+        }
+        scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
     }
 
     @Override

@@ -97,4 +97,15 @@ public class DelegateFilter extends FilterBase {
     public byte[] toByteArray() throws IOException {
         return delegate.toByteArray();
     }
+
+    @Override
+    public void setReversed(boolean reversed) {
+        delegate.setReversed(reversed);
+    }
+
+    @Override
+    public boolean isReversed() {
+        return delegate.isReversed();
+    }
+
 }
