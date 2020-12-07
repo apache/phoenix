@@ -23,13 +23,16 @@ import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -365,6 +368,9 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                     hasMore = innerScanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         lastCell = row.get(0); // lastCell is any cell from the last visited row
+                        if (isDummy(row)) {
+                            break;
+                        }
                         Put put = null;
                         Delete del = null;
                         for (Cell cell : row) {

@@ -32,9 +32,10 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.WALAnnotationUtil.annotateMutation;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -118,7 +119,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UngroupedAggregateRegionScanner.class);
 
-    private long pageSizeInMs = Long.MAX_VALUE;
+    private long pageSizeMs;
     private int maxBatchSize = 0;
     private final Scan scan;
     private final RegionScanner innerScanner;
@@ -169,17 +170,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         this.innerScanner = innerScanner;
         Configuration conf = env.getConfiguration();
-        if (scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGING) != null) {
-            byte[] pageSizeFromScan =
-                    scan.getAttribute(BaseScannerRegionObserver.AGGREGATE_PAGE_SIZE_IN_MS);
-            if (pageSizeFromScan != null) {
-                pageSizeInMs = Bytes.toLong(pageSizeFromScan);
-            } else {
-                pageSizeInMs =
-                        conf.getLong(UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS,
-                                QueryServicesOptions.DEFAULT_UNGROUPED_AGGREGATE_PAGE_SIZE_IN_MS);
-            }
-        }
+        pageSizeMs = getPageSizeMsForRegionScanner(scan);
         ts = scan.getTimeRange().getMax();
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
 
@@ -566,6 +557,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         // since this is an indication of whether or not there are more values after the
                         // ones returned
                         hasMore = innerScanner.nextRaw(results);
+                        if (isDummy(results)) {
+                            if (!hasAny) {
+                                resultsToReturn.addAll(results);
+                                return true;
+                            }
+                            break;
+                        }
                         if (!results.isEmpty()) {
                             lastCell = results.get(0);
                             result.setKeyValues(results);
@@ -606,8 +604,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                             aggregators.aggregate(rowAggregators, result);
                             hasAny = true;
                         }
-                    } while (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) < pageSizeInMs);
-
+                    } while (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) < pageSizeMs);
                     if (!mutations.isEmpty()) {
                         annotateAndCommit(mutations);
                     }
@@ -621,7 +618,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             } catch (DataExceedsCapacityException e) {
                 throw new DoNotRetryIOException(e.getMessage(), e);
             } catch (Throwable e) {
-                LOGGER.error("Exception in UngroupedAggreagteRegionScanner for region "
+                LOGGER.error("Exception in UngroupedAggregateRegionScanner for region "
                         + region.getRegionInfo().getRegionNameAsString(), e);
                 throw e;
             }
