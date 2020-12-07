@@ -360,6 +360,13 @@ public interface QueryServices extends SQLCloseable {
     public static final String GUIDE_POSTS_CACHE_FACTORY_CLASS = "phoenix.guide.posts.cache.factory.class";
 
     public static final String PENDING_MUTATIONS_DDL_THROW_ATTRIB = "phoenix.pending.mutations.before.ddl.throw";
+
+    /**
+     * Parameter to indicate the source of operation attribute.
+     * It can include metadata about the customer, service, etc.
+     */
+    String SOURCE_OPERATION_ATTRIB = "phoenix.source.operation";
+
     /**
      * Get executor service used for parallel scans
      */

@@ -171,6 +171,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
     private Double logSamplingRate;
+    private String sourceOfOperation;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -388,6 +389,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         
         this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
                 QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
+        this.sourceOfOperation =
+                this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
         GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
 
@@ -1293,4 +1296,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return this.logSamplingRate;
     }
 
+    /**
+     *
+     * @return source of operation
+     */
+    public String getSourceOfOperation() {
+        return sourceOfOperation;
+    }
 }

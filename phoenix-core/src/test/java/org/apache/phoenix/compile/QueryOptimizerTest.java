@@ -370,12 +370,12 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         DeleteCompiler compiler = new DeleteCompiler(stmt, null);
         MutationPlan plan = compiler.compile(delete);
         assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        assertTrue(plan.getClass().getName().contains("ServerSelectDeleteMutationPlan"));
+        assertEquals(plan.getClass(), DeleteCompiler.ServerSelectDeleteMutationPlan.class);
         parser = new SQLParser("DELETE FROM t WHERE v1 = 'foo'");
         delete = (DeleteStatement) parser.parseStatement();
         plan = compiler.compile(delete);
         assertEquals("IDX", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        assertTrue(plan.getClass().getName().contains("ClientSelectDeleteMutationPlan"));
+        assertEquals(plan.getClass(), DeleteCompiler.ClientSelectDeleteMutationPlan.class);
     }
 
     @Test
