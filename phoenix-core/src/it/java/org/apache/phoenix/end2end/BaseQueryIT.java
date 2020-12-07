@@ -70,7 +70,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
                             + "    A_DATE)",
                     "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
                             + "    B_STRING, " + "    A_DATE)" };
-    protected static String[] INDEX_DDLS;
+    private static final String[] INDEX_DDLS;
     static {
         INDEX_DDLS = new String[GLOBAL_INDEX_DDLS.length + LOCAL_INDEX_DDLS.length];
         int i = 0;
@@ -88,7 +88,8 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseQueryIT.class);
 
     @BeforeParam
-    public static final void initTables(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) throws Exception {
+    public static void initTables(String idxDdl, boolean columnEncoded,
+            boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             optionBuilder.append("COLUMN_ENCODED_BYTES=0");
