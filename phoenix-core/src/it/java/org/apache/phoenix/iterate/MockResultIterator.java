@@ -28,6 +28,8 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -54,6 +56,11 @@ public class MockResultIterator implements PeekingResultIterator {
 
     @Override
     public void explain(List<String> planSteps) {}
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    }
 
     @Override
     public void close() throws SQLException {}

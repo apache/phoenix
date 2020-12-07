@@ -36,6 +36,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -814,11 +816,18 @@ public class DeleteCompiler {
 
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-            List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
-            List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
+            ExplainPlan explainPlan = aggPlan.getExplainPlan();
+            List<String> queryPlanSteps = explainPlan.getPlanSteps();
+            ExplainPlanAttributes explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+            List<String> planSteps =
+                Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+            ExplainPlanAttributesBuilder newBuilder =
+                new ExplainPlanAttributesBuilder(explainPlanAttributes);
+            newBuilder.setAbstractExplainPlan("DELETE ROWS SERVER SELECT");
             planSteps.add("DELETE ROWS SERVER SELECT");
             planSteps.addAll(queryPlanSteps);
-            return new ExplainPlan(planSteps);
+            return new ExplainPlan(planSteps, newBuilder.build());
         }
 
         @Override
@@ -950,11 +959,17 @@ public class DeleteCompiler {
 
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-            List<String> queryPlanSteps =  bestPlan.getExplainPlan().getPlanSteps();
+            ExplainPlan explainPlan = bestPlan.getExplainPlan();
+            List<String> queryPlanSteps = explainPlan.getPlanSteps();
+            ExplainPlanAttributes explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
             List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
+            ExplainPlanAttributesBuilder newBuilder =
+                new ExplainPlanAttributesBuilder(explainPlanAttributes);
+            newBuilder.setAbstractExplainPlan("DELETE ROWS CLIENT SELECT");
             planSteps.add("DELETE ROWS CLIENT SELECT");
             planSteps.addAll(queryPlanSteps);
-            return new ExplainPlan(planSteps);
+            return new ExplainPlan(planSteps, newBuilder.build());
         }
 
         @Override

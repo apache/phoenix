@@ -36,6 +36,8 @@ import org.apache.commons.io.output.DeferredFileOutputStream;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.memory.MemoryManager;
@@ -253,6 +255,11 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         @Override
         public void explain(List<String> planSteps) {
         }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
     }
 
     /**
@@ -354,9 +361,19 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         @Override
         public void explain(List<String> planSteps) {
         }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
     }
 
     @Override
     public void explain(List<String> planSteps) {
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     }
 }

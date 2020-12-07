@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.iterate;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.CursorUtil;
 
@@ -51,6 +53,14 @@ public class CursorResultIterator implements ResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
+        planSteps.add("CLIENT CURSOR " + cursorName);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientCursorName(cursorName);
         planSteps.add("CLIENT CURSOR " + cursorName);
     }
 

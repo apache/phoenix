@@ -71,6 +71,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -79,7 +81,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
@@ -1564,6 +1565,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void explain(List<String> planSteps) {
+        explainUtil(planSteps, null);
+    }
+
+    /**
+     * Utility to generate ExplainPlan steps.
+     *
+     * @param planSteps Add generated plan in list of planSteps. This argument
+     *     is used to provide planSteps as whole statement consisting of
+     *     list of Strings.
+     * @param explainPlanAttributesBuilder Add generated plan in attributes
+     *     object. Having an API to provide planSteps as an object is easier
+     *     while comparing individual attributes of ExplainPlan.
+     */
+    private void explainUtil(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         boolean displayChunkCount = context.getConnection().getQueryServices().getProps().getBoolean(
                 QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXPLAIN_CHUNK_COUNT);
@@ -1574,32 +1590,65 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     QueryServices.EXPLAIN_ROW_COUNT_ATTRIB,
                     QueryServicesOptions.DEFAULT_EXPLAIN_ROW_COUNT);
             buf.append(this.splits.size()).append("-CHUNK ");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setSplitsChunk(this.splits.size());
+            }
             if (displayRowCount && estimatedRows != null) {
                 buf.append(estimatedRows).append(" ROWS ");
                 buf.append(estimatedSize).append(" BYTES ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setEstimatedRows(estimatedRows);
+                    explainPlanAttributesBuilder.setEstimatedSizeInBytes(estimatedSize);
+                }
             }
         }
-        buf.append(getName()).append(" ").append(size()).append("-WAY ");
-        
-        if(this.plan.getStatement().getTableSamplingRate()!=null){
-        	buf.append(plan.getStatement().getTableSamplingRate()/100D).append("-").append("SAMPLED ");
+        String iteratorTypeAndScanSize = getName() + " " + size() + "-WAY";
+        buf.append(iteratorTypeAndScanSize).append(" ");
+        if (explainPlanAttributesBuilder != null) {
+            explainPlanAttributesBuilder.setIteratorTypeAndScanSize(
+                iteratorTypeAndScanSize);
+        }
+
+        if (this.plan.getStatement().getTableSamplingRate() != null) {
+            Double samplingRate = plan.getStatement().getTableSamplingRate() / 100D;
+            buf.append(samplingRate).append("-").append("SAMPLED ");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setSamplingRate(samplingRate);
+            }
         }
         try {
             if (plan.useRoundRobinIterator()) {
                 buf.append("ROUND ROBIN ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setUseRoundRobinIterator(true);
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
-        if(this.plan instanceof ScanPlan) {
+        if (this.plan instanceof ScanPlan) {
             ScanPlan scanPlan = (ScanPlan) this.plan;
-            if(scanPlan.getRowOffset().isPresent()) {
-                buf.append("With RVC Offset " + "0x" + Hex.encodeHexString(scanPlan.getRowOffset().get()) + " ");
+            if (scanPlan.getRowOffset().isPresent()) {
+                String rowOffset =
+                    Hex.encodeHexString(scanPlan.getRowOffset().get());
+                buf.append("With RVC Offset " + "0x")
+                    .append(rowOffset)
+                    .append(" ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setHexStringRVCOffset(
+                        "0x" + rowOffset);
+                }
             }
         }
 
-        explain(buf.toString(),planSteps);
+        explain(buf.toString(), planSteps, explainPlanAttributesBuilder);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        explainUtil(planSteps, explainPlanAttributesBuilder);
     }
 
     public Long getEstimatedRowCount() {

@@ -41,6 +41,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -1138,11 +1140,18 @@ public class UpsertCompiler {
 
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-            List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
-            List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
+            ExplainPlan explainPlan = aggPlan.getExplainPlan();
+            List<String> queryPlanSteps = explainPlan.getPlanSteps();
+            ExplainPlanAttributes explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+            List<String> planSteps =
+                Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+            ExplainPlanAttributesBuilder newBuilder =
+                new ExplainPlanAttributesBuilder(explainPlanAttributes);
+            newBuilder.setAbstractExplainPlan("UPSERT ROWS");
             planSteps.add("UPSERT ROWS");
             planSteps.addAll(queryPlanSteps);
-            return new ExplainPlan(planSteps);
+            return new ExplainPlan(planSteps, newBuilder.build());
         }
 
         @Override
@@ -1418,11 +1427,18 @@ public class UpsertCompiler {
 
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-            List<String> queryPlanSteps =  queryPlan.getExplainPlan().getPlanSteps();
-            List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
+            ExplainPlan explainPlan = queryPlan.getExplainPlan();
+            List<String> queryPlanSteps = explainPlan.getPlanSteps();
+            ExplainPlanAttributes explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+            List<String> planSteps =
+                Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+            ExplainPlanAttributesBuilder newBuilder =
+                new ExplainPlanAttributesBuilder(explainPlanAttributes);
+            newBuilder.setAbstractExplainPlan("UPSERT SELECT");
             planSteps.add("UPSERT SELECT");
             planSteps.addAll(queryPlanSteps);
-            return new ExplainPlan(planSteps);
+            return new ExplainPlan(planSteps, newBuilder.build());
         }
 
         @Override

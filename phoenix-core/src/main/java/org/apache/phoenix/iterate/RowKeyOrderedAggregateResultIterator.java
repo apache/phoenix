@@ -25,6 +25,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
@@ -101,6 +103,14 @@ public class RowKeyOrderedAggregateResultIterator extends LookAheadResultIterato
     public void explain(List<String> planSteps) {
         if (resultIterators != null) {
             resultIterators.explain(planSteps);
+        }
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        if (resultIterators != null) {
+            resultIterators.explain(planSteps, explainPlanAttributesBuilder);
         }
     }
 

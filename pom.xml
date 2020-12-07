@@ -113,7 +113,7 @@
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <tephra.version>0.16.0-SNAPSHOT</tephra.version>
+    <tephra.version>0.16.0</tephra.version>
     <omid.version>1.0.2</omid.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>

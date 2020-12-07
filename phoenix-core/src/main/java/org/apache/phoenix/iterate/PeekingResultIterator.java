@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -50,6 +52,11 @@ public interface PeekingResultIterator extends ResultIterator {
 
         @Override
         public void explain(List<String> planSteps) {
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         }
     };
 

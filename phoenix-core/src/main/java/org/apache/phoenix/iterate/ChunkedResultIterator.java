@@ -26,6 +26,8 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.MutationState;
@@ -132,6 +134,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     }
 
     @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterator.explain(planSteps, explainPlanAttributesBuilder);
+    }
+
+    @Override
     public void close() throws SQLException {
         resultIterator.close();
     }
@@ -207,6 +215,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         @Override
         public void explain(List<String> planSteps) {
             delegate.explain(planSteps);
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            delegate.explain(planSteps, explainPlanAttributesBuilder);
         }
 
         @Override

@@ -28,6 +28,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -219,45 +222,70 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
+        ExplainPlan explainPlan = delegate.getExplainPlan();
+        List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
+        ExplainPlanAttributes explainPlanAttributes =
+            explainPlan.getPlanStepsAsAttributes();
+        ExplainPlanAttributesBuilder newBuilder =
+            new ExplainPlanAttributesBuilder(explainPlanAttributes);
         if (where != null) {
             planSteps.add("CLIENT FILTER BY " + where.toString());
+            newBuilder.setClientFilterBy(where.toString());
         }
         if (groupBy.isEmpty()) {
             planSteps.add("CLIENT AGGREGATE INTO SINGLE ROW");
+            newBuilder.setClientAggregate("CLIENT AGGREGATE INTO SINGLE ROW");
         } else if (groupBy.isOrderPreserving()) {
             planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+            newBuilder.setClientAggregate("CLIENT AGGREGATE INTO DISTINCT ROWS BY "
+                + groupBy.getExpressions().toString());
         } else if (useHashAgg) {
             planSteps.add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+            newBuilder.setClientAggregate("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY "
+                + groupBy.getExpressions().toString());
             if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
                 planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
+                newBuilder.setClientSortedBy(
+                    groupBy.getKeyExpressions().toString());
             }
         } else {
             planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
             planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+            newBuilder.setClientSortedBy(groupBy.getKeyExpressions().toString());
+            newBuilder.setClientAggregate("CLIENT AGGREGATE INTO DISTINCT ROWS BY "
+                + groupBy.getExpressions().toString());
         }
         if (having != null) {
             planSteps.add("CLIENT AFTER-AGGREGATION FILTER BY " + having.toString());
+            newBuilder.setClientAfterAggregate("CLIENT AFTER-AGGREGATION FILTER BY "
+                + having.toString());
         }
         if (statement.isDistinct() && statement.isAggregate()) {
             planSteps.add("CLIENT DISTINCT ON " + projector.toString());
+            newBuilder.setClientDistinctFilter(projector.toString());
         }
         if (offset != null) {
             planSteps.add("CLIENT OFFSET " + offset);
+            newBuilder.setClientOffset(offset);
         }
         if (orderBy.getOrderByExpressions().isEmpty()) {
             if (limit != null) {
                 planSteps.add("CLIENT " + limit + " ROW LIMIT");
+                newBuilder.setClientRowLimit(limit);
             }
         } else {
             planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+            newBuilder.setClientRowLimit(limit);
+            newBuilder.setClientSortedBy(
+                orderBy.getOrderByExpressions().toString());
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             int nSequences = context.getSequenceManager().getSequenceCount();
             planSteps.add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+            newBuilder.setClientSequenceCount(nSequences);
         }
-        
-        return new ExplainPlan(planSteps);
+
+        return new ExplainPlan(planSteps, newBuilder.build());
     }
 
     @Override

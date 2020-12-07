@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -74,9 +76,17 @@ public class FilterResultIterator  extends LookAheadResultIterator {
         planSteps.add("CLIENT FILTER BY " + expression.toString());
     }
 
-	@Override
-	public String toString() {
-		return "FilterResultIterator [delegate=" + delegate + ", expression="
-				+ expression + ", ptr=" + ptr + "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientFilterBy(expression.toString());
+        planSteps.add("CLIENT FILTER BY " + expression.toString());
+    }
+
+    @Override
+    public String toString() {
+        return "FilterResultIterator [delegate=" + delegate + ", expression="
+            + expression + ", ptr=" + ptr + "]";
+    }
 }
