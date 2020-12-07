@@ -89,7 +89,6 @@ import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.base.Optional;
 
 
