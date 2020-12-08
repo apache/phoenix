@@ -173,6 +173,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
     private Double logSamplingRate;
+    private String sourceOfOperation;
 
     private Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
     private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
@@ -403,6 +404,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         } else {
             GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
         }
+        this.sourceOfOperation =
+                this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
@@ -1360,4 +1363,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return this.logSamplingRate;
     }
 
+    /**
+     *
+     * @return source of operation
+     */
+    public String getSourceOfOperation() {
+        return sourceOfOperation;
+    }
 }
