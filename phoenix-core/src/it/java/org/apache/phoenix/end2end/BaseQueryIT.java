@@ -22,21 +22,18 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.SQLTimeoutException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
+import com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.AfterParam;
 import org.junit.runners.Parameterized.BeforeParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
-
 
 
 /**
@@ -46,20 +43,17 @@ import com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-
 @RunWith(Parameterized.class)
 public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     protected static final String tenantId = getOrganizationId();
-    protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
-    protected static final long BATCH_SIZE = 3;
     protected static final String NO_INDEX = "";
     protected static final String[] GLOBAL_INDEX_DDLS =
             new String[] {
-                    "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
+                    "CREATE INDEX IF NOT EXISTS %s ON %s (a_integer DESC) INCLUDE (" + "    A_STRING, "
                             + "    B_STRING, " + "    A_DATE)",
-                    "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+                    "CREATE INDEX IF NOT EXISTS %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
                             + "    A_DATE)",
-                    "CREATE INDEX %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
+                    "CREATE INDEX IF NOT EXISTS %s ON %s (a_integer) INCLUDE (" + "    A_STRING, "
                             + "    B_STRING, " + "    A_DATE)",
                     NO_INDEX };
     protected static final String[] LOCAL_INDEX_DDLS =
@@ -100,10 +94,10 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         }
         String tableDDLOptions = optionBuilder.toString();
         try {
-            tableName =
-                    initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
-                        date = new Date(System.currentTimeMillis()), null, getUrl(),
-                        tableDDLOptions);
+            tableName = initATableValues(generateUniqueName(), tenantId,
+                getDefaultSplits(tenantId),
+                date = new Date(System.currentTimeMillis()), null, getUrl(),
+                tableDDLOptions);
         } catch (Exception e) {
             LOGGER.error("Exception when creating aTable ", e);
             throw e;
@@ -113,14 +107,23 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
             String indexDDL =
                     String.format(idxDdl, indexName, tableName);
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty("phoenix.query.timeoutMs", "30000");
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 conn.createStatement().execute(indexDDL);
+            } catch (SQLTimeoutException e) {
+                LOGGER.info("Query timed out. Retrying one more time.", e);
+                try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+                    conn.createStatement().execute(indexDDL);
+                } catch (Exception ex) {
+                    LOGGER.error("Exception while creating index during second retry: "
+                        + indexDDL, ex);
+                    throw ex;
+                }
             } catch (Exception e) {
                 LOGGER.error("Exception while creating index: " + indexDDL, e);
                 throw e;
             }
         }
-
     }
 
     public BaseQueryIT(String idxDdl, boolean columnEncoded, boolean keepDeletedCells) {
