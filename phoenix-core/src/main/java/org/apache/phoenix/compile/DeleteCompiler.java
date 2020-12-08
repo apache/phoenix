@@ -22,7 +22,6 @@ import static org.apache.phoenix.util.NumberUtil.add;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -33,6 +32,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -351,7 +351,7 @@ public class DeleteCompiler {
         return Collections.emptyList();
     }
     
-    private class MultiRowDeleteMutationPlan implements MutationPlan {
+    public class MultiRowDeleteMutationPlan implements MutationPlan {
         private final List<MutationPlan> plans;
         private final MutationPlan firstPlan;
         private final QueryPlan dataPlan;
@@ -621,7 +621,7 @@ public class DeleteCompiler {
             final int offset = table.getBucketNum() == null ? 0 : 1;
             Iterator<PColumn> projectedColsItr = projectedColumns.iterator();
             int i = 0;
-            while(projectedColsItr.hasNext()) {
+            while (projectedColsItr.hasNext()) {
                 final int position = i++;
                 adjustedProjectedColumns.add(new DelegateColumn(projectedColsItr.next()) {
                     @Override
@@ -742,7 +742,7 @@ public class DeleteCompiler {
         }
     }
 
-    private class ServerSelectDeleteMutationPlan implements MutationPlan {
+    public class ServerSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final QueryPlan dataPlan;
         private final PhoenixConnection connection;
@@ -802,6 +802,11 @@ public class DeleteCompiler {
                     context.getScan().setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
                     context.getScan().setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                     ScanUtil.setClientVersion(context.getScan(), MetaDataProtocol.PHOENIX_VERSION);
+                    String sourceOfDelete = statement.getConnection().getSourceOfOperation();
+                    if (sourceOfDelete != null) {
+                        context.getScan().setAttribute(QueryServices.SOURCE_OPERATION_ATTRIB,
+                                Bytes.toBytes(sourceOfDelete));
+                    }
                 }
                 ResultIterator iterator = aggPlan.iterator();
                 try {
@@ -860,7 +865,7 @@ public class DeleteCompiler {
         }
     }
 
-    private class ClientSelectDeleteMutationPlan implements MutationPlan {
+    public class ClientSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final TableRef targetTableRef;
         private final QueryPlan dataPlan;

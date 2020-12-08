@@ -18,6 +18,7 @@
 package org.apache.phoenix.execute;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
@@ -646,6 +647,14 @@ public class MutationState implements SQLCloseable {
             if (rowEntry.getValue().getColumnValues() == PRow.DELETE_MARKER) { // means delete
                 row.delete();
                 rowMutations = row.toRowMutations();
+                String sourceOfDelete = getConnection().getSourceOfOperation();
+                if (sourceOfDelete != null) {
+                    byte[] sourceOfDeleteBytes = Bytes.toBytes(sourceOfDelete);
+                    // Set the source of operation attribute.
+                    for (Mutation mutation: rowMutations) {
+                        mutation.setAttribute(SOURCE_OPERATION_ATTRIB, sourceOfDeleteBytes);
+                    }
+                }
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again
                 rowMutationsPertainingToIndex = Collections.emptyList();
             } else {

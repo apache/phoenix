@@ -32,6 +32,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.PhoenixTagType;
+import org.apache.hadoop.hbase.Tag;
+import org.apache.hadoop.hbase.TagRewriteCell;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -922,6 +927,9 @@ public class IndexRegionObserver extends BaseRegionObserver {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
+        // Need to add cell tags to Delete Marker before we do any index processing
+        // since we add tags to tables which doesn't have indexes also.
+        setDeleteAttributes(miniBatchOp);
 
         /*
          * Exclusively lock all rows so we get a consistent read
@@ -975,6 +983,42 @@ public class IndexRegionObserver extends BaseRegionObserver {
         }
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
+        }
+    }
+
+    /**
+     * Set Cell Tags to delete markers with source of operation attribute.
+     * @param miniBatchOp
+     * @throws IOException
+     */
+    private void setDeleteAttributes(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+            throws IOException {
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!(m instanceof  Delete)) {
+                // Ignore if it is not Delete type.
+                continue;
+            }
+            byte[] sourceOpAttr = m.getAttribute(QueryServices.SOURCE_OPERATION_ATTRIB);
+            if (sourceOpAttr == null) {
+                continue;
+            }
+            Tag sourceOpTag = new Tag(PhoenixTagType.SOURCE_OPERATION_TAG_TYPE, sourceOpAttr);
+            List<Cell> updatedCells = new ArrayList<>();
+            for (CellScanner cellScanner = m.cellScanner(); cellScanner.advance();) {
+                Cell cell = cellScanner.current();
+                List<Tag> tags = Tag.asList(cell.getTagsArray(),
+                        cell.getTagsOffset(), cell.getTagsLength());
+                tags.add(sourceOpTag);
+                Cell updatedCell = new TagRewriteCell(cell, Tag.fromList(tags));
+                updatedCells.add(updatedCell);
+            }
+            m.getFamilyCellMap().clear();
+            // Clear and add new Cells to the Mutation.
+            for (Cell cell : updatedCells) {
+                Delete d = (Delete) m;
+                d.addDeleteMarker(cell);
+            }
         }
     }
 
