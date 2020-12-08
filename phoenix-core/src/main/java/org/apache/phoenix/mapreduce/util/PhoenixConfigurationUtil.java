@@ -171,6 +171,26 @@ public final class PhoenixConfigurationUtil {
 
     public static final String MAPREDUCE_JOB_TYPE = "phoenix.mapreduce.jobtype";
 
+    // group number of views per mapper to run the deletion job
+    public static final String MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE = "phoenix.mapreduce.multi.input.split.size";
+
+    public static final String MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE = "phoenix.mapreduce.multi.input.batch.size";
+
+    // phoenix ttl data deletion job for a specific view
+    public static final String MAPREDUCE_PHOENIX_TTL_DELETE_JOB_PER_VIEW = "phoenix.mapreduce.phoenix_ttl.per_view";
+
+    // phoenix ttl data deletion job for all views.
+    public static final String MAPREDUCE_PHOENIX_TTL_DELETE_JOB_ALL_VIEWS = "phoenix.mapreduce.phoenix_ttl.all";
+
+    // provide an absolute path to inject your multi input logic
+    public static final String MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ = "phoenix.mapreduce.multi.input.strategy.path";
+
+    // provide an absolute path to inject your multi split logic
+    public static final String MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ = "phoenix.mapreduce.multi.split.strategy.path";
+
+    // provide an absolute path to inject your multi input mapper logic
+    public static final String MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ = "phoenix.mapreduce.multi.mapper.tracker.path";
+
     /**
      * Determines type of Phoenix Map Reduce job.
      * 1. QUERY allows running arbitrary queries without aggregates
@@ -413,12 +433,29 @@ public final class PhoenixConfigurationUtil {
         
     }
 
-     public static void setUpsertStatement(final Configuration configuration, String upsertStmt) throws SQLException {
-         Preconditions.checkNotNull(configuration);
-         Preconditions.checkNotNull(upsertStmt);
-         configuration.set(UPSERT_STATEMENT, upsertStmt);
-     }
-    
+    public static void setUpsertStatement(final Configuration configuration, String upsertStmt)
+            throws SQLException {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(upsertStmt);
+        configuration.set(UPSERT_STATEMENT, upsertStmt);
+    }
+
+    public static void setMultiInputMapperSplitSize(Configuration configuration, final int splitSize) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, String.valueOf(splitSize));
+    }
+
+    public static void setMultiViewQueryMoreSplitSize(Configuration configuration, final int batchSize) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE, String.valueOf(batchSize));
+    }
+
+    public static int getMultiViewQueryMoreSplitSize(final Configuration configuration) {
+        final String batchSize = configuration.get(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE);
+        Preconditions.checkNotNull(batchSize);
+        return Integer.valueOf(batchSize);
+    }
+
     public static List<ColumnInfo> getSelectColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         List<ColumnInfo> columnMetadataList = null;
@@ -441,6 +478,12 @@ public final class PhoenixConfigurationUtil {
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
         }
         return columnMetadataList;
+    }
+
+    public static int getMultiViewSplitSize(final Configuration configuration) {
+        final String splitSize = configuration.get(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE);
+        Preconditions.checkNotNull(splitSize);
+        return Integer.valueOf(splitSize);
     }
 
     private static List<String> getSelectColumnList(
