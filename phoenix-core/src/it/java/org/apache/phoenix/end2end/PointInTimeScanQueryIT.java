@@ -88,7 +88,7 @@ public class PointInTimeScanQueryIT extends BaseQueryIT {
         long timeDelta = 100;
         Thread.sleep(timeDelta);
 
-        try(Connection upsertConn = DriverManager.getConnection(url, props)) {
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
             upsertConn.setAutoCommit(true); // Test auto commit
             PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
             stmt.setString(1, tenantId);
@@ -102,7 +102,7 @@ public class PointInTimeScanQueryIT extends BaseQueryIT {
             + tableName + " WHERE organization_id=? and a_integer = 5";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
             Long.toString(queryTime));
-        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
@@ -129,8 +129,7 @@ public class PointInTimeScanQueryIT extends BaseQueryIT {
                 "    ENTITY_ID, " +
                 "    A_INTEGER) " +
                 "VALUES (?, ?, ?)";
-        try(Connection upsertConn = DriverManager.getConnection(url, props)) {
-
+        try (Connection upsertConn = DriverManager.getConnection(url, props)) {
             upsertConn.setAutoCommit(true); // Test auto commit
             // Insert all rows at ts
             PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
@@ -164,11 +163,11 @@ public class PointInTimeScanQueryIT extends BaseQueryIT {
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
             List<List<Object>> expectedResultsA = Lists.newArrayList(
-                Arrays.<Object>asList(2, C_VALUE),
-                Arrays.<Object>asList( 3, E_VALUE));
+                Arrays.asList(2, C_VALUE),
+                Arrays.asList(3, E_VALUE));
             List<List<Object>> expectedResultsB = Lists.newArrayList(
-                Arrays.<Object>asList( 5, C_VALUE),
-                Arrays.<Object>asList(4, B_VALUE));
+                Arrays.asList(5, C_VALUE),
+                Arrays.asList(4, B_VALUE));
             // Since we're not ordering and we may be using a descending index, we don't
             // know which rows we'll get back.
             assertOneOfValuesEqualsResultSet(rs, expectedResultsA,
