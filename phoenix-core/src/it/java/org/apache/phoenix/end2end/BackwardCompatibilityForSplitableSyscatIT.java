@@ -30,10 +30,10 @@ import org.junit.runners.Parameterized;
 import java.util.Collection;
 import java.util.Map;
 
-import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
+
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_TMP_TABLE;
-import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_DELETE;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_DELETE_FOR_SPLITABLE_SYSCAT;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_SELECT_AND_DROP_TABLE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
@@ -73,14 +73,15 @@ public class BackwardCompatibilityForSplitableSyscatIT extends SplitSystemCatalo
 
     @Test
     public void testSplittableSyscatWithOldClientForAddingDataAndDelete() throws Exception {
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY_DELETE, zkQuorum);
-        assertExpectedOutput(QUERY_DELETE);
+        executeQueryWithClientVersion(compatibleClientVersion,
+                QUERY_DELETE_FOR_SPLITABLE_SYSCAT, zkQuorum);
+        assertExpectedOutput(QUERY_DELETE_FOR_SPLITABLE_SYSCAT);
     }
 
     @Test
     public void testSplittableSyscatWithNewClientForAddingDataAndDelete() throws Exception {
-        executeQueriesWithCurrentVersion(QUERY_DELETE, url, NONE);
-        assertExpectedOutput(QUERY_DELETE);
+        executeQueriesWithCurrentVersion(QUERY_DELETE_FOR_SPLITABLE_SYSCAT, url, NONE);
+        assertExpectedOutput(QUERY_DELETE_FOR_SPLITABLE_SYSCAT);
     }
 
     @Test
