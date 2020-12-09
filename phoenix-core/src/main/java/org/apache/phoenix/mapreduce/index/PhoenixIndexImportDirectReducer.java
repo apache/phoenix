@@ -108,6 +108,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getAfterIndexHasExtraCellsCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
                         setValue(verificationResult.getAfterIndexHasMissingCellsCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
             }
             if (verificationResult.isVerificationFailed()) {
                 throw new IOException("Index verification failed! " + verificationResult);
