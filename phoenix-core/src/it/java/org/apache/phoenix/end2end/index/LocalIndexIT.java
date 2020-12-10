@@ -18,14 +18,11 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
-import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -33,15 +30,12 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Types;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -63,26 +57,22 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
-import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.util.IndexScrutiny;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 
 public class LocalIndexIT extends BaseLocalIndexIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
@@ -1201,117 +1191,6 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             Estimate info = getByteRowEstimates(conn, sql, binds);
             assertEquals((Long) 10l, info.getEstimatedRows());
             assertTrue(info.getEstimateInfoTs() > 0);
-        }
-    }
-
-    @Test
-    public void testCreateLocalIndexAsync() throws Exception {
-        final int NROWS = 1000;
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        TableName physicalTableName = SchemaUtil.getPhysicalTableName(dataTableFullName.getBytes(), true);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(false);
-            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) ");
-            String upsertStmt = "UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)";
-            PreparedStatement stmt = conn.prepareStatement(upsertStmt);
-            setEveryNthRowWithNull(NROWS, 2, stmt);
-            conn.commit();
-            setEveryNthRowWithNull(NROWS, 3, stmt);
-            conn.commit();
-            conn.createStatement().execute(String.format(
-                    "CREATE LOCAL INDEX %s ON %s (VAL1, VAL2) ASYNC ", indexTableName, dataTableFullName));
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + dataTableFullName + " WHERE VAL1 = 3 AND VAL2 = 4");
-            assertEquals(
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-                            + physicalTableName + "\n"
-                            + "    SERVER FILTER BY (VAL1 = 3 AND VAL2 = 4)",
-                    QueryUtil.getExplainPlan(rs));
-
-            // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-
-
-            ResultSet rs1 = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + dataTableFullName + " WHERE VAL1 = 3 AND VAL2 = 4");
-            assertEquals(
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                            + physicalTableName + " [1,3,4]\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                            + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs1));
-            rs.close();
-            rs1.close();
-        }
-    }
-
-    @Test
-    public void testCreateLocalIndexAsyncWithInclude() throws Exception {
-        final int NROWS = 1000;
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        TableName physicalTableName = SchemaUtil.getPhysicalTableName(dataTableFullName.getBytes(), true);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(false);
-            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) ");
-            String upsertStmt = "UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)";
-            PreparedStatement stmt = conn.prepareStatement(upsertStmt);
-            setEveryNthRowWithNull(NROWS, 2, stmt);
-            conn.commit();
-            setEveryNthRowWithNull(NROWS, 3, stmt);
-            conn.commit();
-            conn.createStatement().execute(String.format(
-                    "CREATE LOCAL INDEX %s ON %s (VAL1) INCLUDE (VAL2) ASYNC ", indexTableName, dataTableFullName));
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + dataTableFullName + " WHERE VAL1 = 3 AND VAL2 = 4");
-            assertEquals(
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-                            + physicalTableName + "\n"
-                            + "    SERVER FILTER BY (VAL1 = 3 AND VAL2 = 4)",
-                    QueryUtil.getExplainPlan(rs));
-
-            // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
-            assertEquals(NROWS, actualRowCount);
-
-
-            ResultSet rs1 = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + dataTableFullName + " WHERE VAL1 = 3 AND VAL2 = 4");
-            assertEquals(
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                            + physicalTableName + " [1,3]\n"
-                            + "    SERVER FILTER BY \"VAL2\" = 4\n"
-                            + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs1));
-            rs.close();
-            rs1.close();
-        }
-    }
-
-    private void setEveryNthRowWithNull(int nrows, int nthRowNull, PreparedStatement stmt) throws Exception {
-        for (int i = 1; i <= nrows; i++) {
-            stmt.setInt(1, i);
-            stmt.setInt(2, i + 1);
-            if (i % nthRowNull != 0) {
-                stmt.setInt(3, i * i);
-            } else {
-                stmt.setNull(3, Types.INTEGER);
-            }
-            stmt.execute();
         }
     }
 }
