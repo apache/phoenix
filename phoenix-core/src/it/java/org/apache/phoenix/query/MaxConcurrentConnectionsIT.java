@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.query;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -39,8 +40,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTE
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
-import static org.apache.phoenix.query.QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -55,8 +54,15 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
     @BeforeClass
     public static void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
-
+        Configuration serverConf = hbaseTestUtil.getConfiguration();
+        // Disable any task handling as that creates additional connections
+        // This must be set before the mini-cluster is brought up
+        serverConf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        serverConf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
         hbaseTestUtil.startMiniCluster(1,1,null,null,DelayedRegionServer.class);
+
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         url = PhoenixRuntime.JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + zkQuorum +
@@ -85,17 +91,16 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
         //table with lots of regions
         String ddl = "create table " + tableName +  "  (i integer not null primary key, j integer) SALT_BUCKETS=256 ";
 
-        Properties props = new Properties();
-        props.setProperty(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,String.valueOf(10));
-        props.setProperty(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS,String.valueOf(10));
-
-        //delay any task handeling as that causes additional connections
-        props.setProperty(TASK_HANDLING_INTERVAL_MS_ATTRIB,String.valueOf(600000));
-        props.setProperty(TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,String.valueOf(600000));
+        Properties clientProps = new Properties();
+        clientProps.setProperty(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
+                String.valueOf(10));
+        clientProps.setProperty(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS,
+                String.valueOf(10));
 
         String deleteStmt = "DELETE FROM " + tableName + " WHERE 20 = j";
 
-        try(Connection conn = DriverManager.getConnection(connectionUrl, props); Statement statement = conn.createStatement()) {
+        try(Connection conn = DriverManager.getConnection(connectionUrl,
+                clientProps); Statement statement = conn.createStatement()) {
             statement.execute(ddl);
         }
 
@@ -103,7 +108,7 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals(0, GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.getMetric().getValue());
         Connection conn = null;
         try {
-            conn = DriverManager.getConnection(connectionUrl, props);
+            conn = DriverManager.getConnection(connectionUrl, clientProps);
             //Enable delay for the delete
             DelayedRegionServer.setDelayEnabled(true);
             try (Statement statement = conn.createStatement()) {
