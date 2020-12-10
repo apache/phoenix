@@ -989,7 +989,11 @@
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-            </exclusion>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-client-hbase1.x</artifactId>
@@ -1001,7 +1005,7 @@
          <exclusion>
            <groupId>org.testng</groupId>
            <artifactId>testng</artifactId>
-          </exclusion>
+         </exclusion>
         </exclusions>
       </dependency>
       <dependency>
