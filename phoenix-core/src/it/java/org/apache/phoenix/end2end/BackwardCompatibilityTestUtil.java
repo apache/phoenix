@@ -77,12 +77,15 @@ public final class BackwardCompatibilityTestUtil {
     public static final String ADD_DELETE = "add_delete";
     public static final String ADD_VIEW_INDEX = "add_view_index";
     public static final String DELETE = "delete";
+    public static final String DELETE_FOR_SPLITABLE_SYSCAT = "delete_for_splitable_syscat";
     public static final String VIEW_INDEX = "view_index";
     public static final String SELECT_AND_DROP_TABLE = "select_and_drop_table";
     public static final String QUERY_CREATE_ADD = QUERY_PREFIX + CREATE_ADD;
     public static final String QUERY_ADD_DATA = QUERY_PREFIX + ADD_DATA;
     public static final String QUERY_ADD_DELETE = QUERY_PREFIX + ADD_DELETE;
     public static final String QUERY_DELETE = QUERY_PREFIX + DELETE;
+    public static final String QUERY_DELETE_FOR_SPLITTABLE_SYSCAT =
+            QUERY_PREFIX + DELETE_FOR_SPLITABLE_SYSCAT;
     public static final String QUERY_SELECT_AND_DROP_TABLE = QUERY_PREFIX + SELECT_AND_DROP_TABLE;
     public static final String QUERY_CREATE_DIVERGED_VIEW = QUERY_PREFIX + CREATE_DIVERGED_VIEW;
     public static final String QUERY_VIEW_INDEX = QUERY_PREFIX + VIEW_INDEX;

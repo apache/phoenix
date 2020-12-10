@@ -29,7 +29,7 @@ import java.util.Collection;
 import java.util.Map;
 
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_TMP_TABLE;
-import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_DELETE;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_DELETE_FOR_SPLITTABLE_SYSCAT;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_SELECT_AND_DROP_TABLE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
@@ -44,7 +44,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradePr
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class BackwardCompatibilityForSplitableSyscatIT extends SplitSystemCatalogIT {
+public class BackwardCompatibilityForSplittableSyscatIT extends SplitSystemCatalogIT {
     private final String compatibleClientVersion;
     private String zkQuorum;
     private String url;
@@ -54,7 +54,7 @@ public class BackwardCompatibilityForSplitableSyscatIT extends SplitSystemCatalo
         return computeClientVersions();
     }
 
-    public BackwardCompatibilityForSplitableSyscatIT(String compatibleClientVersion) {
+    public BackwardCompatibilityForSplittableSyscatIT(String compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
     }
 
@@ -69,14 +69,15 @@ public class BackwardCompatibilityForSplitableSyscatIT extends SplitSystemCatalo
 
     @Test
     public void testSplittableSyscatWithOldClientForAddingDataAndDelete() throws Exception {
-        executeQueryWithClientVersion(compatibleClientVersion, QUERY_DELETE, zkQuorum);
-        assertExpectedOutput(QUERY_DELETE);
+        executeQueryWithClientVersion(compatibleClientVersion,
+                QUERY_DELETE_FOR_SPLITTABLE_SYSCAT, zkQuorum);
+        assertExpectedOutput(QUERY_DELETE_FOR_SPLITTABLE_SYSCAT);
     }
 
     @Test
     public void testSplittableSyscatWithNewClientForAddingDataAndDelete() throws Exception {
-        executeQueriesWithCurrentVersion(QUERY_DELETE, url, NONE);
-        assertExpectedOutput(QUERY_DELETE);
+        executeQueriesWithCurrentVersion(QUERY_DELETE_FOR_SPLITTABLE_SYSCAT, url, NONE);
+        assertExpectedOutput(QUERY_DELETE_FOR_SPLITTABLE_SYSCAT);
     }
 
     @Test
