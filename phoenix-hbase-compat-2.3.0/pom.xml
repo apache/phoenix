@@ -20,55 +20,35 @@
   xsi:schemaLocation=
     "http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-    <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>21</version>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>5.1.0-SNAPSHOT</version>
   </parent>
-  <groupId>org.apache.phoenix</groupId>
+
   <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
-  <version>5.1.0-SNAPSHOT</version>
   <name>Phoenix Hbase 2.3.0 compatibility</name>
   <description>Compatibility module for HBase 2.3.0+</description>
 
-  <build>
-    <plugins>
-      <!-- Setup eclipse -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-eclipse-plugin</artifactId>
-        <version>2.9</version>
-        <configuration>
-          <buildcommands>
-            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
-          </buildcommands>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </build>
+  <properties>
+    <hbase.version>2.3.0</hbase.version>
+  </properties>
 
   <dependencies>
        <!-- HBase dependencies -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-client</artifactId>
-        <version>2.3.0</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
-        <version>2.3.0</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-server</artifactId>
-        <version>2.3.0</version>
         <scope>provided</scope>
       </dependency>
   </dependencies>
