@@ -38,6 +38,53 @@
        <groupId>org.apache.maven.plugins</groupId>
        <artifactId>maven-site-plugin</artifactId>
      </plugin>
+     <!-- If this is configured in the top-level dependencyManagement,
+     it will run on the compat module even if the plugin is not enabled.
+     Sounds like another maven bug -->
+     <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+          <configuration>
+            <rules>
+              <evaluateBeanshell>
+                <condition>
+                  import java.util.regex.Pattern;
+                  import java.lang.Integer;
+
+                  versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                  versionMatcher = versionPattern.matcher("${hbase.version}");
+                  versionMatcher.find();
+
+                  hbaseMajor = Integer.parseInt(versionMatcher.group(1));
+                  hbaseMinor = Integer.parseInt(versionMatcher.group(2));
+                  hbasePatch = Integer.parseInt(versionMatcher.group(3));
+
+                  hbaseMajor == 2 &amp;&amp; (
+                    ("${hbase.compat.version}".equals("2.1.6")
+                      &amp;&amp; hbaseMinor == 1
+                      &amp;&amp; hbasePatch &gt;=6)
+                    || ("${hbase.compat.version}".equals("2.2.1")
+                      &amp;&amp; hbaseMinor == 2
+                      &amp;&amp; hbasePatch &gt;=1)
+                    || ("${hbase.compat.version}".equals("2.3.0")
+                      &amp;&amp; hbaseMinor == 3
+                      &amp;&amp; hbasePatch &gt;=0)
+                  )
+                </condition>
+              </evaluateBeanshell>
+            </rules>
+          </configuration>
+          <executions>
+         <execution>
+           <id>check-hbase-compatibility</id>
+           <phase>validate</phase>
+           <goals>
+             <goal>enforce</goal>
+           </goals>
+         </execution>
+       </executions>
+     </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
