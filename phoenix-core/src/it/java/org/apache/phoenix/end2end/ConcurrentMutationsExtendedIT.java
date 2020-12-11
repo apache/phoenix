@@ -82,7 +82,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    private long verifyIndexTable(String tableName, String indexName, Connection conn) throws Exception {
+    static long verifyIndexTable(String tableName, String indexName,
+            Connection conn) throws Exception {
         // This checks the state of every raw index row without rebuilding any row
         IndexTool indexTool = IndexToolIT.runIndexTool(true, false, "", tableName,
                 indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
@@ -323,66 +324,6 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
         long actualRowCount = verifyIndexTable(tableName, indexName, conn);
         assertEquals(nRows, actualRowCount);
-    }
-
-    @Test
-    public void testConcurrentUpsertsWithNoIndexedColumns() throws Exception {
-        int nThreads = 4;
-        final int batchSize = 100;
-        final int nRows = 997;
-        final String tableName = generateUniqueName();
-        final String indexName = generateUniqueName();
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE " + tableName
-                + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER," +
-                "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE(v2, v3)");
-        final CountDownLatch doneSignal = new CountDownLatch(nThreads);
-        Runnable[] runnables = new Runnable[nThreads];
-        for (int i = 0; i < nThreads; i++) {
-            runnables[i] = new Runnable() {
-
-                @Override public void run() {
-                    try {
-                        Connection conn = DriverManager.getConnection(getUrl());
-                        for (int i = 0; i < 1000; i++) {
-                            if (RAND.nextInt() % 1000 < 10) {
-                                // Do not include the indexed column in upserts
-                                conn.createStatement().execute(
-                                        "UPSERT INTO " + tableName + " (k1, k2, b.v2, c.v3, d.v4) VALUES ("
-                                                + (RAND.nextInt() % nRows) + ", 0, "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
-                            } else {
-                                conn.createStatement().execute(
-                                        "UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                                                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
-                            }
-                            if ((i % batchSize) == 0) {
-                                conn.commit();
-                            }
-                        }
-                        conn.commit();
-                    } catch (SQLException e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        doneSignal.countDown();
-                    }
-                }
-
-            };
-        }
-        for (int i = 0; i < nThreads; i++) {
-            Thread t = new Thread(runnables[i]);
-            t.start();
-        }
-
-        assertTrue("Ran out of time", doneSignal.await(240, TimeUnit.SECONDS));
-        verifyIndexTable(tableName, indexName, conn);
     }
 
     @Test
