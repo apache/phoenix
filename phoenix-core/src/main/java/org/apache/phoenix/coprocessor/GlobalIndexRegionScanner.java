@@ -351,7 +351,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
 
         IndexToolVerificationResult verificationResultTemp = verificationResultRepository
-                .getVerificationResult(lastVerifyTime, scan, region, indexMaintainer.getIndexTableName()) ;
+            .getVerificationResult(lastVerifyTime, scan, region, indexMaintainer.getIndexTableName());
         if(verificationResultTemp != null) {
             verificationResult = verificationResultTemp;
         }
