@@ -889,17 +889,20 @@ public class IndexTool extends Configured implements Tool {
     }
 
     public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
-        try(Connection conn = getConnection(configuration)) {
-            Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                    .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES);
+        try (Connection conn = getConnection(configuration);
+                Table hIndexToolTable = conn.unwrap(PhoenixConnection.class)
+                    .getQueryServices()
+                    .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES)) {
             Scan s = new Scan();
             ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
             boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());
             s.setRowPrefixFilter(Bytes.toBytes(String.format("%s%s%s", lastVerifyTime,
-                    ROW_KEY_SEPARATOR,
-                    SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTable, isNamespaceMapped))));
-            ResultScanner rs = hIndexToolTable.getScanner(s);
-            return rs.next() != null;
+                ROW_KEY_SEPARATOR,
+                SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTable,
+                    isNamespaceMapped))));
+            try (ResultScanner rs = hIndexToolTable.getScanner(s)) {
+                return rs.next() != null;
+            }
         }
     }
 

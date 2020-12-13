@@ -771,11 +771,11 @@ public class IndexUtil {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
         Increment incr = new Increment(indexTableKey);
         incr.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, amount);
-        try {
-            return conn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                            conn.getQueryServices().getProps()).getName())
-                    .increment(incr);
+        try (Table table = conn.getQueryServices().getTable(
+                SchemaUtil.getPhysicalTableName(
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                    conn.getQueryServices().getProps()).getName())) {
+            return table.increment(incr);
         } catch (SQLException e) {
             throw new IOException(e);
         }
@@ -785,11 +785,11 @@ public class IndexUtil {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(failedIndexTable);
         Get get = new Get(indexTableKey);
         get.addColumn(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
-        try {
-            Result result = conn.getQueryServices()
-                    .getTable(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                            conn.getQueryServices().getProps()).getName())
-                    .get(get);
+        try (Table table = conn.getQueryServices().getTable(
+                SchemaUtil.getPhysicalTableName(
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                    conn.getQueryServices().getProps()).getName())) {
+            Result result = table.get(get);
             return Bytes.toLong(result.getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES));
         } catch (SQLException e) {
             throw new IOException(e);

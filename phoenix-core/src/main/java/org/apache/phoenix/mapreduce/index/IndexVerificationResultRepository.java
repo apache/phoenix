@@ -273,6 +273,19 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 .getTable(tableName);
     }
 
+    /**
+     * Get aggregated verification results from
+     * {@link #aggregateVerificationResult(Table, IndexToolVerificationResult,
+     * Scan)}
+     * Provided Table reference should be closed by caller.
+     *
+     * @param htable Table reference. It is caller's responsibility to close
+     *     this reference.
+     * @param ts timestamp used for Scan's startRow
+     * @return Verification result
+     * @throws IOException if something goes wrong while retrieving verification
+     *     results.
+     */
     public IndexToolVerificationResult getVerificationResult(Table htable, long ts)
         throws IOException {
         byte[] startRowKey = Bytes.toBytes(Long.toString(ts));
@@ -284,39 +297,43 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         return aggregateVerificationResult(htable, verificationResult, scan);
     }
 
-    private IndexToolVerificationResult aggregateVerificationResult(Table htable,
-                                                                    IndexToolVerificationResult verificationResult,
-                                                                    Scan scan) throws IOException {
-        ResultScanner scanner = htable.getScanner(scan);
-        for (Result result = scanner.next(); result != null; result = scanner.next()) {
-            boolean isFirst = true;
-            for (Cell cell : result.rawCells()) {
-                if (isFirst){
-                    byte[][] rowKeyParts = ByteUtil.splitArrayBySeparator(result.getRow(),
-                        ROW_KEY_SEPARATOR_BYTE[0]);
-                    verificationResult.setStartRow(rowKeyParts[3]);
-                    verificationResult.setStopRow(rowKeyParts[4]);
-                    isFirst = false;
+    private IndexToolVerificationResult aggregateVerificationResult(
+            Table hTable, IndexToolVerificationResult verificationResult,
+            Scan scan) throws IOException {
+        try (ResultScanner scanner = hTable.getScanner(scan)) {
+            for (Result result = scanner.next(); result != null;
+                    result = scanner.next()) {
+                boolean isFirst = true;
+                for (Cell cell : result.rawCells()) {
+                    if (isFirst) {
+                        byte[][] rowKeyParts = ByteUtil.splitArrayBySeparator(
+                            result.getRow(), ROW_KEY_SEPARATOR_BYTE[0]);
+                        verificationResult.setStartRow(rowKeyParts[3]);
+                        verificationResult.setStopRow(rowKeyParts[4]);
+                        isFirst = false;
+                    }
+                    verificationResult.update(cell);
                 }
-                verificationResult.update(cell);
             }
         }
         return verificationResult;
     }
 
     public IndexToolVerificationResult getVerificationResult(Connection conn,
-                                                             long ts,
-                                                             byte[] indexTableName
-                                                             ) throws IOException,
-        SQLException {
-        Table htable = getTable(conn, RESULT_TABLE_NAME_BYTES);
-        byte[] startRowKey = generatePartialResultTableRowKey(ts, indexTableName);
-        byte[] stopRowKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(startRowKey);
-        IndexToolVerificationResult verificationResult = new IndexToolVerificationResult(ts);
-        Scan scan = new Scan();
-        scan.setStartRow(startRowKey);
-        scan.setStopRow(stopRowKey);
-        return aggregateVerificationResult(htable, verificationResult, scan);
+            long ts, byte[] indexTableName) throws IOException, SQLException {
+        try (Table hTable = getTable(conn, RESULT_TABLE_NAME_BYTES)) {
+            byte[] startRowKey = generatePartialResultTableRowKey(ts,
+                indexTableName);
+            byte[] stopRowKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(
+                startRowKey);
+            IndexToolVerificationResult verificationResult =
+                new IndexToolVerificationResult(ts);
+            Scan scan = new Scan();
+            scan.setStartRow(startRowKey);
+            scan.setStopRow(stopRowKey);
+            return aggregateVerificationResult(hTable, verificationResult,
+                scan);
+        }
     }
 
     private IndexToolVerificationResult getVerificationResult(Table htable, byte [] oldRowKey, Scan scan )
