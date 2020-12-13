@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -25,6 +26,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -233,8 +235,13 @@ public class CreateTableCompiler {
             parentToBe.getSchemaName(), parentToBe.getTableName(),
             parentToBe.isNamespaceMapped());
         // getTableIfExists will throw TNFE if table does not exist
-        connection.getQueryServices().getTableIfExists(
-            fullTableName.getBytes());
+        try (Table ignored =
+               connection.getQueryServices().getTableIfExists(
+                 fullTableName.getBytes())) {
+            // empty try block
+        } catch (IOException e) {
+            throw new SQLException(e);
+        }
         if (isPKMissed) {
             throw new SQLExceptionInfo
                 .Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)

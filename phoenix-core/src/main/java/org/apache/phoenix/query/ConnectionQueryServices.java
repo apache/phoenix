@@ -65,10 +65,12 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public ConnectionQueryServices getChildQueryServices(ImmutableBytesWritable tenantId);
 
     /**
-     * Get an HTableInterface by the given name. It is the callers
-     * responsibility to close the returned HTableInterface.
+     * Get Table by the given name. It is the callers
+     * responsibility to close the returned Table reference.
+     *
      * @param tableName the name of the HTable
-     * @return the HTableInterface
+     * @return Table interface. It is caller's responsibility to close this
+     *     returned Table reference.
      * @throws SQLException 
      */
     public Table getTable(byte[] tableName) throws SQLException;
@@ -79,9 +81,11 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * API to ensure if table exists before returning Table interface from
      * Connection. If table does not exist, this method will throw
      * {@link org.apache.phoenix.schema.TableNotFoundException}
+     * It is caller's responsibility to close returned Table reference.
      *
      * @param tableName the name of the Table
-     * @return Table interface
+     * @return Table interface. It is caller's responsibility to close this
+     *     returned Table reference.
      * @throws SQLException If something goes wrong while retrieving table
      *     interface from connection managed by implementor. If table does not
      *     exist, {@link org.apache.phoenix.schema.TableNotFoundException} will
