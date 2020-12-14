@@ -97,10 +97,12 @@ import org.junit.Test;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test suite related to view metadata
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
