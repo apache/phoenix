@@ -97,10 +97,12 @@ import org.junit.Test;
 import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test suite related to view metadata
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;
