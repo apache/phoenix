@@ -950,6 +950,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,22)");
             conn.commit();
 
+            //test for LHS is a flat table and pushed down NonCorrelated subquery as preFiter.
+            //would use HashJoin.
             sql="select a.aid from " + tableName1 + " a inner join  "+
                     "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                     "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
@@ -960,6 +962,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             assertTrue(rs.getInt(1) == 3);
             assertTrue(!rs.next());
 
+            //test for LHS is a subselect and pushed down NonCorrelated subquery as preFiter.
+            //would use HashJoin.
             sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                     "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                     "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
@@ -970,12 +974,19 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             assertTrue(rs.getInt(1) == 3);
             assertTrue(!rs.next());
 
+            //test for LHS is a subselect and pushed down aggregate NonCorrelated subquery as preFiter.
+            //would use HashJoin.
             sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                     "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                     "where a.age > (select max(code) from " + tableName2 + " c where c.bid >= 1) order by a.aid";
             rs = conn.prepareStatement(sql).executeQuery();
             assertTrue(!rs.next());
 
+            /**
+             * test for LHS is a subselect and has an aggregate Correlated subquery as preFiter,
+             * but the aggregate Correlated subquery would be rewrite as HashJoin before
+             * {@link JoinCompiler#compile}.
+             */
             sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                     "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                     "where a.age > (select max(code) from " + tableName2 + " c where c.bid = a.aid) order by a.aid";
@@ -998,6 +1009,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + tableName3 + "(id,test_id,lastchanged) VALUES (2,100,'2011-11-11 11:11:11')");
             conn.commit();
 
+            //test for LHS is Correlated subquery,the RHS would be as the probe side of Hash join.
             sql= "SELECT AAA.* FROM " +
                     "(SELECT id, test_id, lastchanged FROM " + tableName3 + " T " +
                     "  WHERE lastchanged = ( SELECT max(lastchanged) FROM " + tableName3 + " WHERE test_id = T.test_id )) AAA " +

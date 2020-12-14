@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.HashJoinRegionScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -123,6 +124,9 @@ public class JoinCompiler {
     }
 
     private final PhoenixStatement phoenixStatement;
+    /**
+     * The original join sql for current {@link JoinCompiler}.
+     */
     private final SelectStatement originalJoinSelectStatement;
     private final ColumnResolver origResolver;
     private final boolean useStarJoin;
@@ -314,7 +318,7 @@ public class JoinCompiler {
             return allLeftJoin;
         }
 
-        public SelectStatement getStatement() {
+        public SelectStatement getOriginalJoinSelectStatement() {
             return originalJoinSelectStatement;
         }
 
@@ -785,7 +789,7 @@ public class JoinCompiler {
          * Only make sense for {@link #isSubselect()}.
          * {@link #postFilterParseNodes} could not as this
          * {@link Table}'s where conditions, but need to filter after
-         * {@link #getSelectStatementByApplyPreFiltersIfSubselect()}
+         * {@link #getSelectStatementByApplyPreFiltersForSubselect()}
          * is executed.
          */
         private final List<ParseNode> postFilterParseNodes;
@@ -963,14 +967,33 @@ public class JoinCompiler {
         public SelectStatement getAsSubquery(List<OrderByNode> newOrderByNodes) throws SQLException {
             if (isSubselect()) {
                 return SubselectRewriter.applyOrderByAndPostFilters(
-                        this.getSelectStatementByApplyPreFiltersIfSubselect(),
+                        this.getSelectStatementByApplyPreFiltersForSubselect(),
                         newOrderByNodes,
                         tableNode.getAlias(),
                         postFilterParseNodes);
             }
-            //for flat table, postFilters is empty , because it can safely pushed down as preFilters.
+
+            /**
+             * For flat table, {@link #postFilterParseNodes} is empty , because it can safely pushed down as
+             * {@link #preFilterParseNodes}.
+             */
             assert postFilterParseNodes == null || postFilterParseNodes.isEmpty();
-            return this.getSelectStatementByApplyPreFiltersIfNotSubselect(newOrderByNodes);
+            return NODE_FACTORY.select(
+                    tableNode,
+                    originalJoinSelectStatement.getHint(),
+                    false,
+                    getSelectAliasedNodes(),
+                    getCombinedPreFilterParseNodes(),
+                    null,
+                    null,
+                    newOrderByNodes,
+                    null,
+                    null,
+                    0,
+                    false,
+                    originalJoinSelectStatement.hasSequence(),
+                    Collections.<SelectStatement> emptyList(),
+                    originalJoinSelectStatement.getUdfParseNodes());
         }
 
         public SelectStatement getAsSubqueryForOptimization(boolean applyGroupByOrOrderBy) throws SQLException {
@@ -1044,22 +1067,11 @@ public class JoinCompiler {
                 return false;
             }
 
-            SelectStatement selectStatementToUse =
-                this.getSelectStatementByApplyPreFilters();
+            SelectStatement selectStatementToUse = this.getAsSubquery(null);
             RewriteResult rewriteResult =
                     ParseNodeUtil.rewrite(selectStatementToUse, phoenixStatement.getConnection());
-            return JoinCompiler.isCouldPushToServerAsHashJoinProbeSide(rewriteResult.getRewrittenSelectStatement());
-        }
-
-        /**
-         * Get this {@link Table}'s new {@link SelectStatement} only applying
-         * {@link #preFilterParseNodes}.
-         * @return
-         */
-        private SelectStatement getSelectStatementByApplyPreFilters() {
-            return  this.isSubselect() ?
-                    this.getSelectStatementByApplyPreFiltersIfSubselect() :
-                    this.getSelectStatementByApplyPreFiltersIfNotSubselect(null);
+            return JoinCompiler.isCouldPushToServerAsHashJoinProbeSide(
+                    rewriteResult.getRewrittenSelectStatement());
         }
 
         /**
@@ -1067,36 +1079,12 @@ public class JoinCompiler {
          * {@link #preFilterParseNodes} for {@link #isSubselect()}.
          * @return
          */
-        private SelectStatement getSelectStatementByApplyPreFiltersIfSubselect() {
+        private SelectStatement getSelectStatementByApplyPreFiltersForSubselect() {
             return SubselectRewriter.applyPreFiltersForSubselect(
                     subselectStatement,
                     preFilterParseNodes,
                     tableNode.getAlias());
 
-        }
-
-        /**
-         * Get this {@link Table}'s new {@link SelectStatement} only applying
-         * {@link #preFilterParseNodes} if not {@link #isSubselect()}.
-         * @return
-         */
-        private SelectStatement getSelectStatementByApplyPreFiltersIfNotSubselect(List<OrderByNode> newOrderByNodes) {
-            return NODE_FACTORY.select(
-                    tableNode,
-                    originalJoinSelectStatement.getHint(),
-                    false,
-                    getSelectAliasedNodes(),
-                    getCombinedPreFilterParseNodes(),
-                    null,
-                    null,
-                    newOrderByNodes,
-                    null,
-                    null,
-                    0,
-                    false,
-                    originalJoinSelectStatement.hasSequence(),
-                    Collections.<SelectStatement> emptyList(),
-                    originalJoinSelectStatement.getUdfParseNodes());
         }
 
         protected boolean isWildCardSelect() {
@@ -1470,11 +1458,14 @@ public class JoinCompiler {
     /**
      * Check if this {@link Table} could be pushed to RegionServer
      * {@link HashJoinRegionScanner} as the probe side of Hash join.
-     * Note: the {@link SelectStatement} parameter should be rewritten by
+     * Note: the {@link SelectStatement} parameter must be rewritten by
      * {@link ParseNodeUtil#rewrite} before this method.
      * {@link SelectStatement} parameter could has NonCorrelated subquery,
      * but for Correlated subquery, {@link ParseNodeUtil#rewrite} rewrite
      * it as join.
+     * Note: {@link SelectStatement} could also have {@link OrderBy},but we
+     * could ignore the {@link OrderBy} because we do not guarantee the {@link OrderBy}
+     * after join.
      * @param selectStatement
      * @return
      */

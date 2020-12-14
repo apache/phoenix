@@ -6612,6 +6612,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                     "      CONSTRAINT my_pk PRIMARY KEY (id))";
             conn.createStatement().execute(sql);
 
+            //test for LHS is Correlated subquery,the RHS would be as the probe side of Hash join.
             sql= "SELECT AAA.* FROM " +
                     "(SELECT id, test_id, lastchanged FROM test T " +
                     "  WHERE lastchanged = ( SELECT max(lastchanged) FROM test WHERE test_id = T.test_id )) AAA " +
@@ -6631,6 +6632,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(
                ((TupleProjectionPlan)(subPlans[0].getInnerPlan())).getDelegate() instanceof HashJoinPlan);
 
+            //test for LHS is Correlated subquery,the RHS could not as the probe side of hash join,
+            //so use SortMergeJoinPlan
             sql= "SELECT AAA.* FROM " +
                     "(SELECT id, test_id, lastchanged FROM test T " +
                     "  WHERE lastchanged = ( SELECT max(lastchanged) FROM test WHERE test_id = T.test_id )) AAA " +
@@ -6641,6 +6644,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
            assertTrue(queryPlan instanceof ClientScanPlan);
            assertTrue(((ClientScanPlan)queryPlan).getDelegate() instanceof SortMergeJoinPlan);
 
+           //test for LHS is NonCorrelated subquery ,would use HashJoin.
            String GRAMMAR_TABLE = "CREATE TABLE IF NOT EXISTS GRAMMAR_TABLE (ID INTEGER PRIMARY KEY, " +
                    "unsig_id UNSIGNED_INT, big_id BIGINT, unsig_long_id UNSIGNED_LONG, tiny_id TINYINT," +
                    "unsig_tiny_id UNSIGNED_TINYINT, small_id SMALLINT, unsig_small_id UNSIGNED_SMALLINT," +
@@ -6687,7 +6691,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
            String tableName1 = generateUniqueName();
            String tableName2 = generateUniqueName();
 
-          sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+           sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
                    "AID INTEGER PRIMARY KEY,"+
                    "AGE INTEGER"+
                    ")";
@@ -6699,6 +6703,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                    ")";
            conn.createStatement().execute(sql);
 
+           //test for LHS is a flat table and pushed down NonCorrelated subquery as preFiter.
+           //would use HashJoin.
            sql="select a.aid from " + tableName1 + " a inner join  "+
                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                    "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
@@ -6718,6 +6724,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                    "SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2");
            assertTrue(subPlans[1] instanceof HashSubPlan);
 
+           //test for LHS is a subselect and pushed down NonCorrelated subquery as preFiter.
+           //would use HashJoin.
            sql="select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                    "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
@@ -6737,6 +6745,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                    "SELECT CODE FROM " + tableName2 + " C  WHERE C.BID = 2 LIMIT 2");
            assertTrue(subPlans[1] instanceof HashSubPlan);
 
+           //test for LHS is a subselect and pushed down aggregate NonCorrelated subquery as preFiter.
+           //would use HashJoin.
            sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                    "where a.age > (select max(code) from " + tableName2 + " c where c.bid >= 1) order by a.aid";
@@ -6756,6 +6766,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                    "SELECT  MAX(CODE) FROM " + tableName2 + " C  WHERE C.BID >= 1 LIMIT 2");
            assertTrue(subPlans[1] instanceof HashSubPlan);
 
+           /**
+            * test for LHS is a subselect and has an aggregate Correlated subquery as preFiter,
+            * but the aggregate Correlated subquery would be rewrite as HashJoin before
+            * {@link JoinCompiler#compile}.
+            */
            sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
                    "where a.age > (select max(code) from " + tableName2 + " c where c.bid = a.aid) order by a.aid";
