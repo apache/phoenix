@@ -26,13 +26,13 @@ import org.apache.phoenix.util.SizedUtil;
 
 
 /**
- * 
+ *
  * Class to track whether or not a value is null.
  * The value is a zero-based position in the schema provided.
  *
- * 
+ *
  * @since 0.1
- * 
+ *
  */
 public class ValueBitSet {
     public final static ValueBitSet EMPTY_VALUE_BITSET = new ValueBitSet();
@@ -40,34 +40,34 @@ public class ValueBitSet {
     private static final int BITS_PER_SHORT = 16;
     private final long[] bits;
     private final ValueSchema schema;
-    
+
     private int maxSetBit = -1;
-    
+
     public static ValueBitSet newInstance(ValueSchema schema) {
         if (schema.getFieldCount() == schema.getMinNullable()) {
             return EMPTY_VALUE_BITSET;
         }
         return new ValueBitSet(schema);
     }
-    
+
     private ValueBitSet() {
         schema = null;
         bits = new long[0];
     }
-    
+
     private ValueBitSet(ValueSchema schema) {
         this.schema = schema;
         bits = new long[Math.max(1,(schema.getFieldCount() - schema.getMinNullable() + BITS_PER_LONG -1) / BITS_PER_LONG)];
     }
-    
+
     public int getMaxSetBit() {
         return maxSetBit;
     }
-    
+
     private boolean isVarLength() {
         return schema == null ? false : schema.getFieldCount() - schema.getMinNullable() > BITS_PER_SHORT;
     }
-    
+
     public int getNullCount(int nBit, int nFields) {
         if (schema == null) {
             return 0;
@@ -96,7 +96,7 @@ public class ValueBitSet {
         }
         return count;
     }
-    
+
     /**
      * Serialize the value bit set into a byte array. The byte array
      * is expected to have enough room (use {@link #getEstimatedLength()}
@@ -118,36 +118,36 @@ public class ValueBitSet {
                 offset = Bytes.putLong(b, offset, bits[i]);
             }
             offset = Bytes.putShort(b, offset, nLongs);
-        } else { 
+        } else {
             // Else if the number of values is less than or equal to 16,
             // serialize the bits directly into a short.
-            offset = Bytes.putShort(b, offset, (short)bits[0]);            
+            offset = Bytes.putShort(b, offset, (short)bits[0]);
         }
         return offset;
     }
-    
+
     public void clear() {
         Arrays.fill(bits, 0);
         maxSetBit = -1;
     }
-    
+
     public boolean get(int nBit) {
         int lIndex = nBit / BITS_PER_LONG;
         int bIndex = nBit % BITS_PER_LONG;
         return (bits[lIndex] & (1L << bIndex)) != 0;
     }
-    
+
     public void set(int nBit) {
         int lIndex = nBit / BITS_PER_LONG;
         int bIndex = nBit % BITS_PER_LONG;
         bits[lIndex] |= (1L << bIndex);
         maxSetBit = Math.max(maxSetBit, nBit);
     }
-    
+
     public void or(ImmutableBytesWritable ptr) {
         or(ptr, isVarLength() ? Bytes.SIZEOF_SHORT + 1 : Bytes.SIZEOF_SHORT);
     }
-    
+
     public void or(ImmutableBytesWritable ptr, int length) {
         if (schema == null || length == 0) {
             return;
@@ -163,12 +163,13 @@ public class ValueBitSet {
             maxSetBit = Math.max(maxSetBit, nLongs * BITS_PER_LONG - 1);
         } else {
             long l = Bytes.toShort(ptr.get(), ptr.getOffset() + ptr.getLength() - Bytes.SIZEOF_SHORT);
+            l = l & 0xFFFF;
             bits[0] |= l;
             maxSetBit = Math.max(maxSetBit, (bits[0] == 0 ? 0 : BITS_PER_SHORT) - 1);
         }
-        
+
     }
-    
+
     /**
      * @return Max serialization size
      */
@@ -178,11 +179,11 @@ public class ValueBitSet {
         }
         return Bytes.SIZEOF_SHORT + (isVarLength() ? (maxSetBit + BITS_PER_LONG) / BITS_PER_LONG * Bytes.SIZEOF_LONG : 0);
     }
-    
+
     public static int getSize(int nBits) {
         return SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE + SizedUtil.ARRAY_SIZE + SizedUtil.INT_SIZE + (nBits + BITS_PER_LONG - 1) / BITS_PER_LONG * Bytes.SIZEOF_LONG;
     }
-    
+
     /**
      * @return Size of object in memory
      */
