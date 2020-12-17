@@ -30,8 +30,10 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -137,26 +139,51 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         }
         conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
-        if(localIndex){
-            assertEquals(saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                            + "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                            + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
-        } else {
-            String expected = saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [" + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix +
-                        "v2-1'] - ["+(saltBuckets.intValue()-1)+"," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+        ExplainPlan plan = conn.prepareStatement("SELECT k1, k2, v2 FROM "
+                + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        final String iteratorTypeAndScanSize;
+        final String clientSortAlgo;
+        final String expectedTableName;
+        final String keyRanges;
 
-                  + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                  + "CLIENT MERGE SORT";
-            assertEquals(expected, QueryUtil.getExplainPlan(rs));
+        if (localIndex) {
+            if (saltBuckets == null) {
+                iteratorTypeAndScanSize = "PARALLEL 1-WAY";
+            } else {
+                iteratorTypeAndScanSize = "PARALLEL 3-WAY";
+            }
+            clientSortAlgo = "CLIENT MERGE SORT";
+            expectedTableName = tableName;
+            keyRanges = " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId
+                + "','" + valuePrefix + "v2-1']";
+        } else {
+            if (saltBuckets == null) {
+                iteratorTypeAndScanSize = "PARALLEL 1-WAY";
+                clientSortAlgo = null;
+                keyRanges = " [" + (Short.MIN_VALUE + expectedIndexIdOffset)
+                    + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
+            } else {
+                iteratorTypeAndScanSize = "PARALLEL 3-WAY";
+                clientSortAlgo = "CLIENT MERGE SORT";
+                keyRanges = " [0," + (Short.MIN_VALUE + expectedIndexIdOffset)
+                    + ",'" + tenantId + "','" + valuePrefix + "v2-1'] - ["
+                    + (saltBuckets - 1) + "," + (Short.MIN_VALUE + expectedIndexIdOffset)
+                    + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
+            }
+            expectedTableName = "_IDX_" + tableName;
         }
+        assertEquals(iteratorTypeAndScanSize,
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
+        assertEquals(expectedTableName, explainPlanAttributes.getTableName());
+        assertEquals(keyRanges, explainPlanAttributes.getKeyRanges());
     }
 
     private void createAndVerifyIndexNonStringTenantId(Connection conn, String viewName, String tableName, String tenantId, String valuePrefix) throws SQLException {
@@ -164,11 +191,22 @@ public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
         conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
         conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
-        assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1," + tenantId + ",'" + valuePrefix + "v2-1']\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+        ExplainPlan plan = conn.prepareStatement("SELECT k1, k2, v2 FROM "
+                + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals(" [1," + tenantId + ",'" + valuePrefix + "v2-1']",
+            explainPlanAttributes.getKeyRanges());
+        assertEquals("CLIENT MERGE SORT",
+            explainPlanAttributes.getClientSortAlgo());
     }
     
     private Connection createTenantConnection(String tenantId) throws SQLException {

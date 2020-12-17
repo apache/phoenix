@@ -21,7 +21,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 
 import java.io.IOException;
@@ -34,21 +33,17 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -375,12 +370,22 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("abc", rs.getString(2));
         assertFalse(rs.next());
         
-        String expectedPhoenixPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName
-                + " ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]\n" +
-                "CLIENT FILTER BY COUNT(1) > 1";
-        validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
+        ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals(" ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]",
+            explainPlanAttributes.getKeyRanges());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]",
+            explainPlanAttributes.getServerAggregate());
+        assertEquals("COUNT(1) > 1", explainPlanAttributes.getClientFilterBy());
     }
     
     @Test
@@ -420,10 +425,20 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("a", rs.getString(1));
         assertEquals(4, rs.getLong(2));
         assertFalse(rs.next());
-        String expectedPhoenixPlan = "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER " + tableName + "\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]";
-        validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
+        ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
+        assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
+            explainPlanAttributes.getServerAggregate());
     }
     
     @Test
@@ -471,10 +486,20 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("a", rs.getString(1));
         assertEquals(10, rs.getLong(2));
         assertFalse(rs.next());
-        String expectedPhoenixPlan = "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER " + tableName + "\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]";
-        validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
+        ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
+        assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
+            explainPlanAttributes.getServerAggregate());
     }
 
     @Test
@@ -529,10 +554,19 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("n", rs.getString(1));
         assertEquals(2, rs.getDouble(2), 1e-6);
         assertFalse(rs.next());
-        String expectedPhoenixPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]";
-        validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
+        ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
+            explainPlanAttributes.getServerAggregate());
         TestUtil.analyzeTable(conn, tableName);
         List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
         assertEquals(nGuidePosts, splits.size());
