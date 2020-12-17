@@ -134,8 +134,8 @@ import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -3806,16 +3806,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 LOGGER.info("Updating VIEW_INDEX_ID data type is not needed.");
             }
             try (Admin admin = metaConnection.getQueryServices().getAdmin()) {
-                HTableDescriptor htd;
-                TableName syscatPhysicalTableName = SchemaUtil.getPhysicalTableName(
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props);
-                htd = admin.getTableDescriptor(syscatPhysicalTableName);
-                if (!htd.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
-                    int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
-                            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
-                    htd.addCoprocessor(SystemCatalogRegionObserver.class.getName(), null, priority, null);
-                    admin.modifyTable(syscatPhysicalTableName, htd);
-                    pollForUpdatedTableDescriptor(admin, htd, syscatPhysicalTableName.getName());
+                TableDescriptorBuilder tdBuilder;
+                TableName sysCatPhysicalTableName = SchemaUtil.getPhysicalTableName(
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props);
+                tdBuilder = TableDescriptorBuilder.newBuilder(
+                    admin.getDescriptor(sysCatPhysicalTableName));
+                if (!tdBuilder.build().hasCoprocessor(
+                        SystemCatalogRegionObserver.class.getName())) {
+                    int priority = props.getInt(
+                        QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
+                        QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
+                    tdBuilder.setCoprocessor(
+                        CoprocessorDescriptorBuilder
+                            .newBuilder(SystemCatalogRegionObserver.class.getName())
+                            .setPriority(priority)
+                            .setProperties(Collections.emptyMap())
+                            .build());
+                    admin.modifyTable(tdBuilder.build());
+                    pollForUpdatedTableDescriptor(admin, tdBuilder.build(),
+                        sysCatPhysicalTableName.getName());
                 }
             }
         }
