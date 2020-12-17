@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -41,18 +36,24 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectMapper;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters;
 import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -69,6 +70,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -85,10 +87,10 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
@@ -781,19 +783,23 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             actualExplainPlan.contains(expectedExplainPlan));
     }
 
+    public static CounterGroup getMRJobCounters(IndexTool indexTool) throws IOException {
+        return indexTool.getJob().getCounters().getGroup(PhoenixIndexToolJobCounters.class.getName());
+    }
+
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
                                             String dataTable, String indxTable, String tenantId,
                                             IndexTool.IndexVerifyType verifyType, Long startTime,
                                             Long endTime, Long incrementalVerify) {
         return getArgList(directApi, useSnapshot, schemaName, dataTable, indxTable, tenantId,
-            verifyType, startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, incrementalVerify);
+            verifyType, startTime, endTime, IndexTool.IndexDisableLoggingType.NONE, incrementalVerify, false);
     }
 
     private static List<String> getArgList (boolean directApi, boolean useSnapshot, String schemaName,
                             String dataTable, String indxTable, String tenantId,
                             IndexTool.IndexVerifyType verifyType, Long startTime, Long endTime,
                                             IndexTool.IndexDisableLoggingType disableLoggingType,
-                                            Long incrementalVerify) {
+                                            Long incrementalVerify, boolean useIndexTableAsSource) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("--schema=" + schemaName);
@@ -835,6 +841,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             args.add("-rv");
             args.add(String.valueOf(incrementalVerify));
         }
+
+        if (useIndexTableAsSource) {
+            args.add("-fi");
+        }
+
         args.add("-op");
         args.add("/tmp/" + UUID.randomUUID().toString());
         return args;
@@ -851,7 +862,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                         String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType,
                                         IndexTool.IndexDisableLoggingType disableLoggingType) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
-                tenantId, verifyType, null, null, disableLoggingType, null);
+                tenantId, verifyType, null, null, disableLoggingType, null, false);
         return args.toArray(new String[0]);
     }
 
@@ -870,7 +881,19 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                          IndexTool.IndexDisableLoggingType disableLoggingType,
                                          Long incrementalVerify ) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
-            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify);
+            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify, false);
+        return args.toArray(new String[0]);
+    }
+
+    public static String [] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
+        String dataTable, String indexTable, String tenantId,
+        IndexTool.IndexVerifyType verifyType, Long startTime,
+        Long endTime,
+        IndexTool.IndexDisableLoggingType disableLoggingType,
+        Long incrementalVerify,
+        boolean useIndexTableAsSource) {
+        List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
+            tenantId, verifyType, startTime, endTime, disableLoggingType, incrementalVerify, useIndexTableAsSource);
         return args.toArray(new String[0]);
     }
 

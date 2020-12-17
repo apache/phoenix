@@ -85,6 +85,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.PhoenixServerBuildIndexInputFormat;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -205,10 +206,13 @@ public class IndexTool extends Configured implements Tool {
     private boolean isPartialBuild, isForeground;
     private IndexVerifyType indexVerifyType = IndexVerifyType.NONE;
     private IndexDisableLoggingType disableLoggingType = IndexDisableLoggingType.NONE;
+
     //The qualified normalized table names (no double quotes, case same as HBase table)
     private String qDataTable; //normalized with schema
     private String qIndexTable; //normalized with schema
     private String qSchemaName;
+    private SourceTable sourceTable = SourceTable.DATA_TABLE_SOURCE;
+
     private boolean useSnapshot;
     private boolean isLocalIndexBuild = false;
     private boolean shouldDeleteBeforeRebuild;
@@ -292,6 +296,12 @@ public class IndexTool extends Configured implements Tool {
         , "Disable logging of failed verification rows for BEFORE, " +
         "AFTER, or BOTH verify jobs");
 
+    private static final Option USE_INDEX_TABLE_AS_SOURCE_OPTION =
+        new Option("fi", "from-index", false,
+            "To verify every row in the index table has a corresponding row in the data table. "
+                + "Only supported for global indexes. If this option is used with -v AFTER, these "
+                + "extra rows will be identified but not repaired.");
+
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
     public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
@@ -300,7 +310,6 @@ public class IndexTool extends Configured implements Tool {
 
     public static final String FEATURE_NOT_APPLICABLE = "start-time/end-time and retry verify feature are only "
             + "applicable for local or non-transactional global indexes";
-
 
     public static final String RETRY_VERIFY_NOT_APPLICABLE = "retry verify feature accepts "
             + "non-zero ts set in the past and ts must be present in PHOENIX_INDEX_TOOL_RESULT table";
@@ -330,6 +339,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(END_TIME_OPTION);
         options.addOption(RETRY_VERIFY_OPTION);
         options.addOption(DISABLE_LOGGING_OPTION);
+        options.addOption(USE_INDEX_TABLE_AS_SOURCE_OPTION);
         return options;
     }
 
@@ -456,6 +466,8 @@ public class IndexTool extends Configured implements Tool {
     public IndexTool.IndexDisableLoggingType getDisableLoggingType() {
         return disableLoggingType;
     }
+
+    public IndexScrutinyTool.SourceTable getSourceTable() { return sourceTable; }
 
     class JobFactory {
         Connection connection;
@@ -704,6 +716,7 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
+            PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
             if (startTime != null) {
                 PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
             }
@@ -849,6 +862,7 @@ public class IndexTool extends Configured implements Tool {
         boolean retryVerify = cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt());
         boolean verify = cmdLine.hasOption(VERIFY_OPTION.getOpt());
         boolean disableLogging = cmdLine.hasOption(DISABLE_LOGGING_OPTION.getOpt());
+        boolean useIndexTableAsSource = cmdLine.hasOption(USE_INDEX_TABLE_AS_SOURCE_OPTION.getOpt());
 
         if (useTenantId) {
             tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -875,6 +889,11 @@ public class IndexTool extends Configured implements Tool {
                         cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()));
             }
         }
+
+        if (useIndexTableAsSource) {
+            sourceTable = SourceTable.INDEX_TABLE_SOURCE;
+        }
+
         schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
         dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
         indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());

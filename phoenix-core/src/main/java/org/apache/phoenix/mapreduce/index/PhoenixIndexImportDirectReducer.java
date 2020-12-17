@@ -94,6 +94,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getBeforeRebuildOldIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).
                         setValue(verificationResult.getBeforeRebuildUnknownIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRepairExtraVerifiedIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRepairExtraUnverifiedIndexRowCount());
             }
             if (verifyType == IndexTool.IndexVerifyType.BOTH || verifyType == IndexTool.IndexVerifyType.AFTER) {
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT).
@@ -112,6 +116,11 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getAfterRebuildBeyondMaxLookBackMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT).
+                    setValue(verificationResult.getAfterRepairExtraVerifiedIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT).
+                    setValue(verificationResult.getAfterRepairExtraUnverifiedIndexRowCount());
+
             }
             if (verificationResult.isVerificationFailed()) {
                 throw new IOException("Index verification failed! " + verificationResult);
