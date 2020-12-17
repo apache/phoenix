@@ -17,9 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -116,18 +118,24 @@ public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabled
 	}
 
 	@Test
-	public void testDistinctCountPlanExlain() throws Exception {
+	public void testDistinctCountPlanExplain() throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		String query = "explain SELECT APPROX_COUNT_DISTINCT(i1||i2) FROM " + tableName;
-		
-		try(Connection conn = DriverManager.getConnection(getUrl(), props);
-			PreparedStatement statement = conn.prepareStatement(query);) {
+		String query = "SELECT APPROX_COUNT_DISTINCT(i1||i2) FROM " + tableName;
+		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 			prepareTableWithValues(conn, 100);
-			ResultSet rs = statement.executeQuery();
-
-			assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n"
-					+ "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-					QueryUtil.getExplainPlan(rs));
+			ExplainPlan plan = conn.prepareStatement(query)
+				.unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+				.getExplainPlan();
+			ExplainPlanAttributes explainPlanAttributes =
+				plan.getPlanStepsAsAttributes();
+			assertEquals(tableName, explainPlanAttributes.getTableName());
+			assertEquals("PARALLEL 1-WAY",
+				explainPlanAttributes.getIteratorTypeAndScanSize());
+			assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+			assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+				explainPlanAttributes.getServerWhereFilter());
+			assertEquals("SERVER AGGREGATE INTO SINGLE ROW",
+				explainPlanAttributes.getServerAggregate());
 		}
 	}
 
