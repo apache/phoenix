@@ -90,6 +90,11 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         }
     }
 
+    @Override
+    public byte[] getDataTableName() {
+        return dataHTable.getName().toBytes();
+    }
+
     public void prepareExpectedIndexMutations(Result dataRow, Map<byte[], List<Mutation>> expectedIndexMutationMap) throws IOException {
         Put put = null;
         Delete del = null;
@@ -202,7 +207,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
             return;
         }
         if (verifyType == IndexTool.IndexVerifyType.BOTH) {
-            verifyIndexRows(actualIndexMutationMap,expectedIndexMutationMap, Collections.EMPTY_SET, indexRowsToBeDeleted, verificationResult.getBefore(), true);
+            verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET, indexRowsToBeDeleted, verificationResult.getBefore(), true);
             if (!expectedIndexMutationMap.isEmpty() || !indexRowsToBeDeleted.isEmpty()) {
                 repairIndexRows(expectedIndexMutationMap, indexRowsToBeDeleted, verificationResult);
             }

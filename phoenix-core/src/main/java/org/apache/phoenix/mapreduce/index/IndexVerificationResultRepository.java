@@ -123,6 +123,20 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     public static String AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS = "AfterRebuildInvalidIndexRowCountCozMissingCells";
     public final static byte[] AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES = Bytes.toBytes(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS);
 
+    public final static String BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT = "BeforeRepairExtraVerifiedIndexRowCount";
+    public final static byte[] BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT);
+    public final static String BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT = "BeforeRepairExtraUnverifiedIndexRowCount";
+    public final static byte[] BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT);
+
+    public final static String AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT = "AfterRepairExtraVerifiedIndexRowCount";
+    public final static byte[] AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT);
+    public final static String AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT = "AfterRepairExtraUnverifiedIndexRowCount";
+    public final static byte[] AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT_BYTES =
+        Bytes.toBytes(AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT);
+
     /***
      * Only usable for read / create methods. To write use setResultTable and setIndexTable first
      */
@@ -246,6 +260,10 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                     Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildOldIndexRowCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT_BYTES,
                     Bytes.toBytes(Long.toString(verificationResult.getBeforeRebuildUnknownIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getBeforeRepairExtraVerifiedIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getBeforeRepairExtraUnverifiedIndexRowCount())));
         }
         if (verifyType == IndexTool.IndexVerifyType.AFTER || verifyType == IndexTool.IndexVerifyType.BOTH) {
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_VALID_INDEX_ROW_COUNT_BYTES,
@@ -264,6 +282,10 @@ public class IndexVerificationResultRepository implements AutoCloseable {
                 Bytes.toBytes(Long.toString(verificationResult.getAfterIndexHasExtraCellsCount())));
             put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS_BYTES,
                 Bytes.toBytes(Long.toString(verificationResult.getAfterIndexHasMissingCellsCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getAfterRepairExtraVerifiedIndexRowCount())));
+            put.addColumn(RESULT_TABLE_COLUMN_FAMILY, AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT_BYTES,
+                Bytes.toBytes(Long.toString(verificationResult.getAfterRepairExtraUnverifiedIndexRowCount())));
         }
         resultTable.put(put);
     }
