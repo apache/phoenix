@@ -39,11 +39,13 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -188,19 +190,43 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         assertTrue(BigDecimal.valueOf(51.0).compareTo(rs.getBigDecimal(3))==0);
         assertEquals("bar", rs.getString(4));
         assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
+
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        String iteratorTypeAndScanSize;
+        String clientSortAlgo;
+        String expectedTableName;
+        String keyRanges;
+        String serverFilterBy;
+
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER " + fullTableName +" [1,51]\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "CLIENT MERGE SORT",
-                queryPlan);
+            iteratorTypeAndScanSize = "PARALLEL "
+                + (saltBuckets == null ? 1 : saltBuckets) + "-WAY";
+            expectedTableName = fullTableName;
+            keyRanges = "[1,51]";
+            clientSortAlgo = "CLIENT MERGE SORT";
+            serverFilterBy = "SERVER FILTER BY FIRST KEY ONLY";
         } else {
-            assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + Short.MIN_VALUE + ",51]"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + Short.MIN_VALUE + ",51] - ["+(saltBuckets.intValue()-1)+"," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
-                            queryPlan);
+            iteratorTypeAndScanSize = saltBuckets == null ? "PARALLEL 1-WAY"
+                : "PARALLEL " + saltBuckets + "-WAY";
+            expectedTableName = viewIndexPhysicalName;
+            keyRanges = saltBuckets == null ? " [" + Short.MIN_VALUE + ",51]"
+                : " [0," + Short.MIN_VALUE + ",51] - [" + (saltBuckets - 1)
+                    + "," + Short.MIN_VALUE + ",51]";
+            clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
+            serverFilterBy = null;
         }
+        assertEquals(iteratorTypeAndScanSize,
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(expectedTableName, explainPlanAttributes.getTableName());
+        assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
+        assertEquals(keyRanges, explainPlanAttributes.getKeyRanges());
+        assertEquals(serverFilterBy,
+            explainPlanAttributes.getServerWhereFilter());
 
         String viewIndexName2 = "I_" + generateUniqueName();
         if (localIndex) {
@@ -228,23 +254,38 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         assertEquals(120, rs.getInt(2));
         assertEquals("foo", rs.getString(3));
         assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+
+        plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+
         String physicalTableName;
         if (localIndex) {
             physicalTableName = fullTableName;
-            assertEquals("CLIENT PARALLEL "+ (saltBuckets == null ? 1 : saltBuckets)  +"-WAY RANGE SCAN OVER " + fullTableName +" [" + (2) + ",'foo']\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+            iteratorTypeAndScanSize = "PARALLEL "
+                + (saltBuckets == null ? 1 : saltBuckets) + "-WAY";
+            keyRanges = " [" + (2) + ",'foo']";
+            clientSortAlgo = "CLIENT MERGE SORT";
         } else {
             physicalTableName = viewIndexPhysicalName;
-            assertEquals(saltBuckets == null
-                    ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + viewIndexPhysicalName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + viewIndexPhysicalName + " [0," + (Short.MIN_VALUE+1) + ",'foo'] - ["+(saltBuckets.intValue()-1)+"," + (Short.MIN_VALUE+1) + ",'foo']\n"
-                                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                                    + "CLIENT MERGE SORT",
-                            QueryUtil.getExplainPlan(rs));
+            iteratorTypeAndScanSize = saltBuckets == null ? "PARALLEL 1-WAY"
+                : "PARALLEL " + saltBuckets + "-WAY";
+            keyRanges = saltBuckets == null ? " [" + (Short.MIN_VALUE + 1) + ",'foo']"
+                : " [0," + (Short.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets - 1)
+                    + "," + (Short.MIN_VALUE + 1) + ",'foo']";
+            clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
         }
+        assertEquals(physicalTableName, explainPlanAttributes.getTableName());
+        assertEquals(iteratorTypeAndScanSize,
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(keyRanges, explainPlanAttributes.getKeyRanges());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
+
         conn.close();
         return new Pair<>(physicalTableName,scan);
     }

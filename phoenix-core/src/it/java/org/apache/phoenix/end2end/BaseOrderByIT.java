@@ -30,6 +30,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -39,6 +40,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
@@ -286,11 +290,23 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
         .setWhereClause("K2 = 'ABC'");
 
         // verify that the phoenix query plan doesn't contain an order by
-        String expectedPhoenixPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName +"\n" +
-                "    SERVER FILTER BY K2 = 'ABC'\n" +
-                "    SERVER AGGREGATE INTO DISTINCT ROWS BY [K2, VAL1, VAL2]\n" +
-                "CLIENT MERGE SORT";
-        validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
+        ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY K2 = 'ABC'",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SERVER AGGREGATE INTO DISTINCT ROWS BY [K2, VAL1, VAL2]",
+            explainPlanAttributes.getServerAggregate());
+        assertEquals("CLIENT MERGE SORT",
+            explainPlanAttributes.getClientSortAlgo());
+        assertNull(explainPlanAttributes.getClientSortedBy());
+        assertNull(explainPlanAttributes.getServerSortedBy());
 
         ResultSet rs = executeQuery(conn, queryBuilder);
         assertTrue(rs.next());
