@@ -32,6 +32,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -63,7 +64,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -456,6 +456,127 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             assertEquals(fullIndexName, plan.getTableRef().getTable().getName().getString());
             assertEquals(6, plan.getSplits().size());
         }
+    }
+
+    @Test
+    public void testRowKeyComposition() throws Exception {
+        // For this test we are mapping isNamespaceEnabled to immutable, multitenant table
+        Long int1= 1792L;
+        String text2 ="text2";
+        BigDecimal double1 = BigDecimal.valueOf(254.564);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // View fixed, index variable
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1", "TEXT1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1, TEXT4", "TEXT1", "INT1", int1);
+
+            // Shuffle of data PK columns and a fixed width column that can be null
+            createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1, INT1", "DATE_TIME1, LAST_UPDATE, TEXT1, INT1, DATE_TIME2, INT2", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1",
+                    "DATE_TIME1, LAST_UPDATE, INT1, TEXT1, INT2, PHONE1", "INT1", int1);
+
+            // Variable lens in the middle. Both end with fixed
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, TEXT1, TEXT3, INT1",
+                    "TEXT1, TEXT4, EMAIL1 DESC, DATE_TIME1 DESC, DOUBLE1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, TEXT1, TEXT3, INT1",
+                    "TEXT1, TEXT4, EMAIL1, DATE_TIME1 DESC, DOUBLE1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, TEXT1, INT1",
+                    "TEXT1, DATE_TIME1 DESC, DOUBLE1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, TEXT1, INT1",
+                    "TEXT1, DATE_TIME1 DESC, INT1, DOUBLE1", "INT1", int1);
+
+            // index ends with fix length, data var length
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1, EMAIL1",
+                    "TEXT1, DATE_TIME1 DESC, DOUBLE1", "INT1", int1);
+
+            // Desc separators
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1", "TEXT1 DESC", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1 DESC", "TEXT1 DESC", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1 DESC", "TEXT1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1, TEXT3 DESC, INT1 DESC, TEXT2, TEXT4 DESC", "TEXT1, DOUBLE1 DESC", "TEXT2", text2);
+            createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1, TEXT3 DESC, INT1 DESC, TEXT2 DESC, TEXT4 DESC", "TEXT1 DESC, DOUBLE1 DESC", "TEXT2",text2);
+            createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1 DESC, TEXT3 DESC, INT1, DOUBLE1 DESC", "TEXT1", "DOUBLE1", double1);
+
+            // Both index and data end with var length
+            createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1 DESC, TEXT3 DESC, INT1, TEXT4, EMAIL1", "TEXT1", "INT1", int1);
+            createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1 DESC, TEXT3, INT1, EMAIL1", "TEXT1, TEXT4", "INT1", int1);
+        }
+    }
+
+    private void createTableForRowKeyTestsAndVerify(Connection conn, String viewPkColumns, String indexPKColumns, String lastViewPKCol, Object lastColExpectedVal)
+            throws SQLException {
+        final String fullTableName = "TBL_"+generateUniqueName();
+        final String fullViewName = "VW_" + generateUniqueName();
+        final String fullIndexName = "IDX_" + generateUniqueName();
+        String keyPrefix = "9Ab";
+        String tableDdl = String.format("CREATE TABLE IF NOT EXISTS %s "
+                + "   (ORGANIZATION_ID CHAR(15) NOT NULL, KEY_PREFIX CHAR(3) NOT NULL, LAST_UPDATE DATE NOT NULL"
+                + "   CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, KEY_PREFIX, LAST_UPDATE)"
+                + " )VERSIONS=1, IMMUTABLE_ROWS=%s, MULTI_TENANT=%s, REPLICATION_SCOPE=1, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0"
+
+                , fullTableName, (isNamespaceMapped? "true" : "false"),(isNamespaceMapped? "true" : "false"));
+        String viewDdl = String.format("CREATE VIEW IF NOT EXISTS %s (DATE_TIME1 DATE NOT NULL, TEXT1 VARCHAR, TEXT3 VARCHAR, INT1 BIGINT NOT NULL, DATE_TIME2 DATE, DATE_TIME3 DATE, INT2 BIGINT, INT3 INTEGER, DOUBLE1 DECIMAL(12, 3), "
+                + "DOUBLE2 DECIMAL(12, 3), DOUBLE3 DECIMAL(12, 3), TEXT2 VARCHAR, TEXT4 VARCHAR, EMAIL1 VARCHAR, PHONE1 CHAR(10), URL1 VARCHAR "
+                + "CONSTRAINT PKVIEW PRIMARY KEY (%s)) AS SELECT * FROM %s WHERE KEY_PREFIX = '%s'", fullViewName,viewPkColumns, fullTableName, keyPrefix);
+        String indexDdl = String.format("CREATE INDEX IF NOT EXISTS %s "
+                + "ON %s (%s)\n"
+                + "INCLUDE (DOUBLE3, DOUBLE2, DATE_TIME3, TEXT2, URL1, INT3"
+                + "  )", fullIndexName, fullViewName, indexPKColumns);
+
+        conn.createStatement().execute(tableDdl);
+        conn.createStatement().execute(viewDdl);
+        conn.createStatement().execute(indexDdl);
+
+        String childViewName = String.format("S_%s.\"%s\"", generateUniqueName(), keyPrefix);
+        String viewChildDDl = String.format("CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s", childViewName, fullViewName);
+        Connection conn2 = null;
+        if (isNamespaceMapped) {
+            conn2 = getTenantConnection(TENANT1);
+        } else {
+            conn2 = conn;
+        }
+        conn2.createStatement().execute(viewChildDDl);
+
+        // We picked this number because it ends with the separator byte.
+        int int1= 1792;
+        String upsert = "UPSERT INTO " + childViewName +
+                "(DATE_TIME1, INT1, TEXT1, TEXT2, DOUBLE1, DATE_TIME2, DATE_TIME3, INT3, DOUBLE2, DOUBLE3, "
+                + "TEXT3, TEXT4, EMAIL1, PHONE1, URL1, INT2, LAST_UPDATE"
+                + (isNamespaceMapped? ") " : ",ORGANIZATION_ID) ")
+                + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?" + (isNamespaceMapped? ")":",?)");
+        PreparedStatement upsertStmt = conn2.prepareStatement(upsert);
+        Date date =  Date.valueOf("2019-02-17");
+        upsertStmt.setDate(1, date);
+        upsertStmt.setInt(2, int1);
+        upsertStmt.setString(3, "text1");
+        upsertStmt.setString(4, "text2"); // TEXT2
+        upsertStmt.setDouble(5,254.564);
+        upsertStmt.setDate(6, null); //DATE_TIME2
+        upsertStmt.setDate(7, Date.valueOf("2019-07-16"));
+        upsertStmt.setInt(8, int1);
+        upsertStmt.setDouble(9, 4.09);
+        upsertStmt.setDouble(10, 0.249);
+        upsertStmt.setString(11,"text3"); // TEXT3
+        upsertStmt.setString(12, null); // TEXT4
+        upsertStmt.setString(13,"VScZBIjkO3QyUCMtkUEgmvL9xH0KJjwKi1gpxRv1ghonWcUMoksTWFKR4SD2yUg9@gmail.com");
+        upsertStmt.setString(14, null);
+        upsertStmt.setString(15, "https://www.sssssss.com");
+        upsertStmt.setNull(16, Types.BIGINT); //INT2
+        upsertStmt.setDate(17, Date.valueOf("2019-07-16"));
+        if (!isNamespaceMapped) {
+            upsertStmt.setString(18, TENANT1);
+        }
+        upsertStmt.executeUpdate();
+        conn2.commit();
+
+        String select = "SELECT " + lastViewPKCol + " FROM " + childViewName
+                + "  WHERE TEXT1='text1' LIMIT 10";
+        ResultSet rs1 = conn2.createStatement().executeQuery("EXPLAIN " + select);
+        String actualExplainPlan = QueryUtil.getExplainPlan(rs1);
+        assertTrue(actualExplainPlan.contains("_IDX_" + fullTableName));
+
+        ResultSet rs = conn2.createStatement().executeQuery(select);
+        assertTrue(rs.next());
+        assertEquals(lastColExpectedVal, rs.getObject(1));
     }
 
     private void assertRowCount(Connection conn, String fullTableName, String fullBaseName, int expectedCount) throws SQLException {

@@ -606,6 +606,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         : regionEndKey.length) : 0; 
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedIndexRowKeyBytes + (prependRegionStartKey ? prefixKeyLength : 0));
         DataOutput output = new DataOutputStream(stream);
+
         try {
             // For local indexes, we must prepend the row key with the start region key
             if (prependRegionStartKey) {
@@ -660,6 +661,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
             Iterator<Expression> expressionIterator = indexedExpressions.iterator();
+            int trailingVariableWidthColumnNum = 0;
             for (int i = 0; i < nIndexedColumns; i++) {
                 PDataType dataColumnType;
                 boolean isNullable;
@@ -694,17 +696,26 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                     }
                 }
+
                 if (!indexColumnType.isFixedWidth()) {
-                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC));
+                    byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC);
+                    output.writeByte(sepByte);
+                    trailingVariableWidthColumnNum++;
+                } else {
+                    trailingVariableWidthColumnNum = 0;
                 }
             }
-            int length = stream.size();
-            int minLength = length - maxTrailingNulls;
             byte[] indexRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (length > minLength && indexRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            int length = stream.size();
+            int minLength = length - maxTrailingNulls;
+            // The existing code does not eliminate the separator if the data type is not nullable. It not clear why.
+            // The actual bug is in the calculation of maxTrailingNulls with view indexes. So, in order not to impact some other cases, we should keep minLength check here.
+            while (trailingVariableWidthColumnNum > 0 && length > minLength && indexRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
+                trailingVariableWidthColumnNum--;
             }
+
             if (isIndexSalted) {
                 // Set salt byte
                 byte saltByte = SaltingUtil.getSaltingByte(indexRowKey, SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES, nIndexSaltBuckets);
