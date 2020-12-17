@@ -25,6 +25,7 @@ import java.sql.DriverManager;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -311,5 +312,22 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
         Assert.assertEquals(lastVerifyTime.longValue(),
                 Long.parseLong(PhoenixConfigurationUtil.getIndexToolLastVerifyTime(configuration)));
 
+    }
+
+    @Test
+    public void testIndexToolSourceConfig() {
+        final Configuration conf = new Configuration();
+
+        // by default source is data table
+        SourceTable sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        Assert.assertEquals(sourceTable, SourceTable.DATA_TABLE_SOURCE);
+
+        PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
+        sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        Assert.assertEquals(sourceTable, SourceTable.INDEX_TABLE_SOURCE);
+
+        PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.DATA_TABLE_SOURCE);
+        sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        Assert.assertEquals(sourceTable, SourceTable.DATA_TABLE_SOURCE);
     }
 }
