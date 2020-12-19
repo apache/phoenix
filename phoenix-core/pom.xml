@@ -197,7 +197,6 @@
   <dependency>
     <groupId>org.apache.omid</groupId>
     <artifactId>omid-hbase-client-hbase1.x</artifactId>
-    <version>${omid.version}</version>
     <exclusions>
       <exclusion>
         <groupId>org.apache.curator</groupId>
