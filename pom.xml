@@ -114,7 +114,7 @@
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <tephra.version>0.16.0</tephra.version>
-    <omid.version>1.0.2</omid.version>
+    <omid.version>1.0.3-SNAPSHOT</omid.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
     <guice.version>4.0</guice.version>
@@ -914,46 +914,12 @@
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-common-hbase2.x</artifactId>
         <version>${omid.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-client-hbase2.x</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-client-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-         </exclusion>
          <exclusion>
            <groupId>org.testng</groupId>
            <artifactId>testng</artifactId>
@@ -966,28 +932,8 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-          <artifactId>omid-hbase-client-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -997,28 +943,8 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-daemon</groupId>
@@ -1044,28 +970,8 @@
         <type>test-jar</type>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-daemon</groupId>
@@ -1079,26 +985,6 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-beanutils</groupId>
             <artifactId>commons-beanutils</artifactId>
           </exclusion>
@@ -1108,28 +994,10 @@
         <groupId>org.apache.omid</groupId>
         <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
         <version>${omid.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-transaction-client</artifactId>
+        <artifactId>omid-transaction-client-hbase2.x</artifactId>
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
@@ -1140,7 +1008,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-commit-table</artifactId>
+        <artifactId>omid-commit-table-hbase2.x</artifactId>
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
@@ -1151,7 +1019,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-common</artifactId>
+        <artifactId>omid-common-hbase2.x</artifactId>
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
