@@ -44,27 +44,32 @@ public class PagedRegionScanner extends BaseRegionScanner {
 	}
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
-        boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
-        if (pageFilter == null) {
-            return hasMore;
-        }
-        if (!hasMore) {
-            if (pageFilter.isStopped()) {
-                delegate.close();
-                byte[] rowKey = pageFilter.getRowKeyAtStop();
-                scan.withStartRow(rowKey, true);
-                delegate = region.getScanner(scan);
-                if (results.isEmpty()) {
-                    getDummyResult(rowKey, results);
+	    try {
+            boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
+            if (pageFilter == null) {
+                return hasMore;
+            }
+            if (!hasMore) {
+                if (pageFilter.isStopped()) {
+                    delegate.close();
+                    byte[] rowKey = pageFilter.getRowKeyAtStop();
+                    scan.withStartRow(rowKey, true);
+                    delegate = region.getScanner(scan);
+                    if (results.isEmpty()) {
+                        getDummyResult(rowKey, results);
+                    }
+                    pageFilter.init();
+                    return true;
                 }
-                pageFilter.init();
+                return false;
+            } else {
+                pageFilter.resetStartTime();
                 return true;
             }
-            return false;
-        } else {
-            pageFilter.resetStartTime();
+        } catch (Exception e) {
+            pageFilter.init();
+            throw e;
         }
-        return true;
     }
 
     @Override

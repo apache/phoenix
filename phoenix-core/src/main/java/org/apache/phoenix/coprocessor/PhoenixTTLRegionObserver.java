@@ -223,12 +223,20 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                     if (isDummy(result)) {
                         return true;
                     }
+
+                    /**
+                     Note : That both MaskIfExpiredRequest and DeleteIfExpiredRequest cannot be set at the same time.
+                     Case : MaskIfExpiredRequest, If row not expired then return.
+                     */
                     numRowsScanned++;
                     if (maskIfExpired && checkRowNotExpired(result)) {
                         break;
                     }
 
-                    //TODO 6211 The following logic does not sound correct
+                    /**
+                     Case : DeleteIfExpiredRequest, If deleted then return.
+                     So that it will count towards the aggregate deleted count.
+                     */
                     if (deleteIfExpired && deleteRowIfExpired(result)) {
                         numRowsDeleted++;
                         break;

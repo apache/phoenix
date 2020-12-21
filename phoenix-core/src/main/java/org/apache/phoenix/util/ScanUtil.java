@@ -1215,6 +1215,15 @@ public class ScanUtil {
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
+            if (ScanUtil.isLocalIndex(scan)) {
+                byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null ?
+                        scan.getAttribute(SCAN_ACTUAL_START_ROW) :
+                        HConstants.EMPTY_BYTE_ARRAY;
+                ScanUtil.setLocalIndexAttributes(scan, 0,
+                        actualStartRow,
+                        HConstants.EMPTY_BYTE_ARRAY,
+                        scan.getStartRow(), scan.getStopRow());
+            }
             addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
     }

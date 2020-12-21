@@ -265,6 +265,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
     
     private PeekingResultIterator getResultIterator() throws SQLException {
         if (resultIteratorReady) {
+            // The results have not been ordered yet. When the results are ordered then the result iterator
+            // will be ready to iterate over them
             return resultIterator;
         }
         
