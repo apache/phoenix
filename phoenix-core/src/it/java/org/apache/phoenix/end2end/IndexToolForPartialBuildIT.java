@@ -41,7 +41,10 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -50,7 +53,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -157,13 +159,22 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             conn.commit();
 
             String selectSql = String.format("SELECT LPAD(UPPER(NAME),11,'x')||'_xyz',ID FROM %s", fullTableName);
-            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
 
+            ExplainPlan plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
             // assert we are pulling from data table.
-			assertExplainPlan(actualExplainPlan, schemaName, dataTableName, null, isNamespaceEnabled);
+            assertEquals(SchemaUtil.getPhysicalHBaseTableName(schemaName,
+                dataTableName, isNamespaceEnabled).toString(),
+                explainPlanAttributes.getTableName());
 
-			rs = stmt1.executeQuery(selectSql);
+            rs = stmt1.executeQuery(selectSql);
             for (int i = 1; i <= 7; i++) {
                 assertTrue(rs.next());
                 assertEquals("xxUNAME" + i*1000 + "_xyz", rs.getString(1));
@@ -195,10 +206,19 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             upsertRow(stmt1, 9000);
             conn.commit();
 
+            plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
             // assert we are pulling from index table.
-            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan, schemaName, dataTableName, indxTable, isNamespaceEnabled);
+            assertEquals(SchemaUtil.getPhysicalHBaseTableName(schemaName,
+                indxTable, isNamespaceEnabled).toString(),
+                explainPlanAttributes.getTableName());
 
             rs = stmt.executeQuery(selectSql);
 
@@ -211,20 +231,6 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             conn.close();
         }
     }
-    
-	public static void assertExplainPlan(final String actualExplainPlan, String schemaName, String dataTable,
-			String indxTable, boolean isNamespaceMapped) {
-
-		String expectedExplainPlan = "";
-		if (indxTable != null) {
-		    expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-		            SchemaUtil.getPhysicalHBaseTableName(schemaName, indxTable, isNamespaceMapped));
-		} else {
-			expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-			        SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTable, isNamespaceMapped));
-		}
-		assertTrue(actualExplainPlan.contains(expectedExplainPlan));
-	}
 
     public String[] getArgValues(String schemaName, String dataTable, String indexName) {
         final List<String> args = Lists.newArrayList();
