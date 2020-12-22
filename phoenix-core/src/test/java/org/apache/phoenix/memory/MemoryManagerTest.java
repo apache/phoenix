@@ -26,8 +26,10 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.junit.ClassRule;
 import org.junit.Test;
 
 /**
@@ -39,6 +41,10 @@ import org.junit.Test;
  * @since 0.1
  */
 public class MemoryManagerTest {
+
+    @ClassRule
+    public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
+
     @Test
     public void testOverGlobalMemoryLimit() throws Exception {
         GlobalMemoryManager gmm = new GlobalMemoryManager(250);
