@@ -52,10 +52,12 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -71,6 +73,9 @@ public class ConnectionQueryServicesImplTest {
                     .setTimeToLive(TTL_FOR_MUTEX)
                     .build())
             .build();
+
+    @ClassRule
+    public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
 
     @Mock
     private ConnectionQueryServicesImpl mockCqs;
