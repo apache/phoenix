@@ -215,11 +215,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public Result append(Append append) throws IOException {
         throw new UnsupportedOperationException();
     }

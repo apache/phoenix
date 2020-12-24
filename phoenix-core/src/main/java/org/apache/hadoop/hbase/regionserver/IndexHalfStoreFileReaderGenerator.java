@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -97,7 +98,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
             byte[] regionStartKeyInHFile = null;
             try (Connection hbaseConn =
                     ConnectionFactory.createConnection(ctx.getEnvironment().getConfiguration())) {
-                Scan scan = MetaTableAccessor.getScanForTableName(hbaseConn, tableName);
+                Scan scan = CompatUtil.getScanForTableName(hbaseConn, tableName);
                 SingleColumnValueFilter scvf = null;
                 if (Reference.isTopFileRegion(r.getFileRegion())) {
                     scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,

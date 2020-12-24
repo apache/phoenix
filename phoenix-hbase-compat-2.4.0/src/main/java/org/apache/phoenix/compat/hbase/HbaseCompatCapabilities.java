@@ -15,17 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
+public class HbaseCompatCapabilities {
 
-import org.apache.hadoop.hbase.client.RowMutations;
-import org.apache.hadoop.hbase.client.Table;
-
-public abstract class CompatOmidTransactionTable implements Table {
-
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        throw new UnsupportedOperationException();
+    public static boolean isMaxLookbackTimeSupported() {
+        return true;
     }
+
+    //In HBase 2.1 and 2.2, a lookback query won't return any results if covered by a future delete,
+    //but in 2.3 and later we have the preSoreScannerOpen hook that overrides that behavior
+    public static boolean isLookbackBeyondDeletesSupported() { return true; }
+
+    //HBase 2.1 does not have HBASE-22710, which is necessary for raw scan skip scan and
+    // AllVersionsIndexRebuild filters to
+    // show all versions properly. HBase 2.2.5+ and HBase 2.3.0+ have this fix.
+    public static boolean isRawFilterSupported() { return true; }
+
+    //HBase 2.3+ has preWALAppend() on RegionObserver (HBASE-22623)
+    public static boolean hasPreWALAppend() { return false; }
+
 }

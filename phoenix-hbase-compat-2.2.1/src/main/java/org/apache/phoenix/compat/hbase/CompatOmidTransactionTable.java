@@ -17,7 +17,15 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 
 public abstract class CompatOmidTransactionTable implements Table {
+
+    @Override
+    public void mutateRow(RowMutations rm) throws IOException {
+        throw new UnsupportedOperationException();
+    }
 }

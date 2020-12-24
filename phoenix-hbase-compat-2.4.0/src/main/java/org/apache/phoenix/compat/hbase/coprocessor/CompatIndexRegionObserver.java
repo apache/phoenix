@@ -15,24 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
+package org.apache.phoenix.compat.hbase.coprocessor;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.wal.WALKey;
 
-import org.apache.hadoop.hbase.client.RowMutations;
-import org.apache.hadoop.hbase.client.Table;
+import java.util.HashMap;
+import java.util.Map;
 
-public abstract class CompatDelegateHTable implements Table {
+public class CompatIndexRegionObserver implements RegionObserver {
 
-    protected final Table delegate;
-
-    public CompatDelegateHTable(Table delegate) {
-        this.delegate = delegate;
+    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+        key.addExtendedAttribute(attrKey, attrValue);
     }
 
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
+    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+        return key.getExtendedAttribute(attrKey);
+    }
+
+    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+        return new HashMap<String, byte[]>(key.getExtendedAttributes());
     }
 
 }

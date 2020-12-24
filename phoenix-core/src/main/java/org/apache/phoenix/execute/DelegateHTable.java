@@ -163,11 +163,6 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
-    }
-
-    @Override
     public Result append(Append append) throws IOException {
         return delegate.append(append);
     }

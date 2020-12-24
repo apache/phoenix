@@ -19,20 +19,20 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 
-public abstract class CompatDelegateHTable implements Table {
+public abstract class CompatOmidTransactionTable implements Table {
 
-    protected final Table delegate;
-
-    public CompatDelegateHTable(Table delegate) {
-        this.delegate = delegate;
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
+    public Result mutateRow(RowMutations rm) throws IOException {
+        throw new UnsupportedOperationException();
     }
-
 }
