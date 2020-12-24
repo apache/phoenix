@@ -28,7 +28,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
- * {@link RpcScheduler} that first checks to see if this is an index or metedata update before passing off the
+ * {@link RpcScheduler} that first checks to see if this is an index or metadata update before passing off the
  * call to the delegate {@link RpcScheduler}.
  */
 public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {

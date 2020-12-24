@@ -17,22 +17,13 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
 
-import org.apache.hadoop.hbase.client.RowMutations;
-import org.apache.hadoop.hbase.client.Table;
+public class CompatSteppingSplitPolicy extends SteppingSplitPolicy {
 
-public abstract class CompatDelegateHTable implements Table {
-
-    protected final Table delegate;
-
-    public CompatDelegateHTable(Table delegate) {
-        this.delegate = delegate;
-    }
-
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
+    protected boolean canSplit() {
+        //dummy
+        return false;
     }
 
 }

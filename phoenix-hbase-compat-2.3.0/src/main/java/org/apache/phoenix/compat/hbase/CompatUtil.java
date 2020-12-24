@@ -21,6 +21,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
@@ -68,5 +72,9 @@ public class CompatUtil {
     public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
             CellComparatorImpl cellComparator) {
         return builder;
+    }
+
+    public static Scan getScanForTableName(Connection conn, TableName tableName) {
+        return MetaTableAccessor.getScanForTableName(conn, tableName);
     }
 }

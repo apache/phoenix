@@ -20,6 +20,10 @@ package org.apache.phoenix.compat.hbase;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
@@ -50,5 +54,9 @@ public class CompatUtil {
     public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
             CellComparatorImpl cellComparator) {
         return builder.withComparator(cellComparator);
+    }
+
+    public static Scan getScanForTableName(Connection conn, TableName tableName) {
+        return MetaTableAccessor.getScanForTableName(conn, tableName);
     }
 }

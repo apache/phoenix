@@ -39,7 +39,7 @@ pipeline {
                 axes {
                     axis {
                         name 'HBASE_PROFILE'
-                        values '2.1', '2.2', '2.3'
+                        values '2.1', '2.2', '2.3', '2.4'
                     }
                 }
 

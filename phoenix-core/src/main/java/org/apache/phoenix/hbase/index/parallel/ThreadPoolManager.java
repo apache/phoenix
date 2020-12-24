@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * Manage access to thread pools
@@ -89,7 +90,9 @@ public class ThreadPoolManager {
     ShutdownOnUnusedThreadPoolExecutor pool =
         new ShutdownOnUnusedThreadPoolExecutor(maxThreads, maxThreads, keepAliveTime,
             TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
-            Threads.newDaemonThreadFactory(builder.getName() + "-"), builder.getName());
+            new ThreadFactoryBuilder().setNameFormat(builder.getName()+"-pool-%d")
+            .setUncaughtExceptionHandler(Threads.LOGGING_EXCEPTION_HANDLER).build(),
+            builder.getName());
     pool.allowCoreThreadTimeOut(true);
     return pool;
   }
