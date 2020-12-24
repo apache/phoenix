@@ -32,7 +32,7 @@
   <description>Compatibility module for HBase 2.1.6+</description>
 
   <properties>
-    <hbase.version>2.1.6</hbase.version>
+    <hbase21.compat.version>2.1.6</hbase21.compat.version>
   </properties>
 
   <dependencies>
@@ -40,16 +40,19 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
+      <version>${hbase21.compat.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-common</artifactId>
+      <version>${hbase21.compat.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
+      <version>${hbase21.compat.version}</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>

@@ -31,7 +31,7 @@
   <description>Compatibility module for HBase 2.3.0+</description>
 
   <properties>
-    <hbase.version>2.3.0</hbase.version>
+    <hbase23.compat.version>2.3.0</hbase23.compat.version>
   </properties>
 
   <dependencies>
@@ -39,16 +39,19 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-client</artifactId>
+        <version>${hbase23.compat.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
+        <version>${hbase23.compat.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-server</artifactId>
+        <version>${hbase23.compat.version}</version>
         <scope>provided</scope>
       </dependency>
   </dependencies>
