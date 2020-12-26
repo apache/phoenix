@@ -29,7 +29,7 @@ import "PSchema.proto";
 enum MutationCode {
   TABLE_ALREADY_EXISTS = 0;
   TABLE_NOT_FOUND = 1;
-  COLUMN_NOT_FOUND = 2; 
+  COLUMN_NOT_FOUND = 2;
   COLUMN_ALREADY_EXISTS = 3;
   CONCURRENT_TABLE_MUTATION = 4;
   TABLE_NOT_IN_REGION = 5;
@@ -58,9 +58,9 @@ enum MutationCode {
 
 message SharedTableState {
   optional bytes tenantId = 1;
-  required bytes schemaName  = 2;
+  required bytes schemaName = 2;
   required bytes tableName = 3;
-  repeated PColumn columns = 4;  
+  repeated PColumn columns = 4;
   repeated bytes physicalNames = 5;
   required int64 viewIndexId = 6;
   optional int32 viewIndexIdType = 7 [default = 5];
@@ -84,11 +84,11 @@ message MetaDataResponse {
 
 message GetTableRequest {
   required bytes tenantId = 1;
-  required bytes schemaName  = 2;
+  required bytes schemaName = 2;
   required bytes tableName = 3;
   required int64 tableTimestamp = 4;
   required int64 clientTimestamp = 5;
-  optional int32 clientVersion = 6;	
+  optional int32 clientVersion = 6;
 }
 
 message GetFunctionsRequest {
@@ -183,7 +183,7 @@ message GetVersionResponse {
 
 message ClearTableFromCacheRequest {
   required bytes tenantId = 1;
-  required bytes schemaName  = 2;
+  required bytes schemaName = 2;
   required bytes tableName = 3;
   required int64 clientTimestamp = 4;
   optional int32 clientVersion = 5;
@@ -194,47 +194,47 @@ message ClearTableFromCacheResponse {
 
 service MetaDataService {
   rpc getTable(GetTableRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc getFunctions(GetFunctionsRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc getSchema(GetSchemaRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc createTable(CreateTableRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc createFunction(CreateFunctionRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc createSchema(CreateSchemaRequest)
-	 returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc dropTable(DropTableRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc dropSchema(DropSchemaRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
   rpc dropFunction(DropFunctionRequest)
-    returns (MetaDataResponse);
+      returns (MetaDataResponse);
 
-   rpc addColumn(AddColumnRequest)
-    returns (MetaDataResponse);
-    
-   rpc dropColumn(DropColumnRequest)
-    returns (MetaDataResponse);
-    
-   rpc updateIndexState(UpdateIndexStateRequest)
-    returns (MetaDataResponse); 
-    
-   rpc clearCache(ClearCacheRequest)
-    returns (ClearCacheResponse);
-    
-   rpc getVersion(GetVersionRequest)
-    returns (GetVersionResponse);
-   
-   rpc clearTableFromCache(ClearTableFromCacheRequest)
-    returns (ClearTableFromCacheResponse);
+  rpc addColumn(AddColumnRequest)
+      returns (MetaDataResponse);
+
+  rpc dropColumn(DropColumnRequest)
+      returns (MetaDataResponse);
+
+  rpc updateIndexState(UpdateIndexStateRequest)
+      returns (MetaDataResponse);
+
+  rpc clearCache(ClearCacheRequest)
+      returns (ClearCacheResponse);
+
+  rpc getVersion(GetVersionRequest)
+      returns (GetVersionResponse);
+
+  rpc clearTableFromCache(ClearTableFromCacheRequest)
+      returns (ClearTableFromCacheResponse);
 }

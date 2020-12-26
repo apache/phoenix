@@ -70,7 +70,7 @@ message IndexMaintainer {
 
 message AddServerCacheRequest {
   optional bytes tenantId = 1;
-  required bytes cacheId  = 2;
+  required bytes cacheId = 2;
   required ImmutableBytesWritable cachePtr = 3;
   required ServerCacheFactory cacheFactory = 4;
   optional bytes txState = 5;
@@ -85,7 +85,7 @@ message AddServerCacheResponse {
 
 message RemoveServerCacheRequest {
   optional bytes tenantId = 1;
-  required bytes cacheId  = 2;
+  required bytes cacheId = 2;
 }
 
 message RemoveServerCacheResponse {
@@ -94,8 +94,8 @@ message RemoveServerCacheResponse {
 
 service ServerCachingService {
   rpc addServerCache(AddServerCacheRequest)
-    returns (AddServerCacheResponse);
+      returns (AddServerCacheResponse);
 
   rpc removeServerCache(RemoveServerCacheRequest)
-    returns (RemoveServerCacheResponse);
+      returns (RemoveServerCacheResponse);
 }
