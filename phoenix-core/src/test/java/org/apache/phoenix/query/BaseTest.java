@@ -130,6 +130,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1824,20 +1825,35 @@ public abstract class BaseTest {
         }
         phxConn.close();
     }
-    
 
     /**
      *  Synchronously split table at the given split point
      */
-    protected static void splitRegion(TableName fullTableName, byte[] splitPoint) throws SQLException, IOException, InterruptedException {
-        Admin admin =
-                driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        admin.split(fullTableName, splitPoint);
-        // make sure the split finishes (there's no synchronous splitting before HBase 2.x)
-        admin.disableTable(fullTableName);
-        admin.enableTable(fullTableName);
+    protected static void splitTableSync(Admin admin, TableName hbaseTableName, byte[] splitPoint,
+            int expectedRegions) throws IOException, InterruptedException {
+        admin.split(hbaseTableName, splitPoint);
+        for (int i = 0; i < 30; i++) {
+            List<HRegion> regions = getUtility().getHBaseCluster().getRegions(hbaseTableName);
+            if (regions.size() >= expectedRegions) {
+                boolean splitSuccessful = true;
+                for (HRegion region : regions) {
+                    if (!region.isSplittable()) {
+                        splitSuccessful = false;
+                    }
+                }
+                if(splitSuccessful) {
+                    return;
+                }
+            }
+            LOGGER.info(
+                "Sleeping for 1000 ms while waiting for {} to split and all regions to come online",
+                hbaseTableName.getNameAsString());
+            Thread.sleep(1000);
+        }
+        throw new IOException("Split did not succeed for table: " + hbaseTableName.getNameAsString()
+                + " , expected regions after split: " + expectedRegions);
     }
-    
+
     /**
      * Returns true if the region contains atleast one of the metadata rows we are interested in
      */
@@ -1866,8 +1882,10 @@ public abstract class BaseTest {
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
         for (int i=1; i<splitPoints.size(); ++i) {
-            splitRegion(fullTableName, splitPoints.get(i));
+            splitTableSync(admin, fullTableName, splitPoints.get(i), i + 1);
         }
+        List<RegionInfo> regionInfoList = admin.getRegions(fullTableName);
+        assertEquals(splitPoints.size(), regionInfoList.size());
         HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
         Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
         for (int i=0; i<NUM_SLAVES_BASE; ++i) {
