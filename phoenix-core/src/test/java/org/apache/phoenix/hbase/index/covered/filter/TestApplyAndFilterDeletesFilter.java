@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -147,7 +148,7 @@ public class TestApplyAndFilterDeletesFilter {
     // seek past the given put
     Cell seek = filter.getNextCellHint(put);
     assertTrue("Seeked key wasn't past the expected put - didn't skip the column",
-      KeyValue.COMPARATOR.compare(seek, put) > 0);
+    CellComparator.getInstance().compare(seek, put) > 0);
   }
 
   /**

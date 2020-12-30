@@ -106,6 +106,7 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ArrayBackedTag;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -456,7 +457,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     );
 
     static {
-        Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
+        Collections.sort(COLUMN_KV_COLUMNS, CellComparator.getInstance());
     }
     private static final Cell QUALIFIER_COUNTER_KV =
      KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES,
@@ -867,7 +868,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PDataType dataType =
                 PDataType.fromTypeId(PInteger.INSTANCE.getCodec().decodeInt(
                         dataTypeKv.getValueArray(), dataTypeKv.getValueOffset(), SortOrder.getDefault()));
-        if (maxLength == null && dataType == PBinary.INSTANCE) dataType = PVarbinary.INSTANCE;   // For
+        if (maxLength == null && dataType == PBinary.INSTANCE) {
+            dataType = PVarbinary.INSTANCE;   // For
+        }
         // backward
         // compatibility.
         Cell sortOrderKv = colKeyValues[SORT_ORDER_INDEX];
@@ -2423,7 +2426,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 dropTableStats = true;
             } finally {
                 ServerUtil.releaseRowLocks(locks);
-                if(dropTableStats) {
+                if (dropTableStats) {
                     Thread statsDeleteHandler = new Thread(new StatsDeleteHandler(env,
                             loadedTable, tableNamesToDelete, sharedTablesToDelete),
                             "thread-statsdeletehandler");
@@ -2461,11 +2464,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         try (PhoenixConnection connection =
                                      QueryUtil.getConnectionOnServer(env.getConfiguration())
                                              .unwrap(PhoenixConnection.class)) {
-                            try{
+                            try {
                                 MetaDataUtil.deleteFromStatsTable(connection, deletedTable,
                                         physicalTableNames, sharedTableStates);
-                                LOGGER.info("Table stats deleted successfully. "+
-                                        deletedTable.getPhysicalName().getString());
+                                LOGGER.info("Table stats deleted successfully. "
+                                    + deletedTable.getPhysicalName().getString());
                             } catch(Throwable t) {
                                 LOGGER.warn("Exception while deleting stats of table "
                                         + deletedTable.getPhysicalName().getString()
@@ -2495,8 +2498,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private MetaDataResponse processRemoteRegionMutations(byte[] systemTableName,
                                                           List<Mutation> remoteMutations, MetaDataProtos.MutationCode mutationCode) throws IOException {
-        if (remoteMutations.isEmpty())
+        if (remoteMutations.isEmpty()) {
             return null;
+        }
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
         try (Table hTable =
                 ServerUtil.getHTableForCoprocessorScan(env,
@@ -3640,7 +3644,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 }
 
-                if(newState == PIndexState.ACTIVE||newState == PIndexState.PENDING_ACTIVE||newState == PIndexState.DISABLE){
+                if (newState == PIndexState.ACTIVE || newState == PIndexState.PENDING_ACTIVE || newState == PIndexState.DISABLE) {
                     newKVs.add(PhoenixKeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES, timeStamp, Bytes.toBytes(0L)));
                 }
