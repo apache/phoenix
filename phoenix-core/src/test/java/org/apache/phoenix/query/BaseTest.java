@@ -547,7 +547,10 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
+            long startTime = System.currentTimeMillis();
             utility.startMiniCluster(NUM_SLAVES_BASE);
+            long startupTime = System.currentTimeMillis()-startTime;
+            LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);
         } catch (Throwable t) {
             throw new RuntimeException(t);
@@ -626,6 +629,8 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        //Allow for an extra long miniCluster startup time in case of an overloaded test machine
+        conf.setInt("hbase.master.start.timeout.localHBaseCluster", 200000);
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
