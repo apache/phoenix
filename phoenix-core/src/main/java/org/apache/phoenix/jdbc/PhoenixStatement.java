@@ -343,7 +343,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     catch (MetaDataEntityNotFoundException e) {
                         if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                             if (LOGGER.isDebugEnabled()) {
-                                LOGGER.debug("Reloading table " + e.getTableName() + " data from server");
+                                LOGGER.debug("Reloading table {} data from server",  e.getTableName());
                             }
                             if (new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                 e.getSchemaName(), e.getTableName(), true).wasUpdated()) {
@@ -431,7 +431,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             catch (MetaDataEntityNotFoundException e) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     if (LOGGER.isDebugEnabled()) {
-                                        LOGGER.debug("Reloading table " + e.getTableName() + " data from server");
+                                        LOGGER.debug("Reloading table {} data from server",  e.getTableName());
                                     }
                                     if (new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()) {

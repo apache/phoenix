@@ -2467,8 +2467,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             try {
                                 MetaDataUtil.deleteFromStatsTable(connection, deletedTable,
                                         physicalTableNames, sharedTableStates);
-                                LOGGER.info("Table stats deleted successfully. "
-                                    + deletedTable.getPhysicalName().getString());
+                                LOGGER.info("Table stats deleted successfully, tablename is {}."
+                                    , deletedTable.getPhysicalName().getString());
                             } catch(Throwable t) {
                                 LOGGER.warn("Exception while deleting stats of table "
                                         + deletedTable.getPhysicalName().getString()
