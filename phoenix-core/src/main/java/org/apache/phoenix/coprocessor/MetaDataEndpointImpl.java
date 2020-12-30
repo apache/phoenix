@@ -457,7 +457,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     );
 
     static {
-        Collections.sort(COLUMN_KV_COLUMNS, CellComparator.getInstance());
+        COLUMN_KV_COLUMNS.sort(CellComparator.getInstance());
     }
     private static final Cell QUALIFIER_COUNTER_KV =
      KeyValueUtil.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES,
