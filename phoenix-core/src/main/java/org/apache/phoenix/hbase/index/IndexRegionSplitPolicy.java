@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.apache.hadoop.hbase.regionserver.HStore;
-import org.apache.hadoop.hbase.regionserver.IncreasingToUpperBoundRegionSplitPolicy;
+import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 
@@ -29,7 +29,7 @@ import org.apache.phoenix.query.QueryConstants;
  * Split policy for local indexed tables to select split key from non local index column families
  * always.
  */
-public class IndexRegionSplitPolicy extends IncreasingToUpperBoundRegionSplitPolicy {
+public class IndexRegionSplitPolicy extends SteppingSplitPolicy {
 
     @Override
     protected boolean skipStoreFileRangeCheck(String familyName) {
