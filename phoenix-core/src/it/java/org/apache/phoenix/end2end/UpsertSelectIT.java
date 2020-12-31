@@ -45,8 +45,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.util.Map;
 import java.util.Properties;
 
+import com.google.common.collect.Maps;
+import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -59,10 +62,11 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -71,6 +75,21 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class UpsertSelectIT extends ParallelStatsDisabledIT {
     private final String allowServerSideMutations;
+
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        // An hour - inherited from ParallelStatsDisabledIT
+        props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+            Integer.toString(60 * 60));
+        // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
+        // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+            Long.toString(Long.MAX_VALUE));
+        props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+            Long.toString(Long.MAX_VALUE));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     public UpsertSelectIT(String allowServerSideMutations) {
         this.allowServerSideMutations = allowServerSideMutations;
