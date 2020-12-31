@@ -405,35 +405,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     }
   }
 
-  private void splitTableSync(Admin admin, TableName hbaseTableName,
-      byte[] splitPoint, int expectedRegions) throws IOException,
-      InterruptedException {
-    admin.split(hbaseTableName, splitPoint);
-    AssignmentManager assignmentManager =
-      getUtility().getHBaseCluster().getMaster().getAssignmentManager();
-    // wait for split daughter regions coming online for ~20s
-    for (int i = 0; i < 20; i++) {
-      Thread.sleep(1000);
-      List<HRegion> regions = getUtility().getHBaseCluster()
-        .getRegions(hbaseTableName);
-      if (regions.size() >= expectedRegions) {
-        boolean allRegionsOnline = true;
-        for (HRegion region : regions) {
-          if (!assignmentManager.getRegionStates()
-              .isRegionOnline(region.getRegionInfo())) {
-            allRegionsOnline = false;
-            break;
-          }
-        }
-        if (allRegionsOnline) {
-          break;
-        }
-      }
-      LOGGER.info("Sleeping for 1000 ms while waiting for {} to split and all regions to come online",
-        hbaseTableName.getNameAsString());
-    }
-  }
-
   private void deleteSnapshotIfExists(String snapshotName) throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl());
          Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {

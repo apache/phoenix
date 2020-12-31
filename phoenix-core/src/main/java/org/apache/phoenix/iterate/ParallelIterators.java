@@ -123,12 +123,12 @@ public class ParallelIterators extends BaseResultIterators {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
-                            (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
-                            "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
-                    }
-                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, tableResultItr, scan, physicalTableName, ParallelIterators.this.plan);
+                    PeekingResultIterator iterator = iteratorFactory.newIterator(
+                            context,
+                            tableResultItr,
+                            scan,
+                            physicalTableName,
+                            ParallelIterators.this.plan);
                     if (initFirstScanOnly) {
                         if ((!isReverse && scanLocation.isFirstScan()) || (isReverse && scanLocation.isLastScan())) {
                             // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
@@ -137,6 +137,13 @@ public class ParallelIterators extends BaseResultIterators {
                     } else {
                         iterator.peek();
                     }
+
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
+                            (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
+                            "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
+                    }
+
                     allIterators.add(iterator);
                     return iterator;
                 }
