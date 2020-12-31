@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -62,7 +63,6 @@ public class ScannerBuilder {
   }
 
   public CoveredDeleteScanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts, boolean returnNullIfRowNotFound) {
-
     Filter columnFilters = getColumnFilters(indexedColumns);
     FilterList filters = new FilterList(Lists.newArrayList(columnFilters));
 
@@ -105,8 +105,8 @@ public class ScannerBuilder {
       columnFilters.addFilter(columnFilter);
     }
     
-    if(columns.isEmpty()){
-        columnFilters.addFilter(new FilterBase(){
+    if (columns.isEmpty()) {
+        columnFilters.addFilter(new FilterBase() {
             @Override
             public boolean filterAllRemaining() throws IOException {
                 return true;
@@ -146,7 +146,6 @@ public class ScannerBuilder {
 
     // we have some info in the scanner, so wrap it in an iterator and return.
     return new CoveredDeleteScanner() {
-
       @Override
       public Cell next() {
         try {
@@ -163,7 +162,7 @@ public class ScannerBuilder {
         Cell peek = kvScanner.peek();
         // there is another value and its before the requested one - we can do a reseek!
         if (peek != null) {
-          int compare = KeyValue.COMPARATOR.compare(peek, next);
+          int compare = CellComparator.getInstance().compare(peek, next);
           if (compare < 0) {
             return kvScanner.reseek(next);
           } else if (compare == 0) {
