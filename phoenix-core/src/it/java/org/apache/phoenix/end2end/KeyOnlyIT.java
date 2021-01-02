@@ -32,9 +32,11 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -129,7 +131,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
         assertEquals(3, rs.getInt(1));
         assertFalse(rs.next());
     }
-        
+
     @Test
     public void testQueryWithLimitAndStats() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
@@ -143,11 +145,20 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
         assertEquals(0, rs.getInt(1));
         assertFalse(rs.next());
         
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName + "\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
-                "    SERVER 1 ROW LIMIT\n" + 
-                "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("SERIAL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
+        assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
     }
     
     private void initTableValues(Connection conn) throws Exception {

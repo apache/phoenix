@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -32,7 +33,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -604,59 +608,122 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(false);
 
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
             String ddl = "CREATE TABLE " + tableName1 + " " +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+                "  (a_string varchar not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
             ddl = "CREATE TABLE " + tableName2 + " " +
-                    "  (a_string varchar not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
+                "  (a_string varchar not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            ddl = "explain select a_string, col1 from " + tableName1 + " union all select a_string, col1 from " + tableName2 + " order by col1 limit 1";
-            ResultSet rs = conn.createStatement().executeQuery(ddl);
-            assertEquals(
-                    "UNION ALL OVER 2 QUERIES\n" +
-                    "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName1 + "\n" + 
-                    "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" + 
-                    "    CLIENT LIMIT 1\n" + 
-                    "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName2 + "\n" + 
-                    "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" +
-                    "    CLIENT LIMIT 1\n" + 
-                    "CLIENT MERGE SORT\nCLIENT LIMIT 1", QueryUtil.getExplainPlan(rs)); 
-            
-            String limitPlan = 
-                    "UNION ALL OVER 2 QUERIES\n" + 
-                    "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName1 + "\n" + 
-                    "        SERVER 2 ROW LIMIT\n" + 
-                    "    CLIENT 2 ROW LIMIT\n" + 
-                    "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName2 + "\n" + 
-                    "        SERVER 2 ROW LIMIT\n" + 
-                    "    CLIENT 2 ROW LIMIT\n" + 
+            ddl = "select a_string, col1 from " + tableName1
+                + " union all select a_string, col1 from " + tableName2
+                + " order by col1 limit 1";
+            ExplainPlan plan = conn.prepareStatement(ddl)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("UNION ALL OVER 2 QUERIES",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName1, explainPlanAttributes.getTableName());
+            assertEquals("[COL1]", explainPlanAttributes.getServerSortedBy());
+            assertEquals(1L,
+                explainPlanAttributes.getServerRowLimit().longValue());
+            assertEquals(1,
+                explainPlanAttributes.getClientRowLimit().intValue());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
+            ExplainPlanAttributes rhsPlanAttributes =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("PARALLEL 1-WAY",
+                rhsPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                rhsPlanAttributes.getExplainScanType());
+            assertEquals(tableName2, rhsPlanAttributes.getTableName());
+            assertEquals("[COL1]", rhsPlanAttributes.getServerSortedBy());
+            assertEquals(1L,
+                rhsPlanAttributes.getServerRowLimit().longValue());
+            assertEquals(1,
+                rhsPlanAttributes.getClientRowLimit().intValue());
+            assertEquals("CLIENT MERGE SORT",
+                rhsPlanAttributes.getClientSortAlgo());
+
+            String limitPlan =
+                "UNION ALL OVER 2 QUERIES\n" +
+                    "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName1 + "\n" +
+                    "        SERVER 2 ROW LIMIT\n" +
+                    "    CLIENT 2 ROW LIMIT\n" +
+                    "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName2 + "\n" +
+                    "        SERVER 2 ROW LIMIT\n" +
+                    "    CLIENT 2 ROW LIMIT\n" +
                     "CLIENT 2 ROW LIMIT";
-            ddl = "explain select a_string, col1 from " + tableName1 + " union all select a_string, col1 from " + tableName2;
-            rs = conn.createStatement().executeQuery(ddl + " limit 2");
-            assertEquals(limitPlan, QueryUtil.getExplainPlan(rs));
+
+            ddl = "select a_string, col1 from " + tableName1 + " union all select a_string, col1 from "
+                + tableName2 + " limit 2";
+            plan = conn.prepareStatement(ddl)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("UNION ALL OVER 2 QUERIES",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("SERIAL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName1, explainPlanAttributes.getTableName());
+            assertNull(explainPlanAttributes.getServerSortedBy());
+            assertEquals(2L,
+                explainPlanAttributes.getServerRowLimit().longValue());
+            assertEquals(2,
+                explainPlanAttributes.getClientRowLimit().intValue());
+            rhsPlanAttributes =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("SERIAL 1-WAY",
+                rhsPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                rhsPlanAttributes.getExplainScanType());
+            assertEquals(tableName2, rhsPlanAttributes.getTableName());
+            assertNull(rhsPlanAttributes.getServerSortedBy());
+            assertEquals(2L,
+                rhsPlanAttributes.getServerRowLimit().longValue());
+            assertEquals(2,
+                rhsPlanAttributes.getClientRowLimit().intValue());
+
             Statement stmt = conn.createStatement();
             stmt.setMaxRows(2);
-            rs = stmt.executeQuery(ddl);
+            ResultSet rs = stmt.executeQuery("explain " + ddl);
             assertEquals(limitPlan, QueryUtil.getExplainPlan(rs));
-            
-            ddl = "explain select a_string, col1 from " + tableName1 + " union all select a_string, col1 from " + tableName2;
-            rs = conn.createStatement().executeQuery(ddl);
-            assertEquals(
-                    "UNION ALL OVER 2 QUERIES\n" + 
-                    "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName1 + "\n" + 
-                    "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName2, QueryUtil.getExplainPlan(rs)); 
-        } finally {
-            conn.close();
+
+            ddl = "select a_string, col1 from " + tableName1
+                + " union all select a_string, col1 from " + tableName2;
+            plan = conn.prepareStatement(ddl)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("UNION ALL OVER 2 QUERIES",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName1, explainPlanAttributes.getTableName());
+            rhsPlanAttributes =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("PARALLEL 1-WAY",
+                rhsPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                rhsPlanAttributes.getExplainScanType());
+            assertEquals(tableName2, rhsPlanAttributes.getTableName());
         }
     } 
 
