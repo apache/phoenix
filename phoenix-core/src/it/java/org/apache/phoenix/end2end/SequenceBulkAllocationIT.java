@@ -32,9 +32,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
@@ -845,12 +847,24 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
         genericConn.close();
         
         // Execute EXPLAIN PLAN which should not change Sequence values
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT 1000 VALUES FOR  " + sequenceName + "  FROM " + tableName);
+        String query = "SELECT NEXT 1000 VALUES FOR  " + sequenceName
+            + "  FROM " + tableName;
 
         // Assert output for Explain Plain result is as expected
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                "CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals(1,
+            explainPlanAttributes.getClientSequenceCount().intValue());
     }
     
     

@@ -51,11 +51,12 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -1225,11 +1226,20 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
 
             assertFalse(rs.next());
 
-            String plan = "CLIENT PARALLEL 4-WAY SKIP SCAN ON 12 KEYS OVER " + tempTableWithCompositePK + " [0,2] - [3,4]\n" +
-                          "CLIENT MERGE SORT";
-            String explainQuery = "EXPLAIN " + query;
-            rs = conn.createStatement().executeQuery(explainQuery);
-            assertEquals(query, plan, QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 4-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("SKIP SCAN ON 12 KEYS ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tempTableWithCompositePK,
+                explainPlanAttributes.getTableName());
+            assertEquals(" [0,2] - [3,4]", explainPlanAttributes.getKeyRanges());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
         } finally {
             conn.close();
         }
