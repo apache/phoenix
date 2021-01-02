@@ -34,18 +34,19 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -147,20 +148,43 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                     assertEquals(m, k1ColumnValue[m]);
                 }
 
-                rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-                assertEquals("CLIENT PARALLEL " + (4 + i) + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
+                ExplainPlan plan = conn1.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                    .getExplainPlan();
+                ExplainPlanAttributes explainPlanAttributes =
+                    plan.getPlanStepsAsAttributes();
+                assertEquals("PARALLEL " + (4 + i) + "-WAY",
+                    explainPlanAttributes.getIteratorTypeAndScanSize());
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(indexPhysicalTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
 
                 query = "SELECT t_id,k1,k3 FROM " + tableName;
-                rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-                assertEquals(
-                    "CLIENT PARALLEL "
-                            + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
-                            + "-WAY RANGE SCAN OVER " + indexPhysicalTableName + " [2]\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
+                plan = conn1.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                    .getExplainPlan();
+                explainPlanAttributes =
+                    plan.getPlanStepsAsAttributes();
+                assertEquals("PARALLEL "
+                        + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
+                        + "-WAY",
+                    explainPlanAttributes.getIteratorTypeAndScanSize());
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(indexPhysicalTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
+                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 int[] k3ColumnValue = new int[26];
@@ -238,18 +262,40 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                 assertEquals(25 - j, rs.getInt("k1"));
                 assertEquals(strings[j], rs.getString("V1"));
             }
-            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(
-                "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER " + indexPhysicalTableName + " [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                QueryUtil.getExplainPlan(rs));
+
+            ExplainPlan plan = conn1.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 3-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(indexPhysicalTableName,
+                explainPlanAttributes.getTableName());
+            assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
 
             query = "SELECT t_id,k1,k3 FROM " + tableName;
-            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(
-                "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER " + indexPhysicalTableName + " [2]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                QueryUtil.getExplainPlan(rs));
+            plan = conn1.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 3-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(indexPhysicalTableName,
+                explainPlanAttributes.getTableName());
+            assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
 
             rs = conn1.createStatement().executeQuery(query);
             Thread.sleep(1000);

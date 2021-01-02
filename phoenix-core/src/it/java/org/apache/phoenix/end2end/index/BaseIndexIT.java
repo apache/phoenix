@@ -42,34 +42,31 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -81,7 +78,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -148,19 +144,32 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
 
             String query = "SELECT d.char_col1, int_col1 from " + fullTableName + " as d";
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex) {
-                assertEquals(
-                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\n" +
-                                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                                "CLIENT MERGE SORT",
-                                QueryUtil.getExplainPlan(rs));
+
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+
+            if (localIndex) {
+                assertEquals(fullTableName, explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+                assertEquals(fullIndexName, explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
             }
 
-            rs = conn.createStatement().executeQuery(query);
+            ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("chara", rs.getString(1));
             assertEquals("chara", rs.getString("char_col1"));
@@ -547,17 +556,32 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
             String query = "SELECT int_pk from " + fullTableName ;
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
-            rs = conn.createStatement().executeQuery(query);
+            ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertTrue(rs.next());
@@ -567,14 +591,26 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             query = "SELECT date_col from " + fullTableName + " order by date_col" ;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName, explainPlanAttributes.getTableName());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName, explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
             rs = conn.createStatement().executeQuery(query);
@@ -623,11 +659,27 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             conn.commit();
 
             query = "SELECT * FROM " + fullTableName;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            if (localIndex) {
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
             rs = conn.createStatement().executeQuery(query);
@@ -648,15 +700,24 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             query = "SELECT v1 as foo FROM " + fullTableName + " WHERE v2 = '1' ORDER BY foo";
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullTableName + " [1,~'1']\n" +
-                        "    SERVER SORTED BY [\"V1\"]\n" +
-                        "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals("[\"V1\"]", explainPlanAttributes.getServerSortedBy());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
+            if (localIndex) {
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullIndexName + " [~'1']\n" +
-                        "    SERVER SORTED BY [\"V1\"]\n" +
-                        "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
             }
 
             rs = conn.createStatement().executeQuery(query);
@@ -703,15 +764,38 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             conn.commit();
 
             query = "SELECT * FROM " + fullTableName;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName, QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(fullTableName, explainPlanAttributes.getTableName());
 
             query = "SELECT a.* FROM " + fullTableName;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
             if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
             }
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -874,16 +958,30 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             
             // make sure the index is working as expected
             query = "SELECT * FROM " + testTable;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 2-WAY RANGE SCAN OVER " + testTable+" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                        + "CLIENT MERGE SORT",
-                        QueryUtil.getExplainPlan(rs));
+                assertEquals("PARALLEL 2-WAY",
+                    explainPlanAttributes.getIteratorTypeAndScanSize());
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(testTable, explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY",
-                        QueryUtil.getExplainPlan(rs));
+                assertEquals("PARALLEL 1-WAY",
+                    explainPlanAttributes.getIteratorTypeAndScanSize());
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
             // check that the data table matches as expected
@@ -940,12 +1038,23 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             }
 
             query = "SELECT * FROM " + fullTableName + " WHERE \"v2\" = '1'";
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1,'1']\n"
-                        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            if (localIndex) {
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [1,'1']", explainPlanAttributes.getKeyRanges());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + " ['1']", QueryUtil.getExplainPlan(rs));
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" ['1']", explainPlanAttributes.getKeyRanges());
             }
             
             rs = conn.createStatement().executeQuery(query);
@@ -971,12 +1080,26 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             }
 
             query = "SELECT \"V1\", \"V1\" as foo1, \"v2\" as foo, \"v2\" as \"Foo1\", \"v2\" FROM " + fullTableName + " ORDER BY foo";
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex){
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\nCLIENT MERGE SORT",
-                        QueryUtil.getExplainPlan(rs));
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            if (localIndex) {
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER "+fullIndexName, QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
             rs = conn.createStatement().executeQuery(query);
@@ -1088,11 +1211,27 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             }
 
             query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            if (localIndex) {
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullTableName,
+                    explainPlanAttributes.getTableName());
+                assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
             } else {
-                assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(fullIndexName,
+                    explainPlanAttributes.getTableName());
+                assertNull(explainPlanAttributes.getClientSortAlgo());
             }
 
             rs = conn.createStatement().executeQuery(query);

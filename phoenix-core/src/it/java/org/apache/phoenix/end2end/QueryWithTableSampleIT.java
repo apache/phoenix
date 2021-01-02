@@ -25,10 +25,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.PhoenixParserException;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -204,15 +206,22 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     @Test
     public void testExplainSingleQuery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             prepareTableWithValues(conn, 100);
-            String query = "EXPLAIN SELECT i1, i2 FROM " + tableName +" tablesample (45) ";
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            assertEquals("CLIENT PARALLEL 1-WAY 0.45-SAMPLED FULL SCAN OVER " + tableName + "\n" +
-            			"    SERVER FILTER BY FIRST KEY ONLY",QueryUtil.getExplainPlan(rs));
-        } finally {
-            conn.close();
+            String query = "SELECT i1, i2 FROM " + tableName + " tablesample (45) ";
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(0.45D, explainPlanAttributes.getSamplingRate(), 0D);
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
         }
     }
     

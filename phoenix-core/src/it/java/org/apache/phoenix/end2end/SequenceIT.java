@@ -36,8 +36,11 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
@@ -48,7 +51,6 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 import org.junit.After;
@@ -731,13 +733,25 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BIGINT NOT NULL PRIMARY KEY)");
         
         Connection conn2 = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-        ResultSet rs = conn2.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR " + sequenceName + " FROM " + tableName);
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ tableName +"\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
-        		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
-        
-        
-        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'");
+        String query = "SELECT NEXT VALUE FOR " + sequenceName + " FROM " + tableName;
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals(1,
+            explainPlanAttributes.getClientSequenceCount().intValue());
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"
+                + sequenceNameWithoutSchema + "'");
         assertTrue(rs.next());
         assertEquals(sequenceNameWithoutSchema, rs.getString(1));
         assertEquals(1, rs.getInt(2));
@@ -1382,15 +1396,29 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         String secondSeqName = alternateSequenceName;
         conn.createStatement().execute("CREATE SEQUENCE " + seqName + " START WITH 1 INCREMENT BY 1");
         conn.createStatement().execute("CREATE SEQUENCE " + secondSeqName + " START WITH 2 INCREMENT BY 3");
-        
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT NEXT VALUE FOR " + seqName);
-        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
-        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + seqName);
+
+        String query = "SELECT NEXT VALUE FOR " + seqName;
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals(new Integer(1),
+            explainPlanAttributes.getClientSequenceCount());
+
+        rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT CURRENT VALUE FOR " + seqName);
-        assertEquals("CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
-        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR " + seqName);
+
+        query = "SELECT CURRENT VALUE FOR " + seqName;
+        plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        explainPlanAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(new Integer(1),
+            explainPlanAttributes.getClientSequenceCount());
+
+        rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR " + seqName + ", NEXT VALUE FOR " + secondSeqName);

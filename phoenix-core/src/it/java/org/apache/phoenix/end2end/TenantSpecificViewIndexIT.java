@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaNam
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,11 +31,12 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
@@ -43,10 +45,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	
@@ -189,29 +187,57 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertEquals("f", rs.getString(2));
         assertEquals("g", rs.getString(3));
         assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("explain select * from " + viewName);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) + " ['"
-                + tenantId + "']", QueryUtil.getExplainPlan(rs));
+
+        String query = "select * from " + viewName;
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(SchemaUtil.getPhysicalTableName(
+            Bytes.toBytes(tableName), isNamespaceMapped).toString(),
+            explainPlanAttributes.getTableName());
+        assertEquals(" ['" + tenantId + "']",
+            explainPlanAttributes.getKeyRanges());
 
         rs = conn.createStatement().executeQuery("select pk2,col1 from " + viewName + " where col1='f'");
         assertTrue(rs.next());
         assertEquals("e", rs.getString(1));
         assertEquals("f", rs.getString(2));
         assertFalse(rs.next());
-        rs = conn.createStatement().executeQuery("explain select pk2,col1 from " + viewName + " where col1='f'");
+        query = "select pk2,col1 from " + viewName + " where col1='f'";
+        plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) +
-                    " [" + Long.toString(1L + indexIdOffset) + ",'"
-                    + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
+            assertEquals(SchemaUtil.getPhysicalTableName(
+                Bytes.toBytes(tableName), isNamespaceMapped).toString(),
+                explainPlanAttributes.getTableName());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
+            assertEquals(" [" + (1L + indexIdOffset) + ",'"
+                + tenantId + "','f']", explainPlanAttributes.getKeyRanges());
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
-                        SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes()))
-                    + " [" + Long.toString(Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
-                    QueryUtil.getExplainPlan(rs));
+            assertEquals(
+                Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
+                    SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName),
+                        isNamespaceMapped).toBytes())),
+                explainPlanAttributes.getTableName());
+            assertNull(explainPlanAttributes.getClientSortAlgo());
+            assertEquals(" [" + (Short.MIN_VALUE + indexIdOffset) + ",'"
+                + tenantId + "','f']", explainPlanAttributes.getKeyRanges());
         }
 
         try {

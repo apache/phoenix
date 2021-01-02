@@ -35,6 +35,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -734,14 +736,22 @@ public class InListIT extends ParallelStatsDisabledIT {
                         "SELECT * FROM " + tenantView + " WHERE (ID1, ID2) " +
                                 "IN (('005xx000001Sv6o', '000000000000500'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
 
                 try (PreparedStatement preparedStmt = viewConn.prepareStatement(
                         "SELECT * FROM " + tenantView + " WHERE (ID2, ID1) " +
                                 "IN (('000000000000500', '005xx000001Sv6o'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
 
                 stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
@@ -777,7 +787,11 @@ public class InListIT extends ParallelStatsDisabledIT {
                                 "('bar', '000000000000400')," +
                                 "('foo', '000000000000300'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
 
                 try (PreparedStatement preparedStmt = viewConn.prepareStatement(
@@ -785,7 +799,11 @@ public class InListIT extends ParallelStatsDisabledIT {
                                 "(('bar', '005xx000001Sv6o')," +
                                 "('foo', '005xx000001Sv6o'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
 
                 stmt.execute("DELETE FROM " + tenantView + " WHERE (ID2, ID1) IN " +
@@ -825,7 +843,11 @@ public class InListIT extends ParallelStatsDisabledIT {
                                 "('005xx000001Sv6o', '000000000000400')," +
                                 "('005xx000001Sv6o', '000000000000300'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
 
                 try (PreparedStatement preparedStmt = viewConn.prepareStatement(
@@ -833,7 +855,11 @@ public class InListIT extends ParallelStatsDisabledIT {
                                 "(('000000000000400', '005xx000001Sv6o')," +
                                 "('000000000000300', '005xx000001Sv6o'))")) {
                     QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                    assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                    ExplainPlan plan = queryPlan.getExplainPlan();
+                    ExplainPlanAttributes explainPlanAttributes =
+                        plan.getPlanStepsAsAttributes();
+                    assertTrue(explainPlanAttributes.getExplainScanType()
+                        .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
                 }
                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tenantView + " WHERE (ID2, ID1) IN " +
                         "(('000000000000400', '005xx000001Sv6o')," +
@@ -874,14 +900,21 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "('005xx000001Sv6o', '000000000000400'))");
             QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
             assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
-            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+            ExplainPlan plan = queryPlan.getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertTrue(explainPlanAttributes.getExplainScanType()
+                .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID2) IN " +
                     "(('005xx000001Sv6o', '000000000000500')," +
                     "('005xx000001Sv6o', '000000000000400'))");
             queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
             assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
-            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+            plan = queryPlan.getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertTrue(explainPlanAttributes.getExplainScanType()
+                .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
         }
     }
 
@@ -891,7 +924,13 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(('005xx000001Sv6o')," +
                     "('005xx000001Sv6o'))");
             QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+            ExplainPlan plan = queryPlan.getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1) IN " +
                     "(('005xx000001Sv6o')," +
@@ -903,7 +942,12 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(('000000000000500')," +
                     "('000000000000400'))");
             queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+            plan = queryPlan.getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2) IN " +
                     "(('000000000000500')," +
@@ -919,7 +963,13 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(('005xx000001Sv6o', 1)," +
                     "('005xx000001Sv6o', 2))");
             QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+            ExplainPlan plan = queryPlan.getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID3) IN " +
                     "(('005xx000001Sv6o', 1)," +
@@ -931,7 +981,12 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "(('000000000000500', 1)," +
                     "('000000000000400', 2))");
             queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+            plan = queryPlan.getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2, ID3) IN " +
                     "(('000000000000500', 1)," +
@@ -948,7 +1003,13 @@ public class InListIT extends ParallelStatsDisabledIT {
                     "((1, 1)," +
                     "(2, 2))");
             QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-            assertTrue(queryPlan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY RANGE SCAN OVER"));
+            ExplainPlan plan = queryPlan.getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
 
             viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID3, ID4) IN " +
                     "((1, 1)," +
@@ -1473,18 +1534,27 @@ public class InListIT extends ParallelStatsDisabledIT {
                         "(2, 2))");
                 QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                 assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
-                assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                ExplainPlan plan = queryPlan.getExplainPlan();
+                ExplainPlanAttributes explainPlanAttributes =
+                    plan.getPlanStepsAsAttributes();
+                assertTrue(explainPlanAttributes.getExplainScanType()
+                    .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
                 preparedStmt = conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
                 queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                 assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
-                assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
-
+                plan = queryPlan.getExplainPlan();
+                explainPlanAttributes = plan.getPlanStepsAsAttributes();
+                assertTrue(explainPlanAttributes.getExplainScanType()
+                    .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
                 preparedStmt = conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
                 queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                 assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
-                assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                plan = queryPlan.getExplainPlan();
+                explainPlanAttributes = plan.getPlanStepsAsAttributes();
+                assertTrue(explainPlanAttributes.getExplainScanType()
+                    .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
 
                 ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID5, ID4 FROM " + view + " WHERE (POWER(ID2, 2), ID1) IN " +
@@ -1532,20 +1602,29 @@ public class InListIT extends ParallelStatsDisabledIT {
                         "((1, 1)," +
                         "(2, 2))");
                 QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
-                assertTrue(queryPlan.getExplainPlan().toString().contains("RANGE SCAN"));
+                ExplainPlan plan = queryPlan.getExplainPlan();
+                ExplainPlanAttributes explainPlanAttributes =
+                    plan.getPlanStepsAsAttributes();
+                assertEquals("RANGE SCAN ",
+                    explainPlanAttributes.getExplainScanType());
 
                 preparedStmt = conn.prepareStatement("SELECT ID1,ID5 FROM " + view + " WHERE (ID1, ID2) IN " +
                         "((1, 1),(2, 2))");
                 queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                 assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
-                assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+                plan = queryPlan.getExplainPlan();
+                explainPlanAttributes = plan.getPlanStepsAsAttributes();
+                assertTrue(explainPlanAttributes.getExplainScanType()
+                    .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
 
                 preparedStmt = conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
                 queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
                 assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
-                assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
-
+                plan = queryPlan.getExplainPlan();
+                explainPlanAttributes = plan.getPlanStepsAsAttributes();
+                assertTrue(explainPlanAttributes.getExplainScanType()
+                    .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
 
                 ResultSet rs = stmt.executeQuery("SELECT ID1, ID2, ID5, ID4 FROM " + view + " WHERE (POWER(ID2, 2), ID1) IN " +
                         "((4.0, 9)," +
@@ -1585,7 +1664,11 @@ public class InListIT extends ParallelStatsDisabledIT {
                     " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
             QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
             queryPlan.getTableRef().getTable().getType();
-            assertTrue(queryPlan.getExplainPlan().toString().contains(ExplainTable.POINT_LOOKUP_ON_STRING));
+            ExplainPlan plan = queryPlan.getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertTrue(explainPlanAttributes.getExplainScanType()
+                .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
         }
     }
 }

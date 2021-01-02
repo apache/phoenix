@@ -38,10 +38,11 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
-
 
 
 public class ReverseScanIT extends ParallelStatsDisabledIT {
@@ -59,51 +60,58 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
         String tenantId = getOrganizationId();
         String tableName = initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT entity_id FROM " + tableName + " WHERE entity_id >= '" + ROW3 + "' ORDER BY organization_id DESC, entity_id DESC";
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String query = "SELECT entity_id FROM " + tableName + " WHERE entity_id >= '"
+                + ROW3 + "' ORDER BY organization_id DESC, entity_id DESC";
             Statement stmt = conn.createStatement();
             stmt.setFetchSize(2);
             ResultSet rs = stmt.executeQuery(query);
 
-            assertTrue (rs.next());
-            assertEquals(ROW9,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW8,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW7,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW6,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW5,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW4,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW3,rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW9, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW8, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW7, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW6, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW5, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW4, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW3, rs.getString(1));
 
             assertFalse(rs.next());
-            
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(
-                    "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER " + tableName + "\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'",
-                    QueryUtil.getExplainPlan(rs));
-            
-            PreparedStatement statement = conn.prepareStatement("SELECT entity_id FROM " + tableName + " WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
+
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'",
+                explainPlanAttributes.getServerWhereFilter());
+
+            PreparedStatement statement = conn.prepareStatement(
+                "SELECT entity_id FROM " + tableName + " WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
             statement.setString(1, tenantId);
             statement.setString(2, ROW7);
             rs = statement.executeQuery();
 
-            assertTrue (rs.next());
-            assertEquals(ROW9,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW8,rs.getString(1));
-            assertTrue (rs.next());
-            assertEquals(ROW7,rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW9, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW8, rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals(ROW7, rs.getString(1));
 
             assertFalse(rs.next());
-        } finally {
-            conn.close();
         }
     }
     
@@ -168,26 +176,38 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
         String tableName = initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE INDEX " + indexName + " ON " + tableName + " (a_integer DESC) INCLUDE ("
-        + "    A_STRING, " + "    B_STRING, " + "    A_DATE)";
-        conn.createStatement().execute(ddl);
-        
-        String query = 
-                "SELECT a_integer FROM " + tableName + " where a_integer is not null order by a_integer nulls last limit 1";
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "CREATE INDEX " + indexName + " ON " + tableName
+                + " (a_integer DESC) INCLUDE (" + "    A_STRING, " + "    B_STRING, " + "    A_DATE)";
+            conn.createStatement().execute(ddl);
 
-        PreparedStatement statement = conn.prepareStatement(query);
-        ResultSet rs=statement.executeQuery();
-        assertTrue(rs.next());
-        assertEquals(1,rs.getInt(1));
-        assertFalse(rs.next());
-        
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertEquals(
-                "CLIENT SERIAL 1-WAY REVERSE RANGE SCAN OVER " + indexName + " [not null]\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
-                "    SERVER 1 ROW LIMIT\n" + 
-                "CLIENT 1 ROW LIMIT",QueryUtil.getExplainPlan(rs));
+            String query = "SELECT a_integer FROM " + tableName
+                + " where a_integer is not null order by a_integer nulls last limit 1";
+
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SERIAL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(indexName, explainPlanAttributes.getTableName());
+            assertEquals(" [not null]", explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
+            assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
+        }
+
     }
     
 }

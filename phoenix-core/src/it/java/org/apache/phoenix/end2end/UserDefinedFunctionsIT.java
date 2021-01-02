@@ -57,14 +57,16 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Before;
@@ -795,19 +797,43 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         conn.commit();
         stmt.execute("create index idx on t5(myreverse5(lastname_reverse))");
         String query = "select myreverse5(lastname_reverse) from t5";
-        ResultSet rs = stmt.executeQuery("explain " + query);
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER IDX\n"
-                + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
-        rs = stmt.executeQuery(query);
+
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals("IDX", explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+
+        ResultSet rs = stmt.executeQuery(query);
         assertTrue(rs.next());
         assertEquals("kcoj", rs.getString(1));
         assertFalse(rs.next());
         stmt.execute("create local index idx2 on t5(myreverse5(lastname_reverse))");
         query = "select k,k1,myreverse5(lastname_reverse) from t5 where myreverse5(lastname_reverse)='kcoj'";
-        rs = stmt.executeQuery("explain " + query);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T5 [1,'kcoj']\n"
-                + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                +"CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+
+        plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals("T5", explainPlanAttributes.getTableName());
+        assertEquals(" [1,'kcoj']", explainPlanAttributes.getKeyRanges());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT",
+            explainPlanAttributes.getClientSortAlgo());
+
         rs = stmt.executeQuery(query);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
