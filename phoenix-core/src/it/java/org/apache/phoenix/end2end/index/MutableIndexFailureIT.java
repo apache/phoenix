@@ -49,6 +49,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -57,6 +59,7 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -288,10 +291,22 @@ public class MutableIndexFailureIT extends BaseTest {
             addRowToTable(conn, fullTableName);
 
             query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            String expectedPlan = "CLIENT PARALLEL 2-WAY FULL SCAN OVER "
-                    + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped)+"\nCLIENT MERGE SORT";
-            assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 2-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(
+                SchemaUtil.getPhysicalTableName(fullTableName.getBytes(),
+                    isNamespaceMapped).toString(),
+                explainPlanAttributes.getTableName());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
+
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
@@ -330,10 +345,21 @@ public class MutableIndexFailureIT extends BaseTest {
                 updateTableAgain(conn, false);
                 // Verify previous writes succeeded to data table
                 query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
-                rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                expectedPlan = "CLIENT PARALLEL 2-WAY FULL SCAN OVER "
-                        + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped)+"\nCLIENT MERGE SORT";
-                assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
+                plan = conn.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                    .getExplainPlan();
+                explainPlanAttributes = plan.getPlanStepsAsAttributes();
+                assertEquals("PARALLEL 2-WAY",
+                    explainPlanAttributes.getIteratorTypeAndScanSize());
+                assertEquals("FULL SCAN ",
+                    explainPlanAttributes.getExplainScanType());
+                assertEquals(
+                    SchemaUtil.getPhysicalTableName(fullTableName.getBytes(),
+                        isNamespaceMapped).toString(),
+                    explainPlanAttributes.getTableName());
+                assertEquals("CLIENT MERGE SORT",
+                    explainPlanAttributes.getClientSortAlgo());
+
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));

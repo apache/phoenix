@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -27,6 +28,9 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -110,10 +114,21 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
 
             String query = "SELECT c1, max(rowkey), max(c2) FROM " + tableName + " where rowkey <= 'z' GROUP BY c1";
             // Use the index table plan that opts out order-by when stats are not available.
-            verifyQueryPlan(query,
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [*] - ['z']\n" +
-                    "    SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]\n" +
-                    "CLIENT MERGE SORT");
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(" [*] - ['z']", explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]",
+                explainPlanAttributes.getServerAggregate());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
 
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
             for (int i = 0; i < 10000; i++) {
@@ -129,11 +144,22 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
             // Given that the range on C1 is meaningless and group-by becomes
             // order-preserving if using the data table, the data table plan should
             // come out as the best plan based on the costs.
-            verifyQueryPlan(query,
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'\n" +
-                    "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
-                    "CLIENT MERGE SORT");
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]",
+                explainPlanAttributes.getServerAggregate());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
         } finally {
             conn.close();
         }
@@ -156,10 +182,22 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
 
             String query = "SELECT * FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
             // Use the idx2 plan with a wider PK slot span when stats are not available.
-            verifyQueryPlan(query,
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
-                    "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
-                    "CLIENT MERGE SORT");
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(" [2,*] - [2,9,000]",
+                explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
 
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2, c3) VALUES (?, ?, ?, ?)");
             for (int i = 0; i < 10000; i++) {
@@ -173,10 +211,21 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("UPDATE STATISTICS " + tableName);
 
             // Use the idx2 plan that scans less data when stats become available.
-            verifyQueryPlan(query,
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,10] - [1,20]\n" +
-                    "    SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)\n" +
-                    "CLIENT MERGE SORT");
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(" [1,10] - [1,20]",
+                explainPlanAttributes.getKeyRanges());
+            assertEquals("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
         } finally {
             conn.close();
         }
@@ -394,11 +443,17 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
             String query = "SELECT rowkey, c1, c2 FROM " + tableName + " where rowkey between 1 and 10 ORDER BY c1";
             String hintedQuery = query.replaceFirst("SELECT",
                     "SELECT  /*+ INDEX(" + tableName + " " + tableName + "_idx) */");
-            String dataPlan = "SERVER SORTED BY [C1]";
+            String dataPlan = "[C1]";
             String indexPlan = "SERVER FILTER BY FIRST KEY ONLY AND (\"ROWKEY\" >= 1 AND \"ROWKEY\" <= 10)";
 
             // Use the index table plan that opts out order-by when stats are not available.
-            verifyQueryPlan(query, indexPlan);
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals(indexPlan,
+                explainPlanAttributes.getServerWhereFilter());
 
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
             for (int i = 0; i < 10000; i++) {
@@ -412,10 +467,22 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute("UPDATE STATISTICS " + tableName);
 
             // Use the data table plan that has a lower cost when stats are available.
-            verifyQueryPlan(query, dataPlan);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals(dataPlan,
+                explainPlanAttributes.getServerSortedBy());
 
             // Use the index table plan as has been hinted.
-            verifyQueryPlan(hintedQuery, indexPlan);
+            plan = conn.prepareStatement(hintedQuery)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals(indexPlan,
+                explainPlanAttributes.getServerWhereFilter());
         } finally {
             conn.close();
         }
@@ -427,12 +494,27 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
         String q = "SELECT *\n" +
                 "FROM " + testTable500 + " t1 JOIN " + testTable1000 + " t2\n" +
                 "ON t1.ID = t2.ID";
-        String expected =
-                "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable500 + "\n" +
-                "AND\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable1000;
-        verifyQueryPlan(q, expected);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            ExplainPlan plan = conn.prepareStatement(q)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SORT-MERGE-JOIN (INNER)",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(testTable500, explainPlanAttributes.getTableName());
+            ExplainPlanAttributes rhsTable =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("PARALLEL 1-WAY",
+                rhsTable.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ", rhsTable.getExplainScanType());
+            assertEquals(testTable1000, rhsTable.getTableName());
+        }
     }
 
     /** Sort-merge-join w/ both children ordered wins over hash-join in an un-grouped aggregate query. */
@@ -442,15 +524,33 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
                 "FROM " + testTable500 + " t1 JOIN " + testTable1000 + " t2\n" +
                 "ON t1.ID = t2.ID\n" +
                 "WHERE t1.COL1 < 200";
-        String expected =
-                "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable500 + "\n" +
-                "        SERVER FILTER BY COL1 < 200\n" +
-                "AND (SKIP MERGE)\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable1000 + "\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
-                "CLIENT AGGREGATE INTO SINGLE ROW";
-        verifyQueryPlan(q, expected);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            ExplainPlan plan = conn.prepareStatement(q)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SORT-MERGE-JOIN (INNER)",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals("SERVER FILTER BY COL1 < 200",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(testTable500, explainPlanAttributes.getTableName());
+            assertEquals("CLIENT AGGREGATE INTO SINGLE ROW",
+                explainPlanAttributes.getClientAggregate());
+            ExplainPlanAttributes rhsTable =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("PARALLEL 1-WAY",
+                rhsTable.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ", rhsTable.getExplainScanType());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                rhsTable.getServerWhereFilter());
+            assertEquals(testTable1000, rhsTable.getTableName());
+        }
     }
 
     /** Hash-join w/ PK/FK optimization wins over sort-merge-join w/ larger side ordered. */
@@ -542,13 +642,31 @@ public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
                 "FROM " + testTable500 + " t1 JOIN " + testTable1000 + " t2\n" +
                 "ON t1.ID = t2.ID\n" +
                 "ORDER BY t1.COL1 LIMIT 5";
-        String expected =
-                "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable500 + "\n" +
-                "AND\n" +
-                "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + testTable1000 + "\n" +
-                "CLIENT TOP 5 ROWS SORTED BY [T1.COL1]";
-        verifyQueryPlan(q, expected);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            ExplainPlan plan = conn.prepareStatement(q)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SORT-MERGE-JOIN (INNER)",
+                explainPlanAttributes.getAbstractExplainPlan());
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(testTable500, explainPlanAttributes.getTableName());
+            assertEquals("[T1.COL1]",
+                explainPlanAttributes.getClientSortedBy());
+            assertEquals(new Integer(5),
+                explainPlanAttributes.getClientRowLimit());
+            ExplainPlanAttributes rhsTable =
+                explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            assertEquals("PARALLEL 1-WAY",
+                rhsTable.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ", rhsTable.getExplainScanType());
+            assertEquals(testTable1000, rhsTable.getTableName());
+        }
     }
 
     /**

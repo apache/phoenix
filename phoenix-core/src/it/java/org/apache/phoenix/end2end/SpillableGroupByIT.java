@@ -33,10 +33,12 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -189,12 +191,19 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         assertFalse(rs.next());
         rs.close();
         stmt.close();
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + tableName,
-                explainPlan);
-       conn.close();
+        String query = "SELECT * FROM " + tableName;
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals(new Integer(1), explainPlanAttributes.getSplitsChunk());
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        conn.close();
     }
     
     @Test
