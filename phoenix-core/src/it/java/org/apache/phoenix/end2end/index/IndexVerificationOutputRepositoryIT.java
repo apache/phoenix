@@ -67,7 +67,7 @@ import static org.mockito.Mockito.when;
 public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
-    public static void setupClass() throws Exception {
+    public static synchronized void setupClass() throws Exception {
         Map<String, String> props = Collections.emptyMap();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

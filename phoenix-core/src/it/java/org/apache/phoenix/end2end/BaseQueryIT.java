@@ -82,7 +82,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseQueryIT.class);
 
     @BeforeParam
-    public static void initTables(String idxDdl, boolean columnEncoded,
+    public static synchronized void initTables(String idxDdl, boolean columnEncoded,
             boolean keepDeletedCells) throws Exception {
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {

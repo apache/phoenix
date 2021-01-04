@@ -47,7 +47,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static synchronized void setup() throws Exception {
         Map<String, String> props = Collections.emptyMap();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
