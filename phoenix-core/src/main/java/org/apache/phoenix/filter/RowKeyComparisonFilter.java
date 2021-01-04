@@ -43,7 +43,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
 
     private boolean evaluate = true;
     private boolean keepRow = false;
-    private RowKeyTuple inputTuple = new RowKeyTuple();
+    private final RowKeyTuple inputTuple = new RowKeyTuple();
     private byte[] essentialCF;
 
     public RowKeyComparisonFilter() {
@@ -79,7 +79,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         return keepRow ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
     }
 
-    private final class RowKeyTuple extends BaseTuple {
+    private static final class RowKeyTuple extends BaseTuple {
         private byte[] buf;
         private int offset;
         private int length;
