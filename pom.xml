@@ -79,7 +79,7 @@
   <properties>
     <!-- The HBase compatibility module that that will be included in
     the shaded JARs and the assembly -->
-    <hbase.profile>1.5</hbase.profile>
+    <hbase.profile>1.3</hbase.profile>
     <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
 
     <!-- Hadoop Versions -->
