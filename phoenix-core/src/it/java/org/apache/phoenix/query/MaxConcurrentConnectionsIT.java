@@ -52,7 +52,7 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
     private static HBaseTestingUtility hbaseTestUtil;
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         hbaseTestUtil = new HBaseTestingUtility();
         Configuration serverConf = hbaseTestUtil.getConfiguration();
         // Disable any task handling as that creates additional connections
@@ -76,7 +76,7 @@ public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
 
     //Have to shutdown our special delayed region server
     @AfterClass
-    public static void tearDown() throws Exception {
+    public static synchronized void tearDown() throws Exception {
         hbaseTestUtil.shutdownMiniCluster();
     }
 

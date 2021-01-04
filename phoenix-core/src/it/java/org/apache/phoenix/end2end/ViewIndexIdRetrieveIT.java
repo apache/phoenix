@@ -63,7 +63,7 @@ public class ViewIndexIdRetrieveIT extends BaseUniqueNamesOwnClusterIT {
             " FROM SYSTEM.CATALOG WHERE TABLE_NAME='%s' AND COLUMN_COUNT IS NOT NULL";
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
