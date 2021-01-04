@@ -75,7 +75,7 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "5");
         setUpTestDriver(new ReadOnlyProps(props));

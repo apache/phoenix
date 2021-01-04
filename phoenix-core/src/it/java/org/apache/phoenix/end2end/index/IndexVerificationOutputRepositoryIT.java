@@ -65,7 +65,7 @@ import static org.mockito.Mockito.when;
 public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
-    public static void setupClass() throws Exception {
+    public static synchronized void setupClass() throws Exception {
         Map<String, String> props = new HashMap<>();
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, "100000000");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
