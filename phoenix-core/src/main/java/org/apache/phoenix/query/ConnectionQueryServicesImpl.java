@@ -484,6 +484,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    /**
+     * Close the HBase connection and decrement the counter.
+     * @throws IOException throws IOException
+     */
+    private void closeConnection() throws IOException {
+        if (connection != null) {
+            connection.close();
+            LOGGER.info("{} HConnection closed. Stacktrace for informational"
+                + " purposes: {}", connection, LogUtil.getCallerStackTrace());
+        }
+        GLOBAL_HCONNECTIONS_COUNTER.decrement();
+    }
+
     @Override
     public Table getTable(byte[] tableName) throws SQLException {
         try {
@@ -571,8 +584,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     try {
                         // close the HBase connection
-                        if (connection != null) connection.close();
-                        GLOBAL_HCONNECTIONS_COUNTER.decrement();
+                        closeConnection();
                     } finally {
                         if (renewLeaseExecutor != null) {
                             renewLeaseExecutor.shutdownNow();
@@ -998,16 +1010,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            if(!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
+            if (!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
-            if(!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
+            if (!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
-            if(!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
+            if (!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
-            if(!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
+            if (!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
 
@@ -1091,7 +1103,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
-                if(!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
+                if (!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
                     builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
             } else if (SchemaUtil.isTaskTable(tableName)) {
@@ -1357,12 +1369,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 // If DoNotUpgrade config is set only check namespace mapping and
                 // Client-server compatibility for system tables.
-                if(isDoNotUpgradePropSet) {
+                if (isDoNotUpgradePropSet) {
                     try {
                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(
                                 SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                     } catch (SQLException possibleCompatException) {
-                        if(possibleCompatException.getCause()
+                        if (possibleCompatException.getCause()
                                 instanceof org.apache.hadoop.hbase.TableNotFoundException) {
                             throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
                         }
@@ -1443,7 +1455,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (isMetaTable && !isUpgradeRequired()) {
                     checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                 } else {
-                    for(Pair<byte[],Map<String,Object>> family: families) {
+                    for (Pair<byte[],Map<String,Object>> family: families) {
                         if ((Bytes.toString(family.getFirst())
                                 .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX))) {
                             newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
@@ -1842,9 +1854,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 final ReadOnlyProps props = this.getProps();
                 final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                 if (dropMetadata) {
-                    List<String> columnFamiles = new ArrayList<String>();
+                    List<String> columnFamiles = new ArrayList<>();
                     for (ColumnFamilyDescriptor cf : desc.getColumnFamilies()) {
-                        if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                        if (cf.getNameAsString().startsWith(
+                            QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                             columnFamiles.add(cf.getNameAsString());
                         }
                     }
@@ -3288,7 +3301,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
 
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
-                                    if(!isDoNotUpgradePropSet) {
+                                    if (!isDoNotUpgradePropSet) {
                                         createOtherSystemTables(metaConnection);
                                         // In case namespace mapping is enabled and system table to
                                         // system namespace mapping is also enabled, create an entry
@@ -3322,7 +3335,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         } finally {
                             try {
                                 if (!success && hConnectionEstablished) {
-                                    connection.close();
+                                    closeConnection();
                                 }
                             } catch (IOException e) {
                                 SQLException ex = new SQLException(e);
