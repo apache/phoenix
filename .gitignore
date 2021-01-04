@@ -9,7 +9,7 @@
 
 # eclipse stuffs
 .settings/*
-*/.settings/
+**/.settings/
 .classpath
 .project
 */.externalToolBuilders
