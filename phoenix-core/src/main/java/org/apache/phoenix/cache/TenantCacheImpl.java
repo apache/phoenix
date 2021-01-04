@@ -65,7 +65,7 @@ public class TenantCacheImpl implements TenantCache {
 
     private final long EVICTION_MARGIN_BYTES = 10000000;
 
-    private class CacheEntry implements Comparable<CacheEntry>, Closeable {
+    private static class CacheEntry implements Comparable<CacheEntry>, Closeable {
         private ImmutableBytesPtr cacheId;
         private ImmutableBytesWritable cachePtr;
         private int hits;
@@ -247,9 +247,9 @@ public class TenantCacheImpl implements TenantCache {
                 entry = getIfPresent(cacheId);
                 if (entry == null) {
                     entry = new CacheEntry(
-                            cacheId, cachePtr, cacheFactory, txState, chunk,
-                            usePersistentCache, useProtoForIndexMaintainer,
-                            clientVersion);
+                        cacheId, cachePtr, cacheFactory, txState, chunk,
+                        usePersistentCache, useProtoForIndexMaintainer,
+                        clientVersion);
                     getServerCaches().put(cacheId, entry);
                     if (usePersistentCache) {
                         getPersistentServerCaches().put(cacheId, entry);

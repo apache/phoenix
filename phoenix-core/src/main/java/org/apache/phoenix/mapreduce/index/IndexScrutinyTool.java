@@ -205,7 +205,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         System.exit(exitCode);
     }
 
-    class JobFactory {
+    private static class JobFactory {
         Connection connection;
         Configuration configuration;
         private final boolean useSnapshot;
@@ -456,8 +456,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 schemaName, dataTable, indexTable, useSnapshot, ts, batchSize, basePath,
                 outputFormat, outputMaxRows));
             JobFactory jobFactory =
-                    new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
-                            outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId, mapperClass);
+                new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
+                    outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId, mapperClass);
             // If we are running the scrutiny with both tables as the source, run two separate jobs,
             // one for each direction
             if (SourceTable.BOTH.equals(sourceTable)) {

@@ -843,7 +843,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                         tenantId);
                 for (String viewIndex : viewIndexes) {
                     IndexInfo indexInfo = new IndexInfo(schemaName, viewName,
-                            tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
+                        tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
                     indexInfos.put(viewIndex, indexInfo);
                 }
             }
@@ -891,7 +891,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     " AND TENANT_ID = \'" + tenantId + "\'" : " AND TENANT_ID IS NULL");
     }
 
-    private class IndexInfo {
+    private static class IndexInfo {
         final private String schemaName;
         final private String baseTable;
         final private String tenantId;

@@ -118,7 +118,7 @@ public class GlobalIndexChecker extends BaseRegionObserver implements RegionCopr
      * An instance of this class is created for each scanner on an index
      * and used to verify individual rows and rebuild them if they are not valid
      */
-    private class GlobalIndexScanner implements RegionScanner {
+    private static class GlobalIndexScanner implements RegionScanner {
         private RegionScanner scanner;
         private RegionScanner deleteRowScanner;
         private long ageThreshold;
