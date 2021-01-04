@@ -1059,7 +1059,7 @@ public class TestUtil {
     }
 
     public static void waitForIndexState(Connection conn, String fullIndexName, PIndexState expectedIndexState) throws InterruptedException, SQLException {
-        int maxTries = 60, nTries = 0;
+        int maxTries = 120, nTries = 0;
         PIndexState actualIndexState = null;
         do {
             String schema = SchemaUtil.getSchemaNameFromFullName(fullIndexName);
