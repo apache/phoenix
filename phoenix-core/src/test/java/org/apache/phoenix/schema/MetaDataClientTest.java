@@ -43,7 +43,7 @@ public class MetaDataClientTest extends BaseConnectionlessQueryTest {
     private static CreateTableStatement stmt;
 
     @BeforeClass
-    public static void setupTest() throws SQLException {
+    public static synchronized void setupTest() throws SQLException {
         schema = generateUniqueName();
         baseTable = generateUniqueName();
         phxConn = (PhoenixConnection) DriverManager.getConnection(getUrl());

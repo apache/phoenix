@@ -38,7 +38,7 @@ import static org.junit.Assert.assertEquals;
 public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
-    public static void setupClass() throws Exception {
+    public static synchronized void setupClass() throws Exception {
         Map<String, String> props = Collections.emptyMap();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

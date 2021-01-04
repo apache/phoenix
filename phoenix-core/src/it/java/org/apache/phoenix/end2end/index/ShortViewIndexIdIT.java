@@ -36,7 +36,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class ShortViewIndexIdIT extends BaseUniqueNamesOwnClusterIT {
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, "false");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);

@@ -62,7 +62,7 @@ public class ViewIndexIdRetrieveIT extends BaseUniqueNamesOwnClusterIT {
             " FROM SYSTEM.CATALOG WHERE TABLE_NAME='%s' AND COLUMN_COUNT IS NOT NULL";
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static synchronized void setUp() throws Exception {
         Map<String, String> props = new HashMap<>();
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

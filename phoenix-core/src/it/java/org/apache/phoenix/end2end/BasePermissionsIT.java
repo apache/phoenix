@@ -155,7 +155,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     @BeforeClass
-    public static void skipHBase21() {
+    public static synchronized void skipHBase21() {
         assumeFalse(VersionInfo.getVersion().startsWith("2.1"));
     }
 
