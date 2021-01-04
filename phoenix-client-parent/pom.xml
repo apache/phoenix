@@ -48,7 +48,15 @@
           <skip>true</skip>
         </configuration>
       </plugin>
-
+      <plugin>
+        <!-- RAT gets really confused on the phoenix-client subprojects,
+        and there is nothing to audit here -->
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>

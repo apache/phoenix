@@ -46,6 +46,7 @@
     <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
+    <module>phoenix-client-parent</module>
     <module>phoenix-client-parent/phoenix-client</module>
     <!-- phoenix-client-embedded is added in profile "embedded" -->
     <module>phoenix-server</module>
