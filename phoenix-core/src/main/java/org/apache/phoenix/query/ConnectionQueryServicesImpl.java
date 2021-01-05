@@ -1923,7 +1923,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Only use splits if table is salted, otherwise it may not be applicable
                 // Always add default column family, as we don't know in advance if we'll need it
                 familiesPlusDefault = Lists.newArrayList(families);
-                familiesPlusDefault.add(new Pair<byte[], Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
+                familiesPlusDefault.add(new Pair<>(defaultCF,
+                    Collections.<String, Object>emptyMap()));
             }
             ensureViewIndexTableCreated(
                 physicalTableNameBytes, tableProps, familiesPlusDefault,
