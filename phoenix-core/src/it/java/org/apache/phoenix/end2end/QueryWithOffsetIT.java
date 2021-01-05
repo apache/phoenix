@@ -34,13 +34,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -128,30 +126,57 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
         initTableValues(conn);
         updateStatistics(conn);
         String query = "SELECT t_id from " + tableName + " offset " + offset;
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        if(!isSalted){
-            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName + "\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "    SERVER OFFSET " + offset, QueryUtil.getExplainPlan(rs));
-        }else{
-            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER " + tableName + "\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName,
+            explainPlanAttributes.getTableName());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        if (!isSalted) {
+            assertEquals("SERIAL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals(offset, explainPlanAttributes.getServerOffset()
+                .intValue());
+        } else {
+            assertEquals("PARALLEL 10-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
+            assertEquals(offset, explainPlanAttributes.getClientOffset()
+                .intValue());
         }
-        rs = conn.createStatement().executeQuery(query);
+
+        ResultSet rs = conn.createStatement().executeQuery(query);
         int i = 0;
         while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
             assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
         query = "SELECT t_id from " + tableName + " ORDER BY v1 offset " + offset;
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        explainPlanAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName,
+            explainPlanAttributes.getTableName());
+        assertEquals("[C2.V1]", explainPlanAttributes.getServerSortedBy());
+        assertEquals("CLIENT MERGE SORT",
+            explainPlanAttributes.getClientSortAlgo());
+        assertEquals(offset, explainPlanAttributes.getClientOffset()
+            .intValue());
         if (!isSalted) {
-            assertEquals("CLIENT PARALLEL 5-WAY FULL SCAN OVER " + tableName + "\n" + "    SERVER SORTED BY [C2.V1]\n"
-                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+            assertEquals("PARALLEL 5-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
         } else {
-            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER " + tableName + "\n" + "    SERVER SORTED BY [C2.V1]\n"
-                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+            assertEquals("PARALLEL 10-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
         }
         conn.close();
     }

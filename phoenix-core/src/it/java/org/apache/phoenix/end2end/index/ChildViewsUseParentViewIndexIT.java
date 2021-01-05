@@ -29,12 +29,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
@@ -158,14 +158,25 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
 
     private void assertQueryUsesIndex(final String baseTableName, final String viewName, Connection conn, boolean isChildView) throws SQLException {
         String sql = "SELECT A0, A1, A2, A4 FROM " + viewName +" WHERE A4 IN ('1', '2', '3') ORDER BY A4, A2";
-        ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
+        ExplainPlan plan = conn.prepareStatement(sql)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SKIP SCAN ON 3 KEYS ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals("_IDX_" + baseTableName,
+            explainPlanAttributes.getTableName());
         String childViewScanKey = isChildView ? ",'Y'" : "";
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER _IDX_" + baseTableName + " ["+ Short.MIN_VALUE +",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE + ",'3'" + childViewScanKey + "]\n" +
-            "    SERVER FILTER BY FIRST KEY ONLY",
-            QueryUtil.getExplainPlan(rs));
-        
-        rs = conn.createStatement().executeQuery(sql);
+        assertEquals(" [" + Short.MIN_VALUE + ",'1'" + childViewScanKey + "] - ["
+            + Short.MIN_VALUE + ",'3'" + childViewScanKey + "]",
+            explainPlanAttributes.getKeyRanges());
+
+        ResultSet rs = conn.createStatement().executeQuery(sql);
         assertTrue(rs.next());
         assertEquals("1", rs.getString(1));
         assertEquals("X", rs.getString(2));
@@ -181,13 +192,21 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     
     private void assertQueryUsesBaseTable(final String baseTableName, final String viewName, Connection conn) throws SQLException {
         String sql = "SELECT A0, A1, A2, A4 FROM " + viewName +" WHERE A4 IN ('1', '2', '3') ";
-        ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + baseTableName + "\n" +
-            "    SERVER FILTER BY (A4 IN ('1','2','3') AND ((A1 = 'X' AND A2 = 'Y') AND A3 = 'Z'))",
-            QueryUtil.getExplainPlan(rs));
-        
-        rs = conn.createStatement().executeQuery(sql);
+        ExplainPlan plan = conn.prepareStatement(sql)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("SERVER FILTER BY (A4 IN ('1','2','3') AND ((A1 = 'X' AND A2 = 'Y') AND A3 = 'Z'))",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(baseTableName,
+            explainPlanAttributes.getTableName());
+
+        ResultSet rs = conn.createStatement().executeQuery(sql);
         assertTrue(rs.next());
         assertEquals("1", rs.getString(1));
         assertEquals("X", rs.getString(2));
@@ -262,15 +281,28 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
                 " WHERE WO_ID IN ('003xxxxxxxxxxx1', '003xxxxxxxxxxx2', '003xxxxxxxxxxx3', '003xxxxxxxxxxx4', '003xxxxxxxxxxx5') " +
                 " AND (A_DATE > TO_DATE('2016-01-01 06:00:00.0')) " +
                 " ORDER BY WO_ID, A_DATE DESC";
-        ResultSet rs = conn.prepareStatement("EXPLAIN " + sql).executeQuery();
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY SKIP SCAN ON 5 RANGES OVER _IDX_" + baseTableName + " [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']\n" +
-            "    SERVER FILTER BY FIRST KEY ONLY",
-            QueryUtil.getExplainPlan(rs));
-        
-        rs = conn.createStatement().executeQuery(sql);
-        for (int i=0; i<expectedRows; ++i)
+        ExplainPlan plan = conn.prepareStatement(sql)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            explainPlanAttributes.getServerWhereFilter());
+        assertEquals("SKIP SCAN ON 5 RANGES ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals("_IDX_" + baseTableName,
+            explainPlanAttributes.getTableName());
+        assertEquals(" [" + Short.MIN_VALUE
+                + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [" + Short.MIN_VALUE
+                + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']",
+            explainPlanAttributes.getKeyRanges());
+
+        ResultSet rs = conn.createStatement().executeQuery(sql);
+        for (int i = 0; i < expectedRows; ++i) {
             assertTrue(rs.next());
+        }
         assertFalse(rs.next());
     }
 }

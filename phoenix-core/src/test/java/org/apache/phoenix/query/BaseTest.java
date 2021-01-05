@@ -133,6 +133,7 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -170,10 +171,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * client-time and hbase-time managed tests.
  * 
  * For tests needing connectivity to a cluster, please use
- * {@link BaseHBaseManagedTimeIT} or {@link BaseClientManagedTimeIT}. 
+ * {@link BaseHBaseManagedTimeIT}.
  * 
  * In the rare case when a test can't share the same mini cluster as the 
- * ones used by {@link BaseHBaseManagedTimeIT} or {@link BaseClientManagedTimeIT}
+ * ones used by {@link BaseHBaseManagedTimeIT},
  * one could extend this class and spin up your own mini cluster. Please 
  * make sure to shutdown the mini cluster in a method annotated by @AfterClass.  
  *
@@ -191,6 +192,9 @@ public abstract class BaseTest {
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
             .newSingleThreadExecutor(factory);
+
+    @ClassRule
+    public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -543,7 +547,10 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
+            long startTime = System.currentTimeMillis();
             utility.startMiniCluster(NUM_SLAVES_BASE);
+            long startupTime = System.currentTimeMillis()-startTime;
+            LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);
         } catch (Throwable t) {
             throw new RuntimeException(t);
@@ -622,6 +629,8 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        //Allow for an extra long miniCluster startup time in case of an overloaded test machine
+        conf.setInt("hbase.master.start.timeout.localHBaseCluster", 200000);
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);

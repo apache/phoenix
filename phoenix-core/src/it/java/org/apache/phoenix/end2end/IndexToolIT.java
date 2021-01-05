@@ -19,6 +19,9 @@ package org.apache.phoenix.end2end;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -56,7 +59,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -94,10 +96,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -254,16 +254,23 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     String.format(
                         "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
                         dataTableFullName);
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
 
             // assert we are pulling from data table.
-            assertEquals(String.format(
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
-                        + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
-                dataTableFullName), actualExplainPlan);
+            ExplainPlan plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(dataTableFullName,
+                explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
+                explainPlanAttributes.getServerWhereFilter());
 
-            rs = stmt1.executeQuery(selectSql);
+            ResultSet rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
@@ -278,9 +285,20 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
 
             // assert we are pulling from index table.
-            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName);
+            plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            final String expectedTableName;
+            if (localIndex) {
+                expectedTableName = dataTableFullName;
+            } else {
+                expectedTableName = indexTableFullName;
+            }
+            assertEquals(expectedTableName,
+                explainPlanAttributes.getTableName());
 
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -445,10 +463,19 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     tenantId, 0, new String[0]);
 
             String selectSql = String.format("SELECT ID FROM %s WHERE NAME='x'", viewTenantName);
-            ResultSet rs = connTenant.createStatement().executeQuery("EXPLAIN " + selectSql);
-            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(false, actualExplainPlan, "", viewIndexTableName);
-            rs = connTenant.createStatement().executeQuery(selectSql);
+            ExplainPlan plan = connTenant.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(viewIndexTableName,
+                explainPlanAttributes.getTableName());
+
+            ResultSet rs = connTenant.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());

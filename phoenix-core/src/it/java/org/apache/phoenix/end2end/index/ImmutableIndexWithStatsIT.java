@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -27,9 +28,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
@@ -59,8 +62,16 @@ public class ImmutableIndexWithStatsIT extends ParallelStatsEnabledIT {
         
         conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         query = "SELECT COUNT(*) FROM " + tableName;
-        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT PARALLEL 1-WAY FULL SCAN"));
+
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
 
         String indexName = "I_" + generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
