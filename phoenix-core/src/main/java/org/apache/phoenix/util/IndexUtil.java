@@ -913,4 +913,25 @@ public class IndexUtil {
             throw new IOException(e);
         }
     }
+
+    public static long getIndexPendingDisableCountLastUpdatedTimestamp(
+            PhoenixConnection conn, String failedIndexTable)
+            throws IOException {
+        byte[] indexTableKey =
+            SchemaUtil.getTableKeyFromFullName(failedIndexTable);
+        Get get = new Get(indexTableKey);
+        get.addColumn(TABLE_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+        byte[] systemCatalog = SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+            conn.getQueryServices().getProps()).getName();
+        try (Table table = conn.getQueryServices().getTable(systemCatalog)) {
+            Result result = table.get(get);
+            Cell cell = result.listCells().get(0);
+            return cell.getTimestamp();
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
+
 }
