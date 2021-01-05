@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -30,6 +31,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -64,6 +66,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.SchemaUtil;
@@ -84,9 +87,7 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     private static final long REBUILD_PERIOD = 50000;
     private static final long REBUILD_INTERVAL = 2000;
     private static RegionCoprocessorEnvironment indexRebuildTaskRegionEnvironment;
-    private static Boolean runRebuildOnce = true;
 
-    
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
@@ -129,8 +130,8 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
     private static void runIndexRebuilderAsync(final int interval, final boolean[] cancel, String table) {
         runIndexRebuilderAsync(interval, cancel, Collections.<String>singletonList(table));
     }
+
     private static void runIndexRebuilderAsync(final int interval, final boolean[] cancel, final List<String> tables) {
-        runRebuildOnce = true;
         Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -143,8 +144,6 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
                         throw new RuntimeException(e);
                     } catch (SQLException e) {
                         LOGGER.error(e.getMessage(),e);
-                    } finally {
-                        runRebuildOnce = false;
                     }
                 }
             }
@@ -563,14 +562,21 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
         
         @Override
         public long currentTime() {
-            if(shouldAdvance) {
-                return time++;
+            if (shouldAdvance) {
+                synchronized (this) {
+                    return time++;
+                }
             } else {
                 return time;
             }
         }
+
         public void setAdvance(boolean val) {
             shouldAdvance = val;
+        }
+
+        private synchronized void addTime(long diff) {
+            time += diff;
         }
     }
     
@@ -1060,4 +1066,71 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             throw new DoNotRetryIOException("Simulating write failure on " + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
         }
     }
+
+    @Test
+    public void testPendingDisableWithDisableCountTs() throws Throwable {
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String indexName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        final MyClock clock =
+            new MyClock(EnvironmentEdgeManager.currentTimeMillis());
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(String.format(
+                "CREATE TABLE %s (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR, "
+                    + "v3 VARCHAR, v4 VARCHAR) COLUMN_ENCODED_BYTES = 0, "
+                    + "DISABLE_INDEX_ON_WRITE_FAILURE = TRUE", fullTableName));
+            EnvironmentEdgeManager.injectEdge(clock);
+            clock.addTime(100);
+            conn.createStatement().execute(
+                String.format("CREATE INDEX %s ON %s (v1, v2)", indexName,
+                    fullTableName));
+            clock.addTime(100);
+            conn.createStatement().execute(
+                String.format("UPSERT INTO %s VALUES('k01', 'v01', 'v02', 'v03', 'v04')",
+                    fullTableName));
+            conn.commit();
+            clock.addTime(100);
+
+            try (Table systemCatalog = conn.unwrap(PhoenixConnection.class)
+                    .getQueryServices()
+                    .getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
+                IndexUtil.updateIndexState(fullIndexName, clock.currentTime(),
+                    systemCatalog, PIndexState.PENDING_DISABLE);
+            }
+
+            Configuration conf =
+                conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
+
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            ResultSet rs = stmt.executeQuery(
+                String.format("SELECT V2 FROM %s WHERE V1 = 'v01'", fullTableName));
+            assertTrue(rs.next());
+            assertEquals("v02", rs.getString(1));
+
+            long pendingDisableThreshold = conf.getLong(
+                QueryServices.INDEX_PENDING_DISABLE_THRESHOLD,
+                QueryServicesOptions.DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD);
+            long pendingDisableCountLastUpdatedTs =
+                IndexUtil.getIndexPendingDisableCountLastUpdatedTimestamp(
+                    conn.unwrap(PhoenixConnection.class), fullIndexName);
+            clock.addTime(pendingDisableThreshold + pendingDisableCountLastUpdatedTs);
+
+            stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            rs = stmt.executeQuery(
+                String.format("SELECT V2 FROM %s WHERE V1 = 'v01'", fullTableName));
+            assertTrue(rs.next());
+            assertEquals("v02", rs.getString(1));
+
+            Thread.sleep(1000);
+            waitForIndexState(conn, fullTableName, fullIndexName,
+                PIndexState.DISABLE);
+        } finally {
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
 }
