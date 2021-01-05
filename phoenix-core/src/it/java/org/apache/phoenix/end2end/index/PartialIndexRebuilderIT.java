@@ -889,7 +889,8 @@ public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {
             clock.time += 1000;
             waitForIndexState(conn, fullTableName, fullIndexName, indexStateOnFailure == PIndexState.DISABLE ? PIndexState.INACTIVE : PIndexState.ACTIVE);
             clock.time += WAIT_AFTER_DISABLED;
-            
+            clock.time += 2 * REBUILD_PERIOD;
+
             // First batch should have been processed again because we started over
             runIndexRebuilder(fullTableName);
             assertEquals(3,TestUtil.getRowCount(conn, fullIndexName));
