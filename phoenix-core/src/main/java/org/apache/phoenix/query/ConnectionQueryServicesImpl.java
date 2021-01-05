@@ -485,6 +485,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    /**
+     * Close the HBase connection and decrement the counter.
+     * @throws IOException throws IOException
+     */
+    private void closeConnection() throws IOException {
+        if (connection != null) {
+            connection.close();
+            LOGGER.info("{} HConnection closed. Stacktrace for informational"
+                + " purposes: {}", connection, LogUtil.getCallerStackTrace());
+        }
+        GLOBAL_HCONNECTIONS_COUNTER.decrement();
+    }
+
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
@@ -572,8 +585,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     try {
                         // close the HBase connection
-                        if (connection != null) connection.close();
-                        GLOBAL_HCONNECTIONS_COUNTER.decrement();
+                        closeConnection();
                     } finally {
                         if (renewLeaseExecutor != null) {
                             renewLeaseExecutor.shutdownNow();
@@ -642,7 +654,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * all region locations from the HTable doesn't.
          */
         int retryCount = 0, maxRetryCount = 1;
-        boolean reload =false;
+        boolean reload = false;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -685,7 +697,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     existingTableRef.setLastAccessTime(TimeKeeper.SYSTEM.getCurrentTime());
                     return;
                 }
-            } catch (TableNotFoundException e) {}
+            } catch (TableNotFoundException e) { }
             latestMetaData.addTable(table, resolvedTime);
             latestMetaDataLock.notifyAll();
         }
@@ -1622,7 +1634,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (Throwable t) {
                 throw ServerUtil.parseServerException(t);
             }
-            for (Map.Entry<byte[],GetVersionResponse> result : results.entrySet()) {
+            for (Map.Entry<byte[], GetVersionResponse> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
                 GetVersionResponse versionResponse = result.getValue();
                 long serverJarVersion = versionResponse.getVersion();
@@ -1663,7 +1675,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
                 if (compatibility.getErrorCode() != 0) {
                     if (compatibility.getErrorCode() == SQLExceptionCode.OUTDATED_JARS.getErrorCode()) {
-                        errorMessage.setLength(errorMessage.length()-1);
+                        errorMessage.setLength(errorMessage.length() - 1);
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.OUTDATED_JARS).setMessage(errorMessage.toString()).build().buildException();
                     } else if (compatibility.getErrorCode() == SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode()) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setMessage(errorMessage.toString()).build().buildException();
@@ -1911,7 +1923,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Only use splits if table is salted, otherwise it may not be applicable
                 // Always add default column family, as we don't know in advance if we'll need it
                 familiesPlusDefault = Lists.newArrayList(families);
-                familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
+                familiesPlusDefault.add(new Pair<byte[], Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(
                 physicalTableNameBytes, tableProps, familiesPlusDefault,
@@ -3299,7 +3311,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         } finally {
                             try {
                                 if (!success && hConnectionEstablished) {
-                                    connection.close();
+                                    closeConnection();
                                 }
                             } catch (IOException e) {
                                 SQLException ex = new SQLException(e);
