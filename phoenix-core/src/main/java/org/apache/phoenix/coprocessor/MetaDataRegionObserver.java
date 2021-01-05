@@ -321,9 +321,6 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                         continue;
                     }
 
-                    long indexDisableTimestamp =
-                            PLong.INSTANCE.getCodec().decodeLong(disabledTimeStamp, 0,
-                                SortOrder.ASC);
                     byte[] dataTable = r.getValue(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
                     if ((dataTable == null || dataTable.length == 0) || indexStateCell == null) {
@@ -368,14 +365,21 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                     }
                     
                     PIndexState indexState = PIndexState.fromSerializedValue(indexStateBytes[0]);
-                    long elapsedSinceDisable = EnvironmentEdgeManager.currentTimeMillis() - Math.abs(indexDisableTimestamp);
+                    long pendingDisableCountLastUpdatedTs =
+                        IndexUtil.getIndexPendingDisableCountLastUpdatedTimestamp(conn, indexTableFullName);
+                    long elapsedSinceDisable =
+                        EnvironmentEdgeManager.currentTimeMillis() - pendingDisableCountLastUpdatedTs;
 
                     // on an index write failure, the server side transitions to PENDING_DISABLE, then the client
                     // retries, and after retries are exhausted, disables the index
                     if (indexState == PIndexState.PENDING_DISABLE) {
                         if (elapsedSinceDisable > pendingDisableThreshold) {
-                            // too long in PENDING_DISABLE - client didn't disable the index, so we do it here
-                            IndexUtil.updateIndexState(conn, indexTableFullName, PIndexState.DISABLE, indexDisableTimestamp);
+                            // too long in PENDING_DISABLE -
+                            // client didn't disable the index because last time when
+                            // PENDING_DISABLE_COUNT was updated is greater than pendingDisableThreshold,
+                            // so we do it here
+                            IndexUtil.updateIndexState(conn, indexTableFullName,
+                                PIndexState.DISABLE, pendingDisableCountLastUpdatedTs);
                         }
                         continue;
                     }
