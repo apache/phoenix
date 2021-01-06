@@ -376,6 +376,8 @@ public class BackwardCompatibilityIT {
         if (majorVersion > 4 || (majorVersion == 4 && minorVersion >= 15)) {
             executeQueryWithClientVersion(compatibleClientVersion,
                 INDEX_REBUILD_ASYNC, zkQuorum);
+            // wait 5 seconds to finish the rebuild job
+            Thread.sleep(5000);
             executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
             assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
         }
