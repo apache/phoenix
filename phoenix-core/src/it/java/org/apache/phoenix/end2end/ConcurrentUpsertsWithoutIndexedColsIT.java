@@ -19,10 +19,14 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -42,13 +47,23 @@ import static org.junit.Assert.assertTrue;
 
 
 @RunWith(RunUntilFailure.class)
-@Category(NeedsOwnMiniClusterTest.class)
 public class ConcurrentUpsertsWithoutIndexedColsIT
-        extends ParallelStatsDisabledIT {
+        extends BaseUniqueNamesOwnClusterIT {
 
     private static final Random RANDOM = new Random(5);
     private static final Logger LOGGER =
         LoggerFactory.getLogger(ConcurrentUpsertsWithoutIndexedColsIT.class);
+
+    private static final Map<String, String> PROPS = ImmutableMap.of(
+        QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+        Long.toString(0),
+        CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        Integer.toString(1000000));
+
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        setUpTestDriver(new ReadOnlyProps(PROPS.entrySet().iterator()));
+    }
 
     @Test
     public void testConcurrentUpsertsWithoutIndexedColumns() throws Exception {
