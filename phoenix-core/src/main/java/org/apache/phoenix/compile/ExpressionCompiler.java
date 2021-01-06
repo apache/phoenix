@@ -1217,8 +1217,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public Expression visitLeave(ExistsParseNode node, List<Expression> l) throws SQLException {
         LiteralExpression child = (LiteralExpression) l.get(0);
-        PhoenixArray array = (PhoenixArray) child.getValue();
-        return LiteralExpression.newConstant(array.getDimensions() > 0 ^ node.isNegate(), PBoolean.INSTANCE);
+        boolean exists = child != null
+                && child.getValue() != null
+                && ((PhoenixArray)child.getValue()).getDimensions() > 0;
+        return LiteralExpression.newConstant(exists ^ node.isNegate(), PBoolean.INSTANCE);
     }
 
     @Override
