@@ -97,7 +97,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Dependency versions -->
-    <commons-cli.version>1.2</commons-cli.version>
+    <commons-cli.version>1.4</commons-cli.version>
     <hive.version>1.2.1</hive.version>
     <hadoop.version>2.7.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
