@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 
-
-
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
 import org.apache.phoenix.pherf.XMLConfigParserTest;
@@ -26,32 +24,32 @@ import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.NoopTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.QueryTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.UpsertTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.UserDefinedOperationImpl;
 
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.bind.UnmarshalException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+
+/**
+ * Tests the various operation supplier outcomes based on scenario, model and load profile.
+ */
 public class TenantOperationFactoryTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationFactoryTest.class);
 
-    private static enum TestOperationGroup {
-        op1, op2, op3, op4, op5
+    private enum TestOperationGroup {
+        upsertOp, queryOp1, queryOp2, idleOp, udfOp
     }
 
-    private static enum TestTenantGroup {
+    private enum TestTenantGroup {
         tg1, tg2, tg3
     }
 
@@ -59,13 +57,7 @@ public class TenantOperationFactoryTest {
         URL scenarioUrl = XMLConfigParserTest.class.getResource(resourceName);
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
-        try {
-            return XMLConfigParser.readDataModel(p);
-        } catch (UnmarshalException e) {
-            // If we don't parse the DTD, the variable 'name' won't be defined in the XML
-            LOGGER.warn("Caught expected exception", e);
-        }
-        return null;
+        return XMLConfigParser.readDataModel(p);
     }
 
     @Test public void testVariousOperations() throws Exception {
@@ -79,14 +71,14 @@ public class TenantOperationFactoryTest {
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
             LoadProfile loadProfile = scenario.getLoadProfile();
-            assertTrue("tenant group size is not as expected: ",
-                    loadProfile.getTenantDistribution().size() == numTenantGroups);
-            assertTrue("operation group size is not as expected: ",
-                    loadProfile.getOpDistribution().size() == numOpGroups);
+            assertEquals("tenant group size is not as expected: ",
+                    numTenantGroups, loadProfile.getTenantDistribution().size());
+            assertEquals("operation group size is not as expected: ",
+                    numOpGroups, loadProfile.getOpDistribution().size());
 
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
-            assertTrue("operation group size from the factory is not as expected: ",
-                    opFactory.getOperationsForScenario().size() == numOpGroups);
+            assertEquals("operation group size from the factory is not as expected: ",
+                    numOpGroups, opFactory.getOperationsForScenario().size());
 
             for (int i = 0; i < numRuns; i++) {
                 int ops = numOperations;
@@ -95,24 +87,23 @@ public class TenantOperationFactoryTest {
                         opFactory.getOperationsForScenario(), model, scenario);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
-                    int row = TestOperationGroup.valueOf(info.getOperationGroupId()).ordinal();
-                    switch (row) {
-                    case 0:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(UpsertTenantOperationImpl.class));
+                    switch (TestOperationGroup.valueOf(info.getOperationGroupId())) {
+                    case upsertOp:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(UpsertOperationSupplier.class));
                         break;
-                    case 1:
-                    case 2:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(QueryTenantOperationImpl.class));
+                    case queryOp1:
+                    case queryOp2:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(QueryOperationSupplier.class));
                         break;
-                    case 3:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(NoopTenantOperationImpl.class));
+                    case idleOp:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(IdleTimeOperationSupplier.class));
                         break;
-                    case 4:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(UserDefinedOperationImpl.class));
+                    case udfOp:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(UserDefinedOperationSupplier.class));
                         break;
                     default:
                         Assert.fail();

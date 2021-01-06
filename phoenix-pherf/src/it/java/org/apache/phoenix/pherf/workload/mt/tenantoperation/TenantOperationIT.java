@@ -25,19 +25,19 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.Operation;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.NoopTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.QueryTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.UpsertTenantOperationImpl;
-import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationFactory.UserDefinedOperationImpl;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Tests focused on tenant operations and their validations
+ */
 public class TenantOperationIT extends MultiTenantOperationBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationIT.class);
 
@@ -53,17 +53,17 @@ public class TenantOperationIT extends MultiTenantOperationBaseIT {
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
             LoadProfile loadProfile = scenario.getLoadProfile();
-            assertTrue("tenant group size is not as expected: ",
-                    loadProfile.getTenantDistribution().size() == numTenantGroups);
-            assertTrue("operation group size is not as expected: ",
-                    loadProfile.getOpDistribution().size() == numOpGroups);
+            assertEquals("tenant group size is not as expected: ",
+                    numTenantGroups, loadProfile.getTenantDistribution().size());
+            assertEquals("operation group size is not as expected: ",
+                    numOpGroups, loadProfile.getOpDistribution().size());
 
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
             TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
                     opFactory.getOperationsForScenario(), model, scenario);
 
-            assertTrue("operation group size from the factory is not as expected: ",
-                    opFactory.getOperationsForScenario().size() == numOpGroups);
+            assertEquals("operation group size from the factory is not as expected: ",
+                    numOpGroups, opFactory.getOperationsForScenario().size());
 
             int numRowsInserted = 0;
             for (int i = 0; i < numRuns; i++) {
@@ -71,35 +71,35 @@ public class TenantOperationIT extends MultiTenantOperationBaseIT {
                 loadProfile.setNumOperations(ops);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
-                    TenantOperationImpl op = opFactory.getOperation(info);
-                    int row = TestOperationGroup.valueOf(info.getOperationGroupId()).ordinal();
-                    OperationStats stats = op.getMethod().apply(info);
+                    Supplier<Function<TenantOperationInfo, OperationStats>> opSupplier =
+                            opFactory.getOperationSupplier(info);
+                    OperationStats stats = opSupplier.get().apply(info);
                     LOGGER.info(pUtil.getGSON().toJson(stats));
                     if (info.getOperation().getType() == Operation.OperationType.PRE_RUN) continue;
-                    switch (row) {
-                    case 0:
-                        assertTrue(op.getClass()
-                                .isAssignableFrom(UpsertTenantOperationImpl.class));
+                    switch (TestOperationGroup.valueOf(info.getOperationGroupId())) {
+                    case upsertOp:
+                        assertTrue(opSupplier.getClass()
+                                .isAssignableFrom(UpsertOperationSupplier.class));
                         numRowsInserted += stats.getRowCount();
                         break;
-                    case 1:
-                    case 2:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(QueryTenantOperationImpl.class));
+                    case queryOp1:
+                    case queryOp2:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(QueryOperationSupplier.class));
 
                         // expected row count == num rows inserted
                         assertEquals(numRowsInserted, stats.getRowCount());
                         break;
-                    case 3:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(NoopTenantOperationImpl.class));
+                    case idleOp:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(IdleTimeOperationSupplier.class));
                         assertEquals(0, stats.getRowCount());
                         // expected think time (no-op) to be ~50ms
                         assertTrue(40 < stats.getDurationInMs() && stats.getDurationInMs() < 60);
                         break;
-                    case 4:
-                        assertTrue(opFactory.getOperation(info).getClass()
-                                .isAssignableFrom(UserDefinedOperationImpl.class));
+                    case udfOp:
+                        assertTrue(opFactory.getOperationSupplier(info).getClass()
+                                .isAssignableFrom(UserDefinedOperationSupplier.class));
                         assertEquals(0, stats.getRowCount());
                         break;
                     default:

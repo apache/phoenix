@@ -24,7 +24,7 @@ package org.apache.phoenix.pherf.workload.mt;
  */
 public interface Operation {
     enum OperationType {
-        PRE_RUN, UPSERT, SELECT, NO_OP, USER_DEFINED
+        PRE_RUN, UPSERT, SELECT, IDLE_TIME, USER_DEFINED
     }
     String getId();
     OperationType getType();

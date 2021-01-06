@@ -140,28 +140,28 @@ public class ConfigurationParserTest extends ResultBaseTest {
 
         Scenario testScenarioWithLoadProfile = scenarioList.get(0);
         LoadProfile loadProfile = testScenarioWithLoadProfile.getLoadProfile();
-        assertTrue("batch size not as expected: ",
-                loadProfile.getBatchSize() == 1);
-        assertTrue("num operations not as expected: ",
-                loadProfile.getNumOperations() == 1000);
-        assertTrue("tenant group size is not as expected: ",
-                loadProfile.getTenantDistribution().size() == 3);
-        assertTrue("operation group size is not as expected: ",
-                loadProfile.getOpDistribution().size() == 5);
-        assertTrue("UDFs size is not as expected  ",
-                testScenarioWithLoadProfile.getUdf().size() == 1);
+        assertEquals("batch size not as expected: ",
+                1, loadProfile.getBatchSize());
+        assertEquals("num operations not as expected: ",
+                1000, loadProfile.getNumOperations());
+        assertEquals("tenant group size is not as expected: ",
+                3, loadProfile.getTenantDistribution().size());
+        assertEquals("operation group size is not as expected: ",
+                5,loadProfile.getOpDistribution().size());
+        assertEquals("UDFs size is not as expected  ",
+                1, testScenarioWithLoadProfile.getUdfs().size());
         assertNotNull("UDFs clazzName cannot be null ",
-                testScenarioWithLoadProfile.getUdf().get(0).getClazzName());
-        assertTrue("UDFs args size is not as expected  ",
-                testScenarioWithLoadProfile.getUdf().get(0).getArgs().size() == 2);
-        assertTrue("UpsertSet size is not as expected ",
-                testScenarioWithLoadProfile.getUpsert().size() == 1);
-        assertTrue("#Column within the first upsert is not as expected ",
-                testScenarioWithLoadProfile.getUpsert().get(0).getColumn().size() == 7);
-        assertTrue("QuerySet size is not as expected ",
-                testScenarioWithLoadProfile.getQuerySet().size() == 1);
-        assertTrue("#Queries within the first querySet is not as expected ",
-                testScenarioWithLoadProfile.getQuerySet().get(0).getQuery().size() == 2);
+                testScenarioWithLoadProfile.getUdfs().get(0).getClazzName());
+        assertEquals("UDFs args size is not as expected  ",
+                2, testScenarioWithLoadProfile.getUdfs().get(0).getArgs().size());
+        assertEquals("UpsertSet size is not as expected ",
+                1, testScenarioWithLoadProfile.getUpserts().size());
+        assertEquals("#Column within the first upsert is not as expected ",
+                7, testScenarioWithLoadProfile.getUpserts().get(0).getColumn().size());
+        assertEquals("QuerySet size is not as expected ",
+                1, testScenarioWithLoadProfile.getQuerySet().size());
+        assertEquals("#Queries within the first querySet is not as expected ",
+                2, testScenarioWithLoadProfile.getQuerySet().get(0).getQuery().size());
     }
 
     private URL getResourceUrl(String resourceName) {

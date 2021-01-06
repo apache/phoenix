@@ -61,10 +61,14 @@ public class RulesApplier {
 
     private Map<Column,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
 
-    // Support for multiple models, but rules are only relevant each model
-    // TODO : This is a step towards getting the above comment fixed.
-    // Since rules are only relevant for each model, added a constructor to support a single
-    // data model. We can deprecate the RulesApplier(XMLConfigParser parser) constructor.
+    // Since rules are only relevant for a given data model,
+    // added a constructor to support a single data model => RulesApplier(DataModel model)
+
+    // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+    // since a parser can have multiple data models (all the models found on the classpath)
+    // it implies that the rules apply to all the data models the parser holds
+    // which can be confusing to the user of this class.
+    //
 
     public RulesApplier(DataModel model) {
         this(model, EnvironmentEdgeManager.currentTimeMillis());
@@ -447,10 +451,13 @@ public class RulesApplier {
             return;
         }
 
-        // Support for multiple models, but rules are only relevant each model
-        // TODO : This is a step towards getting the above comment fixed.
-        // Since rules are only relevant for each model, added a constructor to support a single
-        // data model. We can deprecate the RulesApplier(XMLConfigParser parser) constructor.
+        // Since rules are only relevant for a given data model,
+        // added a constructor to support a single data model => RulesApplier(DataModel model)
+
+        // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+        // since a parser can have multiple data models (all the models found on the classpath)
+        // it implies that the rules apply to all the data models the parser holds
+        // which can be confusing to the user of this class.
 
         List<DataModel> models = dataModel != null ?
                 Lists.newArrayList(dataModel) : parser.getDataModels();

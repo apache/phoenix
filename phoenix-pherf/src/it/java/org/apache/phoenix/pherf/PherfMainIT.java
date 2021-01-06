@@ -51,7 +51,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
-    @Ignore
+    @Test
     public void testPherfMain() throws Exception {
         String[] args = { "-q", "-l",
                 "--schemaFile", ".*create_prod_test_unsalted.sql",

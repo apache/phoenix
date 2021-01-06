@@ -34,14 +34,17 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
+/**
+ * Tests the various event generation outcomes based on scenario, model and load profile.
+ */
 public class TenantOperationEventGeneratorTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationEventGeneratorTest.class);
     private enum TestOperationGroup {
-        op1, op2, op3, op4, op5
+        upsertOp, queryOp1, queryOp2, idleOp, udfOp
     }
 
     private enum TestTenantGroup {
@@ -52,13 +55,7 @@ public class TenantOperationEventGeneratorTest {
         URL scenarioUrl = XMLConfigParserTest.class.getResource(resourceName);
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
-        try {
-            return XMLConfigParser.readDataModel(p);
-        } catch (UnmarshalException e) {
-            // If we don't parse the DTD, the variable 'name' won't be defined in the XML
-            LOGGER.warn("Caught expected exception", e);
-        }
-        return null;
+        return XMLConfigParser.readDataModel(p);
     }
 
     /**
@@ -83,10 +80,10 @@ public class TenantOperationEventGeneratorTest {
         for (Scenario scenario : model.getScenarios()) {
             LOGGER.debug(String.format("Testing %s", scenario.getName()));
             LoadProfile loadProfile = scenario.getLoadProfile();
-            assertTrue("tenant group size is not as expected: ",
-                    loadProfile.getTenantDistribution().size() == numTenantGroups);
-            assertTrue("operation group size is not as expected: ",
-                    loadProfile.getOpDistribution().size() == numOpGroups);
+            assertEquals("tenant group size is not as expected: ",
+                    numTenantGroups, loadProfile.getTenantDistribution().size());
+            assertEquals("operation group size is not as expected: ",
+                    numOpGroups, loadProfile.getOpDistribution().size());
             // Calculate the expected distribution.
             int[][] expectedDistribution = new int[numOpGroups][numTenantGroups];
             for (int r = 0; r < numOpGroups; r++) {

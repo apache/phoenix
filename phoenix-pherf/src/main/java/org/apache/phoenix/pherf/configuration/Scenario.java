@@ -40,7 +40,7 @@ public class Scenario {
     private DataOverride dataOverride;
     private List<QuerySet> querySet = new ArrayList<>();
     private List<Upsert> upsertSet = new ArrayList<>();
-    private List<Noop> noops = new ArrayList<>();
+    private List<IdleTime> idleTimes = new ArrayList<>();
     private List<UserDefined> udfs = new ArrayList<>();
     private LoadProfile loadProfile = null;
 
@@ -238,33 +238,33 @@ public class Scenario {
 		this.postScenarioDdls = postScenarioDdls;
 	}
 
-    public List<Upsert> getUpsert() {
+    public List<Upsert> getUpserts() {
         return upsertSet;
     }
 
     @XmlElementWrapper(name = "upserts")
     @XmlElement(name = "upsert")
-    public void setUpsert(List<Upsert> upsertSet) {
+    public void setUpserts(List<Upsert> upsertSet) {
         this.upsertSet = upsertSet;
     }
 
-    public List<Noop> getNoop() {
-        return noops;
+    public List<IdleTime> getIdleTimes() {
+        return idleTimes;
     }
 
-    @XmlElementWrapper(name = "noops")
-    @XmlElement(name = "noop")
-    public void setNoop(List<Noop> noops) {
-        this.noops = noops;
+    @XmlElementWrapper(name = "idleTimes")
+    @XmlElement(name = "idleTime")
+    public void setIdleTimes(List<IdleTime> idleTimes) {
+        this.idleTimes = idleTimes;
     }
 
-    public List<UserDefined> getUdf() {
+    public List<UserDefined> getUdfs() {
         return udfs;
     }
 
-    @XmlElementWrapper(name = "ufds")
+    @XmlElementWrapper(name = "udfs")
     @XmlElement(name = "udf")
-    public void setUdf(List<UserDefined> udfs) {
+    public void setUdfs(List<UserDefined> udfs) {
         this.udfs = udfs;
     }
 

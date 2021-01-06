@@ -36,14 +36,14 @@
                 <tenantDistribution id="tg1" weight="10" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg2" weight="10" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg3" weight="80" numTenants="10"></tenantDistribution>
-                <opDistribution id="op1" weight="50"></opDistribution>
-                <opDistribution id="op2" weight="0"></opDistribution>
-                <opDistribution id="op3" weight="0"></opDistribution>
-                <opDistribution id="op4" weight="50"></opDistribution>
-                <opDistribution id="op5" weight="0"></opDistribution>
+                <opDistribution id="upsertOp" weight="50"></opDistribution>
+                <opDistribution id="queryOp1" weight="0"></opDistribution>
+                <opDistribution id="queryOp2" weight="0"></opDistribution>
+                <opDistribution id="idleOp" weight="50"></opDistribution>
+                <opDistribution id="udfOp" weight="0"></opDistribution>
             </loadProfile>
             <upserts>
-                <upsert id="op1">
+                <upsert id="upsertOp">
                     <column>
                         <type>CHAR</type>
                         <name>COLUMN1</name>
@@ -52,19 +52,19 @@
             </upserts>
 
             <querySet>
-                <query id="op2" statement="select count(*) from PHERF.Z11"/>
-                <query id="op3" statement="select sum(SOME_INT) from PHERF.Z11"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.Z11"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.Z11"/>
             </querySet>
-            <noops>
-                <noop id="op4" idleTime="50"></noop>
-            </noops>
-            <ufds>
-                <udf id="op5" >
+            <idleTimes>
+                <idleTime id="idleOp" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="udfOp" >
                     <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
                     <args>Hello</args>
                     <args>World</args>
                 </udf>
-            </ufds>
+            </udfs>
         </scenario>
         <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2">
             <loadProfile>
@@ -74,14 +74,14 @@
                 <tenantDistribution id="tg1" weight="0" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg2" weight="0" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg3" weight="100" numTenants="10"></tenantDistribution>
-                <opDistribution id="op1" weight="20"></opDistribution>
-                <opDistribution id="op2" weight="20"></opDistribution>
-                <opDistribution id="op3" weight="20"></opDistribution>
-                <opDistribution id="op4" weight="20"></opDistribution>
-                <opDistribution id="op5" weight="20"></opDistribution>
+                <opDistribution id="upsertOp" weight="20"></opDistribution>
+                <opDistribution id="queryOp1" weight="20"></opDistribution>
+                <opDistribution id="queryOp2" weight="20"></opDistribution>
+                <opDistribution id="idleOp" weight="20"></opDistribution>
+                <opDistribution id="udfOp" weight="20"></opDistribution>
             </loadProfile>
             <upserts>
-                <upsert id="op1">
+                <upsert id="upsertOp">
                     <column>
                         <type>CHAR</type>
                         <name>COLUMN1</name>
@@ -90,19 +90,19 @@
             </upserts>
 
             <querySet>
-                <query id="op2" statement="select count(*) from PHERF.Z12"/>
-                <query id="op3" statement="select sum(SOME_INT) from PHERF.Z12"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.Z12"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.Z12"/>
             </querySet>
-            <noops>
-                <noop id="op4" idleTime="50"></noop>
-            </noops>
-            <ufds>
-                <udf id="op5" >
+            <idleTimes>
+                <idleTime id="idleOp" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="udfOp" >
                     <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
                     <args>Hello</args>
                     <args>World</args>
                 </udf>
-            </ufds>
+            </udfs>
         </scenario>
         <scenario tableName="PHERF.EVT_GEN3" name="EVT_GEN3">
             <loadProfile>
@@ -112,14 +112,14 @@
                 <tenantDistribution id="tg1" weight="30" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg2" weight="30" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg3" weight="40" numTenants="10"></tenantDistribution>
-                <opDistribution id="op1" weight="20"></opDistribution>
-                <opDistribution id="op2" weight="20"></opDistribution>
-                <opDistribution id="op3" weight="20"></opDistribution>
-                <opDistribution id="op4" weight="20"></opDistribution>
-                <opDistribution id="op5" weight="20"></opDistribution>
+                <opDistribution id="upsertOp" weight="20"></opDistribution>
+                <opDistribution id="queryOp1" weight="20"></opDistribution>
+                <opDistribution id="queryOp2" weight="20"></opDistribution>
+                <opDistribution id="idleOp" weight="20"></opDistribution>
+                <opDistribution id="udfOp" weight="20"></opDistribution>
             </loadProfile>
             <upserts>
-                <upsert id="op1">
+                <upsert id="upsertOp">
                     <column>
                         <type>CHAR</type>
                         <name>COLUMN1</name>
@@ -128,19 +128,19 @@
             </upserts>
 
             <querySet>
-                <query id="op2" statement="select count(*) from PHERF.Z13"/>
-                <query id="op3" statement="select sum(SOME_INT) from PHERF.Z13"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.Z13"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.Z13"/>
             </querySet>
-            <noops>
-                <noop id="op4" idleTime="50"></noop>
-            </noops>
-            <ufds>
-                <udf id="op5" >
+            <idleTimes>
+                <idleTime id="idleOp" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="udfOp" >
                     <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
                     <args>Hello</args>
                     <args>World</args>
                 </udf>
-            </ufds>
+            </udfs>
         </scenario>
         <scenario tableName="PHERF.EVT_GEN4" name="EVT_GEN4">
             <loadProfile>
@@ -150,14 +150,14 @@
                 <tenantDistribution id="tg1" weight="25" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg2" weight="0" numTenants="10"></tenantDistribution>
                 <tenantDistribution id="tg3" weight="75" numTenants="10"></tenantDistribution>
-                <opDistribution id="op1" weight="40"></opDistribution>
-                <opDistribution id="op2" weight="0"></opDistribution>
-                <opDistribution id="op3" weight="40"></opDistribution>
-                <opDistribution id="op4" weight="20"></opDistribution>
-                <opDistribution id="op5" weight="0"></opDistribution>
+                <opDistribution id="upsertOp" weight="40"></opDistribution>
+                <opDistribution id="queryOp1" weight="0"></opDistribution>
+                <opDistribution id="queryOp2" weight="40"></opDistribution>
+                <opDistribution id="idleOp" weight="20"></opDistribution>
+                <opDistribution id="udfOp" weight="0"></opDistribution>
             </loadProfile>
             <upserts>
-                <upsert id="op1">
+                <upsert id="upsertOp">
                     <column>
                         <type>CHAR</type>
                         <name>COLUMN1</name>
@@ -166,19 +166,19 @@
             </upserts>
 
             <querySet>
-                <query id="op2" statement="select count(*) from PHERF.Z14"/>
-                <query id="op3" statement="select sum(SOME_INT) from PHERF.Z14"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.Z14"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.Z14"/>
             </querySet>
-            <noops>
-                <noop id="op4" idleTime="50"></noop>
-            </noops>
-            <ufds>
-                <udf id="op5" >
+            <idleTimes>
+                <idleTime id="idleOp" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="udfOp" >
                     <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
                     <args>Hello</args>
                     <args>World</args>
                 </udf>
-            </ufds>
+            </udfs>
         </scenario>
     </scenarios>
 </datamodel>

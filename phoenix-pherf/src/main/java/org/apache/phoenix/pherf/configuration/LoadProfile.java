@@ -43,9 +43,9 @@ public class LoadProfile {
     private int groupIdLength;
     private int tenantIdLength;
     // Holds the desired tenant distribution for this load.
-    List<TenantGroup> tenantDistribution;
+    private List<TenantGroup> tenantDistribution;
     // Holds the desired operation distribution for this load.
-    List<OperationGroup> opDistribution;
+    private List<OperationGroup> opDistribution;
 
     public LoadProfile() {
         this.batchSize = MIN_BATCH_SIZE;

@@ -40,8 +40,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class MultiTenantOperationBaseIT extends ParallelStatsDisabledIT {
-    static enum TestOperationGroup {
-        op1, op2, op3, op4, op5
+    enum TestOperationGroup {
+        upsertOp, queryOp1, queryOp2, idleOp, udfOp
     }
 
     static enum  TestTenantGroup {
