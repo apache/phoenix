@@ -147,7 +147,7 @@ public class PhoenixIndexImportDirectReducer extends
             try {
                 IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
             } catch (SQLException e) {
-                LOGGER.error(" Failed to update the status to Active");
+                LOGGER.error(" Failed to update the status to Active", e);
                 throw new RuntimeException(e.getMessage());
             }
         }
