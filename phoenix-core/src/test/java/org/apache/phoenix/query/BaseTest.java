@@ -184,22 +184,22 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
     private static final double ZERO = 1e-9;
-    private static final Map<String,String> tableDDLMap;
+    private static final Map<String, String> tableDDLMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
-    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
-    private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
+    private static final int DROP_TABLE_TIMEOUT = 300; // 5 mins should be long enough.
+    private static final ThreadFactory FACTORY = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
-            .newSingleThreadExecutor(factory);
+            .newSingleThreadExecutor(FACTORY);
 
     @ClassRule
     public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
 
     static {
-        ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
-        builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
+        ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+        builder.put(ENTITY_HISTORY_TABLE_NAME, "create table " + ENTITY_HISTORY_TABLE_NAME +
                 "   (organization_id char(15) not null,\n" +
                 "    parent_id char(15) not null,\n" +
                 "    created_date date not null,\n" +
@@ -208,7 +208,7 @@ public abstract class BaseTest {
                 "    new_value varchar,\n" + //create table shouldn't blow up if the last column definition ends with a comma.
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, parent_id, created_date, entity_history_id)\n" +
                 ")");
-        builder.put(ENTITY_HISTORY_SALTED_TABLE_NAME,"create table " + ENTITY_HISTORY_SALTED_TABLE_NAME +
+        builder.put(ENTITY_HISTORY_SALTED_TABLE_NAME, "create table " + ENTITY_HISTORY_SALTED_TABLE_NAME +
                 "   (organization_id char(15) not null,\n" +
                 "    parent_id char(15) not null,\n" +
                 "    created_date date not null,\n" +
@@ -217,7 +217,7 @@ public abstract class BaseTest {
                 "    new_value varchar\n" +
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, parent_id, created_date, entity_history_id))\n" +
                 "    SALT_BUCKETS = 4");
-        builder.put(ATABLE_NAME,"create table " + ATABLE_NAME +
+        builder.put(ATABLE_NAME, "create table " + ATABLE_NAME +
                 "   (organization_id char(15) not null, \n" +
                 "    entity_id char(15) not null,\n" +
                 "    a_string varchar(100),\n" +
@@ -259,7 +259,7 @@ public abstract class BaseTest {
                 + "    a_unsigned_double unsigned_double \n"
                 + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
                 + ")");
-        builder.put(BTABLE_NAME,"create table " + BTABLE_NAME +
+        builder.put(BTABLE_NAME, "create table " + BTABLE_NAME +
                 "   (a_string varchar not null, \n" +
                 "    a_id char(3) not null,\n" +
                 "    b_string varchar not null, \n" +
@@ -270,7 +270,7 @@ public abstract class BaseTest {
                 "    d_string varchar(3),\n" +
                 "    e_string char(10)\n" +
                 "    CONSTRAINT my_pk PRIMARY KEY (a_string,a_id,b_string,a_integer,c_string))");
-        builder.put(TABLE_WITH_SALTING,"create table " + TABLE_WITH_SALTING +
+        builder.put(TABLE_WITH_SALTING, "create table " + TABLE_WITH_SALTING +
                 "   (a_integer integer not null, \n" +
                 "    a_string varchar not null, \n" +
                 "    a_id char(3) not null,\n" +
@@ -278,30 +278,30 @@ public abstract class BaseTest {
                 "    b_integer integer \n" +
                 "    CONSTRAINT pk PRIMARY KEY (a_integer, a_string, a_id))\n" +
                 "    SALT_BUCKETS = 4");
-        builder.put(STABLE_NAME,"create table " + STABLE_NAME +
+        builder.put(STABLE_NAME, "create table " + STABLE_NAME +
                 "   (id char(1) not null primary key,\n" +
                 "    \"value\" integer)");
-        builder.put(PTSDB_NAME,"create table " + PTSDB_NAME +
+        builder.put(PTSDB_NAME, "create table " + PTSDB_NAME +
                 "   (inst varchar null,\n" +
                 "    host varchar null,\n" +
                 "    date date not null,\n" +
                 "    val decimal(31,10)\n" +
                 "    CONSTRAINT pk PRIMARY KEY (inst, host, date))");
-        builder.put(PTSDB2_NAME,"create table " + PTSDB2_NAME +
+        builder.put(PTSDB2_NAME, "create table " + PTSDB2_NAME +
                 "   (inst varchar(10) not null,\n" +
                 "    date date not null,\n" +
                 "    val1 decimal,\n" +
                 "    val2 decimal(31,10),\n" +
                 "    val3 decimal\n" +
                 "    CONSTRAINT pk PRIMARY KEY (inst, date))");
-        builder.put(PTSDB3_NAME,"create table " + PTSDB3_NAME +
+        builder.put(PTSDB3_NAME, "create table " + PTSDB3_NAME +
                 "   (host varchar(10) not null,\n" +
                 "    date date not null,\n" +
                 "    val1 decimal,\n" +
                 "    val2 decimal(31,10),\n" +
                 "    val3 decimal\n" +
                 "    CONSTRAINT pk PRIMARY KEY (host DESC, date DESC))");
-        builder.put(FUNKY_NAME,"create table " + FUNKY_NAME +
+        builder.put(FUNKY_NAME, "create table " + FUNKY_NAME +
                 "   (\"foo!\" varchar not null primary key,\n" +
                 "    \"1\".\"#@$\" varchar, \n" +
                 "    \"1\".\"foo.bar-bas\" varchar, \n" +
@@ -310,7 +310,7 @@ public abstract class BaseTest {
                 "    \"1\".\"value\" integer,\n" +
                 "    \"1\".\"_blah^\" varchar)"
                 );
-        builder.put(MULTI_CF_NAME,"create table " + MULTI_CF_NAME +
+        builder.put(MULTI_CF_NAME, "create table " + MULTI_CF_NAME +
                 "   (id char(15) not null primary key,\n" +
                 "    a.unique_user_count integer,\n" +
                 "    b.unique_org_count integer,\n" +
@@ -319,14 +319,14 @@ public abstract class BaseTest {
                 "    e.cpu_utilization decimal(31,10),\n" +
                 "    f.response_time bigint,\n" +
                 "    g.response_time bigint)");
-        builder.put(HBASE_DYNAMIC_COLUMNS,"create table " + HBASE_DYNAMIC_COLUMNS + 
+        builder.put(HBASE_DYNAMIC_COLUMNS, "create table " + HBASE_DYNAMIC_COLUMNS +
                 "   (entry varchar not null," +
                 "    F varchar," +
                 "    A.F1v1 varchar," +
                 "    A.F1v2 varchar," +
                 "    B.F2v1 varchar" +
                 "    CONSTRAINT pk PRIMARY KEY (entry))\n");
-        builder.put(PRODUCT_METRICS_NAME,"create table " + PRODUCT_METRICS_NAME +
+        builder.put(PRODUCT_METRICS_NAME, "create table " + PRODUCT_METRICS_NAME +
                 "   (organization_id char(15) not null," +
                 "    date date not null," +
                 "    feature char(1) not null," +
@@ -339,7 +339,7 @@ public abstract class BaseTest {
                 "    region varchar,\n" +
                 "    unset_column decimal(31,10)\n" +
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DATE\", feature, UNIQUE_USERS))");
-        builder.put(CUSTOM_ENTITY_DATA_FULL_NAME,"create table " + CUSTOM_ENTITY_DATA_FULL_NAME +
+        builder.put(CUSTOM_ENTITY_DATA_FULL_NAME, "create table " + CUSTOM_ENTITY_DATA_FULL_NAME +
                 "   (organization_id char(15) not null, \n" +
                 "    key_prefix char(3) not null,\n" +
                 "    custom_entity_data_id char(12) not null,\n" +
@@ -367,9 +367,9 @@ public abstract class BaseTest {
                 "    b.val8 varchar,\n" +
                 "    b.val9 varchar\n" +
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, custom_entity_data_id))");
-        builder.put("IntKeyTest","create table IntKeyTest" +
+        builder.put("IntKeyTest", "create table IntKeyTest" +
                 "   (i integer not null primary key)");
-        builder.put("IntIntKeyTest","create table IntIntKeyTest" +
+        builder.put("IntIntKeyTest", "create table IntIntKeyTest" +
                 "   (i integer not null primary key, j integer)");
         builder.put("PKIntValueTest", "create table PKIntValueTest" +
                 "   (pk integer not null primary key)");
@@ -386,9 +386,9 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-        builder.put(SUM_DOUBLE_NAME,"create table SumDoubleTest" +
+        builder.put(SUM_DOUBLE_NAME, "create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
-        builder.put(BINARY_NAME,"create table " + BINARY_NAME +
+        builder.put(BINARY_NAME, "create table " + BINARY_NAME +
             "   (a_binary BINARY(16) not null, \n" +
             "    b_binary BINARY(16), \n" +
             "    a_varbinary VARBINARY, \n" +
@@ -550,7 +550,7 @@ public abstract class BaseTest {
         try {
             long startTime = System.currentTimeMillis();
             utility.startMiniCluster(NUM_SLAVES_BASE);
-            long startupTime = System.currentTimeMillis()-startTime;
+            long startupTime = System.currentTimeMillis() - startTime;
             LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);
         } catch (Throwable t) {
@@ -587,8 +587,8 @@ public abstract class BaseTest {
     
     private static void setDefaultTestConfig(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
-        QueryServices services = newTestDriver(overrideProps).getQueryServices();
-        for (Entry<String,String> entry : services.getProps()) {
+        QueryServices services = newTestDriver(overrideProps).getQueryServices(new Properties());
+        for (Entry<String, String> entry : services.getProps()) {
             conf.set(entry.getKey(), entry.getValue());
         }
         //no point doing sanity checks when running tests.
@@ -599,7 +599,7 @@ public abstract class BaseTest {
         conf.setLong(HConstants.ZOOKEEPER_TICK_TIME, 6 * 1000);
         
         // override any defaults based on overrideProps
-        for (Entry<String,String> entry : overrideProps) {
+        for (Entry<String, String> entry : overrideProps) {
             conf.set(entry.getKey(), entry.getValue());
         }
     }
@@ -652,7 +652,7 @@ public abstract class BaseTest {
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);
-        if(isDistributedClusterModeEnabled(config)) {
+        if (isDistributedClusterModeEnabled(config)) {
             HashMap<String, String> distPropMap = new HashMap<>(1);
             distPropMap.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
             props = new ReadOnlyProps(props, distPropMap.entrySet().iterator());
@@ -746,13 +746,13 @@ public abstract class BaseTest {
 
     protected static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, Long ts, String tableDDLOptions) throws SQLException {
         String ddl = tableDDLMap.get(tableDDLType);
-        if(!tableDDLType.equals(tableName)) {
-           ddl =  ddl.replace(tableDDLType, tableName);
+        if (!tableDDLType.equals(tableName)) {
+            ddl =  ddl.replace(tableDDLType, tableName);
         }
-        if (tableDDLOptions!=null) {
+        if (tableDDLOptions != null) {
             ddl += tableDDLOptions;
         }
-        createSchema(url,tableName, ts);
+        createSchema(url, tableName, ts);
         createTestTable(url, ddl, splits, ts);
     }
 
@@ -799,7 +799,7 @@ public abstract class BaseTest {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
-            if(isDistributedClusterModeEnabled(config)) {
+            if (isDistributedClusterModeEnabled(config)) {
                 LOGGER.info(
                         "Deleting old tables on distributed cluster because number of tables is likely greater than "
                                 + TEARDOWN_THRESHOLD);
@@ -846,7 +846,7 @@ public abstract class BaseTest {
             for (int i = 0; i < splits.length; i++) {
                 buf.append("'").append(Bytes.toString(splits[i])).append("'").append(",");
             }
-            buf.setCharAt(buf.length()-1, ')');
+            buf.setCharAt(buf.length() - 1, ')');
         }
         ddl = buf.toString();
         Properties props = new Properties();
@@ -951,8 +951,7 @@ public abstract class BaseTest {
                     }
                 }
             }
-        }
-        finally {
+        } finally {
             conn.close();
         }
     }
@@ -1128,19 +1127,19 @@ public abstract class BaseTest {
     }
 
     protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url, String tableDDLOptions) throws Exception {
-        if(tableName == null) {
+        if (tableName == null) {
             tableName = generateUniqueName();
         }
         String tableDDLType = ATABLE_NAME;
         if (ts == null) {
             ensureTableCreated(url, tableName, tableDDLType, splits, null, tableDDLOptions);
         } else {
-            ensureTableCreated(url, tableName, tableDDLType, splits, ts-5, tableDDLOptions);
+            ensureTableCreated(url, tableName, tableDDLType, splits, ts - 5, tableDDLOptions);
         }
         
         Properties props = new Properties();
         if (ts != null) {
-            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts - 3));
         }
         
         try (Connection conn = DriverManager.getConnection(url, props)) {
@@ -1360,7 +1359,7 @@ public abstract class BaseTest {
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, ts-2, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_TABLE_NAME, splits, ts - 2, null);
         }
         
         Properties props = new Properties();
@@ -1470,7 +1469,7 @@ public abstract class BaseTest {
         if (ts == null) {
             ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2, null);
+            ensureTableCreated(url, tableName, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts - 2, null);
         }
         
         Properties props = new Properties();
@@ -1607,13 +1606,13 @@ public abstract class BaseTest {
                         return null;
                     }
                 });
-                future.get(dropTableTimeout, TimeUnit.SECONDS);
+                future.get(DROP_TABLE_TIMEOUT, TimeUnit.SECONDS);
                 success = true;
             } catch (TimeoutException e) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
                 .setMessage(
                     "Not able to disable and delete table " + tableName.getNameAsString()
-                    + " in " + dropTableTimeout + " seconds.").build().buildException();
+                    + " in " + DROP_TABLE_TIMEOUT + " seconds.").build().buildException();
             } catch (Exception e) {
                 throw e;
             }
@@ -1629,7 +1628,7 @@ public abstract class BaseTest {
         while (rs.next()) {
             List<Object> result = Lists.newArrayList();
             for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                result.add(rs.getObject(i+1));
+                result.add(rs.getObject(i + 1));
             }
             results.add(result);
         }
@@ -1668,7 +1667,7 @@ public abstract class BaseTest {
         while (rs.next() && errorResult == null) {
             List<Object> result = Lists.newArrayList();
             for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
-                result.add(rs.getObject(i+1));
+                result.add(rs.getObject(i + 1));
             }
             if (!expectedResults.contains(result)) {
                 errorResult = result;
@@ -1685,7 +1684,7 @@ public abstract class BaseTest {
     }
     
     public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
-        for (int i=1; i<=numRows; ++i) {
+        for (int i = 1; i <= numRows; ++i) {
             upsertRow(conn, fullTableName, i, false);
         }
     }
@@ -1694,8 +1693,8 @@ public abstract class BaseTest {
         String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
-        stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-        stmt.setString(2, "char"+index);
+        stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar" + index);
+        stmt.setString(2, "char" + index);
         stmt.setInt(3, index);
         stmt.setLong(4, index);
         stmt.setBigDecimal(5, new BigDecimal(index));
@@ -1703,15 +1702,15 @@ public abstract class BaseTest {
         stmt.setDate(6, date);
         stmt.setString(7, "varchar_a");
         stmt.setString(8, "chara");
-        stmt.setInt(9, index+1);
-        stmt.setLong(10, index+1);
-        stmt.setBigDecimal(11, new BigDecimal(index+1));
+        stmt.setInt(9, index + 1);
+        stmt.setLong(10, index + 1);
+        stmt.setBigDecimal(11, new BigDecimal(index + 1));
         stmt.setDate(12, date);
         stmt.setString(13, "varchar_b");
         stmt.setString(14, "charb");
-        stmt.setInt(15, index+2);
-        stmt.setLong(16, index+2);
-        stmt.setBigDecimal(17, new BigDecimal(index+2));
+        stmt.setInt(15, index + 2);
+        stmt.setLong(16, index + 2);
+        stmt.setBigDecimal(17, new BigDecimal(index + 2));
         stmt.setDate(18, date);
         stmt.executeUpdate();
     }
@@ -1822,7 +1821,7 @@ public abstract class BaseTest {
 
         ResultSet rs = phxConn.createStatement().executeQuery(ddl);
 
-        if(exists) {
+        if (exists) {
             assertTrue(rs.next());
             assertEquals(value, rs.getLong(4));
         } else {
@@ -1846,7 +1845,7 @@ public abstract class BaseTest {
                         splitSuccessful = false;
                     }
                 }
-                if(splitSuccessful) {
+                if (splitSuccessful) {
                     return;
                 }
             }
@@ -1886,14 +1885,14 @@ public abstract class BaseTest {
         assertFalse("Balancer must be off", master.isBalancerOn());
         AssignmentManager am = master.getAssignmentManager();
         // No need to split on the first splitPoint since the end key of region boundaries are exclusive
-        for (int i=1; i<splitPoints.size(); ++i) {
+        for (int i = 1; i < splitPoints.size(); ++i) {
             splitTableSync(admin, fullTableName, splitPoints.get(i), i + 1);
         }
         List<RegionInfo> regionInfoList = admin.getRegions(fullTableName);
         assertEquals(splitPoints.size(), regionInfoList.size());
         HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
         Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
-        for (int i=0; i<NUM_SLAVES_BASE; ++i) {
+        for (int i = 0; i < NUM_SLAVES_BASE; ++i) {
             availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
         }
         List<HRegionInfo> tableRegions =
@@ -1913,8 +1912,8 @@ public abstract class BaseTest {
                 availableRegionServers.isEmpty());
         for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
             List<HRegionInfo> regions = entry.getValue();
-            if (regions.size()>1) {
-                for (int i=1; i< regions.size(); ++i) {
+            if (regions.size() > 1) {
+                for (int i = 1; i < regions.size(); ++i) {
                     moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
                 }
             }
@@ -1930,9 +1929,8 @@ public abstract class BaseTest {
                 ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
                 if (!serverNames.contains(serverName)) {
                     serverNames.add(serverName);
-                }
-                else {
-                    fail("Multiple regions on "+serverName.getServerName());
+                } else {
+                    fail("Multiple regions on " + serverName.getServerName());
                 }
             }
         }
@@ -1946,14 +1944,14 @@ public abstract class BaseTest {
     protected static void splitSystemCatalog(Map<String, List<String>> tenantToTableAndViewMap) throws Exception  {
         List<byte[]> splitPoints = Lists.newArrayListWithExpectedSize(5);
         // add the rows keys of the table or view metadata rows
-        Set<String> schemaNameSet=Sets.newHashSetWithExpectedSize(15);
+        Set<String> schemaNameSet = Sets.newHashSetWithExpectedSize(15);
         for (Entry<String, List<String>> entrySet : tenantToTableAndViewMap.entrySet()) {
             String tenantId = entrySet.getKey();
             for (String fullName : entrySet.getValue()) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(fullName);
                 // we don't allow SYSTEM.CATALOG to split within a schema, so to ensure each table
                 // or view is on a separate region they need to have a unique tenant and schema name
-                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(tenantId+"."+schemaName));
+                assertTrue("Schema names of tables/view must be unique ", schemaNameSet.add(tenantId + "." + schemaName));
                 String tableName = SchemaUtil.getTableNameFromFullName(fullName);
                 splitPoints.add(
                     SchemaUtil.getTableKey(tenantId, "".equals(schemaName) ? null : schemaName, tableName));
