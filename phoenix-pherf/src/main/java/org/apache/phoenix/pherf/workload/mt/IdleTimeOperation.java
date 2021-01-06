@@ -16,18 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.pherf.workload.mt.tenantoperation;
+package org.apache.phoenix.pherf.workload.mt;
 
-import com.google.common.base.Function;
-import org.apache.phoenix.pherf.workload.mt.OperationStats;
+import org.apache.phoenix.pherf.configuration.IdleTime;
 
 /**
- * An interface that implementers can use to provide a function that takes
- * @see {@link TenantOperationInfo} as an input and gives @see {@link OperationStats} as output.
- * This @see {@link Function} will invoked by the
- * @see {@link TenantOperationWorkHandler#onEvent(TenantOperationWorkload.TenantOperationEvent)}
- * when handling the events.
+ * Defines a no op operation, typically used to simulate idle time.
+ * @see {@link OperationType#IDLE_TIME}
  */
-public interface TenantOperationImpl {
-    Function<TenantOperationInfo, OperationStats> getMethod();
+public interface IdleTimeOperation extends Operation {
+    IdleTime getIdleTime();
 }

@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -27,7 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * TODO Documentation
+ * A handler {@link WorkHandler} for
+ * executing the operations {@link org.apache.phoenix.pherf.workload.mt.Operation}
+ * as and when they become available on the {@link com.lmax.disruptor.RingBuffer}
+ * when published by the workload generator {@link TenantOperationWorkload}
  */
 
 public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEvent>,
@@ -43,22 +48,26 @@ public class TenantOperationWorkHandler implements WorkHandler<TenantOperationEv
         this.operationFactory = operationFactory;
     }
 
-    @Override public void onEvent(TenantOperationEvent event)
+    @Override
+    public void onEvent(TenantOperationEvent event)
             throws Exception {
         TenantOperationInfo input = event.getTenantOperationInfo();
-        TenantOperationImpl op = operationFactory.getOperation(input);
-        OperationStats stats = op.getMethod().apply(input);
+        Supplier<Function<TenantOperationInfo, OperationStats>> opSupplier =
+                operationFactory.getOperationSupplier(input);
+        OperationStats stats = opSupplier.get().apply(input);
         stats.setHandlerId(handlerId);
         LOGGER.info(operationFactory.getPhoenixUtil().getGSON().toJson(stats));
     }
 
-    @Override public void onStart() {
+    @Override
+    public void onStart() {
         Scenario scenario = operationFactory.getScenario();
         LOGGER.info(String.format("TenantOperationWorkHandler started for %s:%s",
                 scenario.getName(), scenario.getTableName()));
     }
 
-    @Override public void onShutdown() {
+    @Override
+    public void onShutdown() {
         Scenario scenario = operationFactory.getScenario();
         LOGGER.info(String.format("TenantOperationWorkHandler stopped for %s:%s",
                 scenario.getName(), scenario.getTableName()));

@@ -22,7 +22,7 @@ import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlType;
 
 @XmlType
-public class Noop {
+public class IdleTime {
 
     private String id;
     private long idleTime = 0;

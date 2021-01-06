@@ -282,16 +282,16 @@
                 </upsert>
             </upserts>
 
-            <noops>
-                <noop id="op114" idleTime="50"></noop>
-            </noops>
-            <ufds>
+            <idleTimes>
+                <idleTime id="op114" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
                 <udf id="op115" >
                     <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
                     <args>Hello</args>
                     <args>World</args>
                 </udf>
-            </ufds>
+            </udfs>
             <querySet>
                 <query id="op112" statement="select count(*) from PHERF.Z11"/>
                 <query id="op113" statement="select sum(SOME_INT) from PHERF.Z11"/>
@@ -309,6 +309,7 @@
                 <opDistribution id="op122" weight="5"></opDistribution>
                 <opDistribution id="op123" weight="5"></opDistribution>
                 <opDistribution id="op124" weight="40"></opDistribution>
+                <opDistribution id="op125" weight="0"></opDistribution>
             </loadProfile>
 
             <preScenarioDdls>
@@ -348,13 +349,20 @@
                 </upsert>
             </upserts>
 
-            <noops>
-                <noop id="op124" idleTime="100"></noop>
-            </noops>
+            <idleTimes>
+                <idleTime id="op124" idleTime="100"></idleTime>
+            </idleTimes>
             <querySet>
                 <query id="op122" statement="select count(*) from PHERF.Z12"/>
                 <query id="op123" statement="select sum(SOME_INT) from PHERF.Z12"/>
             </querySet>
+            <udfs>
+                <udf id="op125" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
 
         </scenario>
 

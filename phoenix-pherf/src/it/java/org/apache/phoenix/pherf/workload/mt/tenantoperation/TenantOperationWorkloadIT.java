@@ -20,7 +20,9 @@
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
 import com.clearspring.analytics.util.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -42,8 +44,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Tests focused on tenant operation workloads {@link TenantOperationWorkload}
+ * and workload handlers {@link WorkHandler}
+ */
 public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
 
     private static class EventCountingWorkHandler implements
@@ -66,10 +73,11 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
         @Override public void onEvent(TenantOperationEvent event)
                 throws Exception {
             TenantOperationInfo input = event.getTenantOperationInfo();
-            TenantOperationImpl op = tenantOperationFactory.getOperation(input);
-            OperationStats stats = op.getMethod().apply(input);
+            Supplier<Function<TenantOperationInfo, OperationStats>>
+                    opSupplier = tenantOperationFactory.getOperationSupplier(input);
+            OperationStats stats = opSupplier.get().apply(input);
             LOGGER.info(tenantOperationFactory.getPhoenixUtil().getGSON().toJson(stats));
-            assertTrue(stats.getStatus() == 0);
+            assertEquals(0, stats.getStatus());
             latches.get(handlerId).countDown();
         }
     }
@@ -90,8 +98,8 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
                 // Set the total number of operations for this load profile
                 scenario.getLoadProfile().setNumOperations(totalOperations);
                 TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
-                assertTrue("operation group size from the factory is not as expected: ",
-                        opFactory.getOperationsForScenario().size() == numOpGroups);
+                assertEquals("operation group size from the factory is not as expected: ",
+                        numOpGroups, opFactory.getOperationsForScenario().size());
 
                 // populate the handlers and countdown latches.
                 String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), numHandlers);
@@ -131,8 +139,8 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
             // Set the total number of operations for this load profile
             scenario.getLoadProfile().setNumOperations(totalOperations);
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
-            assertTrue("operation group size from the factory is not as expected: ",
-                    opFactory.getOperationsForScenario().size() == numOpGroups);
+            assertEquals("operation group size from the factory is not as expected: ",
+                    numOpGroups, opFactory.getOperationsForScenario().size());
 
             // populate the handlers and countdown latches.
             List<WorkHandler> workers = Lists.newArrayList();

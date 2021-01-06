@@ -18,10 +18,10 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import com.sun.org.apache.xpath.internal.operations.Mod;
 import org.apache.commons.math3.distribution.EnumeratedDistribution;
 import org.apache.commons.math3.util.Pair;
@@ -131,7 +131,6 @@ public class TenantOperationEventGenerator
     }
 
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TenantOperationEventGenerator.class);
     private final WeightedRandomSampler sampler;
     private final Properties properties;
 
