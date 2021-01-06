@@ -510,10 +510,10 @@ public class SubqueryIT extends BaseJoinIT {
             assertEquals(rs.getString(2), "T5");
 
             assertFalse(rs.next());
-            
+
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertPlansEqual(plans[3], QueryUtil.getExplainPlan(rs));
-            
+
             query = "SELECT * FROM " + tableName5 + " co WHERE EXISTS (SELECT 1 FROM " + tableName1 + " i WHERE NOT EXISTS (SELECT 1 FROM " + tableName4 + " WHERE \"item_id\" = i.\"item_id\") AND co.item_id = \"item_id\" AND name = co.item_name)"
                     + " OR EXISTS (SELECT 1 FROM " + tableName1 + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + ") AND co.co_item_id = \"item_id\" AND name = co.co_item_name)";
             statement = conn.prepareStatement(query);
@@ -530,10 +530,28 @@ public class SubqueryIT extends BaseJoinIT {
             assertEquals(rs.getString(4), "T1");
 
             assertFalse(rs.next());
-            
+
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String plan = QueryUtil.getExplainPlan(rs);
             assertPlansMatch(plans[2], plan);
+
+            //PHOENIX-3633
+            query = "SELECT * FROM " + tableName4 + " o WHERE NOT EXISTS (SELECT 1 FROM " + tableName1 + " i WHERE \"item_id\" = 'does not exist')";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+
+            assertFalse(rs.next());
+
         } finally {
             conn.close();
         }
