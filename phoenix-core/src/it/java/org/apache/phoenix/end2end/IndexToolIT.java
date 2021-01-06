@@ -54,11 +54,13 @@ import org.apache.phoenix.mapreduce.index.PhoenixServerBuildIndexMapper;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -67,6 +69,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -103,6 +107,8 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);
+
     private final boolean localIndex;
     private final boolean mutable;
     private final boolean transactional;
@@ -650,13 +656,129 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testCaseSensitiveNames() throws Exception {
+        // We have three references to the "same" table name. e.g. for `my_table`
+        // The original name, unquoted: `my_table`
+        // The quoted name to prevent Phoenix from auto-capitalizing it (s): `"my_table"`
+        // The qualified named with schema (q): `"my_schema":"my_table"`
+        String schemaName = generateUniqueName().toLowerCase();
+        String dataTableName = generateUniqueName().toLowerCase();
+        String sSchemaName = SchemaUtil.getCaseSensitiveColumnDisplayName(null, schemaName);
+        String sDataTableName = SchemaUtil.getCaseSensitiveColumnDisplayName(null, dataTableName);
+        String qDataTableName = SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, dataTableName);
+        // The explain plan doesn't re-quote the qualified table name: `my_schema.my_table`
+        String dataTableNameForExplain = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        String indexTableName = generateUniqueName().toLowerCase();
+        String sIndexTableName = SchemaUtil.getCaseSensitiveColumnDisplayName(null, indexTableName);
+        String indexTableNameForExplain = SchemaUtil.getTableName(schemaName, indexTableName);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            String stmString1 =
+                    "CREATE TABLE " + qDataTableName
+                         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                         + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", qDataTableName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // insert two rows
+            upsertRow(stmt1, 1);
+            upsertRow(stmt1, 2);
+            conn.commit();
+
+            if (transactional) {
+                // insert two rows in another connection without committing so that they are not
+                // visible to other transactions
+                try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
+                    conn2.setAutoCommit(false);
+                    PreparedStatement stmt2 = conn2.prepareStatement(upsertQuery);
+                    upsertRow(stmt2, 5);
+                    upsertRow(stmt2, 6);
+                    ResultSet rs =
+                            conn.createStatement()
+                                    .executeQuery("SELECT count(*) from " + qDataTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 2, rs.getInt(1));
+                    assertFalse(rs.next());
+                    rs =
+                            conn2.createStatement()
+                                    .executeQuery("SELECT count(*) from " + qDataTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 4, rs.getInt(1));
+                    assertFalse(rs.next());
+                }
+            }
+
+            String stmtString2 =
+                    String.format(
+                        "CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
+                        (localIndex ? "LOCAL" : ""), sIndexTableName, qDataTableName);
+            conn.createStatement().execute(stmtString2);
+
+            // verify rows are fetched from data table.
+            String selectSql =
+                    String.format(
+                        "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
+                        qDataTableName);
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+
+            // assert we are pulling from data table.
+            assertEquals(String.format(
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
+                     + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
+                        dataTableNameForExplain), actualExplainPlan);
+
+            rs = stmt1.executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+            conn.commit();
+
+            // run the index MR job.
+            runIndexTool(directApi, useSnapshot, sSchemaName, sDataTableName, sIndexTableName);
+
+            // insert two more rows
+            upsertRow(stmt1, 3);
+            upsertRow(stmt1, 4);
+            conn.commit();
+
+            // assert we are pulling from index table.
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+            actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            // Because the explain plan doesn't include double-quotes around case-sensitive table names,
+            // we need to tell assertExplainPlan to not normalize our table names.
+            assertExplainPlan(localIndex, actualExplainPlan, dataTableNameForExplain, indexTableNameForExplain, false);
+
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
     public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
             String dataTableFullName, String indexTableFullName) {
+        assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName, true);
+    }
+
+    public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
+            String dataTableFullName, String indexTableFullName, boolean normalizeTableNames) {
         String expectedExplainPlan;
         if (localIndex) {
-            expectedExplainPlan = String.format(" RANGE SCAN OVER %s [1,", dataTableFullName);
+            expectedExplainPlan = String.format(" RANGE SCAN OVER %s [1,",
+                normalizeTableNames ? SchemaUtil.normalizeIdentifier(dataTableFullName)
+                        : dataTableFullName);
         } else {
-            expectedExplainPlan = String.format(" RANGE SCAN OVER %s", indexTableFullName);
+            expectedExplainPlan = String.format(" RANGE SCAN OVER %s",
+                normalizeTableNames ? SchemaUtil.normalizeIdentifier(indexTableFullName)
+                        : indexTableFullName);
         }
         assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedExplainPlan,
             actualExplainPlan.contains(expectedExplainPlan));
@@ -681,13 +803,11 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                                             Long incrementalVerify, boolean useIndexTableAsSource) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
-            args.add("-s");
-            args.add(schemaName);
+            args.add("--schema=" + schemaName);
         }
-        args.add("-dt");
-        args.add(dataTable);
-        args.add("-it");
-        args.add(indxTable);
+        // Work around CLI-254. The long-form arg parsing doesn't strip off double-quotes
+        args.add("--data-table=" + dataTable);
+        args.add("--index-table=" + indxTable);
         if (directApi) {
             args.add("-direct");
         }
@@ -797,13 +917,14 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
+
         try (Connection conn =
                      DriverManager.getConnection(getUrl(), props)) {
-            PTable dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, dataTableName));
-            PTable indexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indexTableName));
+            PTable indexTable = PhoenixRuntime.getTableNoCache(conn,
+                   SchemaUtil.normalizeFullTableName(SchemaUtil.getTableName(schemaName, indexTableName)));
+            PTable dataTable = PhoenixRuntime.getTableNoCache(conn, SchemaUtil.normalizeFullTableName(SchemaUtil.getTableName(schemaName, dataTableName)));
             boolean transactional = dataTable.isTransactional();
             boolean localIndex = PTable.IndexType.LOCAL.equals(indexTable.getIndexType());
-
             if ((localIndex || !transactional) && !useSnapshot) {
                 assertEquals(job.getMapperClass(), PhoenixServerBuildIndexMapper.class);
             } else {
@@ -845,6 +966,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                 indexTableName, tenantId, verifyType, disableLoggingType);
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.addAll(Arrays.asList(additionalArgs));
+        LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()), new Exception("Stack Trace"));
         int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
 
         if (expectedStatus == 0) {

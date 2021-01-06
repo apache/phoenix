@@ -202,7 +202,8 @@ public class SchemaUtil {
 
     /**
      * Normalize an identifier. If name is surrounded by double quotes,
-     * it is used as-is, otherwise the name is upper caased.
+     * the double quotes are stripped and the rest is used as-is,
+     * otherwise the name is upper caased.
      * @param name the parsed identifier
      * @return the normalized identifier
      */
@@ -705,9 +706,12 @@ public class SchemaUtil {
     }
 
     public static String getSchemaNameFromFullName(String tableName) {
-        if (isExistingTableMappedToPhoenixName(tableName)) { return StringUtil.EMPTY_STRING; }
-        if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) { return getSchemaNameFromFullName(tableName,
-                QueryConstants.NAMESPACE_SEPARATOR); }
+        if (isExistingTableMappedToPhoenixName(tableName)) {
+            return StringUtil.EMPTY_STRING;
+        }
+        if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            return getSchemaNameFromFullName(tableName, QueryConstants.NAMESPACE_SEPARATOR);
+        }
         return getSchemaNameFromFullName(tableName, QueryConstants.NAME_SEPARATOR);
     }
 
@@ -1162,6 +1166,21 @@ public class SchemaUtil {
                     normalizeIdentifier(tableName));
         } else {
             return normalizeIdentifier(tableName);
+        }
+    }
+
+    /**
+     * Calculate the Phoenix Table name without normalization
+     *
+     * @param schemaName import schema name, can be null
+     * @param tableName import table name
+     * @return the qualified Phoenix table name, from the non normalized schema and table
+     */
+    public static String getQualifiedPhoenixTableName(String schemaName, String tableName) {
+        if (schemaName != null && !schemaName.isEmpty()) {
+            return String.format("%s.%s", schemaName, tableName);
+        } else {
+            return tableName;
         }
     }
 
