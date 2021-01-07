@@ -75,8 +75,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * Base tool for running MapReduce-based ingests of data.
  */
 public abstract class AbstractBulkLoadTool extends Configured implements Tool {
-
-    protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
 
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
@@ -97,7 +96,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
      * @param conf job configuration
      */
     protected abstract void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
-                                         Configuration conf) throws SQLException;
+        Configuration conf) throws SQLException;
+
     protected abstract void setupJob(Job job);
 
     protected Options getOptions() {
@@ -188,13 +188,13 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         boolean start = false;
         boolean end = false;
         if (name != null && name.length() > 1) {
-             int length = name.length();
-             start = name.substring(0,2).equals("\"\"");
-             end =  name.substring(length-2, length).equals("\"\"");
-             if (start && !end) {
-                 throw new IllegalArgumentException("Invalid table/schema name " + name +
-                         ". Please check if name end with two double quotes.");
-             }
+            int length = name.length();
+            start = name.substring(0, 2).equals("\"\"");
+            end =  name.substring(length - 2, length).equals("\"\"");
+            if (start && !end) {
+                throw new IllegalArgumentException("Invalid table/schema name " + name
+                    + ". Please check if name end with two double quotes.");
+            }
         }
         return start;
     }
@@ -213,19 +213,31 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
         boolean quotedSchemaName = isStartWithTwoDoubleQuotes(schemaName);
         if (quotedSchemaName) {
-            schemaName = schemaName.substring(1,schemaName.length() - 1);
+            schemaName = schemaName.substring(1, schemaName.length() - 1);
         }
         String qualifiedTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String qualifiedIndexTableName = null;
-        if (indexTableName != null){
+        if (indexTableName != null) {
             qualifiedIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
+        }
+
+        // remove "", beacause system.catalog include in no Quotation
+        String removeMarksTableName = qualifiedTableName;
+        if (removeMarksTableName != null) {
+            removeMarksTableName = removeMarksTableName.replace("\"", "");
+        }
+        if (tableName != null) {
+            tableName = tableName.replace("\"", "");
+        }
+        if (schemaName != null) {
+            schemaName = schemaName.replace("\"", "");
         }
         if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
             // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
             PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
             LOGGER.info("Configuring HBase connection to {}", info);
-            for (Map.Entry<String,String> entry : info.asProps()) {
+            for (Map.Entry<String, String> entry : info.asProps()) {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("Setting {} = {}", entry.getKey(), entry.getValue());
                 }
@@ -242,7 +254,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             LOGGER.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
                     qualifiedTableName);
         }
-        List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
+        List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, removeMarksTableName);
         Preconditions.checkNotNull(importColumns);
         Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
         FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
@@ -269,10 +281,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
-        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+        PTable table = PhoenixRuntime.getTable(conn, removeMarksTableName);
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         boolean hasLocalIndexes = false;
-        for(PTable index: table.getIndexes()) {
+        for (PTable index: table.getIndexes()) {
             if (index.getIndexType() == IndexType.LOCAL) {
                 hasLocalIndexes =
                         qualifiedIndexTableName == null ? true : index.getTableName().getString()
@@ -281,18 +293,18 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             }
         }
         // using conn after it's been closed... o.O
-        tablesToBeLoaded.addAll(getIndexTables(conn, qualifiedTableName));
+        tablesToBeLoaded.addAll(getIndexTables(conn, removeMarksTableName));
 
         // When loading a single index table, check index table name is correct
-        if (qualifiedIndexTableName != null){
+        if (qualifiedIndexTableName != null) {
             TargetTableRef targetIndexRef = null;
-            for (TargetTableRef tmpTable : tablesToBeLoaded){
+            for (TargetTableRef tmpTable : tablesToBeLoaded) {
                 if (tmpTable.getLogicalName().compareToIgnoreCase(qualifiedIndexTableName) == 0) {
                     targetIndexRef = tmpTable;
                     break;
                 }
             }
-            if (targetIndexRef == null){
+            if (targetIndexRef == null) {
                 throw new IllegalStateException("Bulk Loader error: index table " +
                         qualifiedIndexTableName + " doesn't exist");
             }
@@ -325,8 +337,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         try(org.apache.hadoop.hbase.client.Connection hbaseConn =
                 ConnectionFactory.createConnection(job.getConfiguration())) {
             RegionLocator regionLocator = null;
-            if(hasLocalIndexes) {
-                try{
+            if (hasLocalIndexes) {
+                try {
                     regionLocator = hbaseConn.getRegionLocator(
                             TableName.valueOf(qualifiedTableName));
                     splitKeysBeforeJob = regionLocator.getStartKeys();
@@ -357,7 +369,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                     try {
                         regionLocator = hbaseConn.getRegionLocator(
                                 TableName.valueOf(qualifiedTableName));
-                        if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob,
+                        if (!IndexUtil.matchingSplitKeys(splitKeysBeforeJob,
                                 regionLocator.getStartKeys())) {
                             LOGGER.error("The table " + qualifiedTableName + " has local indexes and"
                                     + " there is split key mismatch before and after running"
@@ -370,22 +382,22 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                     }
                 }
                 LOGGER.info("Loading HFiles from {}", outputPath);
-                completebulkload(conf,outputPath,tablesToBeLoaded);
+                completebulkload(conf, outputPath, tablesToBeLoaded);
                 LOGGER.info("Removing output directory {}", outputPath);
-                if(!outputPath.getFileSystem(conf).delete(outputPath, true)) {
+                if (!outputPath.getFileSystem(conf).delete(outputPath, true)) {
                     LOGGER.error("Failed to delete the output directory {}", outputPath);
                 }
                 return 0;
             } else {
-               return -1;
-           }
-       }
+                return -1;
+            }
+        }
     }
 
-    private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
+    private void completebulkload(Configuration conf, Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
         Set<String> tableNames = new HashSet<>(tablesToBeLoaded.size());
-        for(TargetTableRef table : tablesToBeLoaded) {
-            if(tableNames.contains(table.getPhysicalName())){
+        for (TargetTableRef table : tablesToBeLoaded) {
+            if (tableNames.contains(table.getPhysicalName())) {
                 continue;
             }
             tableNames.add(table.getPhysicalName());
@@ -430,7 +442,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
      * @throws java.sql.SQLException
      */
     private void validateTable(Connection conn, String schemaName,
-                               String tableName) throws SQLException {
+        String tableName) throws SQLException {
 
         ResultSet rs = conn.getMetaData().getColumns(
                 null, StringUtil.escapeLike(schemaName),
@@ -460,7 +472,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             throws SQLException {
         PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
-        for(PTable indexTable : table.getIndexes()){
+        for (PTable indexTable : table.getIndexes()) {
             indexTables.add(new TargetTableRef(indexTable.getName().getString(), indexTable
                     .getPhysicalName().getString()));
         }
