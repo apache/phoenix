@@ -260,7 +260,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
        Mutation[] mutationArray = new Mutation[mutations.size()];
       // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
       // flush happen which decrease the memstore size and then writes allowed on the region.
-      for (int i = 0; blockingMemstoreSize > 0 && region.getMemStoreHeapSize() > blockingMemstoreSize && i < 30; i++) {
+      for (int i = 0; blockingMemstoreSize > 0
+              && region.getMemStoreHeapSize() + region.getMemStoreOffHeapSize() > blockingMemstoreSize
+              && i < 30; i++) {
           try {
               checkForRegionClosingOrSplitting();
               Thread.sleep(100);
