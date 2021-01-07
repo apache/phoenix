@@ -199,7 +199,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
    * Hint the next column-qualifier after the given keyvalue. We can't be smart like in the
    * ScanQueryMatcher since we don't know the columns ahead of time.
    */
-  class DeleteColumnHinter implements Hinter {
+  private static class DeleteColumnHinter implements Hinter {
 
     @Override
     public Cell getHint(Cell kv) {

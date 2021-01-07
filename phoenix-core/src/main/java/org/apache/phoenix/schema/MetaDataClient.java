@@ -5219,7 +5219,7 @@ public class MetaDataClient {
         return changingPhoenixTableProperty;
     }
 
-    class MetaProperties{
+    private static class MetaProperties {
         private Boolean isImmutableRowsProp = null;
         private Boolean multiTenantProp = null;
         private Boolean disableWALProp = null;
@@ -5345,7 +5345,7 @@ public class MetaDataClient {
         }
     }
 
-    class MetaPropertiesEvaluated{
+    private static class MetaPropertiesEvaluated {
         private Boolean isImmutableRows;
         private Boolean multiTenant = null;
         private Boolean disableWAL = null;

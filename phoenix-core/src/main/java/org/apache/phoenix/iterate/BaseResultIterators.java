@@ -1281,7 +1281,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES));
     }
 
-    class ScanWrapper {
+    private static class ScanWrapper {
         Scan scan;
 
         public Scan getScan() {

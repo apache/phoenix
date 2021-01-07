@@ -291,7 +291,7 @@ public class RoundRobinResultIterator implements ResultIterator {
      * keeps track of the tuple the {@link PeekingResultIterator} read in the previous next() call before it ran out of
      * underlying scanner cache.
      */
-    private class RoundRobinIterator implements PeekingResultIterator {
+    private static class RoundRobinIterator implements PeekingResultIterator {
 
         private PeekingResultIterator delegate;
         private Tuple tuple;
