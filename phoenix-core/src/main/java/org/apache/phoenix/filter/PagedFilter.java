@@ -85,7 +85,7 @@ public class PagedFilter extends FilterBase implements Writable {
 
     public void resetStartTime() {
         if (state == State.STARTED) {
-            startTime = EnvironmentEdgeManager.currentTimeMillis();
+            init();
         }
     }
 

@@ -29,6 +29,15 @@ import org.apache.phoenix.filter.PagedFilter;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPhoenixPagedFilter;
 
+/**
+ *  PagedRegionScanner works with PagedFilter to make sure that the time between two rows returned by the HBase region
+ *  scanner should not exceed the configured page size in ms (on PagedFilter). When the page size is reached (because
+ *  there are too many cells/rows to be filtered out), PagedFilter stops the HBase region scanner and sets its state
+ *  to STOPPED. In this case, the HBase region scanner next() returns false and PagedFilter#isStopped() returns true.
+ *  PagedRegionScanner is responsible for detecting PagedFilter has stopped the scanner, and then closing the current
+ *  HBase region scanner, starting a new one to resume the scan operation and returning a dummy result to signal to
+ *  Phoenix client to resume the scan operation by skipping this dummy result and calling ResultScanner#next().
+ */
 public class PagedRegionScanner extends BaseRegionScanner {
     protected Region region;
     protected Scan scan;
@@ -50,7 +59,10 @@ public class PagedRegionScanner extends BaseRegionScanner {
                 return hasMore;
             }
             if (!hasMore) {
+                // There is no more row from the HBase region scanner. We need to check if PageFilter
+                // has stopped the region scanner
                 if (pageFilter.isStopped()) {
+                    // Close the current region scanner, start a new one and return a dummy result
                     delegate.close();
                     byte[] rowKey = pageFilter.getRowKeyAtStop();
                     scan.withStartRow(rowKey, true);
@@ -63,6 +75,8 @@ public class PagedRegionScanner extends BaseRegionScanner {
                 }
                 return false;
             } else {
+                // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
+                // start a new page on the next next() call.
                 pageFilter.resetStartTime();
                 return true;
             }
