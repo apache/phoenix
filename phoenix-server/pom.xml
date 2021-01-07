@@ -119,7 +119,7 @@
                         <exclude>sqlline:sqlline</exclude>
                         <exclude>log4j:log4j</exclude>
                         <exclude>org.slf4j:slf4j-api</exclude>
-                        <exclude>org.slf4j:slf4j-log4j</exclude>
+                        <exclude>org.slf4j:slf4j-log4j12</exclude>
                         <exlcude>org.apache.phoenix:phoenix-hbase-compat*</exlcude>
                     </excludes>
                 </artifactSet>
