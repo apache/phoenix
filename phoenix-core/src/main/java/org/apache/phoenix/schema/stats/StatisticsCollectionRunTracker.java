@@ -105,7 +105,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if UPDATE STATISTICS wasn't already running on the region, false otherwise.
      */
     public boolean addUpdateStatsCommandRegion(HRegionInfo regionInfo, Set<byte[]> familySet) {
-        return updateStatsRegions.add(new ColumnFamilyRegionInfo(regionInfo,familySet));
+        return updateStatsRegions.add(new ColumnFamilyRegionInfo(regionInfo, familySet));
     }
 
     /**
@@ -113,7 +113,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if UPDATE STATISTICS was running on the region, false otherwise.
      */
     public boolean removeUpdateStatsCommandRegion(HRegionInfo regionInfo, Set<byte[]> familySet) {
-        return updateStatsRegions.remove(new ColumnFamilyRegionInfo(regionInfo,familySet));
+        return updateStatsRegions.remove(new ColumnFamilyRegionInfo(regionInfo, familySet));
     }
 
     /**
@@ -125,9 +125,9 @@ public class StatisticsCollectionRunTracker {
         return executor.submit(c);
     }
 
-    class ColumnFamilyRegionInfo {
-        private HRegionInfo regionInfo;
-        private Set<byte[]> familySet;
+    private static class ColumnFamilyRegionInfo {
+        private final HRegionInfo regionInfo;
+        private final Set<byte[]> familySet;
 
         public ColumnFamilyRegionInfo(HRegionInfo regionInfo, Set<byte[]> familySet) {
             this.regionInfo = regionInfo;

@@ -82,7 +82,7 @@ public class HashCacheFactory implements ServerCacheFactory {
     }
 
     @Immutable
-    private class HashCacheImpl implements HashCache {
+    private static class HashCacheImpl implements HashCache {
         private final Map<ImmutableBytesPtr,List<Tuple>> hashCache;
         private final MemoryChunk memoryChunk;
         private final boolean singleValueOnly;

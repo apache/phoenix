@@ -1237,7 +1237,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     return new PDatumImpl(expression, pDataTypeInput);
   }
 
-  private class PDatumImpl implements PDatum {
+  private static class PDatumImpl implements PDatum {
 
     private final boolean isNullable;
     private final PDataType dataType;
@@ -1280,7 +1280,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
   }
 
-  private class ExpressionDeterminism {
+  private static class ExpressionDeterminism {
     private ArithmeticParseNode node;
     private List<Expression> children;
     private PDataType theType;
