@@ -1232,11 +1232,45 @@ public class SchemaUtil {
         return columnParseNode.getName();
     }
 
+    /**
+     * This function is needed so that SchemaExtractionTool returns a valid DDL with correct
+     * table/schema name that can be parsed
+     *
+     * @param pSchemaName
+     * @param pTableName
+     * @return quoted string if schema or table name has non-alphabetic characters in it.
+     */
     public static String getPTableFullNameWithQuotes(String pSchemaName, String pTableName) {
         String pTableFullName = getQualifiedTableName(pSchemaName, pTableName);
-        if(!(Character.isAlphabetic(pTableName.charAt(0)))) {
-            pTableFullName = pSchemaName+".\""+pTableName+"\"";
+        boolean tableNameNeedsQuotes = isQuotesNeeded(pTableName);
+        boolean schemaNameNeedsQuotes = isQuotesNeeded(pSchemaName);
+
+        if(schemaNameNeedsQuotes) {
+            pSchemaName= "\""+pSchemaName+"\"";
         }
+        if(tableNameNeedsQuotes) {
+            pTableName = "\""+pTableName+"\"";
+        }
+        if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
+            pTableFullName = pSchemaName + "." + pTableName;
+        }
+
         return pTableFullName;
+    }
+
+    private static boolean isQuotesNeeded(String name) {
+        // first char numeric or non-underscore
+        if(!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
+            return true;
+        }
+        // for all other chars
+        // ex. name like z@@ will need quotes whereas t0001 will not need quotes
+        for (int i=1; i<name.toCharArray().length; i++) {
+            char charAtI = name.charAt(i);
+            if (!(Character.isAlphabetic(charAtI)) && !Character.isDigit(charAtI) && charAtI != '_') {
+                return true;
+            }
+        }
+        return false;
     }
 }
