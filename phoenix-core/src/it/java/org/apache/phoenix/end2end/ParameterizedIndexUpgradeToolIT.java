@@ -39,6 +39,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -103,12 +104,18 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private Connection connTenant;
     private Admin admin;
     private IndexUpgradeTool iut;
+    private static String tmpDir = System.getProperty("java.io.tmpdir");;
 
     @Mock
     private IndexTool indexToolMock;
 
     @Captor
     private ArgumentCaptor<String []> argCapture;
+
+    @BeforeClass
+    public static synchronized void saveTmp () throws Exception {
+        tmpDir = System.getProperty("java.io.tmpdir");
+    }
 
     @Before
     public void setup () throws Exception {
@@ -144,7 +151,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 .get(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB))
                 || Boolean.toString(!isNamespaceEnabled).equals(serverProps
                 .get(QueryServices.IS_NAMESPACE_MAPPING_ENABLED))) {
-            tearDownMiniClusterAsync(1);
+            tearDownMiniCluster(1);
+            System.setProperty("java.io.tmpdir", tmpDir);
         }
         //setting up properties for namespace
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,

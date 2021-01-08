@@ -219,6 +219,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @AfterClass
     public static synchronized void teardown() {
-        tearDownMiniClusterAsync(2);
+        tearDownMiniCluster(2);
     }
 }
