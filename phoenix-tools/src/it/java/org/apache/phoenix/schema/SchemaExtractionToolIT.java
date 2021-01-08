@@ -101,18 +101,38 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
                 + "v1 VARCHAR, v2 VARCHAR)"
                 + properties;
         String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
-        String viewFullName1 = SchemaUtil.getQualifiedTableName(schemaName, viewName+"1");
         String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
-                + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
-                + "AS SELECT * FROM "+pTableFullName;
-        String createView1 = "CREATE VIEW "+viewFullName1 + "(id1 BIGINT, id2 BIGINT NOT NULL, "
                 + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
                 + "AS SELECT * FROM "+pTableFullName;
 
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         queries.add(createView);
-        queries.add(createView1);
+        String result = runSchemaExtractionTool(schemaName, viewName, null, queries);
+        Assert.assertEquals(createView.toUpperCase(), result.toUpperCase());
+
+    }
+
+    @Test
+    public void testCreateViewStatement_customName() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String viewName = generateUniqueName()+"@@";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
+                + "v1 VARCHAR, v2 VARCHAR)"
+                + properties;
+        String viewFullName = SchemaUtil.getPTableFullNameWithQuotes(schemaName, viewName);
+
+        String createView = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
+                + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
+                + "AS SELECT * FROM "+pTableFullName;
+
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStmt);
+        queries.add(createView);
         String result = runSchemaExtractionTool(schemaName, viewName, null, queries);
         Assert.assertEquals(createView.toUpperCase(), result.toUpperCase());
 
@@ -153,7 +173,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String createTableStmt = "CREATE TABLE "+pTableFullName + "(k BIGINT NOT NULL PRIMARY KEY, "
                 + "v1 VARCHAR, v2 VARCHAR)";
-        String viewFullName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
+        String viewFullName = SchemaUtil.getPTableFullNameWithQuotes(schemaName, viewName);
         String createViewStmt = "CREATE VIEW "+viewFullName + "(id1 BIGINT, id2 BIGINT NOT NULL, "
                 + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
                 + "AS SELECT * FROM "+pTableFullName;
@@ -321,7 +341,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     private String runSchemaExtractionTool(String schemaName, String tableName, String tenantId, List<String> queries) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String output;
-        if (tenantId == null){
+        if (tenantId == null) {
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 executeCreateStatements(conn, queries);
                 String [] args = {"-tb", tableName, "-s", schemaName};
