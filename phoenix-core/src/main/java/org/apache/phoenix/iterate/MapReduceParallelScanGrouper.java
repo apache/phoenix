@@ -20,6 +20,7 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -71,6 +72,9 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 				FileSystem fs = rootDir.getFileSystem(conf);
 				Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
 				SnapshotDescription snapshotDescription = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+				//Performing snapshot restore which will be used during scans
+				Path restoreDir = new Path(conf.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+				RestoreSnapshotHelper.copySnapshotForScanner(conf, fs, rootDir, restoreDir, snapshotName);
 				SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshotDescription);
 				return getRegionLocationsFromManifest(manifest);
 			}

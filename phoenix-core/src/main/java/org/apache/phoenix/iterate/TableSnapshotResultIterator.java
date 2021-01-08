@@ -20,19 +20,21 @@ package org.apache.phoenix.iterate;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.SnapshotProtos;
+import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
+import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
@@ -78,8 +80,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     this.scan = scan;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
-    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY),
-        UUID.randomUUID().toString());
+    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
     this.snapshotName = configuration.get(
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
@@ -88,16 +89,16 @@ public class TableSnapshotResultIterator implements ResultIterator {
   }
 
   private void init() throws IOException {
-    RestoreSnapshotHelper.RestoreMetaChanges meta =
-        RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs,
-            this.rootDir, this.restoreDir, this.snapshotName);
-    List<RegionInfo> restoredRegions = meta.getRegionsToAdd();
-    this.htd = meta.getTableDescriptor();
-    this.regions = new ArrayList<RegionInfo>(restoredRegions.size());
-
-    for (RegionInfo restoredRegion : restoredRegions) {
-      if (isValidRegion(restoredRegion)) {
-        this.regions.add(restoredRegion);
+    Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
+    SnapshotProtos.SnapshotDescription snapshotDesc = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+    SnapshotManifest manifest = SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
+    List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
+    this.regions = Lists.newArrayListWithCapacity(regionManifests.size());
+    this.htd = manifest.getTableDescriptor();
+    for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
+      HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
+      if (isValidRegion(hri)) {
+        regions.add(hri);
       }
     }
 

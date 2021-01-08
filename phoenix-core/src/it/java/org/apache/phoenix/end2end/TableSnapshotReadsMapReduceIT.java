@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -38,13 +39,13 @@ import java.util.UUID;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.SnapshotDescription;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -274,6 +275,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
     } finally {
+      assertRestoreDirCount(conf, tmpDir.toString(), 1);
       deleteSnapshotIfExists(SNAPSHOT_NAME);
     }
   }
@@ -425,6 +427,25 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
         LOGGER.info("Snapshot {} does not exist. Possibly corrupted due to region movements.",
           snapshotName);
       }
+    }
+  }
+
+  /**
+   * Making sure that restore temp directory is not having multiple sub directories
+   * for same snapshot restore.
+   * @param conf
+   * @param restoreDir
+   * @param expectedCount
+   * @throws IOException
+   */
+  private void assertRestoreDirCount(Configuration conf, String restoreDir, int expectedCount)
+          throws IOException {
+    FileSystem fs = FileSystem.get(conf);
+    FileStatus[] subDirectories = fs.listStatus(new Path(restoreDir));
+    assertNotNull(subDirectories);
+    assertEquals(expectedCount, subDirectories.length);
+    for (int i = 0; i < expectedCount; i++) {
+      assertTrue(subDirectories[i].isDirectory());
     }
   }
 
