@@ -114,8 +114,8 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
                     operationFactory,
                     handlerId));
         }
-        this.generator = new TenantOperationEventGenerator(
-                operationFactory.getOperationsForScenario(), model, scenario);
+        this.generator = new TenantOperationEventGenerator(operationFactory.getOperations(),
+                model, scenario);
         this.exceptionHandler = new ContinuousWorkloadExceptionHandler();
     }
 
@@ -126,7 +126,7 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
 
         operationFactory = new TenantOperationFactory(phoenixUtil, model, scenario);
         this.properties = properties;
-        this.generator = new TenantOperationEventGenerator(operationFactory.getOperationsForScenario(),
+        this.generator = new TenantOperationEventGenerator(operationFactory.getOperations(),
                 model, scenario);
         this.handlers = workers;
         this.exceptionHandler = exceptionHandler;

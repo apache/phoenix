@@ -17,7 +17,6 @@
  */
 
 
-
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -27,7 +26,6 @@ import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.query.BaseTest;
 import org.junit.BeforeClass;
 import java.net.URL;
 import java.nio.file.Path;

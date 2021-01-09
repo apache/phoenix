@@ -78,13 +78,13 @@ public class TenantOperationFactoryTest {
 
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
             assertEquals("operation group size from the factory is not as expected: ",
-                    numOpGroups, opFactory.getOperationsForScenario().size());
+                    numOpGroups, opFactory.getOperations().size());
 
             for (int i = 0; i < numRuns; i++) {
                 int ops = numOperations;
                 loadProfile.setNumOperations(ops);
                 TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                        opFactory.getOperationsForScenario(), model, scenario);
+                        opFactory.getOperations(), model, scenario);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
                     switch (TestOperationGroup.valueOf(info.getOperationGroupId())) {

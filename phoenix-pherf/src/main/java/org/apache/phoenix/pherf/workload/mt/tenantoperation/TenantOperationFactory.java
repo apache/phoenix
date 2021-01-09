@@ -101,6 +101,49 @@ public class TenantOperationFactory {
         this.parser = null;
         this.rulesApplier = new RulesApplier(model);
         this.loadProfile = this.scenario.getLoadProfile();
+        this.tenantsLoaded = createTenantsLoadedFilter(loadProfile);
+
+        // Read the scenario definition and load the various operations.
+        // Case : Operation.OperationType.PRE_RUN
+        if (scenario.getPreScenarioDdls() != null && scenario.getPreScenarioDdls().size() > 0) {
+            operationSuppliers.put(Operation.OperationType.PRE_RUN,
+                    new PreScenarioOperationSupplier(phoenixUtil, model, scenario));
+        }
+
+        // Case : Operation.OperationType.UPSERT
+        List<Operation> upsertOperations = getUpsertOperationsForScenario(scenario);
+        if (upsertOperations.size() > 0) {
+            operationList.addAll(upsertOperations);
+            operationSuppliers.put(Operation.OperationType.UPSERT,
+                    new UpsertOperationSupplier(phoenixUtil, model, scenario));
+        }
+
+        // Case : Operation.OperationType.SELECT
+        List<Operation> queryOperations = getQueryOperationsForScenario(scenario);
+        if (queryOperations.size() > 0) {
+            operationList.addAll(queryOperations);
+            operationSuppliers.put(Operation.OperationType.SELECT,
+                    new QueryOperationSupplier(phoenixUtil, model, scenario));
+        }
+
+        // Case : Operation.OperationType.IDLE_TIME
+        List<Operation> idleOperations = getIdleTimeOperationsForScenario(scenario);
+        if (idleOperations.size() > 0) {
+            operationList.addAll(idleOperations);
+            operationSuppliers.put(Operation.OperationType.IDLE_TIME,
+                    new IdleTimeOperationSupplier(phoenixUtil, model, scenario));
+        }
+
+        // Case : Operation.OperationType.USER_DEFINED
+        List<Operation> udfOperations = getUDFOperationsForScenario(scenario);
+        if (udfOperations.size() > 0) {
+            operationList.addAll(udfOperations);
+            operationSuppliers.put(Operation.OperationType.USER_DEFINED,
+                    new UserDefinedOperationSupplier(phoenixUtil, model, scenario));
+        }
+    }
+
+    private BloomFilter createTenantsLoadedFilter(LoadProfile loadProfile) {
         Funnel<TenantView> tenantViewFunnel = new Funnel<TenantView>() {
             @Override
             public void funnel(TenantView tenantView, PrimitiveSink into) {
@@ -115,15 +158,11 @@ public class TenantOperationFactory {
         }
 
         // This holds the info whether the tenant view was created (initialized) or not.
-        tenantsLoaded = BloomFilter.create(tenantViewFunnel, numTenants, 0.01);
+        return BloomFilter.create(tenantViewFunnel, numTenants, 0.01);
+    }
 
-        if (scenario.getPreScenarioDdls() != null && scenario.getPreScenarioDdls().size() > 0) {
-            operationSuppliers.put(Operation.OperationType.PRE_RUN,
-                    new PreScenarioOperationSupplier(phoenixUtil, model, scenario));
-        }
-
-        // Read the scenario definition and load the various operations.
-        // Case : Operation.OperationType.UPSERT
+    private List<Operation> getUpsertOperationsForScenario(Scenario scenario) {
+        List<Operation> opList = Lists.newArrayList();
         for (final Upsert upsert : scenario.getUpserts()) {
             Operation upsertOp = new org.apache.phoenix.pherf.workload.mt.UpsertOperation() {
                 @Override public Upsert getUpsert() {
@@ -138,14 +177,13 @@ public class TenantOperationFactory {
                     return OperationType.UPSERT;
                 }
             };
-            operationList.add(upsertOp);
+            opList.add(upsertOp);
         }
-        if (scenario.getUpserts() != null && scenario.getUpserts().size() > 0) {
-            operationSuppliers.put(Operation.OperationType.UPSERT,
-                    new UpsertOperationSupplier(phoenixUtil, model, scenario));
-        }
+        return opList;
+    }
 
-        // Case : Operation.OperationType.SELECT
+    private List<Operation> getQueryOperationsForScenario(Scenario scenario) {
+        List<Operation> opList = Lists.newArrayList();
         for (final QuerySet querySet : scenario.getQuerySet()) {
             for (final Query query : querySet.getQuery()) {
                 Operation queryOp = new org.apache.phoenix.pherf.workload.mt.QueryOperation() {
@@ -161,15 +199,14 @@ public class TenantOperationFactory {
                         return OperationType.SELECT;
                     }
                 };
-                operationList.add(queryOp);
+                opList.add(queryOp);
             }
         }
-        if (scenario.getQuerySet() != null && scenario.getQuerySet().size() > 0) {
-            operationSuppliers.put(Operation.OperationType.SELECT,
-                    new QueryOperationSupplier(phoenixUtil, model, scenario));
-        }
+        return opList;
+    }
 
-        // Case : Operation.OperationType.IDLE_TIME
+    private List<Operation> getIdleTimeOperationsForScenario(Scenario scenario) {
+        List<Operation> opList = Lists.newArrayList();
         for (final IdleTime idleTime : scenario.getIdleTimes()) {
             Operation idleTimeOperation = new IdleTimeOperation() {
                 @Override public IdleTime getIdleTime() {
@@ -183,14 +220,13 @@ public class TenantOperationFactory {
                     return OperationType.IDLE_TIME;
                 }
             };
-            operationList.add(idleTimeOperation);
+            opList.add(idleTimeOperation);
         }
-        if (scenario.getIdleTimes() != null && scenario.getIdleTimes().size() > 0) {
-            operationSuppliers.put(Operation.OperationType.IDLE_TIME,
-                    new IdleTimeOperationSupplier(phoenixUtil, model, scenario));
-        }
+        return opList;
+    }
 
-        // Case : Operation.OperationType.USER_DEFINED
+    private List<Operation> getUDFOperationsForScenario(Scenario scenario) {
+        List<Operation> opList = Lists.newArrayList();
         for (final UserDefined udf : scenario.getUdfs()) {
             Operation udfOperation = new org.apache.phoenix.pherf.workload.mt.UserDefinedOperation() {
                 @Override public UserDefined getUserFunction() {
@@ -205,12 +241,9 @@ public class TenantOperationFactory {
                     return OperationType.USER_DEFINED;
                 }
             };
-            operationList.add(udfOperation);
+            opList.add(udfOperation);
         }
-        if (scenario.getUdfs() != null && scenario.getUdfs().size() > 0) {
-            operationSuppliers.put(Operation.OperationType.USER_DEFINED,
-                    new UserDefinedOperationSupplier(phoenixUtil, model, scenario));
-        }
+        return opList;
     }
 
     public PhoenixUtil getPhoenixUtil() {
@@ -225,7 +258,7 @@ public class TenantOperationFactory {
         return scenario;
     }
 
-    public List<Operation> getOperationsForScenario() {
+    public List<Operation> getOperations() {
         return operationList;
     }
 

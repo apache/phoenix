@@ -99,7 +99,7 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
                 scenario.getLoadProfile().setNumOperations(totalOperations);
                 TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
                 assertEquals("operation group size from the factory is not as expected: ",
-                        numOpGroups, opFactory.getOperationsForScenario().size());
+                        numOpGroups, opFactory.getOperations().size());
 
                 // populate the handlers and countdown latches.
                 String handlerId = String.format("%s.%d", InetAddress.getLocalHost().getHostName(), numHandlers);
@@ -140,7 +140,7 @@ public class TenantOperationWorkloadIT extends MultiTenantOperationBaseIT {
             scenario.getLoadProfile().setNumOperations(totalOperations);
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
             assertEquals("operation group size from the factory is not as expected: ",
-                    numOpGroups, opFactory.getOperationsForScenario().size());
+                    numOpGroups, opFactory.getOperations().size());
 
             // populate the handlers and countdown latches.
             List<WorkHandler> workers = Lists.newArrayList();
