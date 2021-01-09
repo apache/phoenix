@@ -60,10 +60,10 @@ public class TenantOperationIT extends MultiTenantOperationBaseIT {
 
             TenantOperationFactory opFactory = new TenantOperationFactory(pUtil, model, scenario);
             TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                    opFactory.getOperationsForScenario(), model, scenario);
+                    opFactory.getOperations(), model, scenario);
 
             assertEquals("operation group size from the factory is not as expected: ",
-                    numOpGroups, opFactory.getOperationsForScenario().size());
+                    numOpGroups, opFactory.getOperations().size());
 
             int numRowsInserted = 0;
             for (int i = 0; i < numRuns; i++) {

@@ -29,7 +29,6 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.bind.UnmarshalException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -70,7 +69,7 @@ public class TenantOperationEventGeneratorTest {
     public void testVariousEventGeneration() throws Exception {
         int numRuns = 10;
         int numOperations = 100000;
-        int allowedVariance = 1000;
+        int allowedVariance = 1500;
         int normalizedOperations = (numOperations * numRuns) / 10000;
         int numTenantGroups = 3;
         int numOpGroups = 5;
@@ -102,7 +101,7 @@ public class TenantOperationEventGeneratorTest {
                 int ops = numOperations;
                 loadProfile.setNumOperations(ops);
                 TenantOperationEventGenerator evtGen = new TenantOperationEventGenerator(
-                        opFactory.getOperationsForScenario(), model, scenario);
+                        opFactory.getOperations(), model, scenario);
                 while (ops-- > 0) {
                     TenantOperationInfo info = evtGen.next();
                     int row = TestOperationGroup.valueOf(info.getOperationGroupId()).ordinal();
@@ -118,7 +117,9 @@ public class TenantOperationEventGeneratorTest {
                     LOGGER.debug(String.format("Actual[%d,%d] = %d", r, c, distribution[r][c]));
                     int diff = Math.abs(expectedDistribution[r][c] - distribution[r][c]);
                     boolean isAllowed = diff < allowedVariance;
-                    assertTrue("Difference is outside the allowed variance", isAllowed);
+                    assertTrue(String.format("Difference is outside the allowed variance "
+                            + "[expected = %d, actual = %d]", allowedVariance, diff), isAllowed);
+
                 }
             }
         }

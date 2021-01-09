@@ -67,6 +67,14 @@ public class TenantOperationEventGenerator
             this.tableName = scenario.getTableName();
             this.loadProfile = scenario.getLoadProfile();
 
+            // Track the individual tenant group sizes,
+            // so that given a generated sample we can get a random tenant for a group.
+            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
+                tenantGroupMap.put(tg.getId(), tg);
+            }
+            Preconditions.checkArgument(!tenantGroupMap.isEmpty(),
+                    "Tenant group cannot be empty");
+
             for (Operation op : operationList) {
                 for (OperationGroup og : loadProfile.getOpDistribution()) {
                     if (op.getId().compareTo(og.getId()) == 0) {
@@ -81,8 +89,7 @@ public class TenantOperationEventGenerator
             double totalTenantGroupWeight = 0.0f;
             double totalOperationGroupWeight = 0.0f;
             // Sum the weights to find the total weight,
-            // so that individual group sizes can be calculated and also can be used
-            // in the total probability distribution.
+            // so that the weights can be used in the total probability distribution.
             for (TenantGroup tg : loadProfile.getTenantDistribution()) {
                 totalTenantGroupWeight += tg.getWeight();
             }
@@ -90,11 +97,10 @@ public class TenantOperationEventGenerator
                 totalOperationGroupWeight += og.getWeight();
             }
 
-            // Track the individual tenant group sizes,
-            // so that given a generated sample we can get a random tenant for a group.
-            for (TenantGroup tg : loadProfile.getTenantDistribution()) {
-                tenantGroupMap.put(tg.getId(), tg);
-            }
+            Preconditions.checkArgument(totalTenantGroupWeight != 0.0f,
+                    "Total tenant group weight cannot be zero");
+            Preconditions.checkArgument(totalOperationGroupWeight != 0.0f,
+                    "Total operation group weight cannot be zero");
 
             // Initialize the sample probability distribution
             List<Pair<String, Double>> pmf = Lists.newArrayList();
@@ -129,7 +135,6 @@ public class TenantOperationEventGenerator
             return sample;
         }
     }
-
 
     private final WeightedRandomSampler sampler;
     private final Properties properties;
