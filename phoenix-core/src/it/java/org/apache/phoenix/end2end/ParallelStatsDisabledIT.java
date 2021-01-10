@@ -28,12 +28,15 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -55,8 +58,18 @@ import static org.junit.Assert.fail;
 @Category(ParallelStatsDisabledTest.class)
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ParallelStatsDisabledIT.class);
+    protected static final Semaphore serializeTests = new Semaphore(1);
+
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
+        //We suspect that with reuseForks=true, maven doesn't strictly serialize test class invocations
+        //WRT @BeforeClass and @AfterClass
+        if (serializeTests.availablePermits() != 1) {
+            LOGGER.warn("@BeforeClass called before @AfterClass has finished");
+        }
+        serializeTests.acquire();
+
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -64,7 +77,11 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @AfterClass
     public static synchronized void freeResources() throws Exception {
-        BaseTest.freeResourcesIfBeyondThreshold();
+        try {
+            BaseTest.freeResourcesIfBeyondThreshold();
+        } finally {
+            serializeTests.release();
+        }
     }
 
     protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {

@@ -482,6 +482,7 @@ public abstract class BaseTest {
             destroyDriver();
             utility = null;
             clusterInitialized = false;
+            ConnectionFactory.shutdown();
         } finally {
             tearDownClusterService.submit(new Callable<Void>() {
                 @Override
@@ -499,14 +500,10 @@ public abstract class BaseTest {
                             } catch (Throwable t) {
                                 LOGGER.error("Exception caught when shutting down mini cluster", t);
                             } finally {
-                                try {
-                                    ConnectionFactory.shutdown();
-                                } finally {
-                                    LOGGER.info(
-                                        "Time in seconds spent in shutting down mini cluster with "
-                                                + numTables + " tables: "
-                                                + (System.currentTimeMillis() - startTime) / 1000);
-                                }
+                                LOGGER.info(
+                                    "Time in seconds spent in shutting down mini cluster with "
+                                            + numTables + " tables: "
+                                            + (System.currentTimeMillis() - startTime) / 1000);
                             }
                         }
                     }
@@ -631,8 +628,6 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
-        //Allow for an extra long miniCluster startup time in case of an overloaded test machine
-        conf.setInt("hbase.master.start.timeout.localHBaseCluster", 200000);
         conf.setInt(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, 10000);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
@@ -792,7 +787,7 @@ public abstract class BaseTest {
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
     }
 
-    public static void freeResourcesIfBeyondThreshold() throws Exception {
+    public static synchronized void freeResourcesIfBeyondThreshold() throws Exception {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);

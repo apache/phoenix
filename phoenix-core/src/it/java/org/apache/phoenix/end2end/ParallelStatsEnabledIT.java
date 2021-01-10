@@ -19,6 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -29,7 +30,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
@@ -40,10 +42,19 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseTest {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ParallelStatsEnabledIT.class);
+    protected static final Semaphore serializeTests = new Semaphore(1);
     protected static RegionCoprocessorEnvironment TaskRegionEnvironment;
 
     @BeforeClass
     public static synchronized final void doSetup() throws Exception {
+        //We suspect that with reuseForks=true, maven doesn't strictly serialize test class invocations
+        //WRT @BeforeClass and @AfterClass
+        if (serializeTests.availablePermits() != 1) {
+            LOGGER.warn("@BeforeClass called before @AfterClass has finished");
+        }
+        serializeTests.acquire();
+
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
@@ -62,6 +73,10 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
 
     @AfterClass
     public static synchronized void freeResources() throws Exception {
-        BaseTest.freeResourcesIfBeyondThreshold();
+        try {
+            BaseTest.freeResourcesIfBeyondThreshold();
+        } finally {
+            serializeTests.release();
+        }
     }
 }
