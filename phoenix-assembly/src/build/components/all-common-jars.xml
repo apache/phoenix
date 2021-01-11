@@ -27,14 +27,14 @@
       <directory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-client-${project.version}.jar</include>
+        <include>phoenix-client-${hbase.suffix}-${project.version}.jar</include>
       </includes>
     </fileSet>
     <fileSet>
       <directory>${project.basedir}/../phoenix-server/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-server-${project.version}.jar</include>
+        <include>phoenix-server-${hbase.suffix}-${project.version}.jar</include>
       </includes>
     </fileSet>
 

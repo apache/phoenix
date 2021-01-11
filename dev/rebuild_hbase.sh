@@ -48,7 +48,7 @@ HBASE_SOURCE_MIRROR_NAME="hbase/$HBASE_VERSION/$HBASE_SOURCE_NAME"
 
 if [ $# -ne 1 ]
   then
-    echo "Supply the Hbase version as paramater i.e.: rebuild_hbase.sh 2.2.6 "
+  echo "Supply the Hbase version as paramater i.e.: rebuild_hbase.sh 2.2.6 "
 fi
 
 mkdir "$ARTIFACTS_DIR"
@@ -56,6 +56,10 @@ mkdir "$WORK_DIR"
 
 $DEV_SUPPORT/cache-apache-project-artifact.sh --keys https://downloads.apache.org/hbase/KEYS \
     --working-dir "$WORK_DIR" "$ARTIFACTS_DIR/$HBASE_SOURCE_NAME" "$HBASE_SOURCE_MIRROR_NAME"
+
+if [[ ! -z "$MAVEN_SETTINGS_FILE" ]]; then
+  SETTINGS=( "--settings" "$MAVEN_SETTINGS_FILE" )
+fi
 
 STARTDIR=$PWD
 cd $ARTIFACTS_DIR

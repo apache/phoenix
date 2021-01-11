@@ -75,9 +75,6 @@
   </scm>
 
   <properties>
-    <!-- The HBase compatibility module that that will be included in
-    the shaded JARs and the assembly -->
-    <hbase.profile>2.2</hbase.profile>
 
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
@@ -86,6 +83,15 @@
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
     <phoenix.thirdparty.version>1.0.0</phoenix.thirdparty.version>
+    <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
+
+    <!-- This is used by the release script only -->
+    <hbase.profile.list>2.1 2.2 2.3 2.4</hbase.profile.list>
+    <!-- The default hbase versions to build with (override with hbase.version) -->
+    <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
+    <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
+    <hbase-2.3.runtime.version>2.3.3</hbase-2.3.runtime.version>
+    <hbase-2.4.runtime.version>2.4.0</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -636,12 +642,42 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client</artifactId>
+        <artifactId>phoenix-client-hbase-2.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server</artifactId>
+        <artifactId>phoenix-client-hbase-2.2</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.2</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -1516,17 +1552,22 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.1.6 profile -->
-      <id>phoenix-hbase-compat-2.1.6-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.4.0 profile -->
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.4.0-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.1</hbase.profile>
-        <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>2.1.10</hbase.version>
+        <hbase.profile>2.4</hbase.profile>
+        <hbase.compat.version>2.4.0</hbase.compat.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
+        <hadoop.version>3.1.2</hadoop.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
     </profile>
     <profile>
@@ -1541,7 +1582,7 @@
       <properties>
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>2.1.9</hbase.version>
+        <hbase.version>${hbase-2.1.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1556,7 +1597,7 @@
       <properties>
         <hbase.profile>2.2</hbase.profile>
         <hbase.compat.version>2.2.1</hbase.compat.version>
-        <hbase.version>2.2.6</hbase.version>
+        <hbase.version>${hbase-2.2.runtime.version}</hbase.version>
         <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
         <hadoop.version>3.1.2</hadoop.version>
       </properties>
@@ -1573,7 +1614,7 @@
       <properties>
         <hbase.profile>2.3</hbase.profile>
         <hbase.compat.version>2.3.0</hbase.compat.version>
-        <hbase.version>2.3.3</hbase.version>
+        <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
         <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
         <hadoop.version>3.1.2</hadoop.version>
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
@@ -1592,7 +1633,7 @@
       <properties>
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.0</hbase.compat.version>
-        <hbase.version>2.4.0</hbase.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
         <hadoop.version>3.1.2</hadoop.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>

@@ -23,15 +23,6 @@
   <!-- All of our dependencies -->
   <dependencySets>
     <dependencySet>
-      <unpack>false</unpack>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>org.apache.phoenix:phoenix-hbase-compat-2.1.6</include>
-        <include>org.apache.phoenix:phoenix-hbase-compat-2.2.1</include>
-        <include>org.apache.phoenix:phoenix-hbase-compat-2.3.0</include>
-      </includes>
-    </dependencySet>
-    <dependencySet>
       <!-- Unpack all the dependencies to class files, since java doesn't support
         jar of jars for running -->
       <unpack>false</unpack>

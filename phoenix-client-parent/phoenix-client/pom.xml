@@ -24,9 +24,10 @@
     <artifactId>phoenix-client-parent</artifactId>
     <version>5.1.0-SNAPSHOT</version>
   </parent>
-  <artifactId>phoenix-client</artifactId>
-  <name>Phoenix Client</name>
-  <description>Phoenix Client</description>
+
+  <artifactId>phoenix-client-${hbase.suffix}</artifactId>
+  <name>Phoenix Client for HBase ${hbase.profile}</name>
+  <description>Phoenix Client for HBase ${hbase.profile}</description>
   <packaging>jar</packaging>
 
   <build>

@@ -152,7 +152,6 @@ function get_release_info {
     parse_version)"
   echo "Current branch VERSION is $version."
 
-  NEXT_VERSION="$version"
   RELEASE_VERSION=""
   SHORT_VERSION="$(echo "$version" | cut -d . -f 1-2)"
   if [[ ! "$version" =~ .*-SNAPSHOT ]]; then
@@ -176,7 +175,6 @@ function get_release_info {
     if git ls-remote --tags "$ASF_REPO" "$PREV_REL_TAG" | grep -q "refs/tags/${PREV_REL_TAG}$" ; then
       RC_COUNT=0
       REV=$((REV + 1))
-      NEXT_VERSION="${SHORT_VERSION}.${REV}-SNAPSHOT"
     else
       RELEASE_VERSION="${SHORT_VERSION}.${PREV_REL_REV}"
       RC_COUNT="$(git ls-remote --tags "$ASF_REPO" "${RELEASE_VERSION}RC*" | wc -l)"
@@ -185,13 +183,11 @@ function get_release_info {
     fi
   else
     REV=$((REV + 1))
-    NEXT_VERSION="${SHORT_VERSION}.${REV}-SNAPSHOT"
     RC_COUNT=0
   fi
 
   RELEASE_VERSION="$(read_config "RELEASE_VERSION" "$RELEASE_VERSION")"
-  NEXT_VERSION="$(read_config "NEXT_VERSION" "$NEXT_VERSION")"
-  export RELEASE_VERSION NEXT_VERSION
+  export RELEASE_VERSION
 
   RC_COUNT="$(read_config "RC_COUNT" "$RC_COUNT")"
   RELEASE_TAG="${RELEASE_VERSION}RC${RC_COUNT}"
@@ -244,7 +240,6 @@ function get_release_info {
 Release details:
 GIT_BRANCH:      $GIT_BRANCH
 RELEASE_VERSION: $RELEASE_VERSION
-NEXT_VERSION:    $NEXT_VERSION
 RELEASE_TAG:     $RELEASE_TAG $([[ "$GIT_REF" != "$RELEASE_TAG" ]] && printf "\n%s\n" "GIT_REF:         $GIT_REF")
 API_DIFF_TAG:    $API_DIFF_TAG
 ASF_USERNAME:    $ASF_USERNAME
@@ -586,37 +581,45 @@ make_src_release() {
 make_binary_release() {
   local project="${1}"
   local version="${2}"
-  local base_name="${project}-${version}"
   local timing_token
   timing_token="$(start_step)"
-  rm -rf "${base_name}"-bin*
+
   cd "$project" || exit
-
-  git clean -d -f -x
-  # Three invocations of maven. This seems to work. One to
-  # populate the repo, another to build the site, and then
-  # a third to assemble the binary artifact. Trying to do
-  # all in the one invocation fails; a problem in our
-  # assembly spec to in maven. TODO. Meantime, three invocations.
-  #"${MVN[@]}" clean install -DskipTests
-  #"${MVN[@]}" site -DskipTests
-  kick_gpg_agent
-  "${MVN[@]}" clean package -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}"
-
-  # Check there is a bin gz output. The build may not produce one: e.g. hbase-thirdparty.
-  local f_bin_prefix="./${PROJECT}-assembly/target/${base_name}"
-  if ls "${f_bin_prefix}"*-bin.tar.gz &>/dev/null; then
-    cp "${f_bin_prefix}"*-bin.tar.gz ..
-    cd .. || exit
-    for i in "${base_name}"*-bin.tar.gz; do
-      "${GPG}" "${GPG_ARGS[@]}" --armour --output "${i}.asc" --detach-sig "${i}"
-      "${GPG}" "${GPG_ARGS[@]}" --print-md SHA512 "${i}" > "${i}.sha512"
-    done
+  if [[ "$project" == "phoenix" ]]; then
+    rebuild_hbase_2
+    local profiles=( $(maven_get_hbase_profiles) )
   else
-    cd .. || exit
-    echo "No ${f_bin_prefix}*-bin.tar.gz product; expected?"
+    local profiles=( "" )
   fi
 
+  for profile in "${profiles[@]}"; do
+    if [ -z $profile ]; then
+      local hbase_suffix=""
+    else
+      local hbase_suffix="-hbase-${profile}"
+    fi
+    local base_name="${project}${hbase_suffix}-${version}"
+    rm -rf ../"${base_name}"-bin*
+
+    git clean -d -f -x
+    kick_gpg_agent
+    "${MVN[@]}" clean package -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" "-Dhbase.profile=${profile}"
+
+    # Check there is a bin gz output. The build may not produce one: e.g. hbase-thirdparty.
+    local f_bin_prefix="./${PROJECT}-assembly/target/${base_name}"
+    if ls "${f_bin_prefix}"*-bin.tar.gz &>/dev/null; then
+      cp "${f_bin_prefix}"*-bin.tar.gz ..
+      cd .. || exit
+      for i in "${base_name}"*-bin.tar.gz; do
+        "${GPG}" "${GPG_ARGS[@]}" --armour --output "${i}.asc" --detach-sig "${i}"
+        "${GPG}" "${GPG_ARGS[@]}" --print-md SHA512 "${i}" > "${i}.sha512"
+      done
+      cd "$project" || exit
+    else
+      echo "No ${f_bin_prefix}*-bin.tar.gz product; expected?"
+    fi
+  done
+  cd .. || exit
   stop_step "${timing_token}"
 }
 
@@ -643,12 +646,6 @@ function maven_set_version { #input: <version_to_set>
   fi
   echo "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version"
   "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
-  #Hacking around nonstandard maven submodules for phoenix only
-  for i in phoenix-hbase-compat-*; do
-    if [ -e "$i" ]; then
-     "${MVN[@]}" ${variant:+"$variant"} -pl $i versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
-    fi
-  done
   #Omid has an even more nonstandard maven structure, and needs more hacks
   for i in hbase-shims/hbase-*; do
     if [ -e "$i" ]; then
@@ -661,6 +658,17 @@ function maven_set_version { #input: <version_to_set>
 function maven_get_version {
   # shellcheck disable=SC2016
   "${MVN[@]}" -q -N -Dexec.executable="echo" -Dexec.args='${project.version}' exec:exec
+}
+
+function maven_get_hbase_profiles {
+  # shellcheck disable=SC2016
+  "${MVN[@]}" -q -N -Dexec.executable="echo" -Dexec.args='${hbase.profile.list}' exec:exec
+}
+
+function maven_get_hbase_version_from_profile {
+  # shellcheck disable=SC2016
+  local profile="$1"
+  "${MVN[@]}" -q -N -Dexec.executable="echo" -Dexec.args='${hbase-'"$profile"'.runtime.version}' exec:exec
 }
 
 # Do maven deploy to snapshot or release artifact repository, with checks.
@@ -688,8 +696,7 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
   echo "Publish version is $RELEASE_VERSION"
   # Coerce the requested version
   maven_set_version "$RELEASE_VERSION"
-  # Prepare for signing
-  kick_gpg_agent
+
   declare -a mvn_goals=(clean install)
   if ! is_dry_run; then
     mvn_goals=("${mvn_goals[@]}" deploy)
@@ -697,14 +704,23 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
   # Omid needs to be deployed twice for HBase 1 and 2
   if [[ "$PROJECT" == "phoenix-omid" ]]; then
     local variants=( "${OMID_VARIANTS[@]}" )
+  elif [[ "$PROJECT" == "phoenix" ]]; then
+    rebuild_hbase_2
+    local profiles=( $(maven_get_hbase_profiles) )
+    local variants=()
+    for i in "${profiles[@]}"; do
+      variants+=("-Dhbase.profile=$i")
+    done
   else
     local variants=( "" )
   fi
+  rm -f "$mvn_log_file"
   for variant in "${variants[@]}"; do
     echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
         "${mvn_goals[@]}"
     echo "Logging to ${mvn_log_file}.  This will take a while..."
-    rm -f "$mvn_log_file"
+    # Prepare for signing
+    kick_gpg_agent
     # The tortuous redirect in the next command allows mvn's stdout and stderr to go to mvn_log_file,
     # while also sending stderr back to the caller.
     # shellcheck disable=SC2094
@@ -723,4 +739,23 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
 # * LINUX
 function get_host_os() {
   uname -s | tr '[:lower:]' '[:upper:]'
+}
+
+function rebuild_hbase_2() {
+  if [[ "yes" == "$HBASE_ALREADY_REBUILT" ]]; then
+     return 0
+  fi
+  local profiles=( $(maven_get_hbase_profiles) )
+  for i in "${profiles[@]}"; do
+    local hbase_runtime_version=$(maven_get_hbase_version_from_profile "$i")
+    if [[ $hbase_runtime_version == 2* ]]; then
+      rebuild_hbase_locally "$hbase_runtime_version"
+    fi
+  done
+  HBASE_ALREADY_REBUILT="yes"
+}
+
+function rebuild_hbase_locally() {
+  local hbase_version="$1"
+  MAVEN_SETTINGS_FILE="$MAVEN_SETTINGS_FILE" "$SELF"/rebuild_hbase.sh "$hbase_version"
 }
