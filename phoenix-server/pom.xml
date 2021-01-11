@@ -26,9 +26,9 @@
     <artifactId>phoenix</artifactId>
     <version>5.1.0-SNAPSHOT</version>
   </parent>
-  <artifactId>phoenix-server</artifactId>
-  <name>Phoenix Server</name>
-  <description>Phoenix Server</description>
+  <artifactId>phoenix-server-${hbase.suffix}</artifactId>
+  <name>Phoenix Server JAR for HBase ${hbase.profile}</name>
+  <description>Phoenix HBase Server Side JAR for HBase ${hbase.profile}</description>
   <packaging>jar</packaging>
   <properties>
     <!-- Don't make a test-jar -->
@@ -433,6 +433,22 @@
         <property>
           <name>hbase.profile</name>
           <value>2.4</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.0-default</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
         </property>
       </activation>
       <dependencies>

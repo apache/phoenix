@@ -53,11 +53,11 @@
               <arguments>
                 <argument>-fnsv</argument>
                 <argument>
-                  phoenix-client-${project.version}.jar
+                  phoenix-client-${hbase.suffix}-${project.version}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded client JAR, but we don't care -->
-                  phoenix-client.jar
+                  phoenix-client-${hbase.suffix}.jar
                 </argument>
               </arguments>
             </configuration>
@@ -74,11 +74,11 @@
               <arguments>
                 <argument>-fnsv</argument>
                 <argument>
-                  phoenix-server-${project.version}.jar
+                  phoenix-server-${hbase.suffix}-${project.version}.jar
                 </argument>
                 <argument>
                   <!-- We are overwriting the unshaded server JAR, but we don't care -->
-                  phoenix-server.jar
+                  phoenix-server-${hbase.suffix}.jar
                 </argument>
               </arguments>
             </configuration>
@@ -107,7 +107,7 @@
               <goal>single</goal>
             </goals>
             <configuration>
-            <finalName>phoenix-${project.version}-bin</finalName>
+            <finalName>phoenix-${hbase.suffix}-${project.version}-bin</finalName>
               <attach>false</attach>
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
@@ -126,11 +126,11 @@
     <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-server</artifactId>
+      <artifactId>phoenix-server-${hbase.suffix}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-client</artifactId>
+      <artifactId>phoenix-client-${hbase.suffix}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
@@ -139,18 +139,6 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-tracing-webapp</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
     </dependency>
 
     <dependency>

@@ -24,7 +24,7 @@ HBASE_SOURCE_MIRROR_NAME="hbase/$1/$HBASE_SOURCE_NAME"
 
 if [ $# -ne 1 ]
   then
-    echo "Supply the Hbase version as paramater i.e.: rebuild_hbase.sh 2.2.6 "
+  echo "Supply the Hbase version as paramater i.e.: rebuild_hbase.sh 2.2.6 "
 fi
 
 DEV_SUPPORT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
@@ -37,9 +37,14 @@ mkdir "$WORK_DIR"
 $DEV_SUPPORT/cache-apache-project-artifact.sh --keys https://downloads.apache.org/hbase/KEYS \
     --working-dir "$WORK_DIR" "$ARTIFACTS_DIR/$HBASE_SOURCE_NAME" "$HBASE_SOURCE_MIRROR_NAME"
 
+if [[ ! -z "$MAVEN_SETTINGS_FILE" ]]; then
+  SETTINGS=( "--settings" "$MAVEN_SETTINGS_FILE" )
+fi
+
 STARTDIR=$PWD
 cd $ARTIFACTS_DIR
 tar xfz hbase-$1-src.tar.gz
 cd hbase-$1
-mvn clean install -Dhadoop.profile=3.0 -DskipTests -B
+echo mvn ${SETTINGS[@]} clean install -Dhadoop.profile=3.0 -DskipTests -B
+mvn ${SETTINGS[@]} clean install -Dhadoop.profile=3.0 -DskipTests -B
 cd ${STARTDIR}

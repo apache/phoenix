@@ -59,7 +59,6 @@ Used only for 'tag':
   GIT_NAME - Name to use with git
   GIT_EMAIL - E-mail address to use with git
   GIT_BRANCH - Git branch on which to make release. Tag is always placed at HEAD of this branch.
-  NEXT_VERSION - Development version after release (e.g. 2.1.3-SNAPSHOT)
 
 Used only for 'publish':
   GIT_REF - Release tag or commit to build from (defaults to $RELEASE_TAG; only need to
@@ -113,7 +112,7 @@ if [[ "$1" == "tag" ]]; then
   # for 'tag' stage
   set -o pipefail
   check_get_passwords ASF_PASSWORD
-  check_needed_vars PROJECT RELEASE_VERSION RELEASE_TAG NEXT_VERSION GIT_EMAIL GIT_NAME GIT_BRANCH
+  check_needed_vars PROJECT RELEASE_VERSION RELEASE_TAG GIT_EMAIL GIT_NAME GIT_BRANCH
   if [ -z "${GIT_REPO}" ]; then
     check_needed_vars ASF_USERNAME ASF_PASSWORD
   fi
@@ -146,11 +145,6 @@ if [[ "$1" == "tag" ]]; then
   git commit -a -m "Preparing ${PROJECT} release $RELEASE_TAG; tagging and updates to CHANGES.md and RELEASENOTES.md"
   echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
   git tag "$RELEASE_TAG"
-
-  # Create next version
-  maven_set_version "$NEXT_VERSION"
-
-  git commit -a -m "Preparing development version $NEXT_VERSION"
 
   if ! is_dry_run; then
     # Push changes
