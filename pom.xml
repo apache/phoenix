@@ -78,13 +78,17 @@
   </scm>
 
   <properties>
-    <!-- The HBase compatibility module that that will be included in
-    the shaded JARs and the assembly -->
-    <hbase.profile>1.5</hbase.profile>
-    <hbase.profile.string>hbase-${hbase.profile}</hbase.profile.string>
-
     <!-- Hadoop Versions -->
     <hadoop-two.version>2.7.5</hadoop-two.version>
+    <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
+
+    <!-- This is used by the release script only -->
+    <hbase.profile.list>1.3 1.4 1.5 1.6</hbase.profile.list>
+    <!-- The default hbase versions to build with (override with hbase.version) -->
+    <hbase-1.3.runtime.version>1.3.5</hbase-1.3.runtime.version>
+    <hbase-1.4.runtime.version>1.4.10</hbase-1.4.runtime.version>
+    <hbase-1.5.runtime.version>1.5.0</hbase-1.5.runtime.version>
+    <hbase-1.6.runtime.version>1.6.0</hbase-1.6.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -593,12 +597,42 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client</artifactId>
+        <artifactId>phoenix-client-hbase-1.3</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server</artifactId>
+        <artifactId>phoenix-client-hbase-1.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-1.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-1.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-1.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-1.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-1.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-1.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -1175,16 +1209,18 @@
     </profile>
     <!-- See BUILDING.md for profile selection-->
     <profile>
-      <id>phoenix-hbase-compat-1.5.0-default</id>
+      <id>phoenix-hbase-compat-1.6.0-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>1.5</hbase.profile>
+        <hbase.profile>1.6</hbase.profile>
+        <hadoop-two.version>2.8.5</hadoop-two.version>
+        <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.compat.version>1.5.0</hbase.compat.version>
-        <hbase.version>1.5.0</hbase.version>
+        <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1198,7 +1234,7 @@
       <properties>
         <hbase.profile>1.3</hbase.profile>
         <hbase.compat.version>1.3.0</hbase.compat.version>
-        <hbase.version>1.3.5</hbase.version>
+        <hbase.version>${hbase-1.3.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1212,7 +1248,7 @@
       <properties>
         <hbase.profile>1.4</hbase.profile>
         <hbase.compat.version>1.4.0</hbase.compat.version>
-        <hbase.version>1.4.10</hbase.version>
+        <hbase.version>${hbase-1.4.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1226,7 +1262,7 @@
       <properties>
         <hbase.profile>1.5</hbase.profile>
         <hbase.compat.version>1.5.0</hbase.compat.version>
-        <hbase.version>1.5.0</hbase.version>
+        <hbase.version>${hbase-1.5.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1242,7 +1278,7 @@
         <hadoop-two.version>2.8.5</hadoop-two.version>
         <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.compat.version>1.5.0</hbase.compat.version>
-        <hbase.version>1.6.0</hbase.version>
+        <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>

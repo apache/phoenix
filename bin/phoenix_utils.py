@@ -77,10 +77,7 @@ def findClasspath(command_name):
     return tryDecode(subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read())
 
 def setPath():
-    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client*[!s].jar"
-    PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
-    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
-    PHOENIX_LOADBALANCER_JAR_PATTERN = "phoenix-load-balancer-*[!t][!e][!s][!t][!s].jar"
+    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client-hbase-*[!s].jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*-minimal*.jar"
@@ -165,20 +162,6 @@ def setPath():
     if testjar == "":
         testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
-    global phoenix_queryserver_jar
-    phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-queryserver", "target", "*"))
-    if phoenix_queryserver_jar == "":
-        phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
-    if phoenix_queryserver_jar == "":
-        phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
-
-    global phoenix_loadbalancer_jar
-    phoenix_loadbalancer_jar = find(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-loadbalancer", "target", "*"))
-    if phoenix_loadbalancer_jar == "":
-        phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
-    if phoenix_loadbalancer_jar == "":
-        phoenix_loadbalancer_jar = findFileInPathWithoutRecursion(PHOENIX_LOADBALANCER_JAR_PATTERN, os.path.join(current_dir, ".."))
-
     global phoenix_traceserver_jar
     phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target", "*"))
     if phoenix_traceserver_jar == "":
@@ -192,11 +175,6 @@ def setPath():
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_pherf_jar == "":
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, ".."))
-
-    global phoenix_thin_client_jar
-    phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-queryserver-client", "target", "*"))
-    if phoenix_thin_client_jar == "":
-        phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
 
     return ""
 
