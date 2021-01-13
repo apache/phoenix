@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -79,6 +78,7 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -446,19 +446,17 @@ public class ViewUtil {
      * @throws SQLException thrown if there is an error connecting to the server
      */
     public static TableName getSystemTableForChildLinks(int clientVersion,
-            Configuration conf) throws SQLException, IOException {
+                                                        Configuration conf) throws SQLException, IOException {
         byte[] fullTableName = SYSTEM_CHILD_LINK_NAME_BYTES;
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
-                    conf).unwrap(PhoenixConnection.class);
-                    Admin admin = connection.getQueryServices().getAdmin()) {
 
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).
+                    unwrap(PhoenixConnection.class)) {
+                PhoenixRuntime.getTableNoCache(connection, SYSTEM_CHILD_LINK_NAME);
+            } catch (TableNotFoundException e) {
                 // If this is an old client and the CHILD_LINK table doesn't exist i.e. metadata
                 // hasn't been updated since there was never a connection from a 4.15 client
-                if (!admin.tableExists(SchemaUtil.getPhysicalTableName(
-                        SYSTEM_CHILD_LINK_NAME_BYTES, conf))) {
-                    fullTableName = SYSTEM_CATALOG_NAME_BYTES;
-                }
+                fullTableName = SYSTEM_CATALOG_NAME_BYTES;
             } catch (SQLException e) {
                 logger.error("Error getting a connection on the server : " + e);
                 throw e;
@@ -466,7 +464,6 @@ public class ViewUtil {
         }
         return SchemaUtil.getPhysicalTableName(fullTableName, conf);
     }
-
     public static boolean isDivergedView(PTable view) {
         return view.getBaseColumnCount() == QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
     }
