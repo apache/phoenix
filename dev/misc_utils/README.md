@@ -28,6 +28,9 @@ messages with any of these issues:
 3. Jira does not have expected fixVersion
 4. Jira has expected fixVersion, but it is not yet resolved
 
+Moreover, this script also finds any resolved Jira with expected
+fixVersion but without any corresponding commit present.
+
 This should be useful as part of RC preparation.
 
 git_jira_fix_version_check supports python3 and it required
@@ -101,6 +104,13 @@ WARN: Jira not found. 			 Commit: daa6816dcb3ac035bf8553e6bf2ff8a18e80e6e4 Local
 Found first commit hash after which git history is redundant. commit: 02d5935cbbd75ad2491413042e5010bb76ed57c8
 Exiting successfully
 Jira/Git commit message diff completed: ##############################################
+
+Any resolved Jira with fixVersion 4.16.0 but corresponding commit not present
+Starting diff: ##############################################
+PHOENIX-6259 is marked resolved with fixVersion 4.16.0 but no corresponding commit found
+PHOENIX-6258 is marked resolved with fixVersion 4.16.0 but no corresponding commit found
+PHOENIX-6255 is marked resolved with fixVersion 4.16.0 but no corresponding commit found
+Completed diff: ##############################################
 
 
 ```

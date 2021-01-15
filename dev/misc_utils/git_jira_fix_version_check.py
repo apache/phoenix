@@ -49,6 +49,8 @@ print(git_status_msg)
 
 print('\nJira/Git commit message diff starting: ##############################################')
 
+issue_set_from_commit_msg = set()
+
 for commit in subprocess.check_output(['git', 'log', '--pretty=oneline']).decode(
         "utf-8").splitlines():
     if commit.startswith(first_exclude_commit_hash):
@@ -77,12 +79,26 @@ for commit in subprocess.check_output(['git', 'log', '--pretty=oneline']).decode
     if not expected_fix_version:
         print("Jira not present with version: " + fix_version + ". \t Commit: " + commit)
         continue
-    if issue.fields.resolution is None or issue.fields.resolution.name != 'Fixed':
+    if issue.fields.status is None or issue.fields.status.name not in ('Resolved', 'Closed'):
         print("Jira is not resolved yet? \t\t Commit: " + commit)
     else:
         # This means Jira corresponding to current commit message is resolved with expected
         # fixVersion.
         # This is no-op by default, if needed, convert to print statement.
-        pass
+        issue_set_from_commit_msg.add(project_jira_key + jira_num)
 
 print('Jira/Git commit message diff completed: ##############################################')
+
+print('\nAny resolved Jira with fixVersion ' + fix_version
+      + ' but corresponding commit not present')
+print('Starting diff: ##############################################')
+all_issues_with_fix_version = jira.search_issues(
+    'project=' + jira_project_name + ' and status in (Resolved,Closed) and fixVersion='
+    + fix_version)
+
+for issue in all_issues_with_fix_version:
+    if issue.key not in issue_set_from_commit_msg:
+        print(issue.key + ' is marked resolved with fixVersion ' + fix_version
+            + ' but no corresponding commit found')
+
+print('Completed diff: ##############################################')
