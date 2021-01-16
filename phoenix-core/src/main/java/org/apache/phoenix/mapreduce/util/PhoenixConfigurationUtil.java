@@ -191,6 +191,12 @@ public final class PhoenixConfigurationUtil {
     // provide an absolute path to inject your multi input mapper logic
     public static final String MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ = "phoenix.mapreduce.multi.mapper.tracker.path";
 
+    // provide control to whether or not handle MR snapshot restore on phoenix side or handled by caller
+    public static final String MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY = "phoenix.mr.manage.snapshot.restore.internally";
+
+    // by default MR snapshot restore is handled internally by phoenix
+    public static final boolean DEFAULT_MR_SNAPSHOT_RESTORE_INTERNALLY = true;
+
     /**
      * Determines type of Phoenix Map Reduce job.
      * 1. QUERY allows running arbitrary queries without aggregates
@@ -864,6 +870,20 @@ public final class PhoenixConfigurationUtil {
     public static void setTenantId(Configuration configuration, String tenantId){
         Preconditions.checkNotNull(configuration);
         configuration.set(MAPREDUCE_TENANT_ID, tenantId);
+    }
+
+    public static void setMRSnapshotManagedInternally(Configuration configuration, Boolean isSnapshotRestoreManagedInternally) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(isSnapshotRestoreManagedInternally);
+        configuration.set(MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY,
+                String.valueOf(isSnapshotRestoreManagedInternally));
+    }
+
+    public static boolean getMRSnapshotManagedInternally(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        boolean isSnapshotRestoreManagedInternally =
+                configuration.getBoolean(MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY, DEFAULT_MR_SNAPSHOT_RESTORE_INTERNALLY);
+        return isSnapshotRestoreManagedInternally;
     }
 
 }

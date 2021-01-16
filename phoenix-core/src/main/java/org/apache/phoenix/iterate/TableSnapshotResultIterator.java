@@ -20,9 +20,9 @@ package org.apache.phoenix.iterate;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.SnapshotProtos;
+import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
 import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
@@ -89,19 +90,34 @@ public class TableSnapshotResultIterator implements ResultIterator {
   }
 
   private void init() throws IOException {
-    Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
-    SnapshotProtos.SnapshotDescription snapshotDesc = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
-    SnapshotManifest manifest = SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
-    List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
-    this.regions = Lists.newArrayListWithCapacity(regionManifests.size());
-    this.htd = manifest.getTableDescriptor();
-    for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
-      HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
-      if (isValidRegion(hri)) {
-        regions.add(hri);
+    if (PhoenixConfigurationUtil.getMRSnapshotManagedInternally(configuration)) {
+      RestoreSnapshotHelper.RestoreMetaChanges meta =
+          RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs, this.rootDir,
+                      this.restoreDir, this.snapshotName);
+      List<RegionInfo> restoredRegions = meta.getRegionsToAdd();
+      this.htd = meta.getTableDescriptor();
+      this.regions = new ArrayList<>(restoredRegions.size());
+      for (RegionInfo restoredRegion : restoredRegions) {
+        if (isValidRegion(restoredRegion)) {
+          this.regions.add(restoredRegion);
+        }
+      }
+    } else {
+      Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
+      SnapshotProtos.SnapshotDescription snapshotDesc =
+          SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+      SnapshotManifest manifest =
+          SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
+      List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
+      this.regions = new ArrayList<>(regionManifests.size());
+      this.htd = manifest.getTableDescriptor();
+      for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
+        HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
+        if (isValidRegion(hri)) {
+          regions.add(hri);
+        }
       }
     }
-
     this.regions.sort(RegionInfo.COMPARATOR);
     LOGGER.info("Initialization complete with " + regions.size() + " valid regions");
   }
@@ -165,6 +181,11 @@ public class TableSnapshotResultIterator implements ResultIterator {
     closed = true; // ok to say closed even if the below code throws an exception
     try {
       scanIterator.close();
+      if(PhoenixConfigurationUtil.getMRSnapshotManagedInternally(configuration)) {
+        fs.delete(this.restoreDir, true);
+      }
+    } catch (IOException e) {
+      throw ServerUtil.parseServerException(e);
     } finally {
       scanIterator = UNINITIALIZED_SCANNER;
     }

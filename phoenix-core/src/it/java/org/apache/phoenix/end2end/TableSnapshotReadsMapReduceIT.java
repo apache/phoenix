@@ -42,10 +42,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.SnapshotDescription;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -238,7 +240,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
   private void configureJob(Job job, String tableName, String inputQuery, String condition, boolean shouldSplit) throws Exception {
     try {
-      upsertAndSnapshot(tableName, shouldSplit);
+      upsertAndSnapshot(tableName, shouldSplit, job.getConfiguration());
       result = new ArrayList<>();
 
       job.setMapperClass(TableSnapshotMapper.class);
@@ -335,7 +337,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     stmt.execute();
   }
 
-  private void upsertAndSnapshot(String tableName, boolean shouldSplit) throws Exception {
+  private void upsertAndSnapshot(String tableName, boolean shouldSplit, Configuration configuration) throws Exception {
     if (shouldSplit) {
       // having very few rows in table doesn't really help much with splitting case.
       // we should upsert large no of rows as a prerequisite to splitting
@@ -365,6 +367,11 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
       upsertData(stmt, "DDDD", "SNFB", 45);
       conn.commit();
+      //Performing snapshot restore which will be used during scans
+      Path rootDir = new Path(configuration.get(HConstants.HBASE_DIR));
+      FileSystem fs = rootDir.getFileSystem(configuration);
+      Path restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+      RestoreSnapshotHelper.copySnapshotForScanner(configuration, fs, rootDir, restoreDir, SNAPSHOT_NAME);
     }
   }
 
