@@ -68,8 +68,18 @@ mkdir $DIR_BIN;
 # Move src tar
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 
+
+# Take HBase profile
+read -p "Please enter the HBase Profile for the release(example[1.3, 1.4, etc] or using defalut as 1.6): " hbaseProfile
+if [[ -z "$hbaseProfile" ]]; then
+   echo "Using default hbase profile"
+else
+   echo "Changing hbase profile to $hbaseProfile"
+   hbaseMvnParam="-Dhbase.profile=$hbaseProfile "
+fi
+
 # Copy common jars
-mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true -q;
+mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true $hbaseMvnParam -q;
 rm -rf $(find . -type d -name archive-tmp);
 
 # Copy all phoenix-*.jars to release dir
