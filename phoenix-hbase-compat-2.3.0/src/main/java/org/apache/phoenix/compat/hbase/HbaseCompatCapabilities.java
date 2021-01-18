@@ -34,6 +34,6 @@ public class HbaseCompatCapabilities {
     public static boolean isRawFilterSupported() { return true; }
 
     //HBase 2.3+ has preWALAppend() on RegionObserver (HBASE-22623)
-    public static boolean hasPreWALAppend() { return false; }
+    public static boolean hasPreWALAppend() { return true; }
 
 }

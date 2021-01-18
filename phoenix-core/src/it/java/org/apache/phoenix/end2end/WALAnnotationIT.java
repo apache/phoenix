@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.WALCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.WALCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALCoprocessorHost;
@@ -64,6 +65,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
@@ -520,7 +522,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    public static class AnnotatedWALObserver implements WALObserver {
+    public static class AnnotatedWALObserver implements WALCoprocessor, WALObserver {
         Map<TableName, List<Map<String, byte[]>>> walAnnotations = new HashMap<>();
 
         public Map<TableName, List<Map<String, byte[]>>> getWalAnnotations() {
@@ -547,6 +549,11 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
                 }
                 walAnnotations.get(logKey.getTableName()).add(annotationMap);
             }
+        }
+
+        @Override
+        public Optional<WALObserver> getWALObserver() {
+            return Optional.of((WALObserver)this);
         }
     }
 }
