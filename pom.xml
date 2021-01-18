@@ -79,7 +79,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.0.3</hadoop.version>
+    <hadoop.version>3.1.4</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
     <phoenix.thirdparty.version>1.0.0</phoenix.thirdparty.version>
@@ -1564,8 +1564,6 @@
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.0</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
@@ -1598,8 +1596,6 @@
         <hbase.profile>2.2</hbase.profile>
         <hbase.compat.version>2.2.1</hbase.compat.version>
         <hbase.version>${hbase-2.2.runtime.version}</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
       </properties>
     </profile>
     <profile>
@@ -1615,8 +1611,6 @@
         <hbase.profile>2.3</hbase.profile>
         <hbase.compat.version>2.3.0</hbase.compat.version>
         <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
@@ -1634,8 +1628,6 @@
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.0</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
