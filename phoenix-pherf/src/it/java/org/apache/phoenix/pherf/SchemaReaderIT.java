@@ -30,18 +30,44 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
-public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class SchemaReaderIT extends BaseTest {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
+
+    protected static Configuration getTestClusterConfig() {
+        // don't want callers to modify config.
+        return new Configuration(config);
+    }
+
+    @BeforeClass public static synchronized void setUp() throws Exception {
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    }
+
+    @AfterClass public static synchronized void tearDown() throws Exception {
+        dropNonSystemTables();
+    }
+
+    @After
+    public void cleanUpAfterTest() throws Exception {
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
+    }
 
     @Test 
     public void testSchemaReader() {

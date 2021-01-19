@@ -24,14 +24,14 @@ import java.lang.annotation.Target;
 
 /**
  * 
- * Annotation to denote that the test needs to run its own 
- * mini cluster that is separate from the clusters used by 
- * tests annotated as {@link HBaseManagedTimeTest} or 
- * {@link ClientManagedTimeTest}.
+ * Annotation to denote that the test needs to run its own
+ * mini cluster that is separate from the clusters used by
+ * tests annotated as {@link ParallelStatsDisabledTest} or
+ * {@link ParallelStatsEnabledTest}.
  * 
  * As much as possible, tests should be able to run in one of the
- * mini clusters used by {@link HBaseManagedTimeTest} or 
- * {@link ClientManagedTimeTest}. In the *rare* case it can't
+ * mini clusters used by {@link ParallelStatsDisabledTest} or
+ * {@link ParallelStatsEnabledTest}. In the *rare* case it can't
  * you would need to annotate the test as {@link NeedsOwnMiniClusterTest}
  * otherwise the test won't be executed when you run mvn verify or mvn install.
  * 

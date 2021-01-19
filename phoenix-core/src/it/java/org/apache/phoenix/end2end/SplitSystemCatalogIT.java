@@ -37,7 +37,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * Base class for tests that run with split SYSTEM.CATALOG.
  * 
  */
-@Category(SplitSystemCatalogTests.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class SplitSystemCatalogIT extends BaseTest {
 
     protected static String SCHEMA1 = "SCHEMA1";
