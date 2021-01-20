@@ -37,9 +37,9 @@ import org.junit.Test;
 import com.google.common.io.Files;
 
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
-	private static final String PRINCIPAL = "noRenewLease";
+    private static final String PRINCIPAL = "noRenewLease";
     private File spoolDir;
-	private String tableName;
+    private String tableName;
 
     private Connection getConnection() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
@@ -53,99 +53,101 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
         String url = QueryUtil.getConnectionUrl(props, config, PRINCIPAL);
         return DriverManager.getConnection(url, props);
     }
-    
-	@Before 
-	public void setup() throws Exception {
-		tableName = generateUniqueName();
-		spoolDir =  Files.createTempDir();
+
+    @Before
+    public void setup() throws Exception {
+        tableName = generateUniqueName();
+        spoolDir = Files.createTempDir();
         try (Connection conn = getConnection()) {
-    		Statement stmt = conn.createStatement();
-    		stmt.execute("CREATE TABLE " + tableName + " (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
-    		stmt.execute("UPSERT INTO " + tableName + " VALUES ('AA')");
-    		stmt.execute("UPSERT INTO " + tableName + " VALUES ('EB')");
-    		stmt.execute("UPSERT INTO " + tableName + " VALUES ('FA')");
-    		stmt.close();
-    		conn.commit();
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + tableName + " (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
+            stmt.execute("UPSERT INTO " + tableName + " VALUES ('AA')");
+            stmt.execute("UPSERT INTO " + tableName + " VALUES ('EB')");
+            stmt.execute("UPSERT INTO " + tableName + " VALUES ('FA')");
+            stmt.close();
+            conn.commit();
         }
-	}
-	
-	@After
-	public void tearDown() throws Exception {
-	    if (spoolDir != null) {
-	        spoolDir.delete();
-	    }
-	}
+    }
 
-	@Test
-	public void testDeleteAllSpooledTmpFiles() throws SQLException, Throwable {
-		File dir = new File(spoolDir.getPath());
-		File[] files = null; 
+    @After
+    public void tearDown() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
+        if (spoolDir != null) {
+            spoolDir.delete();
+        }
+        assertFalse("refCount leaked", refCountLeaked);
+    }
 
-		class FilenameFilter implements FileFilter {
-			@Override
-			public boolean accept(File dir) {
-				return dir.getName().toLowerCase().endsWith(".bin") && 
-						dir.getName().startsWith("ResultSpooler");
-			}
-		}
+    @Test
+    public void testDeleteAllSpooledTmpFiles() throws SQLException, Throwable {
+        File dir = new File(spoolDir.getPath());
+        File[] files = null;
 
-		FilenameFilter fnameFilter = new FilenameFilter();
+        class FilenameFilter implements FileFilter {
+            @Override
+            public boolean accept(File dir) {
+                return dir.getName().toLowerCase().endsWith(".bin") &&
+                    dir.getName().startsWith("ResultSpooler");
+            }
+        }
 
-		// clean up first
-		files = dir.listFiles(fnameFilter);
-		for (File file : files) {
-			file.delete();
-		}
+        FilenameFilter fnameFilter = new FilenameFilter();
 
-		String query = "select * from " + tableName;
-		Connection conn = getConnection();
-		Statement statement = conn.createStatement();
-		ResultSet rs = statement.executeQuery(query);
-		assertTrue(rs.next());
-		files = dir.listFiles(fnameFilter);
-		assertTrue(files.length > 0);
-		List<String> fileNames = new ArrayList<String>();
-		for (File file : files) {
-			fileNames.add(file.getName());
-		}
+        // clean up first
+        files = dir.listFiles(fnameFilter);
+        for (File file : files) {
+            file.delete();
+        }
 
-		String preparedQuery = "select * from " + tableName + " where id = ?";
-		PreparedStatement pstmt = conn.prepareStatement(preparedQuery);
-		pstmt.setString(1, "EB");
-		ResultSet prs = pstmt.executeQuery(preparedQuery);
-		assertTrue(prs.next());
-		files = dir.listFiles(fnameFilter);
-		assertTrue(files.length > 0);
-		for (File file : files) {
-			fileNames.add(file.getName());
-		}
+        String query = "select * from " + tableName;
+        Connection conn = getConnection();
+        Statement statement = conn.createStatement();
+        ResultSet rs = statement.executeQuery(query);
+        assertTrue(rs.next());
+        files = dir.listFiles(fnameFilter);
+        assertTrue(files.length > 0);
+        List<String> fileNames = new ArrayList<String>();
+        for (File file : files) {
+            fileNames.add(file.getName());
+        }
 
-		Connection conn2 = getConnection();
-		String query2 = "select * from " + tableName + "";
-		Statement statement2 = conn2.createStatement();
-		ResultSet rs2 = statement2.executeQuery(query2);
-		assertTrue(rs2.next());
-		files = dir.listFiles(fnameFilter);
-		assertTrue(files.length > 0);
+        String preparedQuery = "select * from " + tableName + " where id = ?";
+        PreparedStatement pstmt = conn.prepareStatement(preparedQuery);
+        pstmt.setString(1, "EB");
+        ResultSet prs = pstmt.executeQuery(preparedQuery);
+        assertTrue(prs.next());
+        files = dir.listFiles(fnameFilter);
+        assertTrue(files.length > 0);
+        for (File file : files) {
+            fileNames.add(file.getName());
+        }
 
-		String preparedQuery2 = "select * from " + tableName + " where id = ?";
-		PreparedStatement pstmt2 = conn2.prepareStatement(preparedQuery2);
-		pstmt2.setString(1, "EB");
-		ResultSet prs2 = pstmt2.executeQuery(preparedQuery2);
-		assertTrue(prs2.next());
-		files = dir.listFiles(fnameFilter);
-		assertTrue(files.length > 0);
+        Connection conn2 = getConnection();
+        String query2 = "select * from " + tableName + "";
+        Statement statement2 = conn2.createStatement();
+        ResultSet rs2 = statement2.executeQuery(query2);
+        assertTrue(rs2.next());
+        files = dir.listFiles(fnameFilter);
+        assertTrue(files.length > 0);
 
-		conn.close();
+        String preparedQuery2 = "select * from " + tableName + " where id = ?";
+        PreparedStatement pstmt2 = conn2.prepareStatement(preparedQuery2);
+        pstmt2.setString(1, "EB");
+        ResultSet prs2 = pstmt2.executeQuery(preparedQuery2);
+        assertTrue(prs2.next());
+        files = dir.listFiles(fnameFilter);
+        assertTrue(files.length > 0);
 
-		files = dir.listFiles(fnameFilter);
+        conn.close();
 
-		for (File file : files) {
-			assertFalse(fileNames.contains(file.getName()));
-		}
-		conn2.close();
-		files = dir.listFiles(fnameFilter);
-		assertTrue(files.length == 0);
-	}
+        files = dir.listFiles(fnameFilter);
+
+        for (File file : files) {
+            assertFalse(fileNames.contains(file.getName()));
+        }
+        conn2.close();
+        files = dir.listFiles(fnameFilter);
+        assertTrue(files.length == 0);
+    }
 
 }

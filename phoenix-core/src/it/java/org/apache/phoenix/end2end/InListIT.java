@@ -74,13 +74,15 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void cleanUp() throws SQLException {
+    public void cleanUp() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         deleteTenantData(descViewName);
         deleteTenantData(viewName1);
         deleteTenantData(viewName2);
         deleteTenantData(ascViewName);
         deleteTenantData(tableName);
         deleteTenantData(tableName2);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test

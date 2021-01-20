@@ -57,6 +57,7 @@ import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
+import static org.junit.Assert.assertFalse;
 
 @NeedsOwnMiniClusterTest
 public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
@@ -90,7 +91,9 @@ public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
 
     @AfterClass
     public static synchronized void afterClass() {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         EnvironmentEdgeManager.reset();
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test

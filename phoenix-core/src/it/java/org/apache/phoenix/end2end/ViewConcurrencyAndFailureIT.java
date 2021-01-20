@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -142,11 +143,13 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     }
 
     @After
-    public void cleanup() {
+    public void cleanup() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         latch1 = null;
         latch2 = null;
         throwExceptionInChildLinkPreHook = false;
         slowDownAddingChildLink = false;
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test

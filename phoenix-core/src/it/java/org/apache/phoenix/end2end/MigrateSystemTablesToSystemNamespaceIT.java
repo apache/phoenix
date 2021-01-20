@@ -97,8 +97,10 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     public void tearDownMiniCluster() {
         try {
             if (testUtil != null) {
+                boolean refCountLeaked = isAnyStoreRefCountLeaked();
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
+                assertFalse("refCount leaked", refCountLeaked);
             }
         } catch (Exception e) {
             // ignore

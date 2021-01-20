@@ -81,13 +81,13 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // An hour - inherited from ParallelStatsDisabledIT
         props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
-            Integer.toString(60 * 60));
+                Integer.toString(60 * 60));
         // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
         // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
-            Long.toString(Long.MAX_VALUE));
+                Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
-            Long.toString(Long.MAX_VALUE));
+                Long.toString(Long.MAX_VALUE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -104,27 +104,29 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void assertNoConnLeak() {
+    public void assertNoConnLeak() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         assertTrue(PhoenixRuntime.areGlobalClientMetricsBeingCollected());
         assertEquals(0, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     // name is used by failsafe as file name in reports
-    @Parameters(name="UpsertSelecttIT_allowServerSideMutations={0}")
+    @Parameters(name = "UpsertSelecttIT_allowServerSideMutations={0}")
     public static synchronized Object[] data() {
-        return new Object[] {"true", "false"};
+        return new Object[]{"true", "false"};
     }
-	
+
     @Test
     public void testUpsertSelectWithNoIndex() throws Exception {
         testUpsertSelect(false, false);
     }
-    
+
     @Test
     public void testUpsertSelectWithIndex() throws Exception {
         testUpsertSelect(true, false);
     }
-    
+
     @Test
     public void testUpsertSelectWithIndexWithSalt() throws Exception {
         testUpsertSelect(true, true);
@@ -140,13 +142,13 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         byte[][] splits = getDefaultSplits(tenantId);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String aTable = initATableValues(tenantId, saltTable ? null : splits, null,
                 null, getUrl(), saltTable ? "salt_buckets = 2" : null);
 
         String customEntityTable = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             String ddl = "create table " + customEntityTable +
                     "   (organization_id char(15) not null, \n" +
                     "    key_prefix char(3) not null,\n" +
@@ -176,16 +178,16 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                     "    b.val9 varchar\n" +
                     "    CONSTRAINT pk PRIMARY KEY " +
                     "(organization_id, key_prefix, custom_entity_data_id)) " +
-                    (saltTable ? "salt_buckets = 2"  : "");
+                    (saltTable ? "salt_buckets = 2" : "");
             stmt.execute(ddl);
         }
 
         String indexName = generateUniqueName();
         if (createIndex) {
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    Statement stmt = conn.createStatement()) {
+                 Statement stmt = conn.createStatement()) {
                 stmt.execute("CREATE INDEX IF NOT EXISTS " + indexName +
-                        " ON " + aTable + "(a_string)" );
+                        " ON " + aTable + "(a_string)");
             }
         }
         // Trigger multiple batches
@@ -198,7 +200,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                     "a_string  FROM " + aTable + " WHERE ?=a_string";
             if (createIndex) { // Confirm index is used
                 try (PreparedStatement upsertStmt =
-                        conn.prepareStatement("EXPLAIN " + upsert)) {
+                             conn.prepareStatement("EXPLAIN " + upsert)) {
                     upsertStmt.setString(1, tenantId);
                     ResultSet ers = upsertStmt.executeQuery();
                     assertTrue(ers.next());
@@ -218,26 +220,26 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String query = "SELECT key_prefix, substr(custom_entity_data_id, 1, 1), created_by FROM " +
                 customEntityTable + " WHERE organization_id = ? ";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("1", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("2", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("3", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("4", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
@@ -264,32 +266,32 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         query = "SELECT key_prefix, substr(custom_entity_data_id, 1, 1), created_by, " +
                 "last_update_by, division FROM " + customEntityTable + " WHERE organization_id = ?";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             statement.setString(1, tenantId);
             ResultSet rs = statement.executeQuery();
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("1", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
             assertEquals(A_VALUE, rs.getString(4));
             assertTrue(BigDecimal.valueOf(1.0).compareTo(rs.getBigDecimal(5)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("2", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
             assertEquals(A_VALUE, rs.getString(4));
             assertTrue(BigDecimal.valueOf(1.0).compareTo(rs.getBigDecimal(5)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("3", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
             assertEquals(A_VALUE, rs.getString(4));
             assertTrue(BigDecimal.valueOf(1.0).compareTo(rs.getBigDecimal(5)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("00A", rs.getString(1));
             assertEquals("4", rs.getString(2));
             assertEquals(A_VALUE, rs.getString(3));
@@ -309,7 +311,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String upsert;
         ResultSet rs;
         int rowsInserted;
@@ -329,32 +331,32 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String query = "SELECT inst,host,\"DATE\",val FROM " + ptsdbTable;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             rs = statement.executeQuery();
 
             Date now = new Date(EnvironmentEdgeManager.currentTimeMillis());
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW6, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertEquals(null, rs.getBigDecimal(4));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW7, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(7).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW8, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(6).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW9, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(5).compareTo(rs.getBigDecimal(4)) == 0);
 
             assertFalse(rs.next());
@@ -375,27 +377,27 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         query = "SELECT host,inst, \"DATE\",val FROM " + ptsdbTable + " where inst is not null";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             rs = statement.executeQuery();
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW6, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertEquals(null, rs.getBigDecimal(4));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW7, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertTrue(BigDecimal.valueOf(70).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW8, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertTrue(BigDecimal.valueOf(60).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW9, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
@@ -415,53 +417,53 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
 
-        query = "SELECT * FROM " + ptsdbTable ;
+        query = "SELECT * FROM " + ptsdbTable;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             rs = statement.executeQuery();
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW6, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertEquals(null, rs.getBigDecimal(4));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW7, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(7).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW8, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(6).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(ROW9, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(5).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW6, rs.getString(1));
             assertEquals(null, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertEquals(null, rs.getBigDecimal(4));
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW7, rs.getString(1));
             assertEquals(null, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertTrue(BigDecimal.valueOf(70).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW8, rs.getString(1));
             assertEquals(null, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
             assertTrue(BigDecimal.valueOf(60).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(ROW9, rs.getString(1));
             assertEquals(null, rs.getString(2));
             assertTrue(rs.getDate(3).after(now) && rs.getDate(3).before(then));
@@ -475,12 +477,12 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     public void testUpsertSelectForAggAutoCommit() throws Exception {
         testUpsertSelectForAgg(true);
     }
-    
+
     @Test
     public void testUpsertSelectForAgg() throws Exception {
         testUpsertSelectForAgg(false);
     }
-    
+
     private void testUpsertSelectForAgg(boolean autoCommit) throws Exception {
         String tenantId = getOrganizationId();
         String aTable = initATableValues(tenantId, getDefaultSplits(tenantId));
@@ -488,7 +490,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         ensureTableCreated(getUrl(), ptsdbTable, PTSDB_NAME);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(autoCommit);
             String upsert = "UPSERT INTO " + ptsdbTable + "(\"DATE\", val, host) " +
@@ -502,29 +504,29 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 conn.commit();
             }
         }
-        
+
         String query = "SELECT inst,host,\"DATE\",val FROM " + ptsdbTable;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             ResultSet rs = statement.executeQuery();
             Date now = new Date(EnvironmentEdgeManager.currentTimeMillis());
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(A_VALUE, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(10).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(B_VALUE, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(26).compareTo(rs.getBigDecimal(4)) == 0);
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals(null, rs.getString(1));
             assertEquals(C_VALUE, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(9).compareTo(rs.getBigDecimal(4)) == 0);
             assertFalse(rs.next());
         }
@@ -544,14 +546,14 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         query = "SELECT inst,host,\"DATE\",val FROM " + ptsdbTable + " WHERE inst='x'";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement statement = conn.prepareStatement(query)) {
+             PreparedStatement statement = conn.prepareStatement(query)) {
             ResultSet rs = statement.executeQuery();
             Date now = new Date(EnvironmentEdgeManager.currentTimeMillis());
 
-            assertTrue (rs.next());
+            assertTrue(rs.next());
             assertEquals("x", rs.getString(1));
             assertEquals(C_VALUE, rs.getString(2));
-            assertTrue(rs.getDate(3).before(now) );
+            assertTrue(rs.getDate(3).before(now));
             assertTrue(BigDecimal.valueOf(26).compareTo(rs.getBigDecimal(4)) == 0);
             assertFalse(rs.next());
         }
@@ -559,19 +561,19 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertSelectLongToInt() throws Exception {
-        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1),
+        byte[][] splits = new byte[][]{PInteger.INSTANCE.toBytes(1),
                 PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(3),
                 PInteger.INSTANCE.toBytes(4)};
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String upsert = "UPSERT INTO " + tableName + " VALUES(1)";
         int rowsInserted;
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
+             PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
             rowsInserted = upsertStmt.executeUpdate();
             assertEquals(1, rowsInserted);
             conn.commit();
@@ -579,7 +581,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         upsert = "UPSERT INTO " + tableName + "  select i+1 from " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
+             PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
             rowsInserted = upsertStmt.executeUpdate();
             assertEquals(1, rowsInserted);
             conn.commit();
@@ -587,19 +589,19 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String select = "SELECT i FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             ResultSet rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
+            assertEquals(1, rs.getInt(1));
             assertTrue(rs.next());
-            assertEquals(2,rs.getInt(1));
+            assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
         }
     }
 
     @Test
     public void testUpsertSelectRunOnServer() throws Exception {
-        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1),
+        byte[][] splits = new byte[][]{PInteger.INSTANCE.toBytes(1),
                 PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(3),
                 PInteger.INSTANCE.toBytes(4)};
         String tableName = generateUniqueName();
@@ -607,13 +609,13 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 " (i integer not null primary key desc, j integer)", splits, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         ResultSet rs;
         int rowsInserted;
         String upsert = "UPSERT INTO " + tableName + " VALUES(1, 1)";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
+             PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
             rowsInserted = upsertStmt.executeUpdate();
             assertEquals(1, rowsInserted);
             conn.commit();
@@ -621,11 +623,11 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String select = "SELECT i,j+1 FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            assertEquals(2,rs.getInt(2));
+            assertEquals(1, rs.getInt(1));
+            assertEquals(2, rs.getInt(2));
             assertFalse(rs.next());
         }
 
@@ -640,10 +642,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         select = "SELECT j FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(2,rs.getInt(1));
+            assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
         }
 
@@ -658,17 +660,17 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         select = "SELECT j FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
+            assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
         }
     }
 
     @Test
     public void testUpsertSelectOnDescToAsc() throws Exception {
-        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1),
+        byte[][] splits = new byte[][]{PInteger.INSTANCE.toBytes(1),
                 PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(3),
                 PInteger.INSTANCE.toBytes(4)};
         String tableName = generateUniqueName();
@@ -676,13 +678,13 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 " (i integer not null primary key desc, j integer)", splits, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         ResultSet rs;
         int rowsInserted;
         String upsert = "UPSERT INTO " + tableName + " VALUES(1, 1)";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
+             PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
             rowsInserted = upsertStmt.executeUpdate();
             assertEquals(1, rowsInserted);
             conn.commit();
@@ -700,34 +702,34 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String select = "SELECT i,j FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(2,rs.getInt(1));
-            assertEquals(2,rs.getInt(2));
+            assertEquals(2, rs.getInt(1));
+            assertEquals(2, rs.getInt(2));
             assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
-            assertEquals(1,rs.getInt(2));
+            assertEquals(1, rs.getInt(1));
+            assertEquals(1, rs.getInt(2));
             assertFalse(rs.next());
         }
     }
 
     @Test
     public void testUpsertSelectRowKeyMutationOnSplitedTable() throws Exception {
-        byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1),
+        byte[][] splits = new byte[][]{PInteger.INSTANCE.toBytes(1),
                 PInteger.INSTANCE.toBytes(2), PInteger.INSTANCE.toBytes(3),
                 PInteger.INSTANCE.toBytes(4)};
         String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntKeyTest", splits, null, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         int rowsInserted;
         ResultSet rs;
 
         String upsert = "UPSERT INTO " + tableName + " VALUES(?)";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
+             PreparedStatement upsertStmt = conn.prepareStatement(upsert)) {
             upsertStmt.setInt(1, 1);
             upsertStmt.executeUpdate();
             upsertStmt.setInt(1, 3);
@@ -749,33 +751,33 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String select = "SELECT i FROM " + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(select);
             assertTrue(rs.next());
-            assertEquals(1,rs.getInt(1));
+            assertEquals(1, rs.getInt(1));
             assertTrue(rs.next());
             assertTrue(rs.next());
             assertTrue(rs.next());
-            assertEquals(4,rs.getInt(1));
+            assertEquals(4, rs.getInt(1));
             assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithLimit() throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String tableName = generateUniqueName();
         ResultSet rs;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("create table " + tableName +
                     " (id varchar(10) not null primary key, val varchar(10), ts timestamp)");
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + tableName +
                     " values ('aaa', 'abc', current_date())");
             stmt.execute("upsert into " + tableName +
@@ -786,29 +788,29 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery("select * from " + tableName);
 
             assertTrue(rs.next());
-            assertEquals("aaa",rs.getString(1));
-            assertEquals("abc",rs.getString(2));
+            assertEquals("aaa", rs.getString(1));
+            assertEquals("abc", rs.getString(2));
             assertNotNull(rs.getDate(3));
 
             assertTrue(rs.next());
-            assertEquals("bbb",rs.getString(1));
-            assertEquals("bcd",rs.getString(2));
+            assertEquals("bbb", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
             assertNotNull(rs.getDate(3));
 
             assertTrue(rs.next());
-            assertEquals("ccc",rs.getString(1));
-            assertEquals("cde",rs.getString(2));
+            assertEquals("ccc", rs.getString(1));
+            assertEquals("cde", rs.getString(2));
             assertNotNull(rs.getDate(3));
 
             assertFalse(rs.next());
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + tableName +
                     " (id, ts) select id, CAST(null AS timestamp) from " + tableName +
                     " where id <= 'bbb' limit 1");
@@ -816,38 +818,38 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery("select * from " + tableName);
             assertTrue(rs.next());
-            assertEquals("aaa",rs.getString(1));
-            assertEquals("abc",rs.getString(2));
+            assertEquals("aaa", rs.getString(1));
+            assertEquals("abc", rs.getString(2));
             assertNull(rs.getDate(3));
 
             assertTrue(rs.next());
-            assertEquals("bbb",rs.getString(1));
-            assertEquals("bcd",rs.getString(2));
+            assertEquals("bbb", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
             assertNotNull(rs.getDate(3));
 
             assertTrue(rs.next());
-            assertEquals("ccc",rs.getString(1));
-            assertEquals("cde",rs.getString(2));
+            assertEquals("ccc", rs.getString(1));
+            assertEquals("cde", rs.getString(2));
             assertNotNull(rs.getDate(3));
 
             assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithSequence() throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String t1 = generateUniqueName();
         String t2 = generateUniqueName();
         String seq = generateUniqueName();
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("create table  " + t1 +
                     " (id bigint not null primary key, v varchar)");
             stmt.execute("create table " + t2 + " (k varchar primary key)");
@@ -855,7 +857,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t2 + " values ('a')");
             stmt.execute("upsert into " + t2 + " values ('b')");
             stmt.execute("upsert into " + t2 + " values ('c')");
@@ -863,47 +865,47 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t1 + " select next value for  " +
                     seq + " , k from " + t2);
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             ResultSet rs = stmt.executeQuery("select * from " + t1);
 
             assertTrue(rs.next());
-            assertEquals(1,rs.getLong(1));
-            assertEquals("a",rs.getString(2));
+            assertEquals(1, rs.getLong(1));
+            assertEquals("a", rs.getString(2));
 
             assertTrue(rs.next());
-            assertEquals(2,rs.getLong(1));
-            assertEquals("b",rs.getString(2));
+            assertEquals(2, rs.getLong(1));
+            assertEquals("b", rs.getString(2));
 
             assertTrue(rs.next());
-            assertEquals(3,rs.getLong(1));
-            assertEquals("c",rs.getString(2));
+            assertEquals(3, rs.getLong(1));
+            assertEquals("c", rs.getString(2));
 
             assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithSequenceAndOrderByWithSalting() throws Exception {
         int numOfRecords = 200;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String t1 = generateUniqueName();
         String t2 = generateUniqueName();
-        String ddl = "CREATE TABLE IF NOT EXISTS " + t1 +  "(ORGANIZATION_ID CHAR(15) NOT NULL, " +
+        String ddl = "CREATE TABLE IF NOT EXISTS " + t1 + "(ORGANIZATION_ID CHAR(15) NOT NULL, " +
                 "QUERY_ID CHAR(15) NOT NULL, CURSOR_ORDER BIGINT NOT NULL, K1 INTEGER, " +
                 "V1 INTEGER " + "CONSTRAINT MAIN_PK PRIMARY KEY (ORGANIZATION_ID, QUERY_ID, " +
                 "CURSOR_ORDER) " + ") SALT_BUCKETS = 4";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute(ddl);
             stmt.execute(
                     "CREATE TABLE " + t2 + "(ORGANIZATION_ID CHAR(15) NOT NULL, k1 integer " +
@@ -913,7 +915,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             for (int i = 0; i < numOfRecords; i++) {
                 stmt.execute("UPSERT INTO " + t2 +
                         " values ('00Dxx0000001gEH'," + i + "," + (i + 2) + ")");
@@ -922,7 +924,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             stmt.execute("UPSERT INTO " + t1 +
                     " SELECT '00Dxx0000001gEH', 'MyQueryId', NEXT VALUE FOR S, k1, v1  FROM " +
@@ -931,7 +933,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             ResultSet rs = stmt.executeQuery("select count(*) from " + t1);
 
             assertTrue(rs.next());
@@ -951,14 +953,14 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             stmt.execute("drop sequence s");
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithRowtimeStampColumn() throws Exception {
         String t1 = generateUniqueName();
         String t2 = generateUniqueName();
         String t3 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + t1 +
                     " (PK1 VARCHAR NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK " +
                     "PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP " + ")) ");
@@ -969,27 +971,27 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                     "PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK " +
                     "PRIMARY KEY(PK1, PK2 DESC ROW_TIMESTAMP " + ")) ");
         }
-        
+
         // The timestamp of the put will be the value of the row_timestamp column.
         long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         Date rowTimestampDate = new Date(rowTimestamp);
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t1 +
-                " (PK1, PK2, KV1) VALUES(?, ?, ?)")) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t1 +
+                     " (PK1, PK2, KV1) VALUES(?, ?, ?)")) {
             stmt.setString(1, "PK1");
             stmt.setDate(2, rowTimestampDate);
             stmt.setString(3, "KV1");
             stmt.executeUpdate();
             conn.commit();
         }
-        
+
         // Upsert select data into table T2. The connection needs to be at a timestamp beyond the
         // row timestamp. Otherwise it won't see the data from table T1.
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("UPSERT INTO " + t2 + " SELECT * FROM " + t1);
             conn.commit();
             // Verify the data upserted in T2. Note that we can use the same connection here because
@@ -1007,23 +1009,23 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             }
 
         }
-        
+
         // Verify that you can't see the data in T2 if the connection is at a timestamp
         // lower than the row timestamp.
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(rowTimestamp-1));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(rowTimestamp - 1));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + t2 +
-                " WHERE PK1 = ? AND PK2 = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + t2 +
+                     " WHERE PK1 = ? AND PK2 = ?")) {
             stmt.setString(1, "PK1");
             stmt.setDate(2, rowTimestampDate);
             ResultSet rs = stmt.executeQuery();
             assertFalse(rs.next());
         }
-        
+
         // Upsert select data into table T3. The connection needs to be at a timestamp beyond the
         // row timestamp. Otherwise it won't see the data from table T1.
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("UPSERT INTO " + t3 + " SELECT * FROM " + t1);
             conn.commit();
             // Verify the data upserted in T3. Note that we can use the same connection here
@@ -1040,27 +1042,27 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 assertEquals("KV1", rs.getString("KV1"));
             }
         }
-        
+
         // Verify that you can't see the data in T2 if the connection is at next timestamp
         // (which is lower than the row timestamp).
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + t3 +
-                " WHERE PK1 = ? AND PK2 = ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + t3 +
+                     " WHERE PK1 = ? AND PK2 = ?")) {
             stmt.setString(1, "PK1");
             stmt.setDate(2, rowTimestampDate);
             ResultSet rs = stmt.executeQuery();
             assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertSelectSameTableWithRowTimestampColumn() throws Exception {
         String tableName = generateUniqueName();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK " +
                     "PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
@@ -1070,8 +1072,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         long rowTimestamp = 100;
         Date rowTimestampDate = new Date(rowTimestamp);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName +
-                " (PK1, PK2, KV1) VALUES(?, ?, ?)")) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName +
+                     " (PK1, PK2, KV1) VALUES(?, ?, ?)")) {
             stmt.setInt(1, 1);
             stmt.setDate(2, rowTimestampDate);
             stmt.setString(3, "KV1");
@@ -1080,37 +1082,37 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
         String seq = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE SEQUENCE " + seq);
         }
         // Upsert select data into table. The connection needs to be at a timestamp beyond the
         // row timestamp. Otherwise it won't see the data from table.
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("UPSERT INTO  " + tableName +
                     "  SELECT NEXT VALUE FOR " + seq + ", PK2 FROM  " + tableName);
             conn.commit();
         }
-        
+
         // Upsert select using sequences.
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             for (int i = 0; i < 10; i++) {
                 int count = stmt.executeUpdate("UPSERT INTO  " + tableName +
                         "  SELECT NEXT VALUE FOR " + seq + ", PK2 FROM  " + tableName);
-                assertEquals((int)Math.pow(2, i), count);
+                assertEquals((int) Math.pow(2, i), count);
             }
         }
     }
-    
+
     @Test
     public void testAutomaticallySettingRowtimestamp() throws Exception {
         String table1 = generateUniqueName();
         String table2 = generateUniqueName();
         String table3 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + table1 +
                     " (T1PK1 VARCHAR NOT NULL, T1PK2 DATE NOT NULL, T1KV1 VARCHAR, T1KV2 VARCHAR " +
                     "CONSTRAINT PK PRIMARY KEY(T1PK1, T1PK2 DESC ROW_TIMESTAMP)) ");
@@ -1124,10 +1126,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table1 +
-                " (T1PK1, T1KV1, T1KV2) VALUES (?, ?, ?)")) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table1 +
+                     " (T1PK1, T1KV1, T1KV2) VALUES (?, ?, ?)")) {
             // Upsert values where row_timestamp column PK2 is not set and the column names
             // are specified. This should upsert data with the value for PK2 as server timestamp
             stmt.setString(1, "PK1");
@@ -1137,10 +1139,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             conn.commit();
         }
         long endTime = EnvironmentEdgeManager.currentTimeMillis();
-        
+
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("SELECT T1KV1, T1KV2 FROM " +
-                table1 + " WHERE T1PK1 = ? AND T1PK2 >= ? AND T1PK2 <= ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT T1KV1, T1KV2 FROM " +
+                     table1 + " WHERE T1PK1 = ? AND T1PK2 >= ? AND T1PK2 <= ?")) {
             // Now query for data that was upserted above. If the row key was generated correctly
             // then we should be able to see the data in this query.
             stmt.setString(1, "PK1");
@@ -1152,21 +1154,21 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             assertEquals("KV2", rs.getString(2));
             assertFalse(rs.next());
         }
-        
+
         startTime = EnvironmentEdgeManager.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table2 +
-                " (T2PK1, T2KV1, T2KV2) SELECT T1PK1, T1KV1, T1KV2 FROM " + table1)) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table2 +
+                     " (T2PK1, T2KV1, T2KV2) SELECT T1PK1, T1KV1, T1KV2 FROM " + table1)) {
             // Upsert select into table2 by not selecting the row timestamp column. In this case,
             // the rowtimestamp column would end up being set to the server timestamp
             stmt.executeUpdate();
             conn.commit();
         }
         endTime = EnvironmentEdgeManager.currentTimeMillis();
-        
+
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("SELECT T2KV1, T2KV2 FROM " +
-                table2 + " WHERE T2PK1 = ? AND T2PK2 >= ?  AND T2PK2 <= ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT T2KV1, T2KV2 FROM " +
+                     table2 + " WHERE T2PK1 = ? AND T2PK2 >= ?  AND T2PK2 <= ?")) {
             // Now query for data that was upserted above. If the row key was generated correctly
             // then we should be able to see the data in this query.
             stmt.setString(1, "PK1");
@@ -1178,21 +1180,21 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             assertEquals("KV2", rs.getString(2));
             assertFalse(rs.next());
         }
-        
+
         startTime = EnvironmentEdgeManager.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table3 +
-                " (T3PK1, T3KV1, T3KV2) SELECT T2PK1, T2KV1, T2KV2 FROM " + table2)) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + table3 +
+                     " (T3PK1, T3KV1, T3KV2) SELECT T2PK1, T2KV1, T2KV2 FROM " + table2)) {
             // Upsert select into table3 by not selecting the row timestamp column. In this case,
             // the rowtimestamp column would end up being set to the server timestamp
             stmt.executeUpdate();
             conn.commit();
         }
         endTime = EnvironmentEdgeManager.currentTimeMillis();
-        
+
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("SELECT T3KV1, T3KV2 FROM " +
-                table3 + " WHERE T3PK1 = ? AND T3PK2 >= ? AND T3PK2 <= ?")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT T3KV1, T3KV2 FROM " +
+                     table3 + " WHERE T3PK1 = ? AND T3PK2 >= ? AND T3PK2 <= ?")) {
             // Now query for data that was upserted above. If the row key was generated correctly
             // then we should be able to see the data in this query.
             stmt.setString(1, "PK1");
@@ -1205,16 +1207,16 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertSelectAutoCommitWithRowTimestampColumn() throws Exception {
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName1 +
                     " (PK1 INTEGER NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR" +
                     " CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP, PK3)) ");
@@ -1229,8 +1231,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             long rowTimestamp1 = 100;
             Date rowTimestampDate = new Date(rowTimestamp1);
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " +
-                            tableName + " (PK1, PK2, PK3, KV1) VALUES(?, ?, ?, ?)")) {
+                 PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " +
+                         tableName + " (PK1, PK2, PK3, KV1) VALUES(?, ?, ?, ?)")) {
                 stmt.setInt(1, 1);
                 stmt.setDate(2, rowTimestampDate);
                 stmt.setInt(3, 3);
@@ -1241,7 +1243,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    Statement stmt = conn.createStatement()) {
+                 Statement stmt = conn.createStatement()) {
                 conn.setAutoCommit(true);
                 // Upsert select in the same table with the row_timestamp column PK2 not specified. 
                 // This will end up creating a new row whose timestamp is the server time stamp 
@@ -1250,10 +1252,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                         " (PK1, PK3, KV1) SELECT PK1, PK3, KV1 FROM  " + tableName);
             }
             long endTime = EnvironmentEdgeManager.currentTimeMillis();
-            
+
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + tableName +
-                    " WHERE PK1 = ? AND PK2 >= ? AND PK2<= ? AND PK3 = ?")) {
+                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM  " + tableName +
+                         " WHERE PK1 = ? AND PK2 >= ? AND PK2<= ? AND PK3 = ?")) {
                 // Verify the row that was upserted above
                 stmt.setInt(1, 1);
                 stmt.setDate(2, new Date(startTime));
@@ -1274,7 +1276,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
             }
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    Statement stmt = conn.createStatement()) {
+                 Statement stmt = conn.createStatement()) {
                 conn.setAutoCommit(true);
                 // Upsert select in the same table with the row_timestamp column PK2 specified.
                 // This will not end up creating a new row because the destination pk columns,
@@ -1283,7 +1285,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                         " (PK1, PK2, PK3, KV1) SELECT PK1, PK2, PK3, KV1 FROM  " + tableName);
             }
             try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                    Statement stmt = conn.createStatement()) {
+                 Statement stmt = conn.createStatement()) {
                 // Verify that two rows were created. One with rowtimestamp1 and the other
                 // with rowtimestamp2
                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + tableName);
@@ -1291,7 +1293,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 assertEquals(2, rs.getInt(1));
                 assertFalse(rs.next());
             }
-            
+
         }
     }
 
@@ -1305,9 +1307,9 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE IMMUTABLE TABLE " + baseTable +
                     " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, " +
                     "KV1 VARCHAR, KV2 VARCHAR, KV3 VARCHAR CONSTRAINT PK PRIMARY KEY(TENANT_ID, " +
@@ -1317,10 +1319,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             stmt.execute("CREATE VIEW " + globalView + " AS SELECT * FROM " +
                     baseTable + " WHERE KV1 = 'KV1'");
         }
-        
+
         String tenantId = "tenant1";
         try (Connection conn = getTenantConnection(tenantId);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE VIEW " + tenantView + " AS SELECT * FROM " +
                     baseTable);
             stmt.execute("CREATE INDEX " + tenantViewIdx + " ON " +
@@ -1330,8 +1332,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         // upsert data into base table without specifying the row timestamp column PK2
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + baseTable +
-                " (TENANT_ID, PK3, KV1, KV2, KV3) VALUES (?, ?, ?, ?, ?)")) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + baseTable +
+                     " (TENANT_ID, PK3, KV1, KV2, KV3) VALUES (?, ?, ?, ?, ?)")) {
             // Upsert select in the same table with the row_timestamp column PK2 not specified.
             // This will end up creating a new row whose timestamp is the latest timestamp
             // (which will be used for the row key too)
@@ -1398,8 +1400,8 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         // Verify that data can be queried using tenant view and tenant view index
         try (Connection tenantConn = getTenantConnection(tenantId);
-                PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " +
-                tenantView + " WHERE PK2 >= ? AND PK2 <= ? AND PK3 = ?")) {
+             PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " +
+                     tenantView + " WHERE PK2 >= ? AND PK2 <= ? AND PK3 = ?")) {
             // Query the tenant view
             stmt.setDate(1, new Date(startTime));
             stmt.setDate(2, new Date(endTime));
@@ -1505,11 +1507,11 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
                 assertFalse(rs.next());
             }
         }
-        
+
         // Verify that the data upserted using the tenant view can now be queried using tenant view
         try (Connection tenantConn = getTenantConnection(tenantId);
-                PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " +
-                tenantView + " WHERE (PK2, PK3) IN ((?, ?), (?, ?)) ORDER BY KV1")) {
+             PreparedStatement stmt = tenantConn.prepareStatement("SELECT * FROM  " +
+                     tenantView + " WHERE (PK2, PK3) IN ((?, ?), (?, ?)) ORDER BY KV1")) {
             // Query the base table
             stmt.setDate(1, upsertedDate);
             stmt.setInt(2, 33);
@@ -1521,7 +1523,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("KV14", rs.getString("KV1"));
             assertFalse(rs.next());
-            
+
             //TODO: uncomment the code after PHOENIX-2277 is fixed
 //            // Query using the index on the tenantView
 //            stmt = tenantConn.prepareStatement("SELECT KV1 FROM  " + tenantView +
@@ -1540,16 +1542,16 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 //            assertFalse(rs.next());
         }
     }
-        
+
     @Test
     public void testDisallowNegativeValuesForRowTsColumn() throws Exception {
         String tableName = generateUniqueName();
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (PK1 BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR)");
             stmt.execute("CREATE TABLE " + tableName2 +
@@ -1557,52 +1559,52 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
         long upsertedTs = 100;
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName +
-                " VALUES (?, ?)")) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName +
+                     " VALUES (?, ?)")) {
             stmt.setLong(1, upsertedTs);
             stmt.setString(2, "KV1");
             stmt.executeUpdate();
             conn.commit();
         }
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName2 +
-                " SELECT (PK1 - 500), KV1 FROM " + tableName)) {
+             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName2 +
+                     " SELECT (PK1 - 500), KV1 FROM " + tableName)) {
             stmt.executeUpdate();
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
-    
+
     @Test
     public void testUpsertSelectWithFixedWidthNullByteSizeArray() throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String t1 = generateUniqueName();
         ResultSet rs;
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("create table " + t1 +
                     " (id bigint not null primary key, ca char(3)[])");
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t1 + " values (1, ARRAY['aaa', 'bbb'])");
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t1 + " (id, ca) select id, " +
                     "ARRAY['ccc', 'ddd'] from " + t1 + " WHERE id = 1");
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery("select * from " + t1);
             assertTrue(rs.next());
             assertEquals(1, rs.getLong(1));
@@ -1612,26 +1614,26 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
         String t2 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("create table " + t2 +
                     " (id bigint not null primary key, ba binary(4)[])");
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t2 + " values (2, ARRAY[1, 27])");
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             stmt.execute("upsert into " + t2 + " (id, ba) select id, " +
                     "ARRAY[54, 1024] from " + t2 + " WHERE id = 2");
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery("select * from " + t2);
             assertTrue(rs.next());
             assertEquals(2, rs.getLong(1));
@@ -1652,28 +1654,28 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     private void testUpsertSelectWithMultiByteChars(boolean autoCommit) throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         String t1 = generateUniqueName();
         String validValue = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉";
         String invalidValue = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉";
         String columnTypeInfo = "VARCHAR(20)";
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("create table " + t1 +
                     " (id bigint not null primary key, v varchar(20))");
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("upsert into " + t1 + " values (1, 'foo')");
             conn.commit();
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("upsert into " + t1 + " (id, v) select id, "
                     + "'" + validValue + "' from " + t1 + " WHERE id = 1");
@@ -1681,7 +1683,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             ResultSet rs = stmt.executeQuery("select * from  " + t1);
 
@@ -1691,7 +1693,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(autoCommit);
             stmt.execute("upsert into  " + t1 + " (id, v) select id, "
                     + "'" + invalidValue + "' from " + t1 + " WHERE id = 1");
@@ -1716,7 +1718,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String seq = generateUniqueName();
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(false);
 
             stmt.execute("CREATE SEQUENCE " + seq);
@@ -1727,10 +1729,10 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             for (int i = 0; i < 100; i++) {
                 stmt.execute("UPSERT INTO  " + t1 +
-                        "  VALUES (NEXT VALUE FOR " + seq + ", " + (i%10) + ")");
+                        "  VALUES (NEXT VALUE FOR " + seq + ", " + (i % 10) + ")");
             }
             conn.commit();
         }
@@ -1740,7 +1742,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             try (Statement stmt = conn.createStatement()) {
                 int upsertCount = stmt.executeUpdate("UPSERT INTO " + t2 +
                         " SELECT pk, val FROM  " + t1);
-                assertEquals(100,upsertCount);
+                assertEquals(100, upsertCount);
             }
         }
     }
@@ -1751,9 +1753,9 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String indexName = generateUniqueName();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement statement = conn.createStatement()) {
+             Statement statement = conn.createStatement()) {
             statement.execute("CREATE IMMUTABLE TABLE " + tableName +
                     " (k1 TIMESTAMP not null, k2 bigint not null, v bigint, constraint pk " +
                     "primary key (k1 row_timestamp, k2)) SALT_BUCKETS = 9");
@@ -1823,9 +1825,9 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         String tableName2 = generateUniqueName();
         Properties props = new Properties();
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
-                Statement stmt = conn.createStatement()) {
+             Statement stmt = conn.createStatement()) {
             conn.setAutoCommit(true);
             stmt.execute("create table " + tableName1 +
                     "(name varchar(160) primary key, id varchar(120), address varchar(160))");
@@ -1844,13 +1846,13 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
-    
+
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.ENABLE_SERVER_SIDE_UPSERT_MUTATIONS,
-            allowServerSideMutations);
+                allowServerSideMutations);
         props.setProperty(TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), props);
     }
-    
+
 }
