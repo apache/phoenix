@@ -1152,8 +1152,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             PhoenixTTLRegionObserver.class.getName(), null, priority-2, null);
                 }
             }
-
-            if (Arrays.equals(tableName, SYSTEM_CATALOG_NAME_BYTES)) {
+            if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!descriptor.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
                     descriptor.addCoprocessor(
                             SystemCatalogRegionObserver.class.getName(), null, priority, null);
