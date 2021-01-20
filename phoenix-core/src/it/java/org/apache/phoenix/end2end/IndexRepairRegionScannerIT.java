@@ -88,6 +88,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -149,6 +150,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     @After
     public void cleanup() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             deleteAllRows(conn,
@@ -158,6 +160,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         }
         EnvironmentEdgeManager.reset();
         resetIndexRegionObserverFailPoints();
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     private void setIndexRowStatusesToVerified(Connection conn, String dataTableFullName, String indexTableFullName) throws Exception {

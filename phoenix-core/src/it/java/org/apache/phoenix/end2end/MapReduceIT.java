@@ -85,8 +85,10 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void clearCountersForScanGrouper() {
+    public void clearCountersForScanGrouper() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test

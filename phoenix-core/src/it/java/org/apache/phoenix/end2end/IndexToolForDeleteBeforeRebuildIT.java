@@ -49,6 +49,7 @@ import java.util.UUID;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private Connection conn;
@@ -120,9 +121,11 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void teardown() throws SQLException {
+    public void teardown() throws Exception {
         if (conn != null) {
+            boolean refCountLeaked = isAnyStoreRefCountLeaked();
             conn.close();
+            assertFalse("refCount leaked", refCountLeaked);
         }
     }
 

@@ -19,6 +19,7 @@
 package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hbase.wal.WALSplitter;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.TableName;
@@ -151,9 +153,12 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   @After
   public void tearDown() throws Exception {
+    boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
+        UTIL.getHBaseCluster().getMaster());
     UTIL.shutdownMiniHBaseCluster();
     UTIL.shutdownMiniDFSCluster();
     UTIL.shutdownMiniZKCluster();
+    assertFalse("refCount leaked", refCountLeaked);
   }
 
 

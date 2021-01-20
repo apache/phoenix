@@ -116,9 +116,11 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
 
     @After
     public void unsetFailForTesting() {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
         IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     public static void assertExplainPlan(Connection conn, String selectSql,
