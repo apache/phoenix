@@ -18,6 +18,7 @@
 package org.apache.phoenix.compat.hbase;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 
@@ -33,4 +34,15 @@ public abstract class CompatUtil {
     public static Scan setSingleRow(Scan scan, byte[] indexRowKey) {
         return scan.withStartRow(indexRowKey, true).withStopRow(indexRowKey, true);
     }
+
+    /**
+     * HBase 1.5+ has storeRefCount available in RegionMetrics
+     *
+     * @param master Active HMaster instance
+     * @return true if any region has refCount leakage
+     */
+    public static boolean isAnyStoreRefCountLeaked(HMaster master) {
+        return false;
+    }
+
 }

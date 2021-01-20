@@ -135,6 +135,12 @@ import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.SystemExitRule;
+import org.apache.phoenix.compat.hbase.CompatUtil;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -176,10 +182,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * when one runs mvn verify or mvn install.
  * 
  * For tests needing connectivity to a cluster, please use
- * {@link ParallelStatsDisabledIt} or {@link ParallelStatsEnabledIt}.
+ * {@link ParallelStatsDisabledIT} or {@link ParallelStatsEnabledIT}.
  * 
  * In the case when a test can't share the same mini cluster as the
- * ones used by {@link ParallelStatsDisabledIt} or {@link ParallelStatsEnabledIt},
+ * ones used by {@link ParallelStatsDisabledIT} or {@link ParallelStatsEnabledIT},
  * one could extend this class and spin up your own mini cluster. Please
  * make sure to annotate such classes with {@link NeedsOwnMiniClusterTest} and
  * shutdown the mini cluster in a method annotated by @AfterClass.
@@ -457,8 +463,8 @@ public abstract class BaseTest {
             }
         }
     }
-    
-    protected static void dropNonSystemTables() throws Exception {
+
+    protected synchronized static void dropNonSystemTables() throws Exception {
         try {
             disableAndDropNonSystemTables();
         } finally {
@@ -779,15 +785,15 @@ public abstract class BaseTest {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
-            if(isDistributedClusterModeEnabled(config)) {
-                LOGGER.info(
-                        "Deleting old tables on distributed cluster because number of tables is likely greater than "
-                                + TEARDOWN_THRESHOLD);
+            if (isDistributedClusterModeEnabled(config)) {
+                LOGGER.info("Deleting old tables on distributed cluster because "
+                        + "number of tables is likely greater than {}",
+                    TEARDOWN_THRESHOLD);
                 deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
             } else {
-                LOGGER.info(
-                    "Clearing all HBase tables in minicluster because number of tables on this mini cluster is likely greater than "
-                            + TEARDOWN_THRESHOLD);
+                LOGGER.info("Shutting down mini cluster because number of tables"
+                        + " on this mini cluster is likely greater than {}",
+                    TEARDOWN_THRESHOLD);
                 resetHbase();
             }
         }
@@ -2031,5 +2037,18 @@ public abstract class BaseTest {
         });
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /**
+     * Confirms that no storeFile under any region has refCount leakage
+     *
+     * @return true if any region has refCount leakage
+     */
+    protected synchronized static boolean isAnyStoreRefCountLeaked() {
+        if (getUtility() != null) {
+            return CompatUtil.isAnyStoreRefCountLeaked(getUtility()
+                .getHBaseCluster().getMaster());
+        }
+        return false;
     }
 }
