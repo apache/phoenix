@@ -316,7 +316,7 @@
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
-                <reuseForks>true</reuseForks>
+                <reuseForks>false</reuseForks>
                 <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
@@ -328,7 +328,7 @@
             <execution>
               <id>ParallelStatsDisabledTest</id>
               <configuration>
-                <reuseForks>true</reuseForks>
+                <reuseForks>false</reuseForks>
                 <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
@@ -535,7 +535,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
-          <reuseForks>true</reuseForks>
+          <reuseForks>false</reuseForks>
           <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>

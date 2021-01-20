@@ -481,8 +481,10 @@ public abstract class BaseTest {
         }
     }
 
-    public static void tearDownMiniClusterAsync(final int numTables) {
+    public static synchronized void tearDownMiniClusterAsync(
+            final int numTables) {
         final HBaseTestingUtility u = utility;
+        ConnectionFactory.shutdown();
         try {
             destroyDriver();
             utility = null;
@@ -504,14 +506,10 @@ public abstract class BaseTest {
                             } catch (Throwable t) {
                                 LOGGER.error("Exception caught when shutting down mini cluster", t);
                             } finally {
-                                try {
-                                    ConnectionFactory.shutdown();
-                                } finally {
-                                    LOGGER.info(
-                                        "Time in seconds spent in shutting down mini cluster with "
-                                                + numTables + " tables: "
-                                                + (System.currentTimeMillis() - startTime) / 1000);
-                                }
+                                LOGGER.info(
+                                    "Time in seconds spent in shutting down mini cluster with "
+                                        + numTables + " tables: "
+                                        + (System.currentTimeMillis() - startTime) / 1000);
                             }
                         }
                     }
@@ -521,11 +519,14 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
+    protected static synchronized void setUpTestDriver(ReadOnlyProps props)
+            throws Exception {
         setUpTestDriver(props, props);
     }
     
-    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+    protected static synchronized void setUpTestDriver(
+            ReadOnlyProps serverProps, ReadOnlyProps clientProps)
+            throws Exception {
         if (driver == null) {
             String url = checkClusterInitialized(serverProps);
             driver = initAndRegisterTestDriver(url, clientProps);
@@ -549,7 +550,8 @@ public abstract class BaseTest {
      * @return url to be used by clients to connect to the mini cluster.
      * @throws Exception 
      */
-    private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) throws Exception {
+    private static synchronized String initMiniCluster(Configuration conf,
+            ReadOnlyProps overrideProps) throws Exception {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
@@ -672,7 +674,8 @@ public abstract class BaseTest {
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
-    public static PhoenixTestDriver initAndRegisterTestDriver(String url, ReadOnlyProps props) throws Exception {
+    public static synchronized PhoenixTestDriver initAndRegisterTestDriver(
+            String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = newTestDriver(props);
         DriverManager.registerDriver(newDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
@@ -686,7 +689,7 @@ public abstract class BaseTest {
     }
     
     //Close and unregister the driver.
-    protected static boolean destroyDriver(Driver driver) {
+    protected static synchronized boolean destroyDriver(Driver driver) {
         if (driver != null) {
             assert(driver instanceof PhoenixEmbeddedDriver);
             PhoenixEmbeddedDriver pdriver = (PhoenixEmbeddedDriver)driver;
@@ -710,7 +713,7 @@ public abstract class BaseTest {
 
     private static long timestamp;
 
-    public static long nextTimestamp() {
+    public static synchronized long nextTimestamp() {
         timestamp += 100;
         return timestamp;
     }
@@ -797,7 +800,8 @@ public abstract class BaseTest {
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
     }
 
-    public static void freeResourcesIfBeyondThreshold() throws Exception {
+    public static synchronized void freeResourcesIfBeyondThreshold()
+            throws Exception {
         if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
@@ -914,7 +918,8 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void deletePriorMetaData(long ts, String url) throws Exception {
+    protected static synchronized void deletePriorMetaData(long ts,
+            String url) throws Exception {
         deletePriorTables(ts, url);
         if (ts != HConstants.LATEST_TIMESTAMP) {
             ts = nextTimestamp() - 1;
@@ -1577,7 +1582,8 @@ public abstract class BaseTest {
     /**
      * Disable and drop all non system tables
      */
-    protected static void disableAndDropNonSystemTables() throws Exception {
+    protected static synchronized void disableAndDropNonSystemTables()
+            throws Exception {
         if (driver == null) return;
         Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
@@ -1592,9 +1598,9 @@ public abstract class BaseTest {
             admin.close();
         }
     }
-    
-    private static void disableAndDropTable(final Admin admin, final TableName tableName)
-            throws Exception {
+
+    private static synchronized void disableAndDropTable(final Admin admin,
+            final TableName tableName) throws Exception {
         Future<Void> future = null;
         boolean success = false;
         try {
@@ -1719,7 +1725,8 @@ public abstract class BaseTest {
     }
 
     // Populate the test table with data.
-    public static void populateTestTable(String fullTableName) throws SQLException {
+    public static synchronized void populateTestTable(String fullTableName)
+            throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             upsertRows(conn, fullTableName, 3);
