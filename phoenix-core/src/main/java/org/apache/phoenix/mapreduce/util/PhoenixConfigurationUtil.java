@@ -17,6 +17,18 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -47,18 +59,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-
-import static org.apache.commons.lang3.StringUtils.isNotEmpty;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -190,11 +190,12 @@ public final class PhoenixConfigurationUtil {
     // provide an absolute path to inject your multi input mapper logic
     public static final String MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ = "phoenix.mapreduce.multi.mapper.tracker.path";
 
-    // provide control to whether or not handle MR snapshot restore on phoenix side or handled by caller externally
-    public static final String MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY = "phoenix.mr.manage.snapshot.restore.externally";
+    // provide control to whether or not handle mapreduce snapshot restore and cleanup operations which
+    // is used by scanners on phoenix side internally or handled by caller externally
+    public static final String MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE = "phoenix.mapreduce.external.snapshot.restore";
 
     // by default MR snapshot restore is handled internally by phoenix
-    public static final boolean DEFAULT_MR_SNAPSHOT_RESTORE_EXTERNALLY = false;
+    public static final boolean DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE = false;
 
     /**
      * Determines type of Phoenix Map Reduce job.
@@ -874,15 +875,14 @@ public final class PhoenixConfigurationUtil {
     public static void setMRSnapshotManagedExternally(Configuration configuration, Boolean isSnapshotRestoreManagedExternally) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(isSnapshotRestoreManagedExternally);
-        configuration.set(MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY,
-                String.valueOf(isSnapshotRestoreManagedExternally));
+        configuration.setBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, isSnapshotRestoreManagedExternally);
     }
 
     public static boolean isMRSnapshotManagedExternally(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
-        boolean isSnapshotRestoreManagedInternally =
-                configuration.getBoolean(MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY, DEFAULT_MR_SNAPSHOT_RESTORE_EXTERNALLY);
-        return isSnapshotRestoreManagedInternally;
+        boolean isSnapshotRestoreManagedExternally =
+                configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
+        return isSnapshotRestoreManagedExternally;
     }
 
 }
