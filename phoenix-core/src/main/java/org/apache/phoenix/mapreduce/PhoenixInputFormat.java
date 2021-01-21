@@ -209,18 +209,18 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
               // setting the snapshot configuration
               String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
               String restoreDir = configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY);
-              boolean mrSnapshotRestoreInternally = PhoenixConfigurationUtil.getMRSnapshotManagedInternally(configuration);
+              boolean mrSnapshotRestoreExternally = PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration);
               Configuration config = queryPlan.getContext().
                       getConnection().getQueryServices().getConfiguration();
               if (snapshotName != null) {
                 PhoenixConfigurationUtil.setSnapshotNameKey(config, snapshotName);
                 PhoenixConfigurationUtil.setRestoreDirKey(config, restoreDir);
-                PhoenixConfigurationUtil.setMRSnapshotManagedInternally(config, mrSnapshotRestoreInternally);
+                PhoenixConfigurationUtil.setMRSnapshotManagedExternally(config, mrSnapshotRestoreExternally);
               } else {
                 // making sure we unset snapshot name as new job doesn't need it
                 config.unset(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
                 config.unset(PhoenixConfigurationUtil.RESTORE_DIR_KEY);
-                config.unset(PhoenixConfigurationUtil.MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY);
+                config.unset(PhoenixConfigurationUtil.MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY);
               }
 
               return queryPlan;

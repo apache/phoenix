@@ -18,11 +18,6 @@
 
 package org.apache.phoenix.iterate;
 
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -37,14 +32,18 @@ import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
 import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Iterator to scan over an HBase snapshot based on input HBase Scan object.
@@ -90,7 +89,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
   }
 
   private void init() throws IOException {
-    if (PhoenixConfigurationUtil.getMRSnapshotManagedInternally(configuration)) {
+    if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
       RestoreSnapshotHelper.RestoreMetaChanges meta =
           RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs, this.rootDir,
                       this.restoreDir, this.snapshotName);
@@ -181,7 +180,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     closed = true; // ok to say closed even if the below code throws an exception
     try {
       scanIterator.close();
-      if(PhoenixConfigurationUtil.getMRSnapshotManagedInternally(configuration)) {
+      if(!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
         fs.delete(this.restoreDir, true);
       }
     } catch (IOException e) {

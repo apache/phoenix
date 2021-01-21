@@ -18,24 +18,6 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.sql.Array;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
-import java.util.UUID;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -64,16 +46,39 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
+import java.util.UUID;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+@RunWith(Parameterized.class)
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);
@@ -97,6 +102,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private static final String CREATE_STOCK_STATS_TABLE =
           "CREATE TABLE IF NOT EXISTS %s(" + STOCK_NAME + " VARCHAR NOT NULL , " + MAX_RECORDING
                   + " DOUBLE CONSTRAINT pk PRIMARY KEY (" + STOCK_NAME + " ))";
+  private static final String DROP_TABLE = "DROP TABLE %s CASCADE";
   private static List<List<Object>> result;
   private long timestamp;
   private String tableName;
@@ -104,6 +110,16 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private Path tmpDir;
   private Configuration conf;
   private static final Random RANDOM = new Random();
+  private Boolean isSnapshotRestoreDoneExternally;
+
+  public TableSnapshotReadsMapReduceIT(Boolean isSnapshotRestoreDoneExternally) {
+    this.isSnapshotRestoreDoneExternally = isSnapshotRestoreDoneExternally;
+  }
+
+  @Parameterized.Parameters
+  public static synchronized Collection<Boolean> snapshotRestoreDoneExternallyParams() {
+    return Arrays.asList(true, false);
+  }
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -168,6 +184,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     Assert.assertEquals("Correct snapshot name not found in configuration", SNAPSHOT_NAME,
             config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
 
+    TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
+
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       // create table
       tableName = generateUniqueName();
@@ -183,7 +201,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     config = job.getConfiguration();
     Assert.assertNull("Snapshot name is not null in Configuration",
             config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
-
   }
 
   private Job createAndTestJob(Connection conn)
@@ -198,6 +215,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     PhoenixMapReduceUtil.setInput(job, MapReduceIT.StockWritable.class, PhoenixTestingInputFormat.class,
             stockTableName, null, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
     testJob(conn, job, stockTableName, stockStatsTableName);
+    conn.createStatement().execute(String.format(DROP_TABLE, stockTableName));
+    conn.createStatement().execute(String.format(DROP_TABLE, stockStatsTableName));
     return job;
   }
 
@@ -277,7 +296,9 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
     } finally {
-      assertRestoreDirCount(conf, tmpDir.toString(), 1);
+      if (isSnapshotRestoreDoneExternally) {
+        assertRestoreDirCount(conf, tmpDir.toString(), 1);
+      }
       deleteSnapshotIfExists(SNAPSHOT_NAME);
     }
   }
@@ -367,11 +388,14 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
       upsertData(stmt, "DDDD", "SNFB", 45);
       conn.commit();
-      //Performing snapshot restore which will be used during scans
-      Path rootDir = new Path(configuration.get(HConstants.HBASE_DIR));
-      FileSystem fs = rootDir.getFileSystem(configuration);
-      Path restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
-      RestoreSnapshotHelper.copySnapshotForScanner(configuration, fs, rootDir, restoreDir, SNAPSHOT_NAME);
+      if (isSnapshotRestoreDoneExternally) {
+        //Performing snapshot restore which will be used during scans
+        Path rootDir = new Path(configuration.get(HConstants.HBASE_DIR));
+        FileSystem fs = rootDir.getFileSystem(configuration);
+        Path restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+        RestoreSnapshotHelper.copySnapshotForScanner(configuration, fs, rootDir, restoreDir, SNAPSHOT_NAME);
+        PhoenixConfigurationUtil.setMRSnapshotManagedExternally(configuration, true);
+      }
     }
   }
 

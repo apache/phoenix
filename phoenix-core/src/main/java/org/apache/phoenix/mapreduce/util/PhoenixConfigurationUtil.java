@@ -17,18 +17,6 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.commons.lang3.StringUtils.isNotEmpty;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
@@ -46,20 +34,27 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.*;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -191,11 +186,11 @@ public final class PhoenixConfigurationUtil {
     // provide an absolute path to inject your multi input mapper logic
     public static final String MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ = "phoenix.mapreduce.multi.mapper.tracker.path";
 
-    // provide control to whether or not handle MR snapshot restore on phoenix side or handled by caller
-    public static final String MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY = "phoenix.mr.manage.snapshot.restore.internally";
+    // provide control to whether or not handle MR snapshot restore on phoenix side or handled by caller externally
+    public static final String MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY = "phoenix.mr.manage.snapshot.restore.externally";
 
     // by default MR snapshot restore is handled internally by phoenix
-    public static final boolean DEFAULT_MR_SNAPSHOT_RESTORE_INTERNALLY = true;
+    public static final boolean DEFAULT_MR_SNAPSHOT_RESTORE_EXTERNALLY = false;
 
     /**
      * Determines type of Phoenix Map Reduce job.
@@ -872,17 +867,17 @@ public final class PhoenixConfigurationUtil {
         configuration.set(MAPREDUCE_TENANT_ID, tenantId);
     }
 
-    public static void setMRSnapshotManagedInternally(Configuration configuration, Boolean isSnapshotRestoreManagedInternally) {
+    public static void setMRSnapshotManagedExternally(Configuration configuration, Boolean isSnapshotRestoreManagedExternally) {
         Preconditions.checkNotNull(configuration);
-        Preconditions.checkNotNull(isSnapshotRestoreManagedInternally);
-        configuration.set(MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY,
-                String.valueOf(isSnapshotRestoreManagedInternally));
+        Preconditions.checkNotNull(isSnapshotRestoreManagedExternally);
+        configuration.set(MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY,
+                String.valueOf(isSnapshotRestoreManagedExternally));
     }
 
-    public static boolean getMRSnapshotManagedInternally(final Configuration configuration) {
+    public static boolean isMRSnapshotManagedExternally(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         boolean isSnapshotRestoreManagedInternally =
-                configuration.getBoolean(MANAGE_MR_SNAPSHOT_RESTORE_INTERNALLY, DEFAULT_MR_SNAPSHOT_RESTORE_INTERNALLY);
+                configuration.getBoolean(MANAGE_MR_SNAPSHOT_RESTORE_EXTERNALLY, DEFAULT_MR_SNAPSHOT_RESTORE_EXTERNALLY);
         return isSnapshotRestoreManagedInternally;
     }
 

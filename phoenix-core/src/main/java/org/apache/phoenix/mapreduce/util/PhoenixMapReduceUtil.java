@@ -182,7 +182,7 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setSnapshotNameKey(configuration, snapshotName);
         PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
 
-        PhoenixConfigurationUtil.setRestoreDirKey(configuration, new Path(restoreDir, UUID.randomUUID().toString()).toString());
+        PhoenixConfigurationUtil.setRestoreDirKey(configuration, restoreDir.toString());
         PhoenixConfigurationUtil.setSchemaType(configuration, schemaType);
         return configuration;
     }
