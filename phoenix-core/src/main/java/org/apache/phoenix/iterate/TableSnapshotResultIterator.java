@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -80,7 +81,12 @@ public class TableSnapshotResultIterator implements ResultIterator {
     this.scan = scan;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
-    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+    if (PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+      this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+    } else {
+      this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY),
+          UUID.randomUUID().toString());
+    }
     this.snapshotName = configuration.get(
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
@@ -180,7 +186,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     closed = true; // ok to say closed even if the below code throws an exception
     try {
       scanIterator.close();
-      if(!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+      if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
         fs.delete(this.restoreDir, true);
       }
     } catch (IOException e) {
