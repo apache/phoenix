@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.sql.Array;
 import java.sql.Connection;
@@ -292,9 +293,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
     } finally {
-      if (isSnapshotRestoreDoneExternally) {
-        assertRestoreDirCount(conf, tmpDir.toString(), 1);
-      }
+      assertRestoreDirCount(conf, tmpDir.toString(), 1);
       deleteSnapshotIfExists(SNAPSHOT_NAME);
     }
   }
@@ -468,11 +467,21 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private void assertRestoreDirCount(Configuration conf, String restoreDir, int expectedCount)
           throws IOException {
     FileSystem fs = FileSystem.get(conf);
-    FileStatus[] subDirectories = fs.listStatus(new Path(restoreDir));
-    assertNotNull(subDirectories);
-    assertEquals(expectedCount, subDirectories.length);
-    for (int i = 0; i < expectedCount; i++) {
-      assertTrue(subDirectories[i].isDirectory());
+    FileStatus[] subDirectories = null;
+    FileNotFoundException fileNotFoundException = null;
+    try {
+      subDirectories = fs.listStatus(new Path(restoreDir));
+    } catch (FileNotFoundException e) {
+      fileNotFoundException = e;
+    }
+    if (isSnapshotRestoreDoneExternally) {
+      assertNotNull(subDirectories);
+      assertEquals(expectedCount, subDirectories.length);
+      for (int i = 0; i < expectedCount; i++) {
+        assertTrue(subDirectories[i].isDirectory());
+      }
+    } else {
+      assertNotNull(fileNotFoundException);
     }
   }
 
