@@ -102,7 +102,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private static final String CREATE_STOCK_STATS_TABLE =
           "CREATE TABLE IF NOT EXISTS %s(" + STOCK_NAME + " VARCHAR NOT NULL , " + MAX_RECORDING
                   + " DOUBLE CONSTRAINT pk PRIMARY KEY (" + STOCK_NAME + " ))";
-  private static final String DROP_TABLE = "DROP TABLE %s CASCADE";
   private static List<List<Object>> result;
   private long timestamp;
   private String tableName;
@@ -215,8 +214,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     PhoenixMapReduceUtil.setInput(job, MapReduceIT.StockWritable.class, PhoenixTestingInputFormat.class,
             stockTableName, null, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
     testJob(conn, job, stockTableName, stockStatsTableName);
-    conn.createStatement().execute(String.format(DROP_TABLE, stockTableName));
-    conn.createStatement().execute(String.format(DROP_TABLE, stockStatsTableName));
     return job;
   }
 
