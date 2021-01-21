@@ -291,8 +291,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       }
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
-    } finally {
       assertRestoreDirCount(conf, tmpDir.toString(), 1);
+    } finally {
       deleteSnapshotIfExists(SNAPSHOT_NAME);
     }
   }
@@ -468,18 +468,12 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     FileSystem fs = FileSystem.get(conf);
     FileStatus[] subDirectories = fs.listStatus(new Path(restoreDir));
     assertNotNull(subDirectories);
-    assertEquals(expectedCount, subDirectories.length);
-    for (int i = 0; i < expectedCount; i++) {
-      assertTrue(subDirectories[i].isDirectory());
-      FileStatus[] perScanDirectories = fs.listStatus(subDirectories[i].getPath());
-      assertNotNull(perScanDirectories);
-      if (isSnapshotRestoreDoneExternally) {
-        //Snapshot Restore to be deleted externally by the caller
-        assertEquals(1, perScanDirectories.length);
-      } else {
-        //Snapshot Restore already deleted internally
-        assertEquals(0, perScanDirectories.length);
-      }
+    if (isSnapshotRestoreDoneExternally) {
+      //Snapshot Restore to be deleted externally by the caller
+      assertEquals(expectedCount, subDirectories.length);
+    } else {
+      //Snapshot Restore already deleted internally
+      assertEquals(0, subDirectories.length);
     }
   }
 
