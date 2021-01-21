@@ -32,7 +32,7 @@ HBase 2 and Hadoop 3
 Phoenix 5.x requires Hadoop 3. While HBase 2.x is compatible with Hadoop 3, the public Maven Hbase
 artifacts are built with Hadoop 2, and are not.
 
-For this reason, when building Phoenix with an Hbase version later than 2.2.4, you need to rebuild
+For this reason, when building Phoenix, you need to rebuild
 HBase with Hadoop 3, and install it to the local maven repo of the build host.
 
 `$ wget https://downloads.apache.org/hbase/2.2.5/hbase-2.2.5-src.tar.gz`
