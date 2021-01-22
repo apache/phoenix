@@ -27,15 +27,18 @@ import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.SnapshotProtos;
 import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
+import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
+import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -78,8 +81,12 @@ public class TableSnapshotResultIterator implements ResultIterator {
     this.scan = scan;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
-    this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY),
-        UUID.randomUUID().toString());
+    if (PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+      this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+    } else {
+      this.restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY),
+          UUID.randomUUID().toString());
+    }
     this.snapshotName = configuration.get(
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
@@ -88,19 +95,34 @@ public class TableSnapshotResultIterator implements ResultIterator {
   }
 
   private void init() throws IOException {
-    RestoreSnapshotHelper.RestoreMetaChanges meta =
-        RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs,
-            this.rootDir, this.restoreDir, this.snapshotName);
-    List<RegionInfo> restoredRegions = meta.getRegionsToAdd();
-    this.htd = meta.getTableDescriptor();
-    this.regions = new ArrayList<RegionInfo>(restoredRegions.size());
-
-    for (RegionInfo restoredRegion : restoredRegions) {
-      if (isValidRegion(restoredRegion)) {
-        this.regions.add(restoredRegion);
+    if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+      RestoreSnapshotHelper.RestoreMetaChanges meta =
+          RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs, this.rootDir,
+                      this.restoreDir, this.snapshotName);
+      List<RegionInfo> restoredRegions = meta.getRegionsToAdd();
+      this.htd = meta.getTableDescriptor();
+      this.regions = new ArrayList<>(restoredRegions.size());
+      for (RegionInfo restoredRegion : restoredRegions) {
+        if (isValidRegion(restoredRegion)) {
+          this.regions.add(restoredRegion);
+        }
+      }
+    } else {
+      Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
+      SnapshotProtos.SnapshotDescription snapshotDesc =
+          SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+      SnapshotManifest manifest =
+          SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
+      List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
+      this.regions = new ArrayList<>(regionManifests.size());
+      this.htd = manifest.getTableDescriptor();
+      for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
+        HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
+        if (isValidRegion(hri)) {
+          regions.add(hri);
+        }
       }
     }
-
     this.regions.sort(RegionInfo.COMPARATOR);
     LOGGER.info("Initialization complete with " + regions.size() + " valid regions");
   }
@@ -164,7 +186,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
     closed = true; // ok to say closed even if the below code throws an exception
     try {
       scanIterator.close();
-      fs.delete(this.restoreDir, true);
+      if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+        fs.delete(this.restoreDir, true);
+      }
     } catch (IOException e) {
       throw ServerUtil.parseServerException(e);
     } finally {
