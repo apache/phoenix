@@ -41,7 +41,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Collection;
@@ -52,6 +54,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -67,6 +70,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class is meant for testing all compatible client versions 
@@ -77,6 +82,9 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityIT {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        BackwardCompatibilityIT.class);
 
     private final String compatibleClientVersion;
     private static Configuration conf;
@@ -110,12 +118,15 @@ public class BackwardCompatibilityIT {
     
     @After
     public void cleanUpAfterTest() throws Exception {
+        boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
+            hbaseTestUtil.getAdmin());
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
         }
         System.setProperty("java.io.tmpdir", tmpDir);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     /**

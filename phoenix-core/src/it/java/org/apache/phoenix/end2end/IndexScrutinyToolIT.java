@@ -168,7 +168,8 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
 
     }
 
-    @After public void teardown() throws SQLException {
+    @After
+    public void teardown() throws Exception {
         if (conn != null) {
             conn.close();
         }

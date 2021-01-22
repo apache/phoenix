@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
@@ -69,12 +70,12 @@ public class IndexAsyncThresholdIT extends BaseTest {
     private final boolean overThreshold;
     private final Mode mode;
 
-    enum Mode{
+    enum Mode {
         NORMAL,
         ASYNC,
         COVERED,
         FUNCTIONAL
-        }
+    }
 
     public IndexAsyncThresholdIT(Long threshold, Long rows, Long columns, Long overThreshold,
                                  Long mode)
@@ -90,7 +91,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
     }
 
     @Parameterized.Parameters
-    public static synchronized Collection<Long[]>  primeNumbers() {
+    public static synchronized Collection<Long[]> primeNumbers() {
         return Arrays.asList(new Long[][]{
                 {100000L, 5000L, 10L, 0L, 0L},
                 {Long.MAX_VALUE, 200L, 100L, 1L, 0L},
@@ -109,11 +110,12 @@ public class IndexAsyncThresholdIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD, Long.toString(threshold));
         url = setUpTestCluster(conf, new ReadOnlyProps(props.entrySet().iterator()));
-        driver = initAndRegisterTestDriver(url,  new ReadOnlyProps(props.entrySet().iterator()));
+        driver = initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @AfterParam
     public static synchronized void tearDownMiniCluster() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         destroyDriver(driver);
         try {
             HBaseTestingUtility u = new HBaseTestingUtility();
@@ -123,6 +125,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
         } finally {
             ConnectionFactory.shutdown();
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test
@@ -140,16 +143,14 @@ public class IndexAsyncThresholdIT extends BaseTest {
             SQLException exception = null;
             try {
                 String statement = "create index " + indexName + " ON " + this.tableName;
-                if (this.mode == Mode.NORMAL || this.mode == Mode.ASYNC){
+                if (this.mode == Mode.NORMAL || this.mode == Mode.ASYNC) {
                     statement += " (col2, col5, col6, col7, col8)";
-                    if(this.mode == Mode.ASYNC){
+                    if (this.mode == Mode.ASYNC) {
                         statement += "  ASYNC";
                     }
-                }
-                else if(this.mode == Mode.COVERED){
+                } else if (this.mode == Mode.COVERED) {
                     statement += " (col2) INCLUDE(col5, col6, col7, col8)";
-                }
-                else {  // mode == Functional
+                } else {  // mode == Functional
                     statement += " (UPPER(col2 || col4))";
                 }
 
@@ -163,10 +164,9 @@ public class IndexAsyncThresholdIT extends BaseTest {
             PMetaData metaCache = connection.unwrap(PhoenixConnection.class).getMetaDataCache();
             List<PTable> indexes = metaCache.getTableRef(key).getTable().getIndexes();
             if (!overThreshold) {
-                if(this.mode == Mode.ASYNC){
+                if (this.mode == Mode.ASYNC) {
                     assertEquals(PIndexState.BUILDING, indexes.get(0).getIndexState());
-                }
-                else {
+                } else {
                     assertEquals(PIndexState.ACTIVE, indexes.get(0).getIndexState());
                 }
                 assertNull(exception);
@@ -185,7 +185,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
         Statement stmt = conn.createStatement();
         StringBuilder ddl = new StringBuilder("CREATE TABLE " + fullTableName
                 + " (col1 varchar primary key");
-        for (int i = 2; i< columns; i++){
+        for (int i = 2; i < columns; i++) {
             ddl.append(", col").append(i).append(" varchar");
         }
         ddl.append(")");
@@ -195,7 +195,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
             StringBuilder dml = new StringBuilder("upsert into " + fullTableName + " values (");
             for (int j = 1; j < columns; j++) {
                 dml.append("'col").append(j).append("VAL").append(i).append("'");
-                if(j < columns -1){
+                if (j < columns - 1) {
                     dml.append(", ");
                 }
             }

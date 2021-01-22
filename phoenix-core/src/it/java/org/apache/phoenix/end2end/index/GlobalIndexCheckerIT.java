@@ -63,13 +63,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
-    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
+
     private final boolean async;
     private String indexDDLOptions;
     private String tableDDLOptions;
@@ -114,10 +112,12 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     @After
-    public void unsetFailForTesting() {
+    public void unsetFailForTesting() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
         IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     public static void assertExplainPlan(Connection conn, String selectSql,

@@ -69,14 +69,13 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @After
-    public void assertNoUnfreedMemory() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
+    public void assertNoUnfreedMemory() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
-            assertEquals(0,unfreedBytes);
-        } finally {
-            conn.close();
+            assertEquals(0, unfreedBytes);
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
     
     @Test

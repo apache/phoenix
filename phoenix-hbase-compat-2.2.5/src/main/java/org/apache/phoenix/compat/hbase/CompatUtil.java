@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
@@ -30,6 +31,8 @@ import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.AccessControlLists;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
+
+import java.io.IOException;
 
 public class CompatUtil {
 
@@ -59,4 +62,17 @@ public class CompatUtil {
     public static Scan getScanForTableName(Connection conn, TableName tableName) {
         return MetaTableAccessor.getScanForTableName(conn, tableName);
     }
+
+    /**
+     * HBase 2.3+ has storeRefCount available in RegionMetrics
+     *
+     * @param admin Admin instance
+     * @return true if any region has refCount leakage
+     * @throws IOException if something went wrong while connecting to Admin
+     */
+    public static boolean isAnyStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        return false;
+    }
+
 }
