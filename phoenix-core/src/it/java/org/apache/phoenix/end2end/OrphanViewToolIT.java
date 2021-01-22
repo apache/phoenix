@@ -24,6 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -134,13 +135,15 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     }
 
     @AfterClass
-    public static synchronized void cleanUp() {
+    public static synchronized void cleanUp() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
             File file = new File(filePath + OrphanViewTool.fileName[i]);
             if (file.exists()) {
                 file.delete();
             }
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     private String generateDDL(String format) {

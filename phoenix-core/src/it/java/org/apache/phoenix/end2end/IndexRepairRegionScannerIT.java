@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -65,6 +64,7 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
@@ -114,6 +114,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     @After
     public void cleanup() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             deleteAllRows(conn,
@@ -122,6 +123,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
                 TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
         }
         EnvironmentEdgeManager.reset();
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     private void repairIndex(Connection conn, String schemaName, String dataTableFullName, String indexTableName, IndexTool.IndexVerifyType verifyType) throws Exception {
