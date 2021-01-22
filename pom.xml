@@ -42,7 +42,7 @@
   <modules>
     <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-hbase-compat-2.3.0</module>
-    <module>phoenix-hbase-compat-2.2.1</module>
+    <module>phoenix-hbase-compat-2.2.5</module>
     <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
@@ -317,7 +317,7 @@
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>false</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -329,7 +329,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>false</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -671,7 +671,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+        <artifactId>phoenix-hbase-compat-2.2.5</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -1533,6 +1533,8 @@
       </properties>
     </profile>
     <profile>
+      <!-- PHOENIX-5993 may work with the public HBase artifacts, as the test don't trip over
+      anything but it should be rebuilt like 2.2+ -->
       <id>phoenix-hbase-compat-2.1.6</id>
       <activation>
         <activeByDefault>true</activeByDefault>
@@ -1545,11 +1547,12 @@
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
         <hbase.version>${hbase-2.1.runtime.version}</hbase.version>
+        <hadoop.version>3.0.3</hadoop.version>
       </properties>
     </profile>
     <profile>
       <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.2.1</id>
+      <id>phoenix-hbase-compat-2.2.5</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -1558,8 +1561,9 @@
       </activation>
       <properties>
         <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.1</hbase.compat.version>
+        <hbase.compat.version>2.2.5</hbase.compat.version>
         <hbase.version>${hbase-2.2.runtime.version}</hbase.version>
+        <hadoop.version>3.1.3</hadoop.version>
       </properties>
     </profile>
     <profile>
@@ -1577,6 +1581,7 @@
         <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
+        <hadoop.version>3.1.3</hadoop.version>
       </properties>
     </profile>
     <profile>

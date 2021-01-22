@@ -56,11 +56,6 @@ pipeline {
                         environment {
                             HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dhbase.profile=${HBASE_PROFILE} -Dartifact=org.apache.phoenix:phoenix-core -Dexpression=hbase.version -q -DforceStdout").trim()
                         }
-                        when {
-                            not {
-                                environment name: 'HBASE_PROFILE', value: '2.1'
-                            }
-                        }
                         steps {
                             sh "dev/rebuild_hbase.sh ${HBASE_VERSION}"
                         }

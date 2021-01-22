@@ -18,8 +18,6 @@
 
 package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-
 public class HbaseCompatCapabilities {
 
     public static boolean isMaxLookbackTimeSupported() {
