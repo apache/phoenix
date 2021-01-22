@@ -51,5 +51,5 @@ public class SystemExitRule implements TestRule {
     public static class SystemExitInTestException extends SecurityException {
       // empty
     }
-
+//Comment to trigger full test run
 }

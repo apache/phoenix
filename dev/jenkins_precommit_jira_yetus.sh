@@ -143,7 +143,6 @@ cd "${WORKSPACE}" || exit
 if [[ "true" = "${RUN_IN_DOCKER}" ]]; then
   YETUS_ARGS=(
     --docker \
-    --dockermemlimit=20g \
     "--multijdkdirs=/usr/lib/jvm/java-8-openjdk-amd64" \
     "${YETUS_ARGS[@]}" \
   )
