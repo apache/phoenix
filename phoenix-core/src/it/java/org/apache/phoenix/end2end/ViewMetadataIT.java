@@ -134,6 +134,10 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         serverProps.put(PHOENIX_META_DATA_COPROCESSOR_CONF_KEY,
                 ViewConcurrencyAndFailureIT.TestMetaDataRegionObserver.class
                         .getName());
+        serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        serverProps.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
         serverProps.put("hbase.coprocessor.abortonerror", "false");
         // Set this in server properties too since we get a connection on the
         // server and pass in server-side properties when running the drop
