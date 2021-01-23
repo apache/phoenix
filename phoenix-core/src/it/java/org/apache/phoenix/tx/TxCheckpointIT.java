@@ -41,6 +41,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilit
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -51,6 +52,14 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
 	private final String tableDDLOptions;
+
+    @BeforeClass
+    public static synchronized void forceClearTables() throws Exception {
+        // We see this specific test hanging with Heap memory problems.
+        // Try to free as much resources as we can before starting
+        resetHbase();
+        doSetup();
+    }
 
 	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded, String transactionProvider) {
 	    StringBuilder optionBuilder = new StringBuilder();
